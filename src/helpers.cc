@@ -90,17 +90,19 @@ bool LiteClient::dockerAppsChanged() { return false; }
 
 static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(PackageManagerInterface &package_manager,
                                                                              INvStorage &storage,
-                                                                             PackageConfig &config) {
+                                                                             Config &config) {
   data::ResultCode::Numeric result_code = data::ResultCode::Numeric::kUnknown;
   boost::optional<Uptane::Target> pending_version;
   storage.loadInstalledVersions("", nullptr, &pending_version);
 
-  GObjectUniquePtr<OstreeSysroot> sysroot_smart = OstreeManager::LoadSysroot(config.sysroot);
+  GObjectUniquePtr<OstreeSysroot> sysroot_smart = OstreeManager::LoadSysroot(config.pacman.sysroot);
   OstreeDeployment *booted_deployment = ostree_sysroot_get_booted_deployment(sysroot_smart.get());
   std::string current_hash = ostree_deployment_get_csum(booted_deployment);
   if (booted_deployment == nullptr) {
-    throw std::runtime_error("Could not get booted deployment in " + config.sysroot.string());
+    throw std::runtime_error("Could not get booted deployment in " + config.pacman.sysroot.string());
   }
+
+  Bootloader bootloader(config.bootloader, storage);
 
   if (!!pending_version) {
     const Uptane::Target &target = *pending_version;
@@ -108,15 +110,15 @@ static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(Pac
       LOG_INFO << "Marking target install complete for: " << target;
       storage.saveInstalledVersion("", target, InstalledVersionUpdateMode::kCurrent);
       result_code = data::ResultCode::Numeric::kOk;
-      if (package_manager.rebootDetected()) {
-        package_manager.rebootFlagClear();
+      if (bootloader.rebootDetected()) {
+        bootloader.rebootFlagClear();
       }
     } else {
-      if (package_manager.rebootDetected()) {
+      if (bootloader.rebootDetected()) {
         LOG_ERROR << "Expected to boot on " << target.sha256Hash() << " but found " << current_hash
                   << ", system might have experienced a rollback";
         storage.saveInstalledVersion("", target, InstalledVersionUpdateMode::kNone);
-        package_manager.rebootFlagClear();
+        bootloader.rebootFlagClear();
         result_code = data::ResultCode::Numeric::kInstallFailed;
       } else {
         // Update still pending as no reboot was detected
@@ -192,14 +194,14 @@ LiteClient::LiteClient(Config &config_in)
   package_manager = PackageManagerFactory::makePackageManager(config.pacman, config.bootloader, storage, http_client);
 
   std::pair<Uptane::Target, data::ResultCode::Numeric> pair =
-      finalizeIfNeeded(*package_manager, *storage, config.pacman);
+      finalizeIfNeeded(*package_manager, *storage, config);
   http_client->updateHeader("x-ats-target", pair.first.filename());
 
   KeyManager keys(storage, config.keymanagerConfig());
   keys.copyCertsToCurl(*http_client);
 
-  primary = std::make_shared<SotaUptaneClient>(config, storage, http_client);
-  primary->initializePrimaryEcu();
+  primary =
+      std::make_shared<SotaUptaneClient>(config, storage, http_client, nullptr, primary_ecu.first, primary_ecu.second);
 
   if (pair.second != data::ResultCode::Numeric::kAlreadyProcessed) {
     notifyInstallFinished(pair.first, pair.second);
