@@ -1,7 +1,6 @@
 set(AKTUALIZR_LITE_SRC main.cc helpers.cc)
 set(AKTUALIZR_LITE_HEADERS helpers.h)
 
-if(BUILD_OSTREE)
 add_executable(aktualizr-lite ${AKTUALIZR_LITE_SRC})
 target_link_libraries(aktualizr-lite aktualizr_lib)
 
@@ -23,8 +22,6 @@ add_aktualizr_test(NAME lite-helpers SOURCES helpers.cc helpers_test.cc
                    ARGS ${PROJECT_BINARY_DIR}/ostree_repo)
 set_tests_properties(test_lite-helpers PROPERTIES
         ENVIRONMENT LD_PRELOAD=$<TARGET_FILE:t_lite-mock> LABELS "noptest")
-
-endif(BUILD_OSTREE)
 
 aktualizr_source_file_checks(main.cc ${AKTUALIZR_LITE_SRC} ${AKTUALIZR_LITE_HEADERS} helpers_test.cc ostree_mock.cc)
 # vim: set tabstop=4 shiftwidth=4 expandtab:
