@@ -10,12 +10,12 @@
 
 #ifdef BUILD_DOCKERAPP
 static void add_apps_header(std::vector<std::string> &headers, PackageConfig &config) {
-  if (config.type == PackageManager::kOstreeDockerApp) {
+  if (config.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(config.docker_apps, ","));
   }
 }
 bool should_compare_docker_apps(const Config &config) {
-  return (config.pacman.type == PackageManager::kOstreeDockerApp && !config.pacman.docker_apps.empty());
+  return (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP && !config.pacman.docker_apps.empty());
 }
 
 void LiteClient::storeDockerParamsDigest() {
@@ -28,7 +28,7 @@ void LiteClient::storeDockerParamsDigest() {
 }
 
 bool LiteClient::dockerAppsChanged() {
-  if (config.pacman.type != PackageManager::kOstreeDockerApp) {
+  if (config.pacman.type != PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     return false;
   }
 
