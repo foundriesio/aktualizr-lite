@@ -114,7 +114,7 @@ static std::unique_ptr<Uptane::Target> find_target(const std::shared_ptr<SotaUpt
 }
 
 static data::ResultCode::Numeric do_update(LiteClient &client, Uptane::Target &target) {
-  target.InsertEcu(client.primary_ecu.first, client.primary_ecu.second);
+  target.InsertEcu({client.primary_ecu.first, client.primary_ecu.second});
   generate_correlation_id(target);
 
   std::unique_ptr<Lock> lock = client.getDownloadLock();
@@ -241,7 +241,7 @@ static int daemon_main(LiteClient &client, const bpo::variables_map &variables_m
     if (target != nullptr) {
       // do_update sets this information, so we have to set it here so that
       // targets_eq function can compare them properly
-      target->InsertEcu(client.primary_ecu.first, client.primary_ecu.second);
+      target->InsertEcu({client.primary_ecu.first, client.primary_ecu.second});
 
       // This is a workaround for finding and avoiding bad updates after a rollback.
       // Rollback sets the installed version state to none instead of broken, so there is no
