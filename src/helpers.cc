@@ -94,8 +94,7 @@ bool LiteClient::dockerAppsChanged() { return false; }
 #endif
 
 static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(PackageManagerInterface &package_manager,
-                                                                             INvStorage &storage,
-                                                                             Config &config) {
+                                                                             INvStorage &storage, Config &config) {
   data::ResultCode::Numeric result_code = data::ResultCode::Numeric::kUnknown;
   boost::optional<Uptane::Target> pending_version;
   storage.loadInstalledVersions("", nullptr, &pending_version);
@@ -207,8 +206,7 @@ LiteClient::LiteClient(Config &config_in)
   report_queue = std_::make_unique<ReportQueue>(config, http_client);
   package_manager = PackageManagerFactory::makePackageManager(config.pacman, config.bootloader, storage, http_client);
 
-  std::pair<Uptane::Target, data::ResultCode::Numeric> pair =
-      finalizeIfNeeded(*package_manager, *storage, config);
+  std::pair<Uptane::Target, data::ResultCode::Numeric> pair = finalizeIfNeeded(*package_manager, *storage, config);
   http_client->updateHeader("x-ats-target", pair.first.filename());
 
   KeyManager keys(storage, config.keymanagerConfig());
