@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -ex
 
 build_dir=$(pwd)
 aklite=$1
