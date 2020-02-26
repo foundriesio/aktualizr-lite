@@ -4,6 +4,9 @@
 
 cmake_minimum_required (VERSION 3.5)
 
+# Export compile_commands.json for clang-tidy
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 add_definitions(-DBOOST_LOG_DYN_LINK)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/src/libaktualizr)
