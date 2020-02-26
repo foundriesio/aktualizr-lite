@@ -33,6 +33,7 @@ struct LiteClient {
   LiteClient(Config& config_in);
 
   Config config;
+  std::vector<std::string> tags;
   std::shared_ptr<INvStorage> storage;
   std::shared_ptr<SotaUptaneClient> primary;
   std::shared_ptr<PackageManagerInterface> package_manager;

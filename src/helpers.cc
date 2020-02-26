@@ -155,6 +155,15 @@ LiteClient::LiteClient(Config &config_in)
   storage = INvStorage::newStorage(config.storage);
   storage->importData(config.import);
 
+  const std::map<std::string, std::string> raw = config.pacman.extra;
+  if (raw.count("tags") == 1) {
+    std::string val = raw.at("tags");
+    if (val.length() > 0) {
+      // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
+      boost::split(tags, val, boost::is_any_of(", "), boost::token_compress_on);
+    }
+  }
+
   EcuSerials ecu_serials;
   if (!storage->loadEcuSerials(&ecu_serials)) {
     // Set a "random" serial so we don't get warning messages.
@@ -192,7 +201,7 @@ LiteClient::LiteClient(Config &config_in)
     headers.emplace_back("x-ats-primary: " + primary_ecu.first.ToString());
   }
 
-  headers.emplace_back("x-ats-tags: " + boost::algorithm::join(config.pacman.tags, ","));
+  headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
 
   http_client = std::make_shared<HttpClient>(&headers);
   report_queue = std_::make_unique<ReportQueue>(config, http_client);

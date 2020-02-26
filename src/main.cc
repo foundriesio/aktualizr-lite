@@ -64,7 +64,7 @@ static int list_main(LiteClient &client, const bpo::variables_map &unused) {
 
   LOG_INFO << "Updates available to " << hwid << ":";
   for (auto &t : client.primary->allTargets()) {
-    if (!target_has_tags(t, client.config.pacman.tags)) {
+    if (!target_has_tags(t, client.tags)) {
       continue;
     }
     for (auto const &it : t.hardwareIds()) {
@@ -167,7 +167,7 @@ static int update_main(LiteClient &client, const bpo::variables_map &variables_m
     version = variables_map["update-name"].as<std::string>();
   }
   LOG_INFO << "Finding " << version << " to update to...";
-  auto target = find_target(client.primary, hwid, client.config.pacman.tags, version);
+  auto target = find_target(client.primary, hwid, client.tags, version);
   if (target == nullptr) {
     LOG_INFO << "Already up-to-date";
     return 0;
@@ -237,7 +237,7 @@ static int daemon_main(LiteClient &client, const bpo::variables_map &variables_m
       client.primary->reportHwInfo();
     }
 
-    auto target = find_target(client.primary, hwid, client.config.pacman.tags, "latest");
+    auto target = find_target(client.primary, hwid, client.tags, "latest");
     if (target != nullptr) {
       // do_update sets this information, so we have to set it here so that
       // targets_eq function can compare them properly
