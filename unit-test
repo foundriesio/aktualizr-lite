@@ -1,0 +1,22 @@
+#!/bin/bash -e
+
+here=$(dirname $(readlink -f $0))
+cd $here
+
+if [ $# -eq 0 ] ; then
+	echo "Launching unit tests in docker"
+	exec ./dev-shell ./unit-test indocker
+fi
+
+set -x
+
+build=$(mktemp -d -p $here)
+cd $build
+
+../cmake-init.sh
+ninja aktualizr-lite t_lite-helpers libt_lite-mock.so uptane-generator
+
+ninja aktualizr_clang_tidy-src-helpers.cc  aktualizr_clang_tidy-src-main.cc
+
+ctest -V -R test_lite-helpers
+ctest -V -R test_aktualizr-lite

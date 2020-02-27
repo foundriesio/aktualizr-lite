@@ -1,0 +1,21 @@
+#!/bin/bash -e
+
+## A simple wrapper to allow development to occur in a container.
+
+container="aklite-dev"
+
+here=$(dirname $(readlink -f $0))
+cd $here
+
+if ! docker image inspect $container 2>/dev/null 1>/dev/null ; then
+	echo "Container not found, doing one time docker build"
+	docker build -t $container -f ./aktualizr/docker/Dockerfile.debian.testing .
+fi
+
+if [ -n "$CCACHE_DIR" ] ; then
+	CCACHE_DIR=$(readlink -f $CCACHE_DIR)
+	CCACHE_ARGS="-e CCACHE_DIR=$CCACHE_DIR -v$CCACHE_DIR:$CCACHE_DIR"
+fi
+
+set -x
+exec docker run --privileged $CCACHE_ARGS -u $(id -u):$(id -g) --rm -it -v $here:$here -w $here $container $*
