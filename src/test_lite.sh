@@ -114,6 +114,8 @@ if [[ ! "$out" =~ "Active image is: zlast	sha256:$sha" ]] ; then
     echo $out
     exit 1
 fi
+source ${sota_dir}/current-target
+[ "$TARGET_NAME" = "zlast" ] || (echo current-target wrong: $TARGET_NAME != zlast; exit 1)
 
 ## Make sure we obey tags
 echo 'tags = "promoted"' >> $sota_dir/sota.toml

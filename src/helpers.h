@@ -54,6 +54,7 @@ struct LiteClient {
   void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event);
   bool dockerAppsChanged();
   void storeDockerParamsDigest();
+  void writeCurrentTarget(const Uptane::Target& t);
 };
 
 bool should_compare_docker_apps(const Config& config);
