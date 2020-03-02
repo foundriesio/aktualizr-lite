@@ -11,6 +11,7 @@ add_definitions(-DBOOST_LOG_DYN_LINK)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/src/libaktualizr)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/third_party/jsoncpp/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/third_party/googletest/googletest/include)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/cmake-modules;${CMAKE_MODULE_PATH}")
 
