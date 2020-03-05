@@ -15,10 +15,14 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/third_party/googletest
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/cmake-modules;${CMAKE_MODULE_PATH}")
 
-find_package(OSTree REQUIRED)
-include_directories(${GLIB_INCLUDE_DIRS} ${LIBOSTREE_INCLUDE_DIRS})
+if(NOT BUILD_SOTA_TOOLS)
+    find_package(OSTree REQUIRED)
+    include_directories(${GLIB_INCLUDE_DIRS} ${LIBOSTREE_INCLUDE_DIRS})
+endif(NOT BUILD_SOTA_TOOLS)
 
 include(CTest)
 
 add_subdirectory("aktualizr")
-add_subdirectory("src")
+if(NOT BUILD_SOTA_TOOLS)
+    add_subdirectory("src")
+endif(NOT BUILD_SOTA_TOOLS)
