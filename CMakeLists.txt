@@ -15,6 +15,10 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/third_party/googletest
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/cmake-modules;${CMAKE_MODULE_PATH}")
 
+if(BUILD_DOCKERAPP)
+    add_definitions(-DBUILD_DOCKERAPP)
+endif(BUILD_DOCKERAPP)
+
 if(NOT BUILD_SOTA_TOOLS)
     find_package(OSTree REQUIRED)
     include_directories(${GLIB_INCLUDE_DIRS} ${LIBOSTREE_INCLUDE_DIRS})
