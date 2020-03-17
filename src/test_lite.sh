@@ -37,6 +37,7 @@ add_target() {
 {
   "version": "$1",
   "hardwareIds": ["hwid-for-test"],
+  "containers-sha": "deadbeef",
   "targetFormat": "OSTREE"
 }
 EOF
@@ -116,6 +117,7 @@ if [[ ! "$out" =~ "Active image is: zlast	sha256:$sha" ]] ; then
 fi
 source ${sota_dir}/current-target
 [ "$TARGET_NAME" = "zlast" ] || (echo current-target wrong: $TARGET_NAME != zlast; exit 1)
+[ "$CONTAINERS_SHA" = "deadbeef" ] || (echo current-target wrong: $CONTAINERS_SHA != deadbeef; exit 1)
 
 ## Make sure we obey tags
 echo 'tags = "promoted"' >> $sota_dir/sota.toml

@@ -253,8 +253,23 @@ void LiteClient::notifyInstallFinished(const Uptane::Target &t, data::ResultCode
 }
 
 void LiteClient::writeCurrentTarget(const Uptane::Target &t) {
-  std::string content("TARGET_NAME=\"" + t.filename() + "\"\nCUSTOM_VERSION=\"" + t.custom_version() + "\"\n");
-  Utils::writeFile(config.storage.path / "current-target", content);
+  std::stringstream ss;
+  ss << "TARGET_NAME=\"" << t.filename() << "\"\n";
+  ss << "CUSTOM_VERSION=\"" << t.custom_version() << "\"\n";
+  Json::Value custom = t.custom_data();
+  std::string tmp = custom["lmp-manifest-sha"].asString();
+  if (tmp.size() > 0) {
+    ss << "LMP_MANIFEST_SHA=\"" << tmp << "\"\n";
+  }
+  tmp = custom["meta-subscriber-overrides-sha"].asString();
+  if (tmp.size() > 0) {
+    ss << "META_SUBSCRIBER_OVERRIDES_SHA=\"" << tmp << "\"\n";
+  }
+  tmp = custom["containers-sha"].asString();
+  if (tmp.size() > 0) {
+    ss << "CONTAINERS_SHA=\"" << tmp << "\"\n";
+  }
+  Utils::writeFile(config.storage.path / "current-target", ss.str());
 }
 
 static std::unique_ptr<Lock> create_lock(boost::filesystem::path lockfile) {
