@@ -53,10 +53,10 @@ static int list_main(LiteClient &client, const bpo::variables_map &unused) {
   (void)unused;
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
-  LOG_INFO << "Refreshing target metadata";
-  if (!client.primary->updateImagesMeta()) {
+  LOG_INFO << "Refreshing Targets metadata";
+  if (!client.primary->updateImageMeta()) {
     LOG_WARNING << "Unable to update latest metadata, using local copy";
-    if (!client.primary->checkImagesMetaOffline()) {
+    if (!client.primary->checkImageMetaOffline()) {
       LOG_ERROR << "Unable to use local copy of TUF data";
       return 1;
     }
@@ -81,9 +81,9 @@ static std::unique_ptr<Uptane::Target> find_target(const std::shared_ptr<SotaUpt
                                                    Uptane::HardwareIdentifier &hwid,
                                                    const std::vector<std::string> &tags, const std::string &version) {
   std::unique_ptr<Uptane::Target> rv;
-  if (!client->updateImagesMeta()) {
+  if (!client->updateImageMeta()) {
     LOG_WARNING << "Unable to update latest metadata, using local copy";
-    if (!client->checkImagesMetaOffline()) {
+    if (!client->checkImageMetaOffline()) {
       LOG_ERROR << "Unable to use local copy of TUF data";
       throw std::runtime_error("Unable to find update");
     }
@@ -211,8 +211,8 @@ static int daemon_main(LiteClient &client, const bpo::variables_map &variables_m
   client.storage->loadPrimaryInstallationLog(&installed_versions, false);
 
   while (true) {
-    LOG_INFO << "Refreshing target metadata";
-    if (!client.primary->updateImagesMeta()) {
+    LOG_INFO << "Refreshing Targets metadata";
+    if (!client.primary->updateImageMeta()) {
       LOG_WARNING << "Unable to update latest metadata";
       std::this_thread::sleep_for(std::chrono::seconds(10));
       continue;  // There's no point trying to look for an update
@@ -306,8 +306,8 @@ bpo::variables_map parse_options(int argc, char *argv[]) {
       ("version,v", "Current aktualizr version")
       ("config,c", bpo::value<std::vector<boost::filesystem::path> >()->composing(), "configuration file or directory")
       ("loglevel", bpo::value<int>(), "set log level 0-5 (trace, debug, info, warning, error, fatal)")
-      ("repo-server", bpo::value<std::string>(), "url of the uptane repo repository")
-      ("ostree-server", bpo::value<std::string>(), "url of the ostree repository")
+      ("repo-server", bpo::value<std::string>(), "URL of the Uptane repo repository")
+      ("ostree-server", bpo::value<std::string>(), "URL of the Ostree repository")
       ("primary-ecu-hardware-id", bpo::value<std::string>(), "hardware ID of primary ecu")
       ("update-name", bpo::value<std::string>(), "optional name of the update when running \"update\". default=latest")
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for update when in daemon mode.")
