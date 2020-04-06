@@ -1,5 +1,7 @@
 #include <sys/file.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
