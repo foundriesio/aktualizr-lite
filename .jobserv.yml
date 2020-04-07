@@ -1,0 +1,16 @@
+timeout: 30
+triggers:
+  - name: pull-request
+    type: github_pr
+    runs:
+      - name: unit-test
+        container: foundries/aklite-dev
+        host-tag: amd64
+        script: unit-test
+
+scripts:
+
+  unit-test: |
+    #!/bin/sh -ex
+    export CCACHE_DIR=/tmp/ccache
+    ./unit-test no-docker
