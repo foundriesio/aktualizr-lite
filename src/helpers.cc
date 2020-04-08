@@ -205,7 +205,7 @@ LiteClient::LiteClient(Config &config_in)
   headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
 
   http_client = std::make_shared<HttpClient>(&headers);
-  report_queue = std_::make_unique<ReportQueue>(config, http_client);
+  report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
   package_manager = PackageManagerFactory::makePackageManager(config.pacman, config.bootloader, storage, http_client);
 
   std::pair<Uptane::Target, data::ResultCode::Numeric> pair = finalizeIfNeeded(*package_manager, *storage, config);
