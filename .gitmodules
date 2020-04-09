@@ -1,4 +1,4 @@
 [submodule "aktualizr"]
 	path = aktualizr
 	url = https://github.com/foundriesio/aktualizr
-	branch = aklite-breakout
+	branch = 2020.4+fio
