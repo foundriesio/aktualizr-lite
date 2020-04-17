@@ -1,6 +1,5 @@
-#include <sys/file.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 #include <boost/uuid/uuid_generators.hpp>
@@ -77,6 +76,7 @@ bool LiteClient::dockerAppsChanged() {
     }
   } else if (boost::filesystem::exists(checksum)) {
     LOG_INFO << "Config change detected: docker-app parameters have been removed";
+    boost::filesystem::remove(checksum);
     return true;
   }
 
