@@ -46,6 +46,9 @@ struct LiteClient {
   std::unique_ptr<Lock> getDownloadLock();
   std::unique_ptr<Lock> getUpdateLock();
 
+  data::ResultCode::Numeric download(const Uptane::Target& target);
+  data::ResultCode::Numeric install(const Uptane::Target& target);
+
   void notifyDownloadStarted(const Uptane::Target& t);
   void notifyDownloadFinished(const Uptane::Target& t, bool success);
   void notifyInstallStarted(const Uptane::Target& t);

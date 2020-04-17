@@ -117,18 +117,10 @@ static data::ResultCode::Numeric do_update(LiteClient &client, Uptane::Target ta
   target.InsertEcu({client.primary_ecu.first, client.primary_ecu.second});
   generate_correlation_id(target);
 
-  std::unique_ptr<Lock> lock = client.getDownloadLock();
-  if (lock == nullptr) {
-    return data::ResultCode::Numeric::kInternalError;
+  data::ResultCode::Numeric rc = client.download(target);
+  if (rc != data::ResultCode::Numeric::kOk) {
+    return rc;
   }
-  client.notifyDownloadStarted(target);
-  if (!client.primary->downloadImage(target).first) {
-    lock->release();
-    client.notifyDownloadFinished(target, false);
-    return data::ResultCode::Numeric::kDownloadFailed;
-  }
-  lock->release();
-  client.notifyDownloadFinished(target, true);
 
   if (client.primary->VerifyTarget(target) != TargetStatus::kGood) {
     client.notifyInstallFinished(target, data::ResultCode::Numeric::kVerificationFailed);
@@ -136,27 +128,7 @@ static data::ResultCode::Numeric do_update(LiteClient &client, Uptane::Target ta
     return data::ResultCode::Numeric::kVerificationFailed;
   }
 
-  lock = client.getUpdateLock();
-  if (lock == nullptr) {
-    return data::ResultCode::Numeric::kInternalError;
-  }
-
-  client.notifyInstallStarted(target);
-  auto iresult = client.primary->PackageInstall(target);
-  if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
-    LOG_INFO << "Update complete. Please reboot the device to activate";
-    client.storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
-  } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
-    LOG_INFO << "Update complete. No reboot needed";
-    client.storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
-    lock->release();
-  } else {
-    LOG_ERROR << "Unable to install update: " << iresult.description;
-    // let go of the lock since we couldn't update
-    lock->release();
-  }
-  client.notifyInstallFinished(target, iresult.result_code.num_code);
-  return iresult.result_code.num_code;
+  return client.install(target);
 }
 
 static int update_main(LiteClient &client, const bpo::variables_map &variables_map) {
