@@ -18,8 +18,7 @@ struct Version {
 class Lock {
  public:
   Lock(int fd) : fd_(fd) {}
-
-  void release() {
+  ~Lock() {
     if (fd_ != -1) {
       close(fd_);
     }
