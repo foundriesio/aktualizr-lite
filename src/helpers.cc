@@ -313,11 +313,9 @@ data::ResultCode::Numeric LiteClient::download(const Uptane::Target &target) {
   }
   notifyDownloadStarted(target);
   if (!primary->downloadImage(target).first) {
-    lock->release();
     notifyDownloadFinished(target, false);
     return data::ResultCode::Numeric::kDownloadFailed;
   }
-  lock->release();
   notifyDownloadFinished(target, true);
   return data::ResultCode::Numeric::kOk;
 }
@@ -336,11 +334,9 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target &target) {
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
-    lock->release();
   } else {
     LOG_ERROR << "Unable to install update: " << iresult.description;
     // let go of the lock since we couldn't update
-    lock->release();
   }
   notifyInstallFinished(target, iresult.result_code.num_code);
   return iresult.result_code.num_code;

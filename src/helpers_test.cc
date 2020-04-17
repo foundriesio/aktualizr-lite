@@ -134,9 +134,8 @@ TEST(helpers, locking) {
   // 1. Create a lock and hold in inside a thread for a small amount of time
   std::unique_ptr<Lock> lock = client.getUpdateLock();
   std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-  std::thread t([&lock] {
+  std::thread t([_ = std::move(lock)] {  // pass ownership of ptr into lambda
     std::this_thread::sleep_for(std::chrono::milliseconds{500});
-    lock->release();
   });
 
   // 2. Get the lock - this should take a short period of time while its blocked
