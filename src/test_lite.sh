@@ -33,11 +33,15 @@ add_target() {
     else
         sha=$(echo $name | sha256sum | cut -f1 -d\  )
     fi
+    if [ -n "$3" ] ; then
+        tag="\"$3\""
+    fi
     cat >$custom_json <<EOF
 {
   "version": "$1",
   "hardwareIds": ["hwid-for-test"],
   "containers-sha": "deadbeef",
+  "tags": [$tag],
   "targetFormat": "OSTREE"
 }
 EOF
@@ -120,6 +124,6 @@ source ${sota_dir}/current-target
 [ "$CONTAINERS_SHA" = "deadbeef" ] || (echo current-target wrong: $CONTAINERS_SHA != deadbeef; exit 1)
 
 ## Make sure we obey tags
+add_target promoted-$name $sha promoted
 echo 'tags = "promoted"' >> $sota_dir/sota.toml
-cd /tmp/
-OSTREE_HASH=$sha LD_PRELOAD=$mock_ostree $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Already up-to-date"
+OSTREE_HASH=$sha LD_PRELOAD=$mock_ostree $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to: Target(promoted-zlast"

@@ -151,15 +151,14 @@ TEST(helpers, locking) {
 }
 
 #ifdef BUILD_DOCKERAPP
-// Ensure we handle config changes of containers at start-up properly
-TEST(helpers, containers_initialize) {
-  TemporaryDirectory cfg_dir;
 
+static LiteClient createClient(TemporaryDirectory &cfg_dir, std::map<std::string, std::string> extra) {
   Config config;
   config.storage.path = cfg_dir.Path();
   config.pacman.type = PACKAGE_MANAGER_OSTREEDOCKERAPP;
   config.pacman.sysroot = test_sysroot;
-  config.pacman.docker_apps_root = cfg_dir / "docker_apps";
+  config.pacman.extra = extra;
+  config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
 
   std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 
@@ -167,44 +166,61 @@ TEST(helpers, containers_initialize) {
   target_json["hashes"]["sha256"] = "deadbeef";
   target_json["custom"]["targetFormat"] = "OSTREE";
   target_json["length"] = 0;
+  return LiteClient(config);
+}
+
+// Ensure we handle config changes of containers at start-up properly
+TEST(helpers, containers_initialize) {
+  TemporaryDirectory cfg_dir;
+
+  auto apps_root = cfg_dir / "docker_apps";
+  std::map<std::string, std::string> apps_cfg;
+  apps_cfg["docker_apps_root"] = apps_root.native();
+
+  // std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
+
+  Json::Value target_json;
+  target_json["hashes"]["sha256"] = "deadbeef";
+  target_json["custom"]["targetFormat"] = "OSTREE";
+  target_json["length"] = 0;
   Uptane::Target target("test-finalize", target_json);
 
-  LiteClient client(config);
-
   // Nothing different - all empty
-  ASSERT_FALSE(client.dockerAppsChanged());
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
 
   // Add a new app
-  client.config.pacman.docker_apps.push_back("app1");
-  ASSERT_TRUE(client.dockerAppsChanged());
+  apps_cfg["docker_apps"] = "app1";
+
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
 
   // No apps configured, but one installed:
-  client.config.pacman.docker_apps.clear();
-  boost::filesystem::create_directories(client.config.pacman.docker_apps_root / "app1");
-  ASSERT_TRUE(client.dockerAppsChanged());
+  apps_cfg["docker_apps"] = "";
+  boost::filesystem::create_directories(apps_root / "app1");
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
 
   // One app configured, one app deployed
-  client.config.pacman.docker_apps.push_back("app1");
-  boost::filesystem::create_directories(client.config.pacman.docker_apps_root / "app1");
-  ASSERT_FALSE(client.dockerAppsChanged());
+  apps_cfg["docker_apps"] = "app1";
+  boost::filesystem::create_directories(apps_root / "app1");
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
 
   // Docker app parameters enabled
-  client.config.pacman.docker_app_params = cfg_dir / "foo.txt";
-  Utils::writeFile(client.config.pacman.docker_app_params, std::string("foo text content"));
-  ASSERT_TRUE(client.dockerAppsChanged());
+  apps_cfg["docker_app_params"] = (cfg_dir / "foo.txt").native();
+  Utils::writeFile(cfg_dir / "foo.txt", std::string("foo text content"));
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
 
   // Store the hash of the file and make sure no change is detected
+  auto client = createClient(cfg_dir, apps_cfg);
   client.storeDockerParamsDigest();
   ASSERT_FALSE(client.dockerAppsChanged());
 
   // Change the content
-  Utils::writeFile(client.config.pacman.docker_app_params, std::string("foo text content changed"));
+  Utils::writeFile(cfg_dir / "foo.txt", std::string("foo text content changed"));
   ASSERT_TRUE(client.dockerAppsChanged());
 
   // Disable and ensure we detect the change
-  client.config.pacman.docker_app_params = "";
-  ASSERT_TRUE(client.dockerAppsChanged());
-  ASSERT_FALSE(boost::filesystem::exists(config.storage.path / ".params-hash"));
+  apps_cfg["docker_app_params"] = "";
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  ASSERT_FALSE(boost::filesystem::exists(cfg_dir / ".params-hash"));
 }
 #endif
 

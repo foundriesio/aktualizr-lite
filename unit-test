@@ -14,7 +14,7 @@ build=$(mktemp -d -p $here)
 cd $build
 
 ../cmake-init.sh
-ninja aktualizr-lite t_lite-helpers libt_lite-mock.so uptane-generator
+ninja aktualizr-lite t_lite-helpers libt_lite-mock.so uptane-generator make_ostree_sysroot
 
 ninja aktualizr_clang_tidy-src-helpers.cc  aktualizr_clang_tidy-src-main.cc
 
