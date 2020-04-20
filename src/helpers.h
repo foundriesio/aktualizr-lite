@@ -28,35 +28,40 @@ class Lock {
   int fd_;
 };
 
-struct LiteClient {
+class LiteClient {
+ public:
   LiteClient(Config& config_in);
 
   Config config;
   std::vector<std::string> tags;
   std::shared_ptr<INvStorage> storage;
   std::shared_ptr<SotaUptaneClient> primary;
-  std::shared_ptr<PackageManagerInterface> package_manager;
   std::pair<Uptane::EcuSerial, Uptane::HardwareIdentifier> primary_ecu;
-  std::unique_ptr<ReportQueue> report_queue;
   std::shared_ptr<HttpClient> http_client;
   boost::filesystem::path download_lockfile;
   boost::filesystem::path update_lockfile;
 
+  data::ResultCode::Numeric download(const Uptane::Target& target);
+  data::ResultCode::Numeric install(const Uptane::Target& target);
+  void notifyInstallFinished(const Uptane::Target& t, data::ResultCode::Numeric rc);
+
+  bool dockerAppsChanged();
+  void storeDockerParamsDigest();
+
+ private:
+  FRIEND_TEST(helpers, locking);
   std::unique_ptr<Lock> getDownloadLock();
   std::unique_ptr<Lock> getUpdateLock();
 
-  data::ResultCode::Numeric download(const Uptane::Target& target);
-  data::ResultCode::Numeric install(const Uptane::Target& target);
-
+  void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event);
   void notifyDownloadStarted(const Uptane::Target& t);
   void notifyDownloadFinished(const Uptane::Target& t, bool success);
   void notifyInstallStarted(const Uptane::Target& t);
-  void notifyInstallFinished(const Uptane::Target& t, data::ResultCode::Numeric rc);
 
-  void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event);
-  bool dockerAppsChanged();
-  void storeDockerParamsDigest();
   void writeCurrentTarget(const Uptane::Target& t);
+
+  std::shared_ptr<PackageManagerInterface> package_manager;
+  std::unique_ptr<ReportQueue> report_queue;
 };
 
 bool should_compare_docker_apps(const Config& config);
