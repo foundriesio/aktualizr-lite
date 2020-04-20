@@ -2,6 +2,8 @@
 #include <sys/file.h>
 #include <unistd.h>
 
+#include <boost/process.hpp>
+#include <boost/process/environment.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
@@ -165,6 +167,14 @@ LiteClient::LiteClient(Config &config_in)
     }
   }
 
+  if (raw.count("callback_program") == 1) {
+    callback_program = raw.at("callback_program");
+    if (!boost::filesystem::exists(callback_program)) {
+      LOG_ERROR << "callback_program(" << callback_program << ") does not exist";
+      callback_program = "";
+    }
+  }
+
   EcuSerials ecu_serials;
   if (!storage->loadEcuSerials(&ecu_serials)) {
     // Set a "random" serial so we don't get warning messages.
@@ -223,6 +233,28 @@ LiteClient::LiteClient(Config &config_in)
   }
 }
 
+void LiteClient::callback(const char *msg, const Uptane::Target &install_target, const std::string &result) {
+  if (callback_program.size() == 0) {
+    return;
+  }
+  auto env = boost::this_process::environment();
+  boost::process::environment env_copy = env;
+  env_copy["MESSAGE"] = msg;
+  env_copy["CURRENT_TARGET"] = (config.storage.path / "current-target").string();
+
+  if (!install_target.MatchTarget(Uptane::Target::Unknown())) {
+    env_copy["INSTALL_TARGET"] = install_target.filename();
+  }
+  if (result.size() > 0) {
+    env_copy["RESULT"] = result;
+  }
+
+  int rc = boost::process::system(callback_program, env_copy);
+  if (rc != 0) {
+    LOG_ERROR << "Error with callback: " << rc;
+  }
+}
+
 void LiteClient::notify(const Uptane::Target &t, std::unique_ptr<ReportEvent> event) {
   if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
@@ -232,24 +264,30 @@ void LiteClient::notify(const Uptane::Target &t, std::unique_ptr<ReportEvent> ev
 }
 
 void LiteClient::notifyDownloadStarted(const Uptane::Target &t) {
+  callback("download-pre", t);
   notify(t, std_::make_unique<EcuDownloadStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 
 void LiteClient::notifyDownloadFinished(const Uptane::Target &t, bool success) {
+  callback("download-post", t, success ? "OK" : "FAILED");
   notify(t, std_::make_unique<EcuDownloadCompletedReport>(primary_ecu.first, t.correlation_id(), success));
 }
 
 void LiteClient::notifyInstallStarted(const Uptane::Target &t) {
+  callback("install-pre", t);
   notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 
 void LiteClient::notifyInstallFinished(const Uptane::Target &t, data::ResultCode::Numeric rc) {
   if (rc == data::ResultCode::Numeric::kNeedCompletion) {
+    callback("install-post", t, "NEEDS_COMPLETION");
     notify(t, std_::make_unique<EcuInstallationAppliedReport>(primary_ecu.first, t.correlation_id()));
   } else if (rc == data::ResultCode::Numeric::kOk) {
+    callback("install-post", t, "OK");
     writeCurrentTarget(t);
     notify(t, std_::make_unique<EcuInstallationCompletedReport>(primary_ecu.first, t.correlation_id(), true));
   } else {
+    callback("install-post", t, "FAILED");
     notify(t, std_::make_unique<EcuInstallationCompletedReport>(primary_ecu.first, t.correlation_id(), false));
   }
 }

@@ -50,6 +50,10 @@ class LiteClient {
 
  private:
   FRIEND_TEST(helpers, locking);
+  FRIEND_TEST(helpers, callback);
+
+  void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
+
   std::unique_ptr<Lock> getDownloadLock();
   std::unique_ptr<Lock> getUpdateLock();
 
@@ -60,6 +64,7 @@ class LiteClient {
 
   void writeCurrentTarget(const Uptane::Target& t);
 
+  boost::filesystem::path callback_program;
   std::shared_ptr<PackageManagerInterface> package_manager;
   std::unique_ptr<ReportQueue> report_queue;
 };
