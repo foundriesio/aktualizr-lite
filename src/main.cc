@@ -184,7 +184,7 @@ static int daemon_main(LiteClient &client, const bpo::variables_map &variables_m
 
   while (true) {
     LOG_INFO << "Refreshing Targets metadata";
-    if (!client.primary->updateImageMeta()) {
+    if (!client.checkForUpdates()) {
       LOG_WARNING << "Unable to update latest metadata";
       std::this_thread::sleep_for(std::chrono::seconds(10));
       continue;  // There's no point trying to look for an update

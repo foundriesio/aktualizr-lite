@@ -41,6 +41,7 @@ class LiteClient {
   boost::filesystem::path download_lockfile;
   boost::filesystem::path update_lockfile;
 
+  bool checkForUpdates();
   data::ResultCode::Numeric download(const Uptane::Target& target);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::ResultCode::Numeric rc);
