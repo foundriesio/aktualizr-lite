@@ -255,6 +255,14 @@ void LiteClient::callback(const char *msg, const Uptane::Target &install_target,
   }
 }
 
+bool LiteClient::checkForUpdates() {
+  Uptane::Target t = Uptane::Target::Unknown();
+  callback("check-for-update-pre", t);
+  bool rc = primary->updateImageMeta();
+  callback("check-for-update-post", t);
+  return rc;
+}
+
 void LiteClient::notify(const Uptane::Target &t, std::unique_ptr<ReportEvent> event) {
   if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
