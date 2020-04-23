@@ -1,6 +1,6 @@
 set(TARGET aktualizr-lite)
-set(SRC main.cc helpers.cc)
-set(HEADERS helpers.h)
+set(SRC main.cc helpers.cc composeappmanager.cc)
+set(HEADERS helpers.h composeappmanager.h)
 
 add_executable(${TARGET} ${SRC})
 
