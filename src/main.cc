@@ -10,29 +10,6 @@
 
 namespace bpo = boost::program_options;
 
-static void log_info_target(const std::string &prefix, const Config &config, const Uptane::Target &t) {
-  auto name = t.filename();
-  if (t.custom_version().length() > 0) {
-    name = t.custom_version();
-  }
-  LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
-  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
-    bool shown = false;
-    auto apps = t.custom_data()["docker_apps"];
-    for (Json::ValueIterator i = apps.begin(); i != apps.end(); ++i) {
-      if (!shown) {
-        shown = true;
-        LOG_INFO << "\tDocker Apps:";
-      }
-      if ((*i).isObject() && (*i).isMember("filename")) {
-        LOG_INFO << "\t\t" << i.key().asString() << " -> " << (*i)["filename"].asString();
-      } else {
-        LOG_ERROR << "\t\tInvalid custom data for docker-app: " << i.key().asString();
-      }
-    }
-  }
-}
-
 static int status_main(LiteClient &client, const bpo::variables_map &unused) {
   (void)unused;
   auto target = client.primary->getCurrent();

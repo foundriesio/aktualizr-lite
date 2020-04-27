@@ -15,6 +15,43 @@
 #include "composeappmanager.h"
 #include "package_manager/dockerappmanager.h"
 
+void log_info_target(const std::string &prefix, const Config &config, const Uptane::Target &t) {
+  auto name = t.filename();
+  if (t.custom_version().length() > 0) {
+    name = t.custom_version();
+  }
+  LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
+  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
+    bool shown = false;
+    auto apps = t.custom_data()["docker_apps"];
+    for (Json::ValueIterator i = apps.begin(); i != apps.end(); ++i) {
+      if (!shown) {
+        shown = true;
+        LOG_INFO << "\tDocker Apps:";
+      }
+      if ((*i).isObject() && (*i).isMember("filename")) {
+        LOG_INFO << "\t\t" << i.key().asString() << " -> " << (*i)["filename"].asString();
+      } else {
+        LOG_ERROR << "\t\tInvalid custom data for docker-app: " << i.key().asString();
+      }
+    }
+  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+    bool shown = false;
+    auto bundles = t.custom_data()["docker_compose_apps"];
+    for (Json::ValueIterator i = bundles.begin(); i != bundles.end(); ++i) {
+      if (!shown) {
+        shown = true;
+        LOG_INFO << "\tDocker Compose Apps:";
+      }
+      if ((*i).isObject() && (*i).isMember("uri")) {
+        LOG_INFO << "\t\t" << i.key().asString() << " -> " << (*i)["uri"].asString();
+      } else {
+        LOG_ERROR << "\t\tInvalid custom data for docker_compose_apps: " << i.key().asString();
+      }
+    }
+  }
+}
+
 static __attribute__((constructor)) void init_pacman() {
   PackageManagerFactory::registerPackageManager(
       PACKAGE_MANAGER_COMPOSEAPP,
@@ -113,6 +150,14 @@ bool LiteClient::dockerAppsChanged() {
   return false;
 }
 #else /* ! BUILD_DOCKERAPP */
+void log_info_target(const std::string &prefix, const Config &config, const Uptane::Target &t) {
+  auto name = t.filename();
+  if (t.custom_version().length() > 0) {
+    name = t.custom_version();
+  }
+  LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
+}
+
 #define add_apps_header(headers, config) \
   {}
 
