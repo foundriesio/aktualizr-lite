@@ -28,11 +28,18 @@ static void add_apps_header(std::vector<std::string> &headers, PackageConfig &co
   if (config.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     DockerAppManagerConfig dappcfg(config);
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(dappcfg.docker_apps, ","));
+  } else if (config.type == PACKAGE_MANAGER_COMPOSEAPP) {
+    ComposeAppConfig cfg(config);
+    headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(cfg.apps, ","));
   }
 }
 bool should_compare_docker_apps(const Config &config) {
-  DockerAppManagerConfig dappcfg(config.pacman);
-  return (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP && !dappcfg.docker_apps.empty());
+  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
+    return !DockerAppManagerConfig(config.pacman).docker_apps.empty();
+  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+    return !ComposeAppConfig(config.pacman).apps.empty();
+  }
+  return false;
 }
 
 void LiteClient::storeDockerParamsDigest() {
@@ -45,52 +52,62 @@ void LiteClient::storeDockerParamsDigest() {
   }
 }
 
-bool LiteClient::dockerAppsChanged() {
-  if (config.pacman.type != PACKAGE_MANAGER_OSTREEDOCKERAPP) {
-    return false;
-  }
-
-  DockerAppManagerConfig dappcfg(config.pacman);
+static bool appListChanged(std::vector<std::string> &apps, const boost::filesystem::path &apps_dir) {
   // Did the list of installed versus running apps change:
   std::vector<std::string> found;
-  if (boost::filesystem::is_directory(dappcfg.docker_apps_root)) {
-    for (auto &entry :
-         boost::make_iterator_range(boost::filesystem::directory_iterator(dappcfg.docker_apps_root), {})) {
+  if (boost::filesystem::is_directory(apps_dir)) {
+    for (auto &entry : boost::make_iterator_range(boost::filesystem::directory_iterator(apps_dir), {})) {
       if (boost::filesystem::is_directory(entry)) {
         found.emplace_back(entry.path().filename().native());
       }
     }
   }
   std::sort(found.begin(), found.end());
-  std::sort(dappcfg.docker_apps.begin(), dappcfg.docker_apps.end());
-  if (found != dappcfg.docker_apps) {
+  std::sort(apps.begin(), apps.end());
+  if (found != apps) {
     LOG_INFO << "Config change detected: list of apps has changed";
     return true;
   }
+  return false;
+}
 
-  // Did the docker app configuration change
-  auto checksum = config.storage.path / ".params-hash";
-  if (boost::filesystem::exists(dappcfg.docker_app_params)) {
-    if (dappcfg.docker_apps.size() == 0) {
-      // there's no point checking for changes - nothing is running
-      return false;
-    }
-
-    if (boost::filesystem::exists(checksum)) {
-      std::string cur = Utils::readFile(checksum);
-      std::string now = Crypto::sha256digest(Utils::readFile(dappcfg.docker_app_params));
-      if (cur != now) {
-        LOG_INFO << "Config change detected: docker-app-params content has changed";
-        return true;
-      }
-    } else {
-      LOG_INFO << "Config change detected: docker-app-params have been defined";
+bool LiteClient::dockerAppsChanged() {
+  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
+    DockerAppManagerConfig dappcfg(config.pacman);
+    if (appListChanged(dappcfg.docker_apps, dappcfg.docker_apps_root)) {
       return true;
     }
-  } else if (boost::filesystem::exists(checksum)) {
-    LOG_INFO << "Config change detected: docker-app parameters have been removed";
-    boost::filesystem::remove(checksum);
-    return true;
+    // Did the docker app configuration change
+    auto checksum = config.storage.path / ".params-hash";
+    if (boost::filesystem::exists(dappcfg.docker_app_params)) {
+      if (dappcfg.docker_apps.size() == 0) {
+        // there's no point checking for changes - nothing is running
+        return false;
+      }
+
+      if (boost::filesystem::exists(checksum)) {
+        std::string cur = Utils::readFile(checksum);
+        std::string now = Crypto::sha256digest(Utils::readFile(dappcfg.docker_app_params));
+        if (cur != now) {
+          LOG_INFO << "Config change detected: docker-app-params content has changed";
+          return true;
+        }
+      } else {
+        LOG_INFO << "Config change detected: docker-app-params have been defined";
+        return true;
+      }
+    } else if (boost::filesystem::exists(checksum)) {
+      LOG_INFO << "Config change detected: docker-app parameters have been removed";
+      boost::filesystem::remove(checksum);
+      return true;
+    }
+  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+    ComposeAppConfig cacfg(config.pacman);
+    if (appListChanged(cacfg.apps, cacfg.apps_root)) {
+      return true;
+    }
+  } else {
+    return false;
   }
 
   return false;

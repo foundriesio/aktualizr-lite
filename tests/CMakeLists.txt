@@ -16,8 +16,28 @@ add_test(test_aktualizr-lite
 
 set_tests_properties(test_aktualizr-lite PROPERTIES DEPENDS uptane-generator)
 
+add_aktualizr_test(NAME compose-apps
+  SOURCES ${AKLITE_DIR}/src/composeappmanager.cc composeapp_test.cc
+  PROJECT_WORKING_DIRECTORY ARGS ${PROJECT_BINARY_DIR}/aktualizr/ostree_repo
+)
+
+target_include_directories(t_compose-apps PRIVATE
+  ${AKTUALIZR_DIR}/tests
+  ${AKLITE_DIR}/src
+  ${AKTUALIZR_DIR}/src/libaktualizr
+  ${AKTUALIZR_DIR}/third_party/jsoncpp/include
+  ${GLIB_INCLUDE_DIRS}
+  ${LIBOSTREE_INCLUDE_DIRS}
+)
+
+target_link_libraries(t_compose-apps
+  aktualizr_lib
+  ${Boost_LIBRARIES}
+  gtest
+)
+
 add_aktualizr_test(NAME lite-helpers
-  SOURCES helpers_test.cc ${AKLITE_DIR}/src/helpers.cc
+  SOURCES helpers_test.cc ${AKLITE_DIR}/src/helpers.cc ${AKLITE_DIR}/src/composeappmanager.cc
   ARGS ${PROJECT_BINARY_DIR}/aktualizr/ostree_repo
 )
 

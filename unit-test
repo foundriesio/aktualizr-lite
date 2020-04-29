@@ -18,9 +18,15 @@ cd $build
 ninja aklite-tests
 
 # do additional clang-tidying in the aktualizr way
-ninja aktualizr_clang_tidy-src-helpers.cc  aktualizr_clang_tidy-src-main.cc
+clang_tests=$(ninja help | grep aktualizr_clang_tidy-src- | cut -d: -f1)
+ninja $clang_tests
+
+# do clang-formating in the aktualizr way
+clang_tests=$(ninja help | grep aktualizr_ci_clang_format-src- | cut -d: -f1)
+ninja $clang_tests
 
 ctest -V -R test_lite-helpers
+ctest -V -R test_compose-apps
 ctest -V -R test_aktualizr-lite
 
 # test building the sota tools

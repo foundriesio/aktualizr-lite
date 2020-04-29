@@ -10,7 +10,7 @@ if(BUILD_WITH_CLANG_TIDY)
     PROPERTIES CXX_CLANG_TIDY
   # TODO: consider adding clang-tidy options that it makes sense to include here
   # TODO: if all clang-tidy checks are on then lots of errors appears
-  "${CLANG_TIDY};-quiet;-header-filter=\(${CMAKE_SOURCE_DIR}|\\.\\.\)/src/.*"
+  "${CLANG_TIDY};-quiet;-checks=-*,-boost*,clang-analyzer-*,-clang-analyzer-cplusplus*;-header-filter=\(${CMAKE_SOURCE_DIR}|\\.\\.\)/src/.h"
   #  "${CLANG_TIDY_CMD};-checks=*;-quiet;-header-filter=\(${CMAKE_SOURCE_DIR}|\\.\\.\)/src/.*"
   )
 
@@ -31,6 +31,7 @@ target_include_directories(${TARGET} PRIVATE
 )
 
 target_link_libraries(${TARGET} aktualizr_lib)
+
 
 # TODO: consider cleaning up the overall "install" elements as it includes
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
