@@ -24,6 +24,10 @@ class ComposeAppManager : public OstreeManager {
   std::string name() const override { return PACKAGE_MANAGER_COMPOSEAPP; };
 
  private:
+  FRIEND_TEST(ComposeApp, getApps);
+
+  std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target &t) const;
+
   ComposeAppConfig cfg_;
 };
 
