@@ -479,19 +479,36 @@ bool targets_eq(const Uptane::Target &t1, const Uptane::Target &t2, bool compare
   // target equality check looks at hashes
   if (t1.MatchTarget(t2)) {
     if (compareDockerApps) {
-      auto t1_apps = t1.custom_data()["docker_apps"];
-      auto t2_apps = t2.custom_data()["docker_apps"];
-      for (Json::ValueIterator i = t1_apps.begin(); i != t1_apps.end(); ++i) {
+      auto t1_dapps = t1.custom_data()["docker_apps"];
+      auto t2_dapps = t2.custom_data()["docker_apps"];
+      for (Json::ValueIterator i = t1_dapps.begin(); i != t1_dapps.end(); ++i) {
         auto app = i.key().asString();
-        if (!t2_apps.isMember(app)) {
+        if (!t2_dapps.isMember(app)) {
           return false;  // an app has been removed
         }
-        if ((*i)["filename"].asString() != t2_apps[app]["filename"].asString()) {
+        if ((*i)["filename"].asString() != t2_dapps[app]["filename"].asString()) {
           return false;  // tuf target filename changed
         }
-        t2_apps.removeMember(app);
+        t2_dapps.removeMember(app);
       }
-      if (t2_apps.size() > 0) {
+      if (t2_dapps.size() > 0) {
+        return false;  // an app has been added
+      }
+
+      // compose apps
+      auto t1_capps = t1.custom_data()["docker_compose_apps"];
+      auto t2_capps = t2.custom_data()["docker_compose_apps"];
+      for (Json::ValueIterator i = t1_capps.begin(); i != t1_capps.end(); ++i) {
+        auto app = i.key().asString();
+        if (!t2_capps.isMember(app)) {
+          return false;  // an app has been removed
+        }
+        if ((*i)["uri"].asString() != t2_capps[app]["uri"].asString()) {
+          return false;  // tuf target filename changed
+        }
+        t2_capps.removeMember(app);
+      }
+      if (t2_capps.size() > 0) {
         return false;  // an app has been added
       }
     }

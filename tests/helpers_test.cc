@@ -123,6 +123,47 @@ TEST(helpers, targets_eq) {
   ASSERT_TRUE(targets_eq(t1, t2, true));
 }
 
+TEST(helpers, targets_eq_compose) {
+  auto t1 = Uptane::Target::Unknown();
+  auto t2 = Uptane::Target::Unknown();
+
+  // t1 should equal t2 when there a no docker-apps
+  ASSERT_TRUE(targets_eq(t1, t2, false));
+  ASSERT_TRUE(targets_eq(t1, t2, true));
+
+  auto custom = t1.custom_data();
+  custom["docker_compose_apps"]["app1"]["uri"] = "app1-v1";
+  t1.updateCustom(custom);
+  ASSERT_TRUE(targets_eq(t1, t2, false));  // still equal, ignoring docker-apps
+  ASSERT_FALSE(targets_eq(t1, t2, true));
+
+  custom = t2.custom_data();
+  custom["docker_compose_apps"]["app1"]["uri"] = "app1-v1";
+  t2.updateCustom(custom);
+  ASSERT_TRUE(targets_eq(t1, t2, true));
+
+  custom["docker_compose_apps"]["app1"]["uri"] = "app1-v2";
+  t2.updateCustom(custom);
+  ASSERT_FALSE(targets_eq(t1, t2, true));  // version has changed
+
+  // Get things the same again
+  custom["docker_compose_apps"]["app1"]["uri"] = "app1-v1";
+  t2.updateCustom(custom);
+
+  custom["docker_compose_apps"]["app2"]["uri"] = "app2-v2";
+  t2.updateCustom(custom);
+  ASSERT_FALSE(targets_eq(t1, t2, true));  // t2 has an app that t1 doesn't
+
+  custom = t1.custom_data();
+  custom["docker_compose_apps"]["app2"]["uri"] = "app2-v1";
+  t1.updateCustom(custom);
+  ASSERT_FALSE(targets_eq(t1, t2, true));  // app2 versions differ
+
+  custom["docker_compose_apps"]["app2"]["uri"] = "app2-v2";
+  t1.updateCustom(custom);
+  ASSERT_TRUE(targets_eq(t1, t2, true));
+}
+
 TEST(helpers, locking) {
   TemporaryDirectory cfg_dir;
   Config config;
