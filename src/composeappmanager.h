@@ -21,6 +21,8 @@ class ComposeAppManager : public OstreeManager {
                     const std::shared_ptr<INvStorage> &storage, const std::shared_ptr<HttpInterface> &http)
       : OstreeManager(pconfig, bconfig, storage, http), cfg_(pconfig) {}
 
+  bool fetchTarget(const Uptane::Target &target, Uptane::Fetcher &fetcher, const KeyManager &keys,
+                   FetcherProgressCb progress_cb, const api::FlowControlToken *token) override;
   std::string name() const override { return PACKAGE_MANAGER_COMPOSEAPP; };
 
  private:

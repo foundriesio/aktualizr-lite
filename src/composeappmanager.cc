@@ -1,5 +1,47 @@
 #include "composeappmanager.h"
 
+#include "boost/process.hpp"
+
+struct ComposeApp {
+  ComposeApp(std::string name, const ComposeAppConfig &config)
+      : name_(std::move(name)),
+        root_(config.apps_root / name_),
+        compose_(boost::filesystem::canonical(config.compose_bin).string() + " ") {}
+
+  // Utils::shell isn't interactive. The compose commands can take a few
+  // seconds to run, so we use boost::process:system to stream it to stdout/sterr
+  bool cmd_streaming(const std::string &cmd) {
+    LOG_DEBUG << "Running: " << cmd;
+    return boost::process::system(cmd, boost::process::start_dir = root_) == 0;
+  }
+
+  bool fetch(const std::string &app_uri) {
+    boost::filesystem::create_directories(root_);
+    if (cmd_streaming(compose_ + "download " + app_uri)) {
+      LOG_INFO << "Validating compose file";
+      if (cmd_streaming(compose_ + "config")) {
+        LOG_INFO << "Pulling containers";
+        return cmd_streaming(compose_ + "pull");
+      }
+    }
+    return false;
+  };
+
+  bool start() { return cmd_streaming(compose_ + "up --remove-orphans -d"); }
+
+  void remove() {
+    if (cmd_streaming(compose_ + "down")) {
+      boost::filesystem::remove_all(root_);
+    } else {
+      LOG_ERROR << "docker-compose was unable to bring down: " << root_;
+    }
+  }
+
+  std::string name_;
+  boost::filesystem::path root_;
+  std::string compose_;
+};
+
 ComposeAppConfig::ComposeAppConfig(const PackageConfig &pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
 
@@ -42,4 +84,21 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(cons
   }
 
   return apps;
+}
+
+bool ComposeAppManager::fetchTarget(const Uptane::Target &target, Uptane::Fetcher &fetcher, const KeyManager &keys,
+                                    FetcherProgressCb progress_cb, const api::FlowControlToken *token) {
+  if (!OstreeManager::fetchTarget(target, fetcher, keys, progress_cb, token)) {
+    return false;
+  }
+
+  LOG_INFO << "Looking for Compose Apps to fetch";
+  bool passed = true;
+  for (const auto &pair : getApps(target)) {
+    LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
+    if (!ComposeApp(pair.first, cfg_).fetch(pair.second)) {
+      passed = false;
+    }
+  }
+  return passed;
 }
