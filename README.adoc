@@ -41,6 +41,7 @@ cmake --build build --target aklite-tests -- -j6
 
 === Test
 ```
+cd build
 ctest -V -R test_aktualizr-lite
 ctest -V -R test_lite-helpers
 ```

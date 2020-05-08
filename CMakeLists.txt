@@ -9,6 +9,9 @@ project(aklite)
 set(BUILD_OSTREE ON CACHE BOOL "")
 set(BUILD_DOCKERAPP ON CACHE BOOL "")
 
+# TODO: Figure out why it's needed at all
+add_definitions(-DBOOST_LOG_DYN_LINK)
+
 add_custom_target(aklite)
 add_dependencies(aklite aktualizr-lite)
 
