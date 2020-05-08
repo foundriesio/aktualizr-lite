@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 cmake_minimum_required (VERSION 3.5)
+project(aklite)
 
 # Export compile_commands.json for clang-tidy
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
