@@ -1,0 +1,55 @@
+[discrete]
+= aktualizr-lite
+
+====
+C++ implementation of https://theupdateframework.io/[TUF] OTA update client based on https://github.com/advancedtelematic/aktualizr[aktualizr]
+====
+
+== Getting Started
+
+=== Dependencies
+List of aktualizr-lite dependencies can be found https://github.com/advancedtelematic/aktualizr#dependencies[here]
+
+=== Build
+
+```
+git clone --recursive https://github.com/foundriesio/aktualizr-lite
+cd aktualizr-lite
+```
+or if you cloned the repo without `--recursive` flag
+```
+git submodule update --init --recursive
+```
+Initialize a build directory
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+```
+or if you prefer Ninja backend
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -GNinja
+```
+
+Build
+```
+cmake --build build --target aklite -- -j6
+```
+
+Build tests
+```
+cmake --build build --target aklite-tests -- -j6
+```
+
+=== Test
+```
+ctest -V -R test_aktualizr-lite
+ctest -V -R test_lite-helpers
+```
+=== Usage
+
+==== Configure
+TODO
+
+==== Run
+```
+./build/src/aktualizr-lite -h
+```
