@@ -14,9 +14,10 @@ build=$(mktemp -d -p $here)
 cd $build
 
 ../cmake-init.sh
-ninja aktualizr-lite t_lite-helpers libt_lite-mock.so uptane-generator make_ostree_sysroot
+ninja aklite-tests -j6
 
-ninja aktualizr_clang_tidy-src-helpers.cc  aktualizr_clang_tidy-src-main.cc
+# TODO: add clang-tidy support
+#ninja aktualizr_clang_tidy-src-helpers.cc  aktualizr_clang_tidy-src-main.cc
 
 ctest -V -R test_lite-helpers
 ctest -V -R test_aktualizr-lite

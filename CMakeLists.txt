@@ -15,10 +15,6 @@ add_dependencies(aklite aktualizr-lite)
 add_custom_target(aklite-tests)
 add_dependencies(aklite-tests aklite t_lite-helpers uptane-generator)
 
-# Export compile_commands.json for clang-tidy
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/cmake-modules;${CMAKE_MODULE_PATH}")
 
 if(NOT BUILD_SOTA_TOOLS)
