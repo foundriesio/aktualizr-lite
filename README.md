@@ -1,16 +1,15 @@
-[discrete]
-= aktualizr-lite
+# aktualizr-lite
 
-====
-C++ implementation of https://theupdateframework.io/[TUF] OTA update client based on https://github.com/advancedtelematic/aktualizr[aktualizr]
-====
 
-== Getting Started
+C++ implementation of [TUF](https://theupdateframework.io/) OTA update client based on [aktualizr](https://github.com/advancedtelematic/aktualizr)
 
-=== Dependencies
-List of aktualizr-lite dependencies can be found https://github.com/advancedtelematic/aktualizr#dependencies[here]
 
-=== Build
+## Getting Started
+
+### Dependencies
+List of aktualizr-lite dependencies can be found [here](https://github.com/advancedtelematic/aktualizr#dependencies)
+
+### Build
 
 ```
 git clone --recursive https://github.com/foundriesio/aktualizr-lite
@@ -46,7 +45,7 @@ or if Ninja is used just
 cmake --build build --target aklite-tests
 ```
 
-=== Test
+### Test
 ```
 cd build
 ctest -V -R test_aktualizr-lite
@@ -58,12 +57,12 @@ ctest -V -R test_lite-helpers
 ./unit-test
 ```
 
-=== Usage
+### Usage
 
-==== Configure
+#### Configure
 TODO
 
-==== Run
+#### Run
 ```
 ./build/src/aktualizr-lite -h
 ```
