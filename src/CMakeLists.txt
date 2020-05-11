@@ -4,8 +4,12 @@ set(HEADERS helpers.h)
 
 add_executable(${TARGET} ${SRC})
 
-target_include_directories(${TARGET} PRIVATE ${AKTUALIZR_DIR}/src/libaktualizr)
-target_include_directories(${TARGET} PRIVATE ${AKTUALIZR_DIR}/third_party/jsoncpp/include)
+target_include_directories(${TARGET} PRIVATE
+  ${AKTUALIZR_DIR}/src/libaktualizr
+  ${AKTUALIZR_DIR}/third_party/jsoncpp/include
+  ${GLIB_INCLUDE_DIRS}
+  ${LIBOSTREE_INCLUDE_DIRS}
+)
 
 target_link_libraries(${TARGET} aktualizr_lib)
 

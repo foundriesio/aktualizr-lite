@@ -23,7 +23,8 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aktualizr/cmake-modules;${CMA
 
 if(NOT BUILD_SOTA_TOOLS)
   find_package(OSTree REQUIRED)
-  include_directories(${GLIB_INCLUDE_DIRS} ${LIBOSTREE_INCLUDE_DIRS})
+  find_package(PkgConfig REQUIRED)
+  pkg_search_module(GLIB REQUIRED glib-2.0)
 endif(NOT BUILD_SOTA_TOOLS)
 
 include(CTest)
