@@ -8,6 +8,7 @@ project(aklite)
 # OSTree is mandatory for aktualizr-lite
 option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
 option(BUILD_DOCKERAPP "Set to ON to compile with package manager support of docker-app" OFF)
+option(CLANG_TIDY "Set to ON to do do clang-tidy" OFF)
 
 set(AKTUALIZR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/aktualizr)
 set(AKLITE_DIR ${CMAKE_CURRENT_SOURCE_DIR})

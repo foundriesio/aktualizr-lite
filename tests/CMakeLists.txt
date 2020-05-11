@@ -6,6 +6,9 @@ set(TEST_LIBS gtest gmock testutilities aktualizr_lib)
 add_library(lite-mock SHARED ostree_mock.cc)
 target_include_directories(lite-mock PRIVATE ${LIBOSTREE_INCLUDE_DIRS})
 
+# TODO: add more gtests
+# TODO: add static checker
+# TODO: add valgrind
 add_test(test_aktualizr-lite
   ${CMAKE_CURRENT_SOURCE_DIR}/test_lite.sh
           ${CMAKE_BINARY_DIR}/src/aktualizr-lite

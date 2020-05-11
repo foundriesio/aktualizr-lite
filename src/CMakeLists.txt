@@ -4,7 +4,15 @@ set(HEADERS helpers.h)
 
 add_executable(${TARGET} ${SRC})
 
-if (BUILD_DOCKERAPP)
+if(CLANG_TIDY)
+set_target_properties(${TARGET}
+  PROPERTIES CXX_CLANG_TIDY
+# TODO: consider adding clang-tidy options that it makes sense to include here
+  clang-tidy-6.0;-checks=*;-warnings-as-errors=*
+)
+endif(CLANG_TIDY)
+
+if(BUILD_DOCKERAPP)
   target_compile_definitions(${TARGET} PRIVATE BUILD_DOCKERAPP)
 endif(BUILD_DOCKERAPP)
 

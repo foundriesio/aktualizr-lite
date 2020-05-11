@@ -9,4 +9,7 @@ if [ "$HERE" = "$(pwd)" ] ; then
 	exit 1
 fi
 
-cmake -GNinja -DBUILD_DOCKERAPP=ON $HERE
+CMAKE_DEF_ARGS="-GNinja -DBUILD_DOCKERAPP=ON"
+CMAKE_ARGS="${CMAKE_DEF_ARGS} $1"
+echo "Building aklite with the following arguments: ${CMAKE_ARGS}"
+cmake ${CMAKE_ARGS} $HERE
