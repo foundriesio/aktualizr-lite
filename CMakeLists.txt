@@ -41,9 +41,9 @@ if(BUILD_AKLITE)
   find_package(PkgConfig REQUIRED)
   pkg_search_module(GLIB REQUIRED glib-2.0)
 
-  include(CTest)
-
   add_subdirectory(src)
+
+  include(CTest)
   add_subdirectory(tests EXCLUDE_FROM_ALL)
 
 endif(BUILD_AKLITE)

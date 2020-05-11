@@ -1,7 +1,5 @@
 set(TEST_SOURCES test_lite.sh)
 
-set(TEST_LIBS gtest gmock testutilities aktualizr_lib)
-
 # TODO: Find a way to test without a need in the lite-mock
 add_library(lite-mock SHARED ostree_mock.cc)
 target_include_directories(lite-mock PRIVATE ${LIBOSTREE_INCLUDE_DIRS})
@@ -33,7 +31,12 @@ target_include_directories(t_lite-helpers PRIVATE
   ${GLIB_INCLUDE_DIRS}
   ${LIBOSTREE_INCLUDE_DIRS}
 )
-target_link_libraries(t_lite-helpers aktualizr_lib ${Boost_LIBRARIES})
+
+target_link_libraries(t_lite-helpers
+  aktualizr_lib
+  ${Boost_LIBRARIES}
+  gtest
+)
 
 # TODO: Find a way to test without a need in the lite-mock
 set_tests_properties(test_lite-helpers PROPERTIES ENVIRONMENT LD_PRELOAD=$<TARGET_FILE:lite-mock>)
