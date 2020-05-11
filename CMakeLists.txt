@@ -5,18 +5,13 @@
 cmake_minimum_required (VERSION 3.5)
 project(aklite)
 
+set(AKTUALIZR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/aktualizr)
+set(AKLITE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
 # OSTree is mandatory for aktualizr-lite
 option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
 option(BUILD_DOCKERAPP "Set to ON to compile with package manager support of docker-app" OFF)
 option(CLANG_TIDY "Set to ON to do do clang-tidy" OFF)
-
-set(AKTUALIZR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/aktualizr)
-set(AKLITE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-
-# TODO: consider adding a custom target or using ExternalProject so we don't need
-# to encapsulate/inherit all aktualizr's targets and definitions, so e.g. `make all`
-# would aktually means build 'all' of aktualizr-lite but not 'all' of aktualizr
-add_subdirectory(${AKTUALIZR_DIR})
 
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
@@ -27,6 +22,11 @@ if(BUILD_SOTA_TOOLS)
 else(BUILD_SOTA_TOOLS)
   set(BUILD_AKLITE ON)
 endif(BUILD_SOTA_TOOLS)
+
+# TODO: consider adding a custom target or using ExternalProject so we don't need
+# to encapsulate/inherit all aktualizr's targets and definitions, so e.g. `make all`
+# would aktually means build 'all' of aktualizr-lite but not 'all' of aktualizr
+add_subdirectory(${AKTUALIZR_DIR})
 
 if(BUILD_AKLITE)
   add_custom_target(aklite)
@@ -47,3 +47,10 @@ if(BUILD_AKLITE)
   add_subdirectory(tests EXCLUDE_FROM_ALL)
 
 endif(BUILD_AKLITE)
+
+# Use `-LH` options (cmake <args> -LH) to output all variables
+message(STATUS "BUILD_AKLITE: ${BUILD_AKLITE}")
+message(STATUS "BUILD_OSTREE: ${BUILD_OSTREE}")
+message(STATUS "BUILD_DOCKERAPP: ${BUILD_DOCKERAPP}")
+message(STATUS "BUILD_SOTA_TOOLS: ${BUILD_SOTA_TOOLS}")
+message(STATUS "CLANG_TIDY: ${CLANG_TIDY}")
