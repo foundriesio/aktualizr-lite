@@ -22,21 +22,28 @@ git submodule update --init --recursive
 ```
 Initialize a build directory
 ```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake -S . -B build -DBUILD_DOCKERAPP=ON -DCMAKE_BUILD_TYPE=Debug
 ```
-or if you prefer Ninja backend
+if you prefer Ninja backend
 ```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -GNinja
+cmake -S . -B build -DBUILD_DOCKERAPP=ON -DCMAKE_BUILD_TYPE=Debug -GNinja
 ```
-
-Build
+turn on clang-tidy
+```
+cmake -S . -B build -DBUILD_DOCKERAPP=ON -DCMAKE_BUILD_TYPE=Debug -GNinja  -DCLANG_TIDY=ON
+```
+Build aktualizr-lite
 ```
 cmake --build build --target aklite -- -j6
+or if Ninja is used just
+cmake --build build --target aklite
 ```
 
 Build tests
 ```
 cmake --build build --target aklite-tests -- -j6
+or if Ninja is used just
+cmake --build build --target aklite-tests
 ```
 
 === Test
@@ -45,6 +52,12 @@ cd build
 ctest -V -R test_aktualizr-lite
 ctest -V -R test_lite-helpers
 ```
+
+==== Build and test in a docker container
+```
+./unit-test
+```
+
 === Usage
 
 ==== Configure
