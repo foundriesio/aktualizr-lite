@@ -21,6 +21,7 @@ target_compile_definitions(${TARGET} PRIVATE BOOST_LOG_DYN_LINK)
 target_include_directories(${TARGET} PRIVATE
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include
+  ${AKTUALIZR_DIR}/third_party/googletest/googletest/include
   ${GLIB_INCLUDE_DIRS}
   ${LIBOSTREE_INCLUDE_DIRS}
 )
