@@ -5,9 +5,10 @@
 cmake_minimum_required (VERSION 3.5)
 project(aklite)
 
-# OSTree and DockerApp package manager are mandatory for aktualizr-lite
-set(BUILD_OSTREE ON CACHE BOOL "")
-set(BUILD_DOCKERAPP ON CACHE BOOL "")
+# OSTree is mandatory for aktualizr-lite
+option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
+option(BUILD_DOCKERAPP "Set to ON to compile with package manager support of docker-app" OFF)
+
 
 # TODO: Figure out why it's needed at all
 add_definitions(-DBOOST_LOG_DYN_LINK)

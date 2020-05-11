@@ -26,5 +26,9 @@ target_include_directories(t_lite-helpers PRIVATE
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include
 )
 
+# TODO: Find a way to test without a need in the lite-mock
 set_tests_properties(test_lite-helpers PROPERTIES ENVIRONMENT LD_PRELOAD=$<TARGET_FILE:lite-mock>)
 
+if (BUILD_DOCKERAPP)
+  target_compile_definitions(t_lite-helpers PRIVATE BUILD_DOCKERAPP)
+endif(BUILD_DOCKERAPP)

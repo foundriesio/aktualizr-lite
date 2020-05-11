@@ -9,4 +9,4 @@ if [ "$HERE" = "$(pwd)" ] ; then
 	exit 1
 fi
 
-cmake -GNinja $HERE
+cmake -GNinja -DBUILD_DOCKERAPP=ON $HERE
