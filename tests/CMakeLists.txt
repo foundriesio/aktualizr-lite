@@ -20,6 +20,7 @@ add_aktualizr_test(NAME lite-helpers
   ARGS ${PROJECT_BINARY_DIR}/aktualizr/ostree_repo
 )
 
+target_compile_definitions(t_lite-helpers PRIVATE BOOST_LOG_DYN_LINK)
 add_dependencies(t_lite-helpers lite-mock make_ostree_sysroot)
 
 target_include_directories(t_lite-helpers PRIVATE
@@ -29,6 +30,7 @@ target_include_directories(t_lite-helpers PRIVATE
   ${GLIB_INCLUDE_DIRS}
   ${LIBOSTREE_INCLUDE_DIRS}
 )
+target_link_libraries(t_lite-helpers aktualizr_lib ${Boost_LIBRARIES})
 
 # TODO: Find a way to test without a need in the lite-mock
 set_tests_properties(test_lite-helpers PROPERTIES ENVIRONMENT LD_PRELOAD=$<TARGET_FILE:lite-mock>)

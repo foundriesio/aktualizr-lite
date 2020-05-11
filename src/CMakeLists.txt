@@ -4,6 +4,12 @@ set(HEADERS helpers.h)
 
 add_executable(${TARGET} ${SRC})
 
+if (BUILD_DOCKERAPP)
+  target_compile_definitions(${TARGET} PRIVATE BUILD_DOCKERAPP)
+endif(BUILD_DOCKERAPP)
+
+target_compile_definitions(${TARGET} PRIVATE BOOST_LOG_DYN_LINK)
+
 target_include_directories(${TARGET} PRIVATE
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include
@@ -13,6 +19,6 @@ target_include_directories(${TARGET} PRIVATE
 
 target_link_libraries(${TARGET} aktualizr_lib)
 
-if (BUILD_DOCKERAPP)
-  target_compile_definitions(${TARGET} PRIVATE BUILD_DOCKERAPP)
-endif(BUILD_DOCKERAPP)
+# TODO: consider cleaning up the overall "install" elements as it includes
+# redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
+install(TARGETS ${TARGET} RUNTIME DESTINATION bin COMPONENT ${TARGET})
