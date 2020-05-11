@@ -18,3 +18,16 @@ ninja aklite-tests
 
 ctest -V -R test_lite-helpers
 ctest -V -R test_aktualizr-lite
+
+# test building the sota tools
+rm -rf ./*
+../cmake-init.sh -DBUILD_DOCKERAPP=OFF -DBUILD_SOTA_TOOLS=ON
+ninja all
+if [[ ! -f ./aktualizr/src/sota_tools/garage-sign/bin/garage-sign ]]; then
+  echo "Failed to build garage-sign!"
+  exit 1
+fi
+if [[ ! -f ./aktualizr/src/sota_tools/garage-push ]]; then
+  echo "Failed to build garage-push!"
+  exit 1
+fi
