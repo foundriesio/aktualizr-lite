@@ -8,10 +8,14 @@ project(aklite)
 set(AKTUALIZR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/aktualizr)
 set(AKLITE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
+# export compile commands to make teh aktualizr's clang-tidy stuff working
+# see aktualizr/CMakeLists.txt for more details
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # OSTree is mandatory for aktualizr-lite
 option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
 option(BUILD_DOCKERAPP "Set to ON to compile with package manager support of docker-app" OFF)
-option(CLANG_TIDY "Set to ON to do do clang-tidy" OFF)
+option(BUILD_WITH_CLANG_TIDY "Set to ON to do clang-tidy during source compilation" OFF)
 
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
@@ -53,4 +57,4 @@ message(STATUS "BUILD_AKLITE: ${BUILD_AKLITE}")
 message(STATUS "BUILD_OSTREE: ${BUILD_OSTREE}")
 message(STATUS "BUILD_DOCKERAPP: ${BUILD_DOCKERAPP}")
 message(STATUS "BUILD_SOTA_TOOLS: ${BUILD_SOTA_TOOLS}")
-message(STATUS "CLANG_TIDY: ${CLANG_TIDY}")
+message(STATUS "BUILD_WITH_CLANG_TIDY: ${BUILD_WITH_CLANG_TIDY}")

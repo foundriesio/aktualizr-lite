@@ -4,13 +4,17 @@ set(HEADERS helpers.h)
 
 add_executable(${TARGET} ${SRC})
 
-if(CLANG_TIDY)
-set_target_properties(${TARGET}
-  PROPERTIES CXX_CLANG_TIDY
-# TODO: consider adding clang-tidy options that it makes sense to include here
-  clang-tidy-6.0;-checks=*;-warnings-as-errors=*
-)
-endif(CLANG_TIDY)
+if(BUILD_WITH_CLANG_TIDY)
+  # Build the given target sources with clang-tidy
+  set_target_properties(${TARGET}
+    PROPERTIES CXX_CLANG_TIDY
+  # TODO: consider adding clang-tidy options that it makes sense to include here
+  # TODO: if all clang-tidy checks are on then lots of errors appears
+  "${CLANG_TIDY};-quiet;-header-filter=\(${CMAKE_SOURCE_DIR}|\\.\\.\)/src/.*"
+  #  "${CLANG_TIDY_CMD};-checks=*;-quiet;-header-filter=\(${CMAKE_SOURCE_DIR}|\\.\\.\)/src/.*"
+  )
+
+endif(BUILD_WITH_CLANG_TIDY)
 
 if(BUILD_DOCKERAPP)
   target_compile_definitions(${TARGET} PRIVATE BUILD_DOCKERAPP)
@@ -31,3 +35,6 @@ target_link_libraries(${TARGET} aktualizr_lib)
 # TODO: consider cleaning up the overall "install" elements as it includes
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
 install(TARGETS ${TARGET} RUNTIME DESTINATION bin COMPONENT ${TARGET})
+
+# enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
+aktualizr_source_file_checks(${SRC} ${HEADERS})

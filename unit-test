@@ -13,8 +13,12 @@ set -x
 build=$(mktemp -d -p $here)
 cd $build
 
-../cmake-init.sh -DCLANG_TIDY=ON
+# do clang-tidy during compilation
+../cmake-init.sh -DBUILD_WITH_CLANG_TIDY=ON
 ninja aklite-tests
+
+# do additional clang-tidying in the aktualizr way
+ninja aktualizr_clang_tidy-src-helpers.cc  aktualizr_clang_tidy-src-main.cc
 
 ctest -V -R test_lite-helpers
 ctest -V -R test_aktualizr-lite
