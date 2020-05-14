@@ -7,7 +7,7 @@ uptane_gen_bin=$2
 tests_dir=$3
 #valgrind=$4
 valgrind=""
-mock_ostree=$(dirname $aklite)/libt_lite-mock.so
+mock_ostree=${build_dir}/liblite-mock.so
 
 dest_dir=$(mktemp -d)
 

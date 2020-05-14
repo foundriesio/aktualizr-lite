@@ -13,10 +13,25 @@ set -x
 build=$(mktemp -d -p $here)
 cd $build
 
-../cmake-init.sh
-ninja aktualizr-lite t_lite-helpers libt_lite-mock.so uptane-generator make_ostree_sysroot
+# do clang-tidy during compilation
+../cmake-init.sh -DBUILD_WITH_CLANG_TIDY=ON
+ninja aklite-tests
 
+# do additional clang-tidying in the aktualizr way
 ninja aktualizr_clang_tidy-src-helpers.cc  aktualizr_clang_tidy-src-main.cc
 
 ctest -V -R test_lite-helpers
 ctest -V -R test_aktualizr-lite
+
+# test building the sota tools
+rm -rf ./*
+../cmake-init.sh -DBUILD_DOCKERAPP=OFF -DBUILD_SOTA_TOOLS=ON
+ninja all
+if [[ ! -f ./aktualizr/src/sota_tools/garage-sign/bin/garage-sign ]]; then
+  echo "Failed to build garage-sign!"
+  exit 1
+fi
+if [[ ! -f ./aktualizr/src/sota_tools/garage-push ]]; then
+  echo "Failed to build garage-push!"
+  exit 1
+fi
