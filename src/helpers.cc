@@ -2,6 +2,8 @@
 #include <sys/file.h>
 #include <unistd.h>
 
+#include <boost/process.hpp>
+#include <boost/process/environment.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
@@ -10,16 +12,71 @@
 #include "package_manager/packagemanagerfactory.h"
 
 #ifdef BUILD_DOCKERAPP
+#include "composeappmanager.h"
 #include "package_manager/dockerappmanager.h"
+
+void log_info_target(const std::string &prefix, const Config &config, const Uptane::Target &t) {
+  auto name = t.filename();
+  if (t.custom_version().length() > 0) {
+    name = t.custom_version();
+  }
+  LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
+  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
+    bool shown = false;
+    auto apps = t.custom_data()["docker_apps"];
+    for (Json::ValueIterator i = apps.begin(); i != apps.end(); ++i) {
+      if (!shown) {
+        shown = true;
+        LOG_INFO << "\tDocker Apps:";
+      }
+      if ((*i).isObject() && (*i).isMember("filename")) {
+        LOG_INFO << "\t\t" << i.key().asString() << " -> " << (*i)["filename"].asString();
+      } else {
+        LOG_ERROR << "\t\tInvalid custom data for docker-app: " << i.key().asString();
+      }
+    }
+  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+    bool shown = false;
+    auto bundles = t.custom_data()["docker_compose_apps"];
+    for (Json::ValueIterator i = bundles.begin(); i != bundles.end(); ++i) {
+      if (!shown) {
+        shown = true;
+        LOG_INFO << "\tDocker Compose Apps:";
+      }
+      if ((*i).isObject() && (*i).isMember("uri")) {
+        LOG_INFO << "\t\t" << i.key().asString() << " -> " << (*i)["uri"].asString();
+      } else {
+        LOG_ERROR << "\t\tInvalid custom data for docker_compose_apps: " << i.key().asString();
+      }
+    }
+  }
+}
+
+static __attribute__((constructor)) void init_pacman() {
+  PackageManagerFactory::registerPackageManager(
+      PACKAGE_MANAGER_COMPOSEAPP,
+      [](const PackageConfig &pconfig, const BootloaderConfig &bconfig, const std::shared_ptr<INvStorage> &storage,
+         const std::shared_ptr<HttpInterface> &http) {
+        return new ComposeAppManager(pconfig, bconfig, storage, http);
+      });
+}
+
 static void add_apps_header(std::vector<std::string> &headers, PackageConfig &config) {
   if (config.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     DockerAppManagerConfig dappcfg(config);
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(dappcfg.docker_apps, ","));
+  } else if (config.type == PACKAGE_MANAGER_COMPOSEAPP) {
+    ComposeAppConfig cfg(config);
+    headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(cfg.apps, ","));
   }
 }
 bool should_compare_docker_apps(const Config &config) {
-  DockerAppManagerConfig dappcfg(config.pacman);
-  return (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP && !dappcfg.docker_apps.empty());
+  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
+    return !DockerAppManagerConfig(config.pacman).docker_apps.empty();
+  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+    return !ComposeAppConfig(config.pacman).apps.empty();
+  }
+  return false;
 }
 
 void LiteClient::storeDockerParamsDigest() {
@@ -32,57 +89,75 @@ void LiteClient::storeDockerParamsDigest() {
   }
 }
 
-bool LiteClient::dockerAppsChanged() {
-  if (config.pacman.type != PACKAGE_MANAGER_OSTREEDOCKERAPP) {
-    return false;
-  }
-
-  DockerAppManagerConfig dappcfg(config.pacman);
+static bool appListChanged(std::vector<std::string> &apps, const boost::filesystem::path &apps_dir) {
   // Did the list of installed versus running apps change:
   std::vector<std::string> found;
-  if (boost::filesystem::is_directory(dappcfg.docker_apps_root)) {
-    for (auto &entry :
-         boost::make_iterator_range(boost::filesystem::directory_iterator(dappcfg.docker_apps_root), {})) {
+  if (boost::filesystem::is_directory(apps_dir)) {
+    for (auto &entry : boost::make_iterator_range(boost::filesystem::directory_iterator(apps_dir), {})) {
       if (boost::filesystem::is_directory(entry)) {
         found.emplace_back(entry.path().filename().native());
       }
     }
   }
   std::sort(found.begin(), found.end());
-  std::sort(dappcfg.docker_apps.begin(), dappcfg.docker_apps.end());
-  if (found != dappcfg.docker_apps) {
+  std::sort(apps.begin(), apps.end());
+  if (found != apps) {
     LOG_INFO << "Config change detected: list of apps has changed";
     return true;
   }
+  return false;
+}
 
-  // Did the docker app configuration change
-  auto checksum = config.storage.path / ".params-hash";
-  if (boost::filesystem::exists(dappcfg.docker_app_params)) {
-    if (dappcfg.docker_apps.size() == 0) {
-      // there's no point checking for changes - nothing is running
-      return false;
-    }
-
-    if (boost::filesystem::exists(checksum)) {
-      std::string cur = Utils::readFile(checksum);
-      std::string now = Crypto::sha256digest(Utils::readFile(dappcfg.docker_app_params));
-      if (cur != now) {
-        LOG_INFO << "Config change detected: docker-app-params content has changed";
-        return true;
-      }
-    } else {
-      LOG_INFO << "Config change detected: docker-app-params have been defined";
+bool LiteClient::dockerAppsChanged() {
+  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
+    DockerAppManagerConfig dappcfg(config.pacman);
+    if (appListChanged(dappcfg.docker_apps, dappcfg.docker_apps_root)) {
       return true;
     }
-  } else if (boost::filesystem::exists(checksum)) {
-    LOG_INFO << "Config change detected: docker-app parameters have been removed";
-    boost::filesystem::remove(checksum);
-    return true;
+    // Did the docker app configuration change
+    auto checksum = config.storage.path / ".params-hash";
+    if (boost::filesystem::exists(dappcfg.docker_app_params)) {
+      if (dappcfg.docker_apps.size() == 0) {
+        // there's no point checking for changes - nothing is running
+        return false;
+      }
+
+      if (boost::filesystem::exists(checksum)) {
+        std::string cur = Utils::readFile(checksum);
+        std::string now = Crypto::sha256digest(Utils::readFile(dappcfg.docker_app_params));
+        if (cur != now) {
+          LOG_INFO << "Config change detected: docker-app-params content has changed";
+          return true;
+        }
+      } else {
+        LOG_INFO << "Config change detected: docker-app-params have been defined";
+        return true;
+      }
+    } else if (boost::filesystem::exists(checksum)) {
+      LOG_INFO << "Config change detected: docker-app parameters have been removed";
+      boost::filesystem::remove(checksum);
+      return true;
+    }
+  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+    ComposeAppConfig cacfg(config.pacman);
+    if (appListChanged(cacfg.apps, cacfg.apps_root)) {
+      return true;
+    }
+  } else {
+    return false;
   }
 
   return false;
 }
 #else /* ! BUILD_DOCKERAPP */
+void log_info_target(const std::string &prefix, const Config &config, const Uptane::Target &t) {
+  auto name = t.filename();
+  if (t.custom_version().length() > 0) {
+    name = t.custom_version();
+  }
+  LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
+}
+
 #define add_apps_header(headers, config) \
   {}
 
@@ -165,6 +240,14 @@ LiteClient::LiteClient(Config &config_in)
     }
   }
 
+  if (raw.count("callback_program") == 1) {
+    callback_program = raw.at("callback_program");
+    if (!boost::filesystem::exists(callback_program)) {
+      LOG_ERROR << "callback_program(" << callback_program << ") does not exist";
+      callback_program = "";
+    }
+  }
+
   EcuSerials ecu_serials;
   if (!storage->loadEcuSerials(&ecu_serials)) {
     // Set a "random" serial so we don't get warning messages.
@@ -223,6 +306,36 @@ LiteClient::LiteClient(Config &config_in)
   }
 }
 
+void LiteClient::callback(const char *msg, const Uptane::Target &install_target, const std::string &result) {
+  if (callback_program.size() == 0) {
+    return;
+  }
+  auto env = boost::this_process::environment();
+  boost::process::environment env_copy = env;
+  env_copy["MESSAGE"] = msg;
+  env_copy["CURRENT_TARGET"] = (config.storage.path / "current-target").string();
+
+  if (!install_target.MatchTarget(Uptane::Target::Unknown())) {
+    env_copy["INSTALL_TARGET"] = install_target.filename();
+  }
+  if (result.size() > 0) {
+    env_copy["RESULT"] = result;
+  }
+
+  int rc = boost::process::system(callback_program, env_copy);
+  if (rc != 0) {
+    LOG_ERROR << "Error with callback: " << rc;
+  }
+}
+
+bool LiteClient::checkForUpdates() {
+  Uptane::Target t = Uptane::Target::Unknown();
+  callback("check-for-update-pre", t);
+  bool rc = primary->updateImageMeta();
+  callback("check-for-update-post", t);
+  return rc;
+}
+
 void LiteClient::notify(const Uptane::Target &t, std::unique_ptr<ReportEvent> event) {
   if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
@@ -232,24 +345,30 @@ void LiteClient::notify(const Uptane::Target &t, std::unique_ptr<ReportEvent> ev
 }
 
 void LiteClient::notifyDownloadStarted(const Uptane::Target &t) {
+  callback("download-pre", t);
   notify(t, std_::make_unique<EcuDownloadStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 
 void LiteClient::notifyDownloadFinished(const Uptane::Target &t, bool success) {
+  callback("download-post", t, success ? "OK" : "FAILED");
   notify(t, std_::make_unique<EcuDownloadCompletedReport>(primary_ecu.first, t.correlation_id(), success));
 }
 
 void LiteClient::notifyInstallStarted(const Uptane::Target &t) {
+  callback("install-pre", t);
   notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 
 void LiteClient::notifyInstallFinished(const Uptane::Target &t, data::ResultCode::Numeric rc) {
   if (rc == data::ResultCode::Numeric::kNeedCompletion) {
+    callback("install-post", t, "NEEDS_COMPLETION");
     notify(t, std_::make_unique<EcuInstallationAppliedReport>(primary_ecu.first, t.correlation_id()));
   } else if (rc == data::ResultCode::Numeric::kOk) {
+    callback("install-post", t, "OK");
     writeCurrentTarget(t);
     notify(t, std_::make_unique<EcuInstallationCompletedReport>(primary_ecu.first, t.correlation_id(), true));
   } else {
+    callback("install-post", t, "FAILED");
     notify(t, std_::make_unique<EcuInstallationCompletedReport>(primary_ecu.first, t.correlation_id(), false));
   }
 }
@@ -306,6 +425,42 @@ void generate_correlation_id(Uptane::Target &t) {
   t.setCorrelationId(id + "-" + boost::uuids::to_string(tmp));
 }
 
+data::ResultCode::Numeric LiteClient::download(const Uptane::Target &target) {
+  std::unique_ptr<Lock> lock = getDownloadLock();
+  if (lock == nullptr) {
+    return data::ResultCode::Numeric::kInternalError;
+  }
+  notifyDownloadStarted(target);
+  if (!primary->downloadImage(target).first) {
+    notifyDownloadFinished(target, false);
+    return data::ResultCode::Numeric::kDownloadFailed;
+  }
+  notifyDownloadFinished(target, true);
+  return data::ResultCode::Numeric::kOk;
+}
+
+data::ResultCode::Numeric LiteClient::install(const Uptane::Target &target) {
+  std::unique_ptr<Lock> lock = getUpdateLock();
+  if (lock == nullptr) {
+    return data::ResultCode::Numeric::kInternalError;
+  }
+
+  notifyInstallStarted(target);
+  auto iresult = primary->PackageInstall(target);
+  if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
+    LOG_INFO << "Update complete. Please reboot the device to activate";
+    storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
+  } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
+    LOG_INFO << "Update complete. No reboot needed";
+    storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+  } else {
+    LOG_ERROR << "Unable to install update: " << iresult.description;
+    // let go of the lock since we couldn't update
+  }
+  notifyInstallFinished(target, iresult.result_code.num_code);
+  return iresult.result_code.num_code;
+}
+
 bool target_has_tags(const Uptane::Target &t, const std::vector<std::string> &config_tags) {
   if (!config_tags.empty()) {
     auto tags = t.custom_data()["tags"];
@@ -324,19 +479,36 @@ bool targets_eq(const Uptane::Target &t1, const Uptane::Target &t2, bool compare
   // target equality check looks at hashes
   if (t1.MatchTarget(t2)) {
     if (compareDockerApps) {
-      auto t1_apps = t1.custom_data()["docker_apps"];
-      auto t2_apps = t2.custom_data()["docker_apps"];
-      for (Json::ValueIterator i = t1_apps.begin(); i != t1_apps.end(); ++i) {
+      auto t1_dapps = t1.custom_data()["docker_apps"];
+      auto t2_dapps = t2.custom_data()["docker_apps"];
+      for (Json::ValueIterator i = t1_dapps.begin(); i != t1_dapps.end(); ++i) {
         auto app = i.key().asString();
-        if (!t2_apps.isMember(app)) {
+        if (!t2_dapps.isMember(app)) {
           return false;  // an app has been removed
         }
-        if ((*i)["filename"].asString() != t2_apps[app]["filename"].asString()) {
+        if ((*i)["filename"].asString() != t2_dapps[app]["filename"].asString()) {
           return false;  // tuf target filename changed
         }
-        t2_apps.removeMember(app);
+        t2_dapps.removeMember(app);
       }
-      if (t2_apps.size() > 0) {
+      if (t2_dapps.size() > 0) {
+        return false;  // an app has been added
+      }
+
+      // compose apps
+      auto t1_capps = t1.custom_data()["docker_compose_apps"];
+      auto t2_capps = t2.custom_data()["docker_compose_apps"];
+      for (Json::ValueIterator i = t1_capps.begin(); i != t1_capps.end(); ++i) {
+        auto app = i.key().asString();
+        if (!t2_capps.isMember(app)) {
+          return false;  // an app has been removed
+        }
+        if ((*i)["uri"].asString() != t2_capps[app]["uri"].asString()) {
+          return false;  // tuf target filename changed
+        }
+        t2_capps.removeMember(app);
+      }
+      if (t2_capps.size() > 0) {
         return false;  // an app has been added
       }
     }

@@ -123,7 +123,21 @@ source ${sota_dir}/current-target
 [ "$TARGET_NAME" = "zlast" ] || (echo current-target wrong: $TARGET_NAME != zlast; exit 1)
 [ "$CONTAINERS_SHA" = "deadbeef" ] || (echo current-target wrong: $CONTAINERS_SHA != deadbeef; exit 1)
 
-## Make sure we obey tags
+## Make sure we obey tags and notify the callback program
 add_target promoted-$name $sha promoted
 echo 'tags = "promoted"' >> $sota_dir/sota.toml
+echo "callback_program = \"${sota_dir}/callback.sh\"" >> $sota_dir/sota.toml
+cat >$sota_dir/callback.sh <<EOF
+#!/bin/sh -e
+env >> ${sota_dir}/\$MESSAGE.log
+EOF
+chmod +x $sota_dir/callback.sh
 OSTREE_HASH=$sha LD_PRELOAD=$mock_ostree $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to: Target(promoted-zlast"
+for callback in download-pre download-post install-pre install-post ; do
+  if [ -f ${sota_dir}/${callback}.log ] ; then
+    grep "INSTALL_TARGET=promoted-zlast" ${sota_dir}/${callback}.log
+  else
+    echo "ERROR: Callback not performed for $callback"
+    exit 1
+  fi
+done
