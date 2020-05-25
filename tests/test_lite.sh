@@ -82,7 +82,7 @@ sqldb_path = "sql.db"
 uptane_metadata_path = "$sota_dir/metadata"
 
 [pacman]
-type = "ostree"
+type = "ostree+compose_apps"
 sysroot = "$OSTREE_SYSROOT"
 os = "dummy-os"
 EOF
