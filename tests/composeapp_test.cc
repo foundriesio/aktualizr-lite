@@ -5,8 +5,99 @@
 
 #include "http/httpclient.h"
 #include "test_utils.h"
+#include "utilities/utils.h"
+#include "http/httpinterface.h"
 
 #include "composeappmanager.h"
+
+
+class FakeRegistry {
+  public:
+    FakeRegistry(const std::string base_url, boost::filesystem::path root_dir):base_url_{base_url}, root_dir_{root_dir} {
+    }
+
+    std::string addApp(const std::string& app_repo, const std::string& app_name,
+                       const std::string file_name, std::string app_content) {
+      // TODO compose a proper docker compose app here (bunch of files)
+      auto docker_flie = root_dir_ / app_name / file_name;
+      Utils::writeFile(docker_flie, app_content);
+      tgz_path_ = root_dir_ / app_name / (app_name + ".tgz");
+      std::string stdout_msg;
+      boost::process::system("tar -czf " + tgz_path_.string() + " " + file_name, boost::process::start_dir = (root_dir_ / app_name));
+      std::string tgz_content = Utils::readFile(tgz_path_);
+      auto hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(tgz_content)));
+      // TODO: it should be in ComposeApp::Manifest::Manifest()
+      manifest_["annotations"]["compose-app"] = "v1";
+      manifest_["layers"][0]["digest"] = "sha256:" + hash;
+      manifest_["layers"][0]["size"] = tgz_content.size();
+      manifest_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::jsonToCanonicalStr(manifest_))));
+      // app URI
+      auto app_uri = base_url_ + app_repo + '/' + app_name + '@' + "sha256:" + manifest_hash_;
+      return app_uri;
+    }
+
+    std::string getManifest() const { return Utils::jsonToCanonicalStr(manifest_); }
+    std::string getShortManifestHash() const { return manifest_hash_.substr(0, 7); }
+    std::string getArchiveContent() const { return Utils::readFile(tgz_path_); }
+
+  private:
+    const std::string base_url_;
+    boost::filesystem::path root_dir_;
+    Json::Value manifest_;
+    std::string manifest_hash_;
+    boost::filesystem::path tgz_path_;
+};
+
+class FakeOtaClient: public HttpInterface {
+  public:
+    FakeOtaClient(FakeRegistry& registry, const std::vector<std::string>* headers = nullptr):
+      registry_{registry}, headers_{headers} {}
+
+  public:
+    HttpResponse get(const std::string &url, int64_t maxsize) override {
+      std::string resp;
+      if (0 == url.find("https://hub.foundries.io/token-auth/")) {
+        resp = "{\"token\":\"token\"}";
+      } else if (0 == url.find("https://hub.foundries.io/v2/")) {
+        resp = registry_.getManifest();
+      } else {
+        resp = "{\"Secret\":\"secret\",\"Username\":\"test-user\"}";
+      }
+     return HttpResponse(resp, 200, CURLE_OK, "");
+    }
+
+    HttpResponse post(const std::string &url, const std::string &content_type, const std::string &data) override {}
+
+    HttpResponse post(const std::string &url, const Json::Value &data) override {}
+
+    HttpResponse put(const std::string &url, const std::string &content_type, const std::string &data) override {}
+
+    HttpResponse put(const std::string &url, const Json::Value &data) override {}
+
+    HttpResponse download(const std::string &url, curl_write_callback write_cb,
+                                  curl_xferinfo_callback progress_cb, void *userp, curl_off_t from) override {
+
+      std::string data{registry_.getArchiveContent()};
+      write_cb(const_cast<char*>(data.c_str()), data.size(), 1, userp);
+
+      return HttpResponse("resp", 200, CURLE_OK, "");
+    }
+
+    std::future<HttpResponse> downloadAsync(const std::string &url, curl_write_callback write_cb,
+                                                    curl_xferinfo_callback progress_cb, void *userp, curl_off_t from,
+                                                    CurlHandler *easyp) override {
+
+
+    }
+
+    void setCerts(const std::string &ca, CryptoSource ca_source, const std::string &cert,
+                          CryptoSource cert_source, const std::string &pkey, CryptoSource pkey_source) override {}
+
+ private:
+  FakeRegistry& registry_;
+  const std::vector<std::string>* headers_;
+
+};
 
 static boost::filesystem::path test_sysroot;
 
@@ -61,10 +152,13 @@ TEST(ComposeApp, Config) {
 }
 
 struct TestClient {
-  TestClient(const char* apps, const Uptane::Target* installedTarget = nullptr) {
+  TestClient(const char* apps, const Uptane::Target* installedTarget = nullptr,
+             const std::shared_ptr<HttpInterface>& ota_lite_client = nullptr,
+             RegistryClient::HttpClientFactory registry_http_client_factory = nullptr) {
     tempdir = std_::make_unique<TemporaryDirectory>();
 
     Config config;
+    config.logger.loglevel = 1;
     config.pacman.type = PACKAGE_MANAGER_COMPOSEAPP;
     config.bootloader.reboot_sentinel_dir = tempdir->Path();
     config.pacman.sysroot = test_sysroot.string();
@@ -74,11 +168,14 @@ struct TestClient {
     config.pacman.extra["docker_prune"] = "0";
     config.storage.path = tempdir->Path();
 
+    config.pacman.extra["registry_auth_creds_endpoint"] = "http://hub-creds/";
+    config.pacman.extra["registry_base_url"] = "http://";
+
     storage = INvStorage::newStorage(config.storage);
     if (installedTarget != nullptr) {
       storage->savePrimaryInstalledVersion(*installedTarget, InstalledVersionUpdateMode::kCurrent);
     }
-    pacman = std_::make_unique<ComposeAppManager>(config.pacman, config.bootloader, storage, nullptr);
+    pacman = std_::make_unique<ComposeAppManager>(config.pacman, config.bootloader, storage, ota_lite_client, registry_http_client_factory);
     keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
     fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());
   }
@@ -112,21 +209,32 @@ TEST(ComposeApp, getApps) {
 }
 
 TEST(ComposeApp, fetch) {
+  TemporaryDirectory tmp_dir;
+  FakeRegistry registry{"https://hub.io/", tmp_dir.Path()};
+  auto fake_ota_client = std::make_shared<FakeOtaClient>(registry);
+  RegistryClient::HttpClientFactory registry_fake_http_client_factory = [&registry](const std::vector<std::string>* headers) {
+    return std::make_shared<FakeOtaClient>(registry, headers);
+  };
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
   Json::Value target_json;
   target_json["hashes"]["sha256"] = sha;
   target_json["custom"]["targetFormat"] = "OSTREE";
   target_json["length"] = 0;
   target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "n/a";
-  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "N/A";
+  const std::string app_file_name = "docker-compose.yml";
+  const std::string app_content = "lajdalsjdlasjflkjasldjaldlasdl89749823748jsdhfjshdfjk89273498273jsdkjkdfjkdsfj928";
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2", app_file_name, app_content);
   Uptane::Target target("pull", target_json);
 
-  TestClient client("app2 doesnotexist");  // only app2 can be fetched
+  TestClient client("app2 doesnotexist", nullptr, fake_ota_client, registry_fake_http_client_factory);  // only app2 can be fetched
   bool result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
   ASSERT_TRUE(result);
-  std::string output = Utils::readFile(client.tempdir->Path() / "apps/app2/download.log", true);
-  ASSERT_EQ("download N/A", output);
-  output = Utils::readFile(client.tempdir->Path() / "apps/app2/config.log", true);
+  const std::string expected_file = (client.pacman->cfg_.apps_root / "app2"/ app_file_name).string();
+  ASSERT_TRUE(boost::filesystem::exists(expected_file));
+  std::string delivered_app_file_content = Utils::readFile(expected_file);
+  ASSERT_EQ(delivered_app_file_content, app_content);
+
+  auto output = Utils::readFile(client.tempdir->Path() / "apps/app2/config.log", true);
   ASSERT_EQ("config", output);
   output = Utils::readFile(client.tempdir->Path() / "apps/app2/pull.log", true);
   ASSERT_EQ("pull", output);
