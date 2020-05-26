@@ -10,7 +10,7 @@
 
 namespace bpo = boost::program_options;
 
-static int status_main(LiteClient &client, const bpo::variables_map &unused) {
+static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
   auto target = client.primary->getCurrent();
 
@@ -26,7 +26,7 @@ static int status_main(LiteClient &client, const bpo::variables_map &unused) {
   return 0;
 }
 
-static int list_main(LiteClient &client, const bpo::variables_map &unused) {
+static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
@@ -40,11 +40,11 @@ static int list_main(LiteClient &client, const bpo::variables_map &unused) {
   }
 
   LOG_INFO << "Updates available to " << hwid << ":";
-  for (auto &t : client.primary->allTargets()) {
+  for (auto& t : client.primary->allTargets()) {
     if (!target_has_tags(t, client.tags)) {
       continue;
     }
-    for (auto const &it : t.hardwareIds()) {
+    for (auto const& it : t.hardwareIds()) {
       if (it == hwid) {
         log_info_target("", client.config, t);
         break;
@@ -54,9 +54,9 @@ static int list_main(LiteClient &client, const bpo::variables_map &unused) {
   return 0;
 }
 
-static std::unique_ptr<Uptane::Target> find_target(const std::shared_ptr<SotaUptaneClient> &client,
-                                                   Uptane::HardwareIdentifier &hwid,
-                                                   const std::vector<std::string> &tags, const std::string &version) {
+static std::unique_ptr<Uptane::Target> find_target(const std::shared_ptr<SotaUptaneClient>& client,
+                                                   Uptane::HardwareIdentifier& hwid,
+                                                   const std::vector<std::string>& tags, const std::string& version) {
   std::unique_ptr<Uptane::Target> rv;
   if (!client->updateImageMeta()) {
     LOG_WARNING << "Unable to update latest metadata, using local copy";
@@ -68,11 +68,11 @@ static std::unique_ptr<Uptane::Target> find_target(const std::shared_ptr<SotaUpt
 
   bool find_latest = (version == "latest");
   std::unique_ptr<Uptane::Target> latest = nullptr;
-  for (auto &t : client->allTargets()) {
+  for (auto& t : client->allTargets()) {
     if (!target_has_tags(t, tags)) {
       continue;
     }
-    for (auto const &it : t.hardwareIds()) {
+    for (auto const& it : t.hardwareIds()) {
       if (it == hwid) {
         if (find_latest) {
           if (latest == nullptr || Version(latest->custom_version()) < Version(t.custom_version())) {
@@ -90,7 +90,7 @@ static std::unique_ptr<Uptane::Target> find_target(const std::shared_ptr<SotaUpt
   throw std::runtime_error("Unable to find update");
 }
 
-static data::ResultCode::Numeric do_update(LiteClient &client, Uptane::Target target) {
+static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target) {
   target.InsertEcu({client.primary_ecu.first, client.primary_ecu.second});
   generate_correlation_id(target);
 
@@ -108,7 +108,7 @@ static data::ResultCode::Numeric do_update(LiteClient &client, Uptane::Target ta
   return client.install(target);
 }
 
-static int update_main(LiteClient &client, const bpo::variables_map &variables_map) {
+static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
   std::string version("latest");
@@ -129,7 +129,7 @@ static int update_main(LiteClient &client, const bpo::variables_map &variables_m
   return 1;
 }
 
-static int daemon_main(LiteClient &client, const bpo::variables_map &variables_map) {
+static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
   if (client.config.uptane.repo_server.empty()) {
     LOG_ERROR << "[uptane]/repo_server is not configured";
     return 1;
@@ -217,8 +217,8 @@ static int daemon_main(LiteClient &client, const bpo::variables_map &variables_m
 }
 
 struct SubCommand {
-  const char *name;
-  int (*main)(LiteClient &, const bpo::variables_map &);
+  const char* name;
+  int (*main)(LiteClient&, const bpo::variables_map&);
 };
 static SubCommand commands[] = {
     {"status", status_main},
@@ -227,7 +227,7 @@ static SubCommand commands[] = {
     {"daemon", daemon_main},
 };
 
-void check_info_options(const bpo::options_description &description, const bpo::variables_map &vm) {
+void check_info_options(const bpo::options_description& description, const bpo::variables_map& vm) {
   if (vm.count("help") != 0 || vm.count("command") == 0) {
     std::cout << description << '\n';
     exit(EXIT_SUCCESS);
@@ -238,7 +238,7 @@ void check_info_options(const bpo::options_description &description, const bpo::
   }
 }
 
-bpo::variables_map parse_options(int argc, char *argv[]) {
+bpo::variables_map parse_options(int argc, char* argv[]) {
   std::string subs("Command to execute: ");
   for (size_t i = 0; i < sizeof(commands) / sizeof(SubCommand); i++) {
     if (i != 0) {
@@ -282,11 +282,11 @@ bpo::variables_map parse_options(int argc, char *argv[]) {
       std::cout << description << "\n";
       exit(EXIT_FAILURE);
     }
-  } catch (const bpo::required_option &ex) {
+  } catch (const bpo::required_option& ex) {
     // print the error and append the default commandline option description
     std::cout << ex.what() << std::endl << description;
     exit(EXIT_FAILURE);
-  } catch (const bpo::error &ex) {
+  } catch (const bpo::error& ex) {
     check_info_options(description, vm);
 
     // log boost error
@@ -304,7 +304,7 @@ bpo::variables_map parse_options(int argc, char *argv[]) {
   return vm;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   logger_init(isatty(1) == 1);
   logger_set_threshold(boost::log::trivial::info);
 
@@ -330,7 +330,7 @@ int main(int argc, char *argv[]) {
     }
     throw bpo::invalid_option_value(cmd);
     r = EXIT_SUCCESS;
-  } catch (const std::exception &ex) {
+  } catch (const std::exception& ex) {
     LOG_ERROR << ex.what();
   }
   return r;
