@@ -83,7 +83,7 @@ struct ComposeApp {
   bool download(const std::string& app_uri);
   std::pair<std::string, std::string> parseAppUri(const std::string& uri);
   std::string downloadArchive(const std::string& repo, const Manifest& manifest);
-  void extractAppArchive(const std::string& archive_file_name);
+  void extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction = true);
 
  private:
   std::string name_;
@@ -318,9 +318,14 @@ std::string ComposeApp::downloadArchive(const std::string& repo, const Manifest&
   return archive_file_name;
 }
 
-void ComposeApp::extractAppArchive(const std::string& archive_file_name) {
+void ComposeApp::extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction) {
   if (!cmd_streaming("tar -xzf " + archive_file_name)) {
     throw std::runtime_error("Failed to extract the compose app archive: " + archive_file_name);
+  }
+  if (delete_after_extraction) {
+    if (!cmd_streaming("rm -f " + archive_file_name)) {
+      throw std::runtime_error("Failed to remove the compose app archive: " + archive_file_name);
+    }
   }
 }
 

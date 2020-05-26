@@ -40,6 +40,7 @@ class FakeRegistry {
         manifest_post_processor(manifest_, hash);
         manifest_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::jsonToCanonicalStr(manifest_))));
       }
+      archive_name_ = hash.substr(0,7) + '.' + app_name + ".tgz";
       // app URI
       auto app_uri = base_url_ + app_repo + '/' + app_name + '@' + "sha256:" + manifest_hash_;
       return app_uri;
@@ -47,6 +48,7 @@ class FakeRegistry {
 
     const std::string& baseURL() const {return base_url_; }
     Json::Value& manifest() { return manifest_; }
+    const std::string& archiveName() const {return archive_name_; }
     std::string getManifest() const { return Utils::jsonToCanonicalStr(manifest_); }
     std::string getShortManifestHash() const { return manifest_hash_.substr(0, 7); }
     std::string getArchiveContent() const { return Utils::readFile(tgz_path_); }
@@ -57,6 +59,7 @@ class FakeRegistry {
     Json::Value manifest_;
     std::string manifest_hash_;
     boost::filesystem::path tgz_path_;
+    std::string archive_name_;
 };
 
 class FakeOtaClient: public HttpInterface {
@@ -299,6 +302,7 @@ TEST(ComposeApp, fetch) {
   ASSERT_TRUE(boost::filesystem::exists(expected_file));
   std::string delivered_app_file_content = Utils::readFile(expected_file);
   ASSERT_EQ(delivered_app_file_content, app_content);
+  ASSERT_FALSE(boost::filesystem::exists(client.pacman->cfg_.apps_root / "app2"/ registry.archiveName()));
 
   auto output = Utils::readFile(client.tempdir->Path() / "apps/app2/config.log", true);
   ASSERT_EQ("config", output);
