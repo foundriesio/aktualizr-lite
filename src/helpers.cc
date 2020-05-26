@@ -15,7 +15,7 @@
 #include "composeappmanager.h"
 #include "package_manager/dockerappmanager.h"
 
-void log_info_target(const std::string &prefix, const Config &config, const Uptane::Target &t) {
+void log_info_target(const std::string& prefix, const Config& config, const Uptane::Target& t) {
   auto name = t.filename();
   if (t.custom_version().length() > 0) {
     name = t.custom_version();
@@ -55,13 +55,13 @@ void log_info_target(const std::string &prefix, const Config &config, const Upta
 static __attribute__((constructor)) void init_pacman() {
   PackageManagerFactory::registerPackageManager(
       PACKAGE_MANAGER_COMPOSEAPP,
-      [](const PackageConfig &pconfig, const BootloaderConfig &bconfig, const std::shared_ptr<INvStorage> &storage,
-         const std::shared_ptr<HttpInterface> &http) {
+      [](const PackageConfig& pconfig, const BootloaderConfig& bconfig, const std::shared_ptr<INvStorage>& storage,
+         const std::shared_ptr<HttpInterface>& http) {
         return new ComposeAppManager(pconfig, bconfig, storage, http);
       });
 }
 
-static void add_apps_header(std::vector<std::string> &headers, PackageConfig &config) {
+static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config) {
   if (config.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     DockerAppManagerConfig dappcfg(config);
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(dappcfg.docker_apps, ","));
@@ -70,7 +70,7 @@ static void add_apps_header(std::vector<std::string> &headers, PackageConfig &co
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(cfg.apps, ","));
   }
 }
-bool should_compare_docker_apps(const Config &config) {
+bool should_compare_docker_apps(const Config& config) {
   if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     return !DockerAppManagerConfig(config.pacman).docker_apps.empty();
   } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
@@ -89,11 +89,11 @@ void LiteClient::storeDockerParamsDigest() {
   }
 }
 
-static bool appListChanged(std::vector<std::string> &apps, const boost::filesystem::path &apps_dir) {
+static bool appListChanged(std::vector<std::string>& apps, const boost::filesystem::path& apps_dir) {
   // Did the list of installed versus running apps change:
   std::vector<std::string> found;
   if (boost::filesystem::is_directory(apps_dir)) {
-    for (auto &entry : boost::make_iterator_range(boost::filesystem::directory_iterator(apps_dir), {})) {
+    for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(apps_dir), {})) {
       if (boost::filesystem::is_directory(entry)) {
         found.emplace_back(entry.path().filename().native());
       }
@@ -150,7 +150,7 @@ bool LiteClient::dockerAppsChanged() {
   return false;
 }
 #else /* ! BUILD_DOCKERAPP */
-void log_info_target(const std::string &prefix, const Config &config, const Uptane::Target &t) {
+void log_info_target(const std::string& prefix, const Config& config, const Uptane::Target& t) {
   auto name = t.filename();
   if (t.custom_version().length() > 0) {
     name = t.custom_version();
@@ -161,7 +161,7 @@ void log_info_target(const std::string &prefix, const Config &config, const Upta
 #define add_apps_header(headers, config) \
   {}
 
-bool should_compare_docker_apps(const Config &config) {
+bool should_compare_docker_apps(const Config& config) {
   (void)config;
   return false;
 }
@@ -170,14 +170,14 @@ void LiteClient::storeDockerParamsDigest() {}
 bool LiteClient::dockerAppsChanged() { return false; }
 #endif
 
-static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(PackageManagerInterface &package_manager,
-                                                                             INvStorage &storage, Config &config) {
+static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(PackageManagerInterface& package_manager,
+                                                                             INvStorage& storage, Config& config) {
   data::ResultCode::Numeric result_code = data::ResultCode::Numeric::kUnknown;
   boost::optional<Uptane::Target> pending_version;
   storage.loadInstalledVersions("", nullptr, &pending_version);
 
   GObjectUniquePtr<OstreeSysroot> sysroot_smart = OstreeManager::LoadSysroot(config.pacman.sysroot);
-  OstreeDeployment *booted_deployment = ostree_sysroot_get_booted_deployment(sysroot_smart.get());
+  OstreeDeployment* booted_deployment = ostree_sysroot_get_booted_deployment(sysroot_smart.get());
   std::string current_hash = ostree_deployment_get_csum(booted_deployment);
   if (booted_deployment == nullptr) {
     throw std::runtime_error("Could not get booted deployment in " + config.pacman.sysroot.string());
@@ -186,7 +186,7 @@ static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(Pac
   Bootloader bootloader(config.bootloader, storage);
 
   if (!!pending_version) {
-    const Uptane::Target &target = *pending_version;
+    const Uptane::Target& target = *pending_version;
     if (current_hash == target.sha256Hash()) {
       LOG_INFO << "Marking target install complete for: " << target;
       storage.saveInstalledVersion("", target, InstalledVersionUpdateMode::kCurrent);
@@ -225,7 +225,7 @@ static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(Pac
   return std::make_pair(Uptane::Target::Unknown(), result_code);
 }
 
-LiteClient::LiteClient(Config &config_in)
+LiteClient::LiteClient(Config& config_in)
     : config(std::move(config_in)), primary_ecu(Uptane::EcuSerial::Unknown(), "") {
   std::string pkey;
   storage = INvStorage::newStorage(config.storage);
@@ -267,7 +267,7 @@ LiteClient::LiteClient(Config &config_in)
 
   std::vector<std::string> headers;
   GObjectUniquePtr<OstreeSysroot> sysroot_smart = OstreeManager::LoadSysroot(config.pacman.sysroot);
-  OstreeDeployment *deployment = ostree_sysroot_get_booted_deployment(sysroot_smart.get());
+  OstreeDeployment* deployment = ostree_sysroot_get_booted_deployment(sysroot_smart.get());
   std::string header("x-ats-ostreehash: ");
   if (deployment != nullptr) {
     header += ostree_deployment_get_csum(deployment);
@@ -306,7 +306,7 @@ LiteClient::LiteClient(Config &config_in)
   }
 }
 
-void LiteClient::callback(const char *msg, const Uptane::Target &install_target, const std::string &result) {
+void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {
   if (callback_program.size() == 0) {
     return;
   }
@@ -336,7 +336,7 @@ bool LiteClient::checkForUpdates() {
   return rc;
 }
 
-void LiteClient::notify(const Uptane::Target &t, std::unique_ptr<ReportEvent> event) {
+void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) {
   if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
     event->custom["version"] = t.custom_version();
@@ -344,22 +344,22 @@ void LiteClient::notify(const Uptane::Target &t, std::unique_ptr<ReportEvent> ev
   }
 }
 
-void LiteClient::notifyDownloadStarted(const Uptane::Target &t) {
+void LiteClient::notifyDownloadStarted(const Uptane::Target& t) {
   callback("download-pre", t);
   notify(t, std_::make_unique<EcuDownloadStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 
-void LiteClient::notifyDownloadFinished(const Uptane::Target &t, bool success) {
+void LiteClient::notifyDownloadFinished(const Uptane::Target& t, bool success) {
   callback("download-post", t, success ? "OK" : "FAILED");
   notify(t, std_::make_unique<EcuDownloadCompletedReport>(primary_ecu.first, t.correlation_id(), success));
 }
 
-void LiteClient::notifyInstallStarted(const Uptane::Target &t) {
+void LiteClient::notifyInstallStarted(const Uptane::Target& t) {
   callback("install-pre", t);
   notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 
-void LiteClient::notifyInstallFinished(const Uptane::Target &t, data::ResultCode::Numeric rc) {
+void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::ResultCode::Numeric rc) {
   if (rc == data::ResultCode::Numeric::kNeedCompletion) {
     callback("install-post", t, "NEEDS_COMPLETION");
     notify(t, std_::make_unique<EcuInstallationAppliedReport>(primary_ecu.first, t.correlation_id()));
@@ -373,7 +373,7 @@ void LiteClient::notifyInstallFinished(const Uptane::Target &t, data::ResultCode
   }
 }
 
-void LiteClient::writeCurrentTarget(const Uptane::Target &t) {
+void LiteClient::writeCurrentTarget(const Uptane::Target& t) {
   std::stringstream ss;
   ss << "TARGET_NAME=\"" << t.filename() << "\"\n";
   ss << "CUSTOM_VERSION=\"" << t.custom_version() << "\"\n";
@@ -416,7 +416,7 @@ static std::unique_ptr<Lock> create_lock(boost::filesystem::path lockfile) {
 std::unique_ptr<Lock> LiteClient::getDownloadLock() { return create_lock(download_lockfile); }
 std::unique_ptr<Lock> LiteClient::getUpdateLock() { return create_lock(update_lockfile); }
 
-void generate_correlation_id(Uptane::Target &t) {
+void generate_correlation_id(Uptane::Target& t) {
   std::string id = t.custom_version();
   if (id.empty()) {
     id = t.filename();
@@ -425,7 +425,7 @@ void generate_correlation_id(Uptane::Target &t) {
   t.setCorrelationId(id + "-" + boost::uuids::to_string(tmp));
 }
 
-data::ResultCode::Numeric LiteClient::download(const Uptane::Target &target) {
+data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target) {
   std::unique_ptr<Lock> lock = getDownloadLock();
   if (lock == nullptr) {
     return data::ResultCode::Numeric::kInternalError;
@@ -439,7 +439,7 @@ data::ResultCode::Numeric LiteClient::download(const Uptane::Target &target) {
   return data::ResultCode::Numeric::kOk;
 }
 
-data::ResultCode::Numeric LiteClient::install(const Uptane::Target &target) {
+data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   std::unique_ptr<Lock> lock = getUpdateLock();
   if (lock == nullptr) {
     return data::ResultCode::Numeric::kInternalError;
@@ -461,7 +461,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target &target) {
   return iresult.result_code.num_code;
 }
 
-bool target_has_tags(const Uptane::Target &t, const std::vector<std::string> &config_tags) {
+bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& config_tags) {
   if (!config_tags.empty()) {
     auto tags = t.custom_data()["tags"];
     for (Json::ValueIterator i = tags.begin(); i != tags.end(); ++i) {
@@ -475,7 +475,7 @@ bool target_has_tags(const Uptane::Target &t, const std::vector<std::string> &co
   return true;
 }
 
-bool targets_eq(const Uptane::Target &t1, const Uptane::Target &t2, bool compareDockerApps) {
+bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps) {
   // target equality check looks at hashes
   if (t1.MatchTarget(t2)) {
     if (compareDockerApps) {
@@ -517,7 +517,7 @@ bool targets_eq(const Uptane::Target &t1, const Uptane::Target &t2, bool compare
   return false;
 }
 
-bool known_local_target(LiteClient &client, const Uptane::Target &t, std::vector<Uptane::Target> &installed_versions) {
+bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector<Uptane::Target>& installed_versions) {
   bool known_target = false;
   auto current = client.primary->getCurrent();
   boost::optional<Uptane::Target> pending;

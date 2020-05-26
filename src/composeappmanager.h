@@ -7,7 +7,7 @@
 
 class ComposeAppConfig {
  public:
-  ComposeAppConfig(const PackageConfig &pconfig);
+  ComposeAppConfig(const PackageConfig& pconfig);
 
   std::vector<std::string> apps;
   boost::filesystem::path apps_root;
@@ -17,21 +17,21 @@ class ComposeAppConfig {
 
 class ComposeAppManager : public OstreeManager {
  public:
-  ComposeAppManager(const PackageConfig &pconfig, const BootloaderConfig &bconfig,
-                    const std::shared_ptr<INvStorage> &storage, const std::shared_ptr<HttpInterface> &http)
+  ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
+                    const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http)
       : OstreeManager(pconfig, bconfig, storage, http), cfg_(pconfig) {}
 
-  bool fetchTarget(const Uptane::Target &target, Uptane::Fetcher &fetcher, const KeyManager &keys,
-                   FetcherProgressCb progress_cb, const api::FlowControlToken *token) override;
-  data::InstallationResult install(const Uptane::Target &target) const override;
+  bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
+                   FetcherProgressCb progress_cb, const api::FlowControlToken* token) override;
+  data::InstallationResult install(const Uptane::Target& target) const override;
   std::string name() const override { return PACKAGE_MANAGER_COMPOSEAPP; };
 
  private:
   FRIEND_TEST(ComposeApp, getApps);
   FRIEND_TEST(ComposeApp, handleRemovedApps);
 
-  std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target &t) const;
-  void handleRemovedApps(const Uptane::Target &target) const;
+  std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target& t) const;
+  void handleRemovedApps(const Uptane::Target& target) const;
 
   ComposeAppConfig cfg_;
 };
