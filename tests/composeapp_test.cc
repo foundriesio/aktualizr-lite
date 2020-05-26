@@ -13,11 +13,15 @@
 
 class FakeRegistry {
   public:
-    FakeRegistry(const std::string base_url, boost::filesystem::path root_dir):base_url_{base_url}, root_dir_{root_dir} {
-    }
+    FakeRegistry(const std::string base_url, boost::filesystem::path root_dir):
+      base_url_{base_url}, root_dir_{root_dir} {}
+
+    using ManifestPostProcessor = std::function<void(Json::Value&, std::string&)>;
 
     std::string addApp(const std::string& app_repo, const std::string& app_name,
-                       const std::string file_name, std::string app_content) {
+                       ManifestPostProcessor manifest_post_processor = nullptr,
+                       const std::string file_name = "docker-compose.yml",
+                       std::string app_content = "some fake content qwertyuiop 1231313123123123") {
       // TODO compose a proper docker compose app here (bunch of files)
       auto docker_flie = root_dir_ / app_name / file_name;
       Utils::writeFile(docker_flie, app_content);
@@ -27,15 +31,22 @@ class FakeRegistry {
       std::string tgz_content = Utils::readFile(tgz_path_);
       auto hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(tgz_content)));
       // TODO: it should be in ComposeApp::Manifest::Manifest()
+      manifest_.clear();
       manifest_["annotations"]["compose-app"] = "v1";
       manifest_["layers"][0]["digest"] = "sha256:" + hash;
       manifest_["layers"][0]["size"] = tgz_content.size();
       manifest_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::jsonToCanonicalStr(manifest_))));
+      if (manifest_post_processor) {
+        manifest_post_processor(manifest_, hash);
+        manifest_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::jsonToCanonicalStr(manifest_))));
+      }
       // app URI
       auto app_uri = base_url_ + app_repo + '/' + app_name + '@' + "sha256:" + manifest_hash_;
       return app_uri;
     }
 
+    const std::string& baseURL() const {return base_url_; }
+    Json::Value& manifest() { return manifest_; }
     std::string getManifest() const { return Utils::jsonToCanonicalStr(manifest_); }
     std::string getShortManifestHash() const { return manifest_hash_.substr(0, 7); }
     std::string getArchiveContent() const { return Utils::readFile(tgz_path_); }
@@ -50,53 +61,50 @@ class FakeRegistry {
 
 class FakeOtaClient: public HttpInterface {
   public:
-    FakeOtaClient(FakeRegistry& registry, const std::vector<std::string>* headers = nullptr):
+    FakeOtaClient(FakeRegistry* registry, const std::vector<std::string>* headers = nullptr):
       registry_{registry}, headers_{headers} {}
 
   public:
     HttpResponse get(const std::string &url, int64_t maxsize) override {
+      assert(registry_);
       std::string resp;
-      if (0 == url.find("https://hub.foundries.io/token-auth/")) {
+      if (0 == url.find(registry_->baseURL() + "/token-auth/")) {
         resp = "{\"token\":\"token\"}";
-      } else if (0 == url.find("https://hub.foundries.io/v2/")) {
-        resp = registry_.getManifest();
+      } else if (0 == url.find(registry_->baseURL() + "/v2/")) {
+        resp = registry_->getManifest();
       } else {
         resp = "{\"Secret\":\"secret\",\"Username\":\"test-user\"}";
       }
      return HttpResponse(resp, 200, CURLE_OK, "");
     }
 
-    HttpResponse post(const std::string &url, const std::string &content_type, const std::string &data) override {}
+    HttpResponse download(const std::string &url, curl_write_callback write_cb, curl_xferinfo_callback progress_cb, void *userp, curl_off_t from) override {
 
-    HttpResponse post(const std::string &url, const Json::Value &data) override {}
+      (void)url;
+      (void)progress_cb;
+      (void)from;
 
-    HttpResponse put(const std::string &url, const std::string &content_type, const std::string &data) override {}
-
-    HttpResponse put(const std::string &url, const Json::Value &data) override {}
-
-    HttpResponse download(const std::string &url, curl_write_callback write_cb,
-                                  curl_xferinfo_callback progress_cb, void *userp, curl_off_t from) override {
-
-      std::string data{registry_.getArchiveContent()};
+      assert(registry_);
+      std::string data{registry_->getArchiveContent()};
       write_cb(const_cast<char*>(data.c_str()), data.size(), 1, userp);
 
       return HttpResponse("resp", 200, CURLE_OK, "");
     }
 
-    std::future<HttpResponse> downloadAsync(const std::string &url, curl_write_callback write_cb,
-                                                    curl_xferinfo_callback progress_cb, void *userp, curl_off_t from,
-                                                    CurlHandler *easyp) override {
-
-
+    std::future<HttpResponse> downloadAsync(const std::string&, curl_write_callback, curl_xferinfo_callback, void*, curl_off_t, CurlHandler*) override {
+      std::promise<HttpResponse> resp_promise;
+      resp_promise.set_value(HttpResponse("", 500, CURLE_OK, ""));
+      return resp_promise.get_future();
     }
-
-    void setCerts(const std::string &ca, CryptoSource ca_source, const std::string &cert,
-                          CryptoSource cert_source, const std::string &pkey, CryptoSource pkey_source) override {}
+    HttpResponse post(const std::string&, const std::string&, const std::string&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    HttpResponse post(const std::string&, const Json::Value&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    HttpResponse put(const std::string&, const std::string&, const std::string&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    HttpResponse put(const std::string&, const Json::Value&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    void setCerts(const std::string&, CryptoSource, const std::string&, CryptoSource, const std::string&, CryptoSource) override {}
 
  private:
-  FakeRegistry& registry_;
+  FakeRegistry* registry_;
   const std::vector<std::string>* headers_;
-
 };
 
 static boost::filesystem::path test_sysroot;
@@ -141,6 +149,11 @@ TEST(ComposeApp, Config) {
   ASSERT_EQ("app2", cfg.apps[1]);
   ASSERT_EQ("apps-root", cfg.apps_root);
   ASSERT_EQ("compose", cfg.compose_bin);
+  // check default values of the registry configuration
+  ASSERT_EQ(RegistryClient::Conf().auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
+  ASSERT_EQ(RegistryClient::Conf().base_url, cfg.registry_conf.base_url);
+  ASSERT_EQ(RegistryClient::Conf().auth_token_endpoint, cfg.registry_conf.auth_token_endpoint);
+  ASSERT_EQ(RegistryClient::Conf().repo_base_url, cfg.registry_conf.repo_base_url);
 
   config.pacman.extra["docker_prune"] = "0";
   cfg = ComposeAppConfig(config.pacman);
@@ -151,10 +164,56 @@ TEST(ComposeApp, Config) {
   ASSERT_FALSE(cfg.docker_prune);
 }
 
+TEST(ComposeApp, RegistryClientConfig) {
+  {
+    // check config if just registry_auth_creds_endpoint and registry_base_url is specified
+    Config config;
+    const std::string registry_auth_creds_endpoint{"registry_auth_creds_endpoint"};
+    const std::string registry_base_url{"registry_base_url"};
+    config.pacman.extra["registry_auth_creds_endpoint"] = registry_auth_creds_endpoint;
+    config.pacman.extra["registry_base_url"] = registry_base_url;
+
+    ComposeAppConfig cfg(config.pacman);
+    ASSERT_EQ(registry_auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
+    ASSERT_EQ(registry_base_url, cfg.registry_conf.base_url);
+    ASSERT_EQ(registry_base_url + "/token-auth/", cfg.registry_conf.auth_token_endpoint);
+    ASSERT_EQ(registry_base_url + "/v2/", cfg.registry_conf.repo_base_url);
+  }
+  {
+    // check config if none of the registry parameters are specified and just pacman.ostree_server is defined
+    Config config;
+    config.pacman.ostree_server = "https://ota-server:8080/treehub";
+
+    ComposeAppConfig cfg(config.pacman);
+    ASSERT_EQ("https://ota-server:8080/hub-creds/", cfg.registry_conf.auth_creds_endpoint);
+    ASSERT_EQ(RegistryClient::Conf().base_url, cfg.registry_conf.base_url);
+    ASSERT_EQ(RegistryClient::Conf().auth_token_endpoint, cfg.registry_conf.auth_token_endpoint);
+    ASSERT_EQ(RegistryClient::Conf().repo_base_url, cfg.registry_conf.repo_base_url);
+  }
+  {
+    // check config if all registry parameters are specified
+    Config config;
+    const std::string registry_auth_creds_endpoint{"registry_auth_creds_endpoint"};
+    const std::string registry_base_url{"registry_base_url"};
+    const std::string auth_token_endpoint{"auth_token_endpoint"};
+    const std::string repo_base_url{"repo_base_url"};
+
+    config.pacman.extra["registry_auth_creds_endpoint"] = registry_auth_creds_endpoint;
+    config.pacman.extra["registry_base_url"] = registry_base_url;
+    config.pacman.extra["registry_auth_token_endpoint"] = auth_token_endpoint;
+    config.pacman.extra["registry_repo_base_url"] = repo_base_url;
+
+    ComposeAppConfig cfg(config.pacman);
+    ASSERT_EQ(registry_auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
+    ASSERT_EQ(registry_base_url, cfg.registry_conf.base_url);
+    ASSERT_EQ(auth_token_endpoint, cfg.registry_conf.auth_token_endpoint);
+    ASSERT_EQ(repo_base_url, cfg.registry_conf.repo_base_url);
+  }
+}
+
 struct TestClient {
   TestClient(const char* apps, const Uptane::Target* installedTarget = nullptr,
-             const std::shared_ptr<HttpInterface>& ota_lite_client = nullptr,
-             RegistryClient::HttpClientFactory registry_http_client_factory = nullptr) {
+             FakeRegistry* registry = nullptr) {
     tempdir = std_::make_unique<TemporaryDirectory>();
 
     Config config;
@@ -175,7 +234,16 @@ struct TestClient {
     if (installedTarget != nullptr) {
       storage->savePrimaryInstalledVersion(*installedTarget, InstalledVersionUpdateMode::kCurrent);
     }
-    pacman = std_::make_unique<ComposeAppManager>(config.pacman, config.bootloader, storage, ota_lite_client, registry_http_client_factory);
+    std::shared_ptr<HttpInterface> http_client;
+    RegistryClient::HttpClientFactory registry_fake_http_client_factory;
+    if (registry) {
+      http_client = std::make_shared<FakeOtaClient>(registry);
+      registry_fake_http_client_factory = [registry](const std::vector<std::string>* headers) {
+        return std::make_shared<FakeOtaClient>(registry, headers);
+      };
+      config.pacman.extra["registry_base_url"] = registry->baseURL();
+    }
+    pacman = std_::make_unique<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, registry_fake_http_client_factory);
     keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
     fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());
   }
@@ -211,10 +279,7 @@ TEST(ComposeApp, getApps) {
 TEST(ComposeApp, fetch) {
   TemporaryDirectory tmp_dir;
   FakeRegistry registry{"https://hub.io/", tmp_dir.Path()};
-  auto fake_ota_client = std::make_shared<FakeOtaClient>(registry);
-  RegistryClient::HttpClientFactory registry_fake_http_client_factory = [&registry](const std::vector<std::string>* headers) {
-    return std::make_shared<FakeOtaClient>(registry, headers);
-  };
+
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
   Json::Value target_json;
   target_json["hashes"]["sha256"] = sha;
@@ -223,10 +288,11 @@ TEST(ComposeApp, fetch) {
   target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "n/a";
   const std::string app_file_name = "docker-compose.yml";
   const std::string app_content = "lajdalsjdlasjflkjasldjaldlasdl89749823748jsdhfjshdfjk89273498273jsdkjkdfjkdsfj928";
-  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2", app_file_name, app_content);
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                                                                nullptr, app_file_name, app_content);
   Uptane::Target target("pull", target_json);
 
-  TestClient client("app2 doesnotexist", nullptr, fake_ota_client, registry_fake_http_client_factory);  // only app2 can be fetched
+  TestClient client("app2 doesnotexist", nullptr, &registry);  // only app2 can be fetched
   bool result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
   ASSERT_TRUE(result);
   const std::string expected_file = (client.pacman->cfg_.apps_root / "app2"/ app_file_name).string();
@@ -239,9 +305,102 @@ TEST(ComposeApp, fetch) {
   output = Utils::readFile(client.tempdir->Path() / "apps/app2/pull.log", true);
   ASSERT_EQ("pull", output);
   ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/doesnotexist"));
+}
+
+TEST(ComposeApp, fetchNegative) {
+  TemporaryDirectory tmp_dir;
+  FakeRegistry registry{"https://hub.io/", tmp_dir.Path()};
+
+  std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
+  Json::Value target_json;
+  target_json["hashes"]["sha256"] = sha;
+  target_json["custom"]["targetFormat"] = "OSTREE";
+  target_json["length"] = 0;
+  target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "n/a";
+
+  Uptane::Target target("pull", target_json);
+  TestClient client("app2", nullptr, &registry);
 
   // Now do a quick check that we can handle a simple download failure
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "FAILTEST";
+  target = Uptane::Target("pull", target_json);
+  bool result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Invalid App URI
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "https://hub.io/test_repo/app2sha256:712329f5d298ccc144f2d1c8b071cc277dcbe77796d8d3a805b69dd09aa486dc";
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Invalid App Manifest: no version
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                                  [](Json::Value& manifest, std::string&) {
+                                                    manifest["annotations"].clear();
+                                                  });
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Invalid App Manifest: unsupported version
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                                          [](Json::Value& manifest, std::string&) {
+                                                            manifest["annotations"]["compose-app"] = "v0";
+                                                          });
+  registry.manifest()["annotations"]["compose-app"] = "v0";
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Invalid App Manifest: no archive/blob layer
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                                          [](Json::Value& manifest, std::string&) {
+                                                            manifest["layers"].clear();
+                                                          });
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Invalid App Manifest: invalid hash caused by manifest altering
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2");
+  registry.manifest()["custom"]["some_filed"] = "some_value";
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Invalid archive hash
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                      [](Json::Value& manifest, std::string& hash) {
+                                        manifest["layers"][0]["digest"] = "sha256:" + hash.replace(2, 3, "123");
+                                      });
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Invalid archive size: received more data than specified in the manifest
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                      [](Json::Value& manifest, std::string&) {
+                                        manifest["layers"][0]["size"] = manifest["layers"][0]["size"].asUInt() - 1;
+                                      });
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Invalid archive size: received less data than specified in the manifest
+target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                        [](Json::Value& manifest, std::string&) {
+                                          manifest["layers"][0]["size"] = manifest["layers"][0]["size"].asUInt() + 1;
+                                        });
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+
+  // Manifest size exceeds maximum allowed size (RegistryClient::ManifestMaxSize)
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                        [](Json::Value& manifest, std::string&) {
+                                          manifest["layers"][1]["some_value"] = std::string(RegistryClient::ManifestMaxSize + 1, 'f');
+                                        });
   target = Uptane::Target("pull", target_json);
   result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
   ASSERT_FALSE(result);

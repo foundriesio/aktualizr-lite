@@ -21,17 +21,19 @@ struct ComposeApp {
     Manifest(const Json::Value& value = Json::Value()) : Json::Value(value) {
       auto manifest_version{(*this)["annotations"]["compose-app"].asString()};
       if (manifest_version.empty()) {
-        throw std::runtime_error("Got invalid App manifest: " + value.asString());
+        throw std::runtime_error("Got invalid App manifest, missing a manifest version: " +
+                                 Utils::jsonToCanonicalStr(value));
       }
       if (Version != manifest_version) {
-        throw std::runtime_error("Got unsupported App manifest: " + value.asString());
+        throw std::runtime_error("Got unsupported App manifest version: " + Utils::jsonToCanonicalStr(value));
       }
     }
 
     std::string archiveDigest() const {
       auto digest{(*this)["layers"][0]["digest"].asString()};
       if (digest.empty()) {
-        throw std::runtime_error("Failed to extract App Archive digest from App manifest: " + (*this).asString());
+        throw std::runtime_error("Got invalid App manifest, failed to extract App Archive digest from App manifest: " +
+                                 Utils::jsonToCanonicalStr(*this));
       }
       return digest;
     }
@@ -39,7 +41,8 @@ struct ComposeApp {
     size_t archiveSize() const {
       LargestUInt arch_size{(*this)["layers"][0]["size"].asLargestUInt()};
       if (0 == arch_size || arch_size > std::numeric_limits<size_t>::max()) {
-        throw std::runtime_error("Invalid size of App Archive is specified in App manifest: " + (*this).asString());
+        throw std::runtime_error("Invalid size of App Archive is specified in App manifest: " +
+                                 Utils::jsonToCanonicalStr(*this));
       }
 
       return arch_size;
@@ -116,18 +119,23 @@ ComposeAppConfig::ComposeAppConfig(const PackageConfig& pconfig) {
   if (raw.count("registry_auth_creds_endpoint") == 1) {
     registry_conf.auth_creds_endpoint = raw.at("registry_auth_creds_endpoint");
   } else {
-    const std::string treehub_endpoint = "treehub";
-    const std::string registry_creds_endpoint = "hub-creds/";
-    registry_conf.auth_creds_endpoint = pconfig.ostree_server;
-    auto endpoint_pos = registry_conf.auth_creds_endpoint.find(treehub_endpoint);
-    if (endpoint_pos != std::string::npos) {
-      registry_conf.auth_creds_endpoint.replace(endpoint_pos, registry_creds_endpoint.length(),
-                                                registry_creds_endpoint);
+    // if not specified, let's extract it from the `ostree_server` value if it's defined
+    if (!pconfig.ostree_server.empty()) {
+      const std::string treehub_endpoint = "treehub";
+      const std::string registry_creds_endpoint = "hub-creds/";
+      registry_conf.auth_creds_endpoint = pconfig.ostree_server;
+      auto endpoint_pos = registry_conf.auth_creds_endpoint.find(treehub_endpoint);
+      if (endpoint_pos != std::string::npos) {
+        registry_conf.auth_creds_endpoint.replace(endpoint_pos, registry_creds_endpoint.length(),
+                                                  registry_creds_endpoint);
+      }
     }
   }
 
   if (raw.count("registry_base_url") == 1) {
     registry_conf.base_url = raw.at("registry_base_url");
+    registry_conf.auth_token_endpoint = registry_conf.base_url + "/token-auth/";
+    registry_conf.repo_base_url = registry_conf.base_url + "/v2/";
   }
 
   if (raw.count("registry_auth_token_endpoint") == 1) {
@@ -348,18 +356,23 @@ Json::Value RegistryClient::getAppManifest(const std::string& repo, const Hashed
     throw std::runtime_error("Failed to download App manifest: " + manifest_resp.getStatusStr());
   }
 
+  if (manifest_resp.body.size() > ManifestMaxSize) {
+    throw std::runtime_error("Size of received App manifest exceeds the maximum allowed: " +
+                             std::to_string(manifest_resp.body.size()) + " > " + std::to_string(ManifestMaxSize));
+  }
+
   auto received_manifest_hash{
       boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(manifest_resp.body)))};
+
   if (received_manifest_hash != digest.hash()) {
     throw std::runtime_error(
         "Hash of received App manifest and the hash specified in Target"
-        "do not match: " +
+        " do not match: " +
         received_manifest_hash + " != " + digest.hash());
   }
 
   LOG_TRACE << "Received App manifest: \n" << manifest_resp.getJson();
   return ComposeApp::Manifest{manifest_resp.getJson()};
-  ;
 }
 
 struct DownloadCtx {
@@ -371,13 +384,14 @@ struct DownloadCtx {
   std::size_t expected_size;
 
   std::size_t written_size{0};
+  std::size_t received_size{0};
 
   std::size_t write(const char* data, std::size_t size) {
     assert(data);
 
-    if ((written_size + size) > expected_size) {
-      LOG_ERROR << "!!! Received data size exceeds the expected size: " << (written_size + size)
-                << " != " << expected_size;
+    received_size = written_size + size;
+    if (received_size > expected_size) {
+      LOG_ERROR << "!!! Received data size exceeds the expected size: " << received_size << " != " << expected_size;
       return (size + 1);  // returning value that is not equal to received data size will make curl fail
     }
 
