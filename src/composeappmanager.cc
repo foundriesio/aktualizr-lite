@@ -6,7 +6,7 @@
 #include "json/json.h"
 
 struct ComposeApp {
-  ComposeApp(std::string name, const ComposeAppConfig& config, const RegistryClient& registry_client)
+  ComposeApp(std::string name, const ComposeAppConfig& config, const Docker::RegistryClient& registry_client)
       : name_{std::move(name)},
         root_{config.apps_root / name_},
         compose_{boost::filesystem::canonical(config.compose_bin).string() + " "},
@@ -81,15 +81,13 @@ struct ComposeApp {
 
  private:
   bool download(const std::string& app_uri);
-  std::pair<std::string, std::string> parseAppUri(const std::string& uri);
-  std::string downloadArchive(const std::string& repo, const Manifest& manifest);
   void extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction = true);
 
  private:
   std::string name_;
   boost::filesystem::path root_;
   std::string compose_;
-  const RegistryClient& registry_client_;
+  const Docker::RegistryClient& registry_client_;
 };
 
 ComposeAppConfig::ComposeAppConfig(const PackageConfig& pconfig) {
@@ -114,43 +112,23 @@ ComposeAppConfig::ComposeAppConfig(const PackageConfig& pconfig) {
     boost::algorithm::to_lower(val);
     docker_prune = val != "0" && val != "false";
   }
-
-  // Docker Registry Configuration
-  if (raw.count("registry_auth_creds_endpoint") == 1) {
-    registry_conf.auth_creds_endpoint = raw.at("registry_auth_creds_endpoint");
-  } else {
-    // if not specified, let's extract it from the `ostree_server` value if it's defined
-    if (!pconfig.ostree_server.empty()) {
-      const std::string treehub_endpoint = "treehub";
-      const std::string registry_creds_endpoint = "hub-creds/";
-      registry_conf.auth_creds_endpoint = pconfig.ostree_server;
-      auto endpoint_pos = registry_conf.auth_creds_endpoint.find(treehub_endpoint);
-      if (endpoint_pos != std::string::npos) {
-        registry_conf.auth_creds_endpoint.replace(endpoint_pos, registry_creds_endpoint.length(),
-                                                  registry_creds_endpoint);
-      }
+  // if not specified, let's extract it from the `ostree_server` value if it's defined
+  if (!pconfig.ostree_server.empty()) {
+    const std::string treehub_endpoint = "treehub";
+    const std::string registry_creds_endpoint = "hub-creds/";
+    registry_conf.auth_creds_endpoint = pconfig.ostree_server;
+    auto endpoint_pos = registry_conf.auth_creds_endpoint.find(treehub_endpoint);
+    if (endpoint_pos != std::string::npos) {
+      registry_conf.auth_creds_endpoint.replace(endpoint_pos, registry_creds_endpoint.length(),
+                                                registry_creds_endpoint);
     }
-  }
-
-  if (raw.count("registry_base_url") == 1) {
-    registry_conf.base_url = raw.at("registry_base_url");
-    registry_conf.auth_token_endpoint = registry_conf.base_url + "/token-auth/";
-    registry_conf.repo_base_url = registry_conf.base_url + "/v2/";
-  }
-
-  if (raw.count("registry_auth_token_endpoint") == 1) {
-    registry_conf.auth_token_endpoint = raw.at("registry_auth_token_endpoint");
-  }
-
-  if (raw.count("registry_repo_base_url") == 1) {
-    registry_conf.repo_base_url = raw.at("registry_repo_base_url");
   }
 }
 
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
-                                     RegistryClient::HttpClientFactory registry_http_client_factory)
+                                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory)
     : OstreeManager(pconfig, bconfig, storage, http),
       cfg_{pconfig},
       registry_client_{cfg_.registry_conf, http, std::move(registry_http_client_factory)} {}
@@ -263,13 +241,15 @@ bool ComposeApp::download(const std::string& app_uri) {
   try {
     LOG_DEBUG << name_ << ": downloading App from Registry: " << app_uri;
 
-    std::string repo, digest;
-    std::tie(repo, digest) = parseAppUri(app_uri);
-    RegistryClient::HashedDigest hashed_digest{digest};
+    Docker::Uri uri{Docker::Uri::parseUri(app_uri)};
+    Manifest manifest{registry_client_.getAppManifest(uri, Manifest::Format)};
 
-    Manifest manifest{registry_client_.getAppManifest(repo, hashed_digest, Manifest::Format)};
-    auto downloaded_archive = downloadArchive(repo, manifest);
-    extractAppArchive(downloaded_archive);
+    const std::string archive_file_name{uri.digest.shortHash() + '.' + name_ + ArchiveExt};
+    Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
+
+    registry_client_.downloadBlob(archive_uri, root_ / archive_file_name, manifest.archiveSize());
+
+    extractAppArchive(archive_file_name);
 
     result = true;
     LOG_DEBUG << name_ << ": App has been downloaded";
@@ -278,44 +258,6 @@ bool ComposeApp::download(const std::string& app_uri) {
   }
 
   return result;
-}
-
-std::pair<std::string, std::string> ComposeApp::parseAppUri(const std::string& uri) {
-  auto split_pos = uri.find('@');
-  if (split_pos == std::string::npos) {
-    throw std::invalid_argument("Invalid App URI: '@' not found in " + uri);
-  }
-
-  auto compose_app_digest{uri.substr(split_pos + 1)};
-  LOG_DEBUG << name_ << ": App digest: " << compose_app_digest;
-
-  auto app_name_pos = uri.rfind('/', split_pos);
-  if (app_name_pos == std::string::npos) {
-    throw std::invalid_argument("Invalid App URI: the app name not found in " + uri);
-  }
-
-  auto compose_app_name{uri.substr(app_name_pos + 1, split_pos - app_name_pos - 1)};
-
-  auto factory_name_pos = uri.rfind('/', app_name_pos - 1);
-  if (factory_name_pos == std::string::npos) {
-    throw std::invalid_argument("Invalid App URI; the app factory name not found in " + uri);
-  }
-
-  auto factory_name{uri.substr(factory_name_pos + 1, app_name_pos - factory_name_pos - 1)};
-  LOG_DEBUG << name_ << ": Factory: " << factory_name;
-
-  auto repo_name{uri.substr(factory_name_pos + 1, split_pos - factory_name_pos - 1)};
-  LOG_DEBUG << name_ << ": App Repo name: " << repo_name;
-
-  return {repo_name, compose_app_digest};
-}
-
-std::string ComposeApp::downloadArchive(const std::string& repo, const Manifest& manifest) {
-  RegistryClient::HashedDigest hashed_digest{manifest.archiveDigest()};
-
-  const std::string archive_file_name{hashed_digest.shortHash() + '.' + name_ + ArchiveExt};
-  registry_client_.downloadBlob(repo, hashed_digest, root_ / archive_file_name, manifest.archiveSize());
-  return archive_file_name;
 }
 
 void ComposeApp::extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction) {
@@ -329,13 +271,50 @@ void ComposeApp::extractAppArchive(const std::string& archive_file_name, bool de
   }
 }
 
+namespace Docker {
+
+Uri Uri::parseUri(const std::string& uri) {
+  auto split_pos = uri.find('@');
+  if (split_pos == std::string::npos) {
+    throw std::invalid_argument("Invalid App URI: '@' not found in " + uri);
+  }
+
+  auto app_name_pos = uri.rfind('/', split_pos);
+  if (app_name_pos == std::string::npos) {
+    throw std::invalid_argument("Invalid App URI: the app name not found in " + uri);
+  }
+
+  auto app = uri.substr(app_name_pos + 1, split_pos - app_name_pos - 1);
+  auto digest = uri.substr(split_pos + 1);
+  LOG_DEBUG << app << ": App digest: " << digest;
+
+  auto factory_name_pos = uri.rfind('/', app_name_pos - 1);
+  if (factory_name_pos == std::string::npos) {
+    throw std::invalid_argument("Invalid App URI; the app factory name not found in " + uri);
+  }
+
+  auto factory = uri.substr(factory_name_pos + 1, app_name_pos - factory_name_pos - 1);
+  LOG_DEBUG << app << ": Factory: " << factory;
+
+  auto repo = uri.substr(factory_name_pos + 1, split_pos - factory_name_pos - 1);
+  LOG_DEBUG << app << ": App Repo: " << repo;
+
+  auto registry_hostname = uri.substr(0, factory_name_pos);
+  LOG_DEBUG << app << ": App Registry hostname: " << registry_hostname;
+
+  return Uri{HashedDigest{digest}, app, factory, repo, registry_hostname};
+}
+
+Uri Uri::createUri(const HashedDigest& digest_in) {
+  return Uri{HashedDigest{digest_in}, app, factory, repo, registryHostname};
+}
+
 RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
     [](const std::vector<std::string>* headers) { return std::make_shared<HttpClient>(headers); };
 
-const std::string RegistryClient::HashedDigest::Type{"sha256:"};
+const std::string HashedDigest::Type{"sha256:"};
 
-RegistryClient::HashedDigest::HashedDigest(const std::string& hash_digest)
-    : digest_{boost::algorithm::to_lower_copy(hash_digest)} {
+HashedDigest::HashedDigest(const std::string& hash_digest) : digest_{boost::algorithm::to_lower_copy(hash_digest)} {
   if (Type != digest_.substr(0, Type.length())) {
     throw std::invalid_argument("Unsupported hash type: " + hash_digest);
   }
@@ -348,12 +327,15 @@ RegistryClient::HashedDigest::HashedDigest(const std::string& hash_digest)
   short_hash_ = hash_.substr(0, 7);
 }
 
-Json::Value RegistryClient::getAppManifest(const std::string& repo, const HashedDigest& digest,
-                                           const std::string& format) const {
-  const std::string manifest_url{conf_.repo_base_url + repo + "/manifests/" + digest()};
+const std::string RegistryClient::ManifestEndpoint{"/manifests/"};
+const std::string RegistryClient::BlobEndpoint{"/blobs/"};
+const std::string RegistryClient::SupportedRegistryVersion{"/v2/"};
+
+Json::Value RegistryClient::getAppManifest(const Uri& uri, const std::string& format) const {
+  const std::string manifest_url{composeManifestUrl(uri)};
   LOG_DEBUG << "Downloading App manifest: " << manifest_url;
 
-  std::vector<std::string> registry_repo_request_headers{getBearerAuthHeader(repo), "accept:" + format};
+  std::vector<std::string> registry_repo_request_headers{getBearerAuthHeader(uri), "accept:" + format};
   auto registry_repo_client{http_client_factory_(&registry_repo_request_headers)};
 
   auto manifest_resp = registry_repo_client->get(manifest_url, ManifestMaxSize);
@@ -369,11 +351,11 @@ Json::Value RegistryClient::getAppManifest(const std::string& repo, const Hashed
   auto received_manifest_hash{
       boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(manifest_resp.body)))};
 
-  if (received_manifest_hash != digest.hash()) {
+  if (received_manifest_hash != uri.digest.hash()) {
     throw std::runtime_error(
         "Hash of received App manifest and the hash specified in Target"
         " do not match: " +
-        received_manifest_hash + " != " + digest.hash());
+        received_manifest_hash + " != " + uri.digest.hash());
   }
 
   LOG_TRACE << "Received App manifest: \n" << manifest_resp.getJson();
@@ -422,18 +404,17 @@ static size_t DownloadHandler(char* data, size_t buf_size, size_t buf_numb, void
   return download_ctx->write(data, (buf_size * buf_numb));
 }
 
-void RegistryClient::downloadBlob(const std::string& repo, const HashedDigest& digest,
-                                  const boost::filesystem::path& file_path, size_t expected_size) const {
-  auto compose_app_blob_url{conf_.repo_base_url + repo + "/blobs/" + digest()};
+void RegistryClient::downloadBlob(const Uri& uri, const boost::filesystem::path& filepath, size_t expected_size) const {
+  auto compose_app_blob_url{composeBlobUrl(uri)};
 
   LOG_DEBUG << "Downloading App blob: " << compose_app_blob_url;
 
-  std::vector<std::string> registry_repo_request_headers{getBearerAuthHeader(repo)};
+  std::vector<std::string> registry_repo_request_headers{getBearerAuthHeader(uri)};
   auto registry_repo_client{http_client_factory_(&registry_repo_request_headers)};
 
-  std::ofstream output_file{file_path.string(), std::ios_base::out | std::ios_base::binary};
+  std::ofstream output_file{filepath.string(), std::ios_base::out | std::ios_base::binary};
   if (!output_file.is_open()) {
-    throw std::runtime_error("Failed to open a file: " + file_path.string());
+    throw std::runtime_error("Failed to open a file: " + filepath.string());
   }
   MultiPartSHA256Hasher hasher;
 
@@ -448,7 +429,7 @@ void RegistryClient::downloadBlob(const std::string& repo, const HashedDigest& d
   std::size_t recv_blob_file_size{download_ctx.written_size};
 
   if (recv_blob_file_size != expected_size) {
-    std::remove(file_path.c_str());
+    std::remove(filepath.c_str());
     throw std::runtime_error(
         "Size of downloaded App blob does not equal to "
         "the expected one: " +
@@ -457,16 +438,21 @@ void RegistryClient::downloadBlob(const std::string& repo, const HashedDigest& d
 
   auto recv_blob_hash{boost::algorithm::to_lower_copy(hasher.getHexDigest())};
 
-  if (recv_blob_hash != digest.hash()) {
-    std::remove(file_path.c_str());
+  if (recv_blob_hash != uri.digest.hash()) {
+    std::remove(filepath.c_str());
     throw std::runtime_error(
         "Hash of downloaded App blob does not equal to "
         "the expected one: " +
-        recv_blob_hash + " != " + digest.hash());
+        recv_blob_hash + " != " + uri.digest.hash());
   }
 }
 
 std::string RegistryClient::getBasicAuthHeader() const {
+  // TODO: to make it working against any Registry, not just FIO's one
+  // we will need to make use of the Docker's mechanisms for it,
+  // specifically in docker/config.json there should defined an auth material and/or credHelpers
+  // for a given registry. If auth material is defined then just use it if not then try to invoke
+  // a script/executbale defined in credHelpers  that is supposed to return an auth material
   LOG_DEBUG << "Getting Docker Registry credentials from " << conf_.auth_creds_endpoint;
 
   auto creds_resp = ota_lite_client_->get(conf_.auth_creds_endpoint, AuthMaterialMaxSize);
@@ -491,18 +477,26 @@ std::string RegistryClient::getBasicAuthHeader() const {
   return "authorization: basic " + encoded_auth_secret;
 }
 
-std::string RegistryClient::getBearerAuthHeader(const std::string& repo) const {
-  LOG_DEBUG << "Getting Docker Registry token from " << conf_.auth_token_endpoint;
+std::string RegistryClient::getBearerAuthHeader(const Uri& uri) const {
+  // TODO: to make it generic we need to make a request for a resource at first
+  // and then if we get 401 we should parse 'Www-Authenticate' header and get
+  // URL and params of the request for a token from it.
+  // Currently, we support just FIO's Registry so we know its endpoint and what params we need to send
+  // so we do shortcut here.
+  // The aktualizr HTTP client doesn't return headers in the response object so adding this functionality
+  // implies making changes in libaktualizr or writing our own http client what is not justifiable at the moment
+  std::string auth_token_endpoint{"https://" + uri.registryHostname + "/token-auth/"};
+  LOG_DEBUG << "Getting Docker Registry token from " << auth_token_endpoint;
 
   std::vector<std::string> auth_header = {getBasicAuthHeader()};
 
   auto registry_client{http_client_factory_(&auth_header)};
-  std::string token_req_params{"?service=registry&scope=repository:" + repo + ":pull"};
+  std::string token_req_params{"?service=registry&scope=repository:" + uri.repo + ":pull"};
 
-  auto token_resp = registry_client->get(conf_.auth_token_endpoint + token_req_params, AuthMaterialMaxSize);
+  auto token_resp = registry_client->get(auth_token_endpoint + token_req_params, AuthMaterialMaxSize);
 
   if (!token_resp.isOk()) {
-    throw std::runtime_error("Failed to get Auth Token at Docker Registry" + conf_.auth_token_endpoint +
+    throw std::runtime_error("Failed to get Auth Token at Docker Registry " + auth_token_endpoint +
                              "; error: " + token_resp.getStatusStr());
   }
 
@@ -514,3 +508,5 @@ std::string RegistryClient::getBearerAuthHeader(const std::string& repo) const {
   LOG_DEBUG << "Got Docker Registry token: " << token;
   return "authorization: bearer " + token;
 }
+
+}  // namespace Docker
