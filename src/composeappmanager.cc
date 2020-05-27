@@ -1,5 +1,7 @@
 #include "composeappmanager.h"
 
+#include <sys/statvfs.h>
+
 #include "boost/process.hpp"
 #include "crypto/crypto.h"
 #include "http/httpclient.h"
@@ -39,7 +41,7 @@ struct ComposeApp {
     }
 
     size_t archiveSize() const {
-      LargestUInt arch_size{(*this)["layers"][0]["size"].asLargestUInt()};
+      uint64_t arch_size{(*this)["layers"][0]["size"].asUInt64()};
       if (0 == arch_size || arch_size > std::numeric_limits<size_t>::max()) {
         throw std::runtime_error("Invalid size of App Archive is specified in App manifest: " +
                                  Utils::jsonToCanonicalStr(*this));
@@ -81,6 +83,7 @@ struct ComposeApp {
 
  private:
   bool download(const std::string& app_uri);
+  static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);
   void extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction = true);
 
  private:
@@ -235,6 +238,20 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
   }
 }
 
+bool ComposeApp::checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size) {
+  struct statvfs stat_buf {};
+  const int stat_res = statvfs(app_root.c_str(), &stat_buf);
+  if (stat_res < 0) {
+    LOG_WARNING << "Unable to read filesystem statistics: error code " << stat_res;
+    return false;
+  }
+  const uint64_t available_bytes = (static_cast<uint64_t>(stat_buf.f_bsize) * stat_buf.f_bavail);
+  const uint64_t reserved_bytes = 1 << 20;
+
+  out_available_size = (available_bytes - reserved_bytes);
+  return true;
+}
+
 bool ComposeApp::download(const std::string& app_uri) {
   bool result = false;
 
@@ -247,8 +264,21 @@ bool ComposeApp::download(const std::string& app_uri) {
     const std::string archive_file_name{uri.digest.shortHash() + '.' + name_ + ArchiveExt};
     Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
 
-    registry_client_.downloadBlob(archive_uri, root_ / archive_file_name, manifest.archiveSize());
+    uint64_t available_storage;
+    if (checkAvailableStorageSpace(root_, available_storage)) {
+      // assume that an extracted files total size is up to 10x larger than the archive size
+      // 80% is a storage space watermark, we don't want to fill a volume above it
+      auto need_storage = manifest.archiveSize() * 10;
+      auto available_for_apps = static_cast<uint64_t>(available_storage * 0.8);
+      if (need_storage > available_for_apps) {
+        throw std::runtime_error("There is no sufficient storage space available to download App archive, available: " +
+                                 std::to_string(available_for_apps) + " need: " + std::to_string(need_storage));
+      }
+    } else {
+      LOG_WARNING << "Failed to get an available storage space, continuing with App archive download";
+    }
 
+    registry_client_.downloadBlob(archive_uri, root_ / archive_file_name, manifest.archiveSize());
     extractAppArchive(archive_file_name);
 
     result = true;

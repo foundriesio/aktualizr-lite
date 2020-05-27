@@ -356,7 +356,7 @@ TEST(ComposeApp, fetchNegative) {
   ASSERT_FALSE(result);
 
   // Invalid archive size: received less data than specified in the manifest
-target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
                                         [](Json::Value& manifest, std::string&) {
                                           manifest["layers"][0]["size"] = manifest["layers"][0]["size"].asUInt() + 1;
                                         });
@@ -369,6 +369,15 @@ target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("t
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
                                         [](Json::Value& manifest, std::string&) {
                                           manifest["layers"][1]["some_value"] = std::string(Docker::RegistryClient::ManifestMaxSize + 1, 'f');
+                                        });
+  target = Uptane::Target("pull", target_json);
+  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  ASSERT_FALSE(result);
+
+  // Archive size exceeds maximum available storage space
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
+                                        [](Json::Value& manifest, std::string&) {
+                                          manifest["layers"][0]["size"] = std::numeric_limits<size_t>::max();
                                         });
   target = Uptane::Target("pull", target_json);
   result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
