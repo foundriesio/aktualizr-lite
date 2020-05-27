@@ -42,7 +42,7 @@ class FakeRegistry {
       }
       archive_name_ = hash.substr(0,7) + '.' + app_name + ".tgz";
       // app URI
-      auto app_uri = base_url_ + app_repo + '/' + app_name + '@' + "sha256:" + manifest_hash_;
+      auto app_uri = base_url_ + '/' + app_repo + '/' + app_name + '@' + "sha256:" + manifest_hash_;
       return app_uri;
     }
 
@@ -71,9 +71,9 @@ class FakeOtaClient: public HttpInterface {
     HttpResponse get(const std::string &url, int64_t maxsize) override {
       assert(registry_);
       std::string resp;
-      if (0 == url.find(registry_->baseURL() + "/token-auth/")) {
+      if (std::string::npos != url.find(registry_->baseURL() + "/token-auth/")) {
         resp = "{\"token\":\"token\"}";
-      } else if (0 == url.find(registry_->baseURL() + "/v2/")) {
+      } else if (std::string::npos != url.find(registry_->baseURL() + "/v2/")) {
         resp = registry_->getManifest();
       } else {
         resp = "{\"Secret\":\"secret\",\"Username\":\"test-user\"}";
@@ -152,11 +152,8 @@ TEST(ComposeApp, Config) {
   ASSERT_EQ("app2", cfg.apps[1]);
   ASSERT_EQ("apps-root", cfg.apps_root);
   ASSERT_EQ("compose", cfg.compose_bin);
-  // check default values of the registry configuration
-  ASSERT_EQ(RegistryClient::Conf().auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
-  ASSERT_EQ(RegistryClient::Conf().base_url, cfg.registry_conf.base_url);
-  ASSERT_EQ(RegistryClient::Conf().auth_token_endpoint, cfg.registry_conf.auth_token_endpoint);
-  ASSERT_EQ(RegistryClient::Conf().repo_base_url, cfg.registry_conf.repo_base_url);
+  // check default values of the registry configuration (TODO: to be removed)
+  ASSERT_EQ(Docker::RegistryClient::Conf().auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
 
   config.pacman.extra["docker_prune"] = "0";
   cfg = ComposeAppConfig(config.pacman);
@@ -169,48 +166,18 @@ TEST(ComposeApp, Config) {
 
 TEST(ComposeApp, RegistryClientConfig) {
   {
-    // check config if just registry_auth_creds_endpoint and registry_base_url is specified
-    Config config;
-    const std::string registry_auth_creds_endpoint{"registry_auth_creds_endpoint"};
-    const std::string registry_base_url{"registry_base_url"};
-    config.pacman.extra["registry_auth_creds_endpoint"] = registry_auth_creds_endpoint;
-    config.pacman.extra["registry_base_url"] = registry_base_url;
-
-    ComposeAppConfig cfg(config.pacman);
-    ASSERT_EQ(registry_auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
-    ASSERT_EQ(registry_base_url, cfg.registry_conf.base_url);
-    ASSERT_EQ(registry_base_url + "/token-auth/", cfg.registry_conf.auth_token_endpoint);
-    ASSERT_EQ(registry_base_url + "/v2/", cfg.registry_conf.repo_base_url);
-  }
-  {
-    // check config if none of the registry parameters are specified and just pacman.ostree_server is defined
+    // check config if pacman.ostree_server is defined
     Config config;
     config.pacman.ostree_server = "https://ota-server:8080/treehub";
 
     ComposeAppConfig cfg(config.pacman);
     ASSERT_EQ("https://ota-server:8080/hub-creds/", cfg.registry_conf.auth_creds_endpoint);
-    ASSERT_EQ(RegistryClient::Conf().base_url, cfg.registry_conf.base_url);
-    ASSERT_EQ(RegistryClient::Conf().auth_token_endpoint, cfg.registry_conf.auth_token_endpoint);
-    ASSERT_EQ(RegistryClient::Conf().repo_base_url, cfg.registry_conf.repo_base_url);
   }
   {
-    // check config if all registry parameters are specified
+    // check config if pacman.ostree_server is not defined
     Config config;
-    const std::string registry_auth_creds_endpoint{"registry_auth_creds_endpoint"};
-    const std::string registry_base_url{"registry_base_url"};
-    const std::string auth_token_endpoint{"auth_token_endpoint"};
-    const std::string repo_base_url{"repo_base_url"};
-
-    config.pacman.extra["registry_auth_creds_endpoint"] = registry_auth_creds_endpoint;
-    config.pacman.extra["registry_base_url"] = registry_base_url;
-    config.pacman.extra["registry_auth_token_endpoint"] = auth_token_endpoint;
-    config.pacman.extra["registry_repo_base_url"] = repo_base_url;
-
     ComposeAppConfig cfg(config.pacman);
-    ASSERT_EQ(registry_auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
-    ASSERT_EQ(registry_base_url, cfg.registry_conf.base_url);
-    ASSERT_EQ(auth_token_endpoint, cfg.registry_conf.auth_token_endpoint);
-    ASSERT_EQ(repo_base_url, cfg.registry_conf.repo_base_url);
+    ASSERT_EQ(Docker::RegistryClient::Conf().auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
   }
 }
 
@@ -231,20 +198,18 @@ struct TestClient {
     config.storage.path = tempdir->Path();
 
     config.pacman.extra["registry_auth_creds_endpoint"] = "http://hub-creds/";
-    config.pacman.extra["registry_base_url"] = "http://";
 
     storage = INvStorage::newStorage(config.storage);
     if (installedTarget != nullptr) {
       storage->savePrimaryInstalledVersion(*installedTarget, InstalledVersionUpdateMode::kCurrent);
     }
     std::shared_ptr<HttpInterface> http_client;
-    RegistryClient::HttpClientFactory registry_fake_http_client_factory;
+    Docker::RegistryClient::HttpClientFactory registry_fake_http_client_factory;
     if (registry) {
       http_client = std::make_shared<FakeOtaClient>(registry);
       registry_fake_http_client_factory = [registry](const std::vector<std::string>* headers) {
         return std::make_shared<FakeOtaClient>(registry, headers);
       };
-      config.pacman.extra["registry_base_url"] = registry->baseURL();
     }
     pacman = std_::make_unique<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, registry_fake_http_client_factory);
     keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
@@ -281,7 +246,7 @@ TEST(ComposeApp, getApps) {
 
 TEST(ComposeApp, fetch) {
   TemporaryDirectory tmp_dir;
-  FakeRegistry registry{"https://hub.io/", tmp_dir.Path()};
+  FakeRegistry registry{"hub.io", tmp_dir.Path()};
 
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
   Json::Value target_json;
@@ -332,7 +297,7 @@ TEST(ComposeApp, fetchNegative) {
   ASSERT_FALSE(result);
 
   // Invalid App URI
-  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "https://hub.io/test_repo/app2sha256:712329f5d298ccc144f2d1c8b071cc277dcbe77796d8d3a805b69dd09aa486dc";
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "hub.io/test_repo/app2sha256:712329f5d298ccc144f2d1c8b071cc277dcbe77796d8d3a805b69dd09aa486dc";
   target = Uptane::Target("pull", target_json);
   result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
   ASSERT_FALSE(result);
@@ -403,7 +368,7 @@ target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("t
   // Manifest size exceeds maximum allowed size (RegistryClient::ManifestMaxSize)
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
                                         [](Json::Value& manifest, std::string&) {
-                                          manifest["layers"][1]["some_value"] = std::string(RegistryClient::ManifestMaxSize + 1, 'f');
+                                          manifest["layers"][1]["some_value"] = std::string(Docker::RegistryClient::ManifestMaxSize + 1, 'f');
                                         });
   target = Uptane::Target("pull", target_json);
   result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
