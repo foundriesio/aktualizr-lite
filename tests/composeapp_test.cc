@@ -149,7 +149,7 @@ TEST(ComposeApp, Config) {
   config.pacman.extra["compose_apps"] = "app1 app2";
   config.pacman.extra["docker_compose_bin"] = "compose";
 
-  ComposeAppConfig cfg(config.pacman);
+  ComposeAppManager::Config cfg(config.pacman);
   ASSERT_TRUE(cfg.docker_prune);
   ASSERT_EQ(2, cfg.apps.size());
   ASSERT_EQ("app1", cfg.apps[0]);
@@ -158,11 +158,11 @@ TEST(ComposeApp, Config) {
   ASSERT_EQ("compose", cfg.compose_bin);
 
   config.pacman.extra["docker_prune"] = "0";
-  cfg = ComposeAppConfig(config.pacman);
+  cfg = ComposeAppManager::Config(config.pacman);
   ASSERT_FALSE(cfg.docker_prune);
 
   config.pacman.extra["docker_prune"] = "FALSE";
-  cfg = ComposeAppConfig(config.pacman);
+  cfg = ComposeAppManager::Config(config.pacman);
   ASSERT_FALSE(cfg.docker_prune);
 }
 

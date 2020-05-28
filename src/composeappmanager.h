@@ -6,18 +6,18 @@
 
 #define PACKAGE_MANAGER_COMPOSEAPP "ostree+compose_apps"
 
-class ComposeAppConfig {
- public:
-  ComposeAppConfig(const PackageConfig& pconfig);
-
-  std::vector<std::string> apps;
-  boost::filesystem::path apps_root;
-  boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
-  bool docker_prune{true};
-};
-
 class ComposeAppManager : public OstreeManager {
  public:
+  struct Config {
+   public:
+    Config(const PackageConfig& pconfig);
+
+    std::vector<std::string> apps;
+    boost::filesystem::path apps_root;
+    boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
+    bool docker_prune{true};
+  };
+
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory =
@@ -32,8 +32,9 @@ class ComposeAppManager : public OstreeManager {
   void handleRemovedApps(const Uptane::Target& target) const;
 
  private:
-  ComposeAppConfig cfg_;
+  Config cfg_;
   Docker::RegistryClient registry_client_;
+  const std::string compose_bin_;
 };
 
 #endif  // COMPOSE_APP_MANAGER_H_
