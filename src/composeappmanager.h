@@ -30,15 +30,10 @@ class ComposeAppManager : public OstreeManager {
   data::InstallationResult install(const Uptane::Target& target) const override;
   std::string name() const override { return PACKAGE_MANAGER_COMPOSEAPP; };
 
- private:
-  // TODO: consider avoiding it
-  FRIEND_TEST(ComposeApp, getApps);
-  FRIEND_TEST(ComposeApp, handleRemovedApps);
-  FRIEND_TEST(ComposeApp, fetch);
-
   std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target& t) const;
   void handleRemovedApps(const Uptane::Target& target) const;
 
+ private:
   ComposeAppConfig cfg_;
   Docker::RegistryClient registry_client_;
 };
