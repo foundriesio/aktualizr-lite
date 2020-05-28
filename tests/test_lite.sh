@@ -5,6 +5,7 @@ build_dir=$(pwd)
 aklite=$1
 uptane_gen_bin=$2
 tests_dir=$3
+compose_bin=$4
 #valgrind=$4
 valgrind=""
 mock_ostree=${build_dir}/liblite-mock.so
@@ -85,6 +86,7 @@ uptane_metadata_path = "$sota_dir/metadata"
 type = "ostree+compose_apps"
 sysroot = "$OSTREE_SYSROOT"
 os = "dummy-os"
+docker_compose_bin = "${compose_bin}"
 EOF
 
 ## Check that we can do the info command
