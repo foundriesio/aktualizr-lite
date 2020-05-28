@@ -143,7 +143,7 @@ static void progress_cb(const Uptane::Target& target, const std::string& descrip
 
 TEST(ComposeApp, Config) {
   Config config;
-  config.pacman.type = PACKAGE_MANAGER_COMPOSEAPP;
+  config.pacman.type = ComposeAppManager::Name;
   config.pacman.sysroot = test_sysroot.string();
   config.pacman.extra["compose_apps_root"] = "apps-root";
   config.pacman.extra["compose_apps"] = "app1 app2";
@@ -173,7 +173,7 @@ struct TestClient {
 
     Config config;
     config.logger.loglevel = 1;
-    config.pacman.type = PACKAGE_MANAGER_COMPOSEAPP;
+    config.pacman.type = ComposeAppManager::Name;
     config.bootloader.reboot_sentinel_dir = tempdir->Path();
     config.pacman.sysroot = test_sysroot.string();
     apps_root = config.pacman.extra["compose_apps_root"] = (*tempdir / "apps").native();

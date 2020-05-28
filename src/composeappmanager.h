@@ -4,10 +4,10 @@
 #include "docker.h"
 #include "package_manager/ostreemanager.h"
 
-#define PACKAGE_MANAGER_COMPOSEAPP "ostree+compose_apps"
-
 class ComposeAppManager : public OstreeManager {
  public:
+  static constexpr const char* const Name{"ostree+compose_apps"};
+
   struct Config {
    public:
     Config(const PackageConfig& pconfig);
@@ -26,7 +26,7 @@ class ComposeAppManager : public OstreeManager {
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    FetcherProgressCb progress_cb, const api::FlowControlToken* token) override;
   data::InstallationResult install(const Uptane::Target& target) const override;
-  std::string name() const override { return PACKAGE_MANAGER_COMPOSEAPP; };
+  std::string name() const override { return Name; };
 
   std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target& t) const;
   void handleRemovedApps(const Uptane::Target& target) const;
