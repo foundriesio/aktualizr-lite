@@ -1,8 +1,11 @@
-set(TARGET aktualizr-lite)
-set(SRC main.cc helpers.cc composeappmanager.cc docker.cc)
+set(TARGET_EXE aktualizr-lite)
+set(TARGET ${MAIN_TARGET_LIB})
+
+set(SRC helpers.cc composeappmanager.cc docker.cc)
 set(HEADERS helpers.h composeappmanager.h docker.h)
 
-add_executable(${TARGET} ${SRC})
+add_executable(${TARGET_EXE} main.cc)
+add_library(${TARGET} OBJECT ${SRC})
 
 if(BUILD_WITH_CLANG_TIDY)
   # Build the given target sources with clang-tidy
@@ -21,8 +24,9 @@ if(BUILD_DOCKERAPP)
 endif(BUILD_DOCKERAPP)
 
 target_compile_definitions(${TARGET} PRIVATE BOOST_LOG_DYN_LINK)
+target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 
-target_include_directories(${TARGET} PRIVATE
+set(INCS
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include
   ${AKTUALIZR_DIR}/third_party/googletest/googletest/include
@@ -30,12 +34,16 @@ target_include_directories(${TARGET} PRIVATE
   ${LIBOSTREE_INCLUDE_DIRS}
 )
 
+target_include_directories(${TARGET} PRIVATE ${INCS})
+target_include_directories(${TARGET_EXE} PRIVATE ${INCS})
+
 target_link_libraries(${TARGET} aktualizr_lib)
+target_link_libraries(${TARGET_EXE} ${TARGET})
 
 
 # TODO: consider cleaning up the overall "install" elements as it includes
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
-install(TARGETS ${TARGET} RUNTIME DESTINATION bin COMPONENT ${TARGET})
+install(TARGETS ${TARGET_EXE} RUNTIME DESTINATION bin COMPONENT ${TARGET_EXE})
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
 aktualizr_source_file_checks(${SRC} ${HEADERS})
