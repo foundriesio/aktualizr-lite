@@ -12,6 +12,7 @@ add_test(test_aktualizr-lite
           ${CMAKE_BINARY_DIR}/src/aktualizr-lite
           ${CMAKE_BINARY_DIR}/aktualizr/src/uptane_generator/uptane-generator
           ${PROJECT_SOURCE_DIR}/aktualizr/tests
+          ${CMAKE_CURRENT_SOURCE_DIR}/compose_fake.sh
 )
 
 set_tests_properties(test_aktualizr-lite PROPERTIES DEPENDS uptane-generator)
