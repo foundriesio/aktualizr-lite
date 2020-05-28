@@ -13,8 +13,8 @@
 
 class FakeRegistry {
   public:
-    FakeRegistry(const std::string base_url, boost::filesystem::path root_dir):
-      base_url_{base_url}, root_dir_{root_dir} {}
+    FakeRegistry(const std::string& auth_url, const std::string& base_url, const boost::filesystem::path& root_dir):
+      auth_url_{auth_url}, base_url_{base_url}, root_dir_{root_dir} {}
 
     using ManifestPostProcessor = std::function<void(Json::Value&, std::string&)>;
 
@@ -46,6 +46,7 @@ class FakeRegistry {
       return app_uri;
     }
 
+    const std::string& authURL() const {return auth_url_; }
     const std::string& baseURL() const {return base_url_; }
     Json::Value& manifest() { return manifest_; }
     const std::string& archiveName() const {return archive_name_; }
@@ -54,6 +55,7 @@ class FakeRegistry {
     std::string getArchiveContent() const { return Utils::readFile(tgz_path_); }
 
   private:
+    const std::string auth_url_;
     const std::string base_url_;
     boost::filesystem::path root_dir_;
     Json::Value manifest_;
@@ -75,8 +77,10 @@ class FakeOtaClient: public HttpInterface {
         resp = "{\"token\":\"token\"}";
       } else if (std::string::npos != url.find(registry_->baseURL() + "/v2/")) {
         resp = registry_->getManifest();
-      } else {
+      } else if (url == registry_->authURL()) {
         resp = "{\"Secret\":\"secret\",\"Username\":\"test-user\"}";
+      } else {
+        return HttpResponse(resp, 401, CURLE_OK, "");
       }
      return HttpResponse(resp, 200, CURLE_OK, "");
     }
@@ -152,8 +156,6 @@ TEST(ComposeApp, Config) {
   ASSERT_EQ("app2", cfg.apps[1]);
   ASSERT_EQ("apps-root", cfg.apps_root);
   ASSERT_EQ("compose", cfg.compose_bin);
-  // check default values of the registry configuration (TODO: to be removed)
-  ASSERT_EQ(Docker::RegistryClient::Conf().auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
 
   config.pacman.extra["docker_prune"] = "0";
   cfg = ComposeAppConfig(config.pacman);
@@ -164,26 +166,9 @@ TEST(ComposeApp, Config) {
   ASSERT_FALSE(cfg.docker_prune);
 }
 
-TEST(ComposeApp, RegistryClientConfig) {
-  {
-    // check config if pacman.ostree_server is defined
-    Config config;
-    config.pacman.ostree_server = "https://ota-server:8080/treehub";
-
-    ComposeAppConfig cfg(config.pacman);
-    ASSERT_EQ("https://ota-server:8080/hub-creds/", cfg.registry_conf.auth_creds_endpoint);
-  }
-  {
-    // check config if pacman.ostree_server is not defined
-    Config config;
-    ComposeAppConfig cfg(config.pacman);
-    ASSERT_EQ(Docker::RegistryClient::Conf().auth_creds_endpoint, cfg.registry_conf.auth_creds_endpoint);
-  }
-}
-
 struct TestClient {
   TestClient(const char* apps, const Uptane::Target* installedTarget = nullptr,
-             FakeRegistry* registry = nullptr) {
+             FakeRegistry* registry = nullptr, std::string ostree_server_url = "") {
     tempdir = std_::make_unique<TemporaryDirectory>();
 
     Config config;
@@ -196,7 +181,9 @@ struct TestClient {
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
     config.pacman.extra["docker_prune"] = "0";
     config.storage.path = tempdir->Path();
-
+    if (!ostree_server_url.empty()) {
+      config.pacman.ostree_server = ostree_server_url;
+    }
     config.pacman.extra["registry_auth_creds_endpoint"] = "http://hub-creds/";
 
     storage = INvStorage::newStorage(config.storage);
@@ -246,8 +233,9 @@ TEST(ComposeApp, getApps) {
 }
 
 TEST(ComposeApp, fetch) {
+  const std::string ostree_server_url{"https://my-ota/treehub"};
   TemporaryDirectory tmp_dir;
-  FakeRegistry registry{"hub.io", tmp_dir.Path()};
+  FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
 
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
   Json::Value target_json;
@@ -261,7 +249,7 @@ TEST(ComposeApp, fetch) {
                                                                                 nullptr, app_file_name, app_content);
   Uptane::Target target("pull", target_json);
 
-  TestClient client("app2 doesnotexist", nullptr, &registry);  // only app2 can be fetched
+  TestClient client("app2 doesnotexist", nullptr, &registry, ostree_server_url);  // only app2 can be fetched
   bool result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
   ASSERT_TRUE(result);
   const std::string expected_file = (client.apps_root / "app2"/ app_file_name).string();
@@ -279,8 +267,8 @@ TEST(ComposeApp, fetch) {
 
 TEST(ComposeApp, fetchNegative) {
   TemporaryDirectory tmp_dir;
-  FakeRegistry registry{"https://hub.io/", tmp_dir.Path()};
 
+  FakeRegistry registry{Docker::RegistryClient::DefAuthCredsEndpoint, "https://hub.io/", tmp_dir.Path()};
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
   Json::Value target_json;
   target_json["hashes"]["sha256"] = sha;

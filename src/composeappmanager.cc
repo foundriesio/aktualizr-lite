@@ -113,17 +113,6 @@ ComposeAppConfig::ComposeAppConfig(const PackageConfig& pconfig) {
     boost::algorithm::to_lower(val);
     docker_prune = val != "0" && val != "false";
   }
-  // if not specified, let's extract it from the `ostree_server` value if it's defined
-  if (!pconfig.ostree_server.empty()) {
-    const std::string treehub_endpoint = "treehub";
-    const std::string registry_creds_endpoint = "hub-creds/";
-    registry_conf.auth_creds_endpoint = pconfig.ostree_server;
-    auto endpoint_pos = registry_conf.auth_creds_endpoint.find(treehub_endpoint);
-    if (endpoint_pos != std::string::npos) {
-      registry_conf.auth_creds_endpoint.replace(endpoint_pos, registry_creds_endpoint.length(),
-                                                registry_creds_endpoint);
-    }
-  }
 }
 
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -132,7 +121,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
                                      Docker::RegistryClient::HttpClientFactory registry_http_client_factory)
     : OstreeManager(pconfig, bconfig, storage, http),
       cfg_{pconfig},
-      registry_client_{cfg_.registry_conf, http, std::move(registry_http_client_factory)} {}
+      registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)} {}
 
 std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(const Uptane::Target& t) const {
   std::vector<std::pair<std::string, std::string>> apps;

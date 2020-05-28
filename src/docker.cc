@@ -43,9 +43,6 @@ Uri Uri::createUri(const HashedDigest& digest_in) {
   return Uri{HashedDigest{digest_in}, app, factory, repo, registryHostname};
 }
 
-RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
-    [](const std::vector<std::string>* headers) { return std::make_shared<HttpClient>(headers); };
-
 const std::string HashedDigest::Type{"sha256:"};
 
 HashedDigest::HashedDigest(const std::string& hash_digest) : digest_{boost::algorithm::to_lower_copy(hash_digest)} {
@@ -61,9 +58,31 @@ HashedDigest::HashedDigest(const std::string& hash_digest) : digest_{boost::algo
   short_hash_ = hash_.substr(0, 7);
 }
 
+RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
+    [](const std::vector<std::string>* headers) { return std::make_shared<HttpClient>(headers); };
+
 const std::string RegistryClient::ManifestEndpoint{"/manifests/"};
 const std::string RegistryClient::BlobEndpoint{"/blobs/"};
 const std::string RegistryClient::SupportedRegistryVersion{"/v2/"};
+
+RegistryClient::RegistryClient(const std::string& treehub_endpoint,
+                               const std::shared_ptr<HttpInterface>& ota_lite_client,
+                               HttpClientFactory http_client_factory)
+    : ota_lite_client_{ota_lite_client}, http_client_factory_{std::move(http_client_factory)} {
+  // There is an assumption that the treehub and the registry auth endpoints share the same base URL,
+  // so let's try to deduce the registry auth endpoint from the received URL to the treehub
+  if (!treehub_endpoint.empty()) {
+    auto endpoint_pos = treehub_endpoint.find("treehub");
+    if (endpoint_pos != std::string::npos) {
+      auth_creds_endpoint_ = treehub_endpoint.substr(0, endpoint_pos);
+      auth_creds_endpoint_.append("hub-creds/");
+    }
+  }
+  // if treehub URL is not specified/empty or we cannot extract its base URL just use the default Auth endpoint
+  if (auth_creds_endpoint_.empty()) {
+    auth_creds_endpoint_ = DefAuthCredsEndpoint;
+  }
+}
 
 Json::Value RegistryClient::getAppManifest(const Uri& uri, const std::string& format) const {
   const std::string manifest_url{composeManifestUrl(uri)};
@@ -187,12 +206,12 @@ std::string RegistryClient::getBasicAuthHeader() const {
   // specifically in docker/config.json there should defined an auth material and/or credHelpers
   // for a given registry. If auth material is defined then just use it if not then try to invoke
   // a script/executbale defined in credHelpers  that is supposed to return an auth material
-  LOG_DEBUG << "Getting Docker Registry credentials from " << conf_.auth_creds_endpoint;
+  LOG_DEBUG << "Getting Docker Registry credentials from " << auth_creds_endpoint_;
 
-  auto creds_resp = ota_lite_client_->get(conf_.auth_creds_endpoint, AuthMaterialMaxSize);
+  auto creds_resp = ota_lite_client_->get(auth_creds_endpoint_, AuthMaterialMaxSize);
 
   if (!creds_resp.isOk()) {
-    throw std::runtime_error("Failed to get Docker Registry credentials from " + conf_.auth_creds_endpoint +
+    throw std::runtime_error("Failed to get Docker Registry credentials from " + auth_creds_endpoint_ +
                              "; error: " + creds_resp.getStatusStr());
   }
 

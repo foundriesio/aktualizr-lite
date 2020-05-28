@@ -36,15 +36,7 @@ struct Uri {
 
 class RegistryClient {
  public:
-  struct Conf {
-    // TODO: consider using Docker's config.json ("auths" and "credHelpers")
-    // to make it working against any Docker Registry instance.
-    // Currently we just support FIO's Registry so we do shortcut and make direct
-    // auth request to the endpoint specified here. We still need this configuration
-    // to support the on-premise deployment or deployments under different hostnames
-    std::string auth_creds_endpoint{"https://ota-lite.foundries.io:8443/hub-creds/"};
-  };
-
+  static constexpr const char* const DefAuthCredsEndpoint{"https://ota-lite.foundries.io:8443/hub-creds/"};
   static const int AuthMaterialMaxSize{1024};
   static const int ManifestMaxSize{2048};
   static const size_t MaxBlobSize{std::numeric_limits<int>::max()};
@@ -57,12 +49,10 @@ class RegistryClient {
   static HttpClientFactory DefaultHttpClientFactory;
 
  public:
-  RegistryClient(const Conf& conf, const std::shared_ptr<HttpInterface>& ota_lite_client,
-                 HttpClientFactory http_client_factory)
-      : conf_{conf}, ota_lite_client_{ota_lite_client}, http_client_factory_{std::move(http_client_factory)} {}
+  RegistryClient(const std::string& treehub_endpoint, const std::shared_ptr<HttpInterface>& ota_lite_client,
+                 HttpClientFactory http_client_factory);
 
   Json::Value getAppManifest(const Uri& uri, const std::string& format) const;
-
   void downloadBlob(const Uri& uri, const boost::filesystem::path& filepath, size_t expected_size) const;
 
  private:
@@ -78,7 +68,7 @@ class RegistryClient {
   }
 
  private:
-  const Conf conf_;
+  std::string auth_creds_endpoint_;
   std::shared_ptr<HttpInterface> ota_lite_client_;
   HttpClientFactory http_client_factory_;
 };

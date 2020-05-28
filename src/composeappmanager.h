@@ -14,8 +14,6 @@ class ComposeAppConfig {
   boost::filesystem::path apps_root;
   boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
   bool docker_prune{true};
-
-  Docker::RegistryClient::Conf registry_conf;
 };
 
 class ComposeAppManager : public OstreeManager {
