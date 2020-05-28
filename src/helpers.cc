@@ -35,7 +35,7 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
         LOG_ERROR << "\t\tInvalid custom data for docker-app: " << i.key().asString();
       }
     }
-  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+  } else if (config.pacman.type == ComposeAppManager::Name) {
     bool shown = false;
     auto bundles = t.custom_data()["docker_compose_apps"];
     for (Json::ValueIterator i = bundles.begin(); i != bundles.end(); ++i) {
@@ -54,7 +54,7 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
 
 static __attribute__((constructor)) void init_pacman() {
   PackageManagerFactory::registerPackageManager(
-      PACKAGE_MANAGER_COMPOSEAPP,
+      ComposeAppManager::Name,
       [](const PackageConfig& pconfig, const BootloaderConfig& bconfig, const std::shared_ptr<INvStorage>& storage,
          const std::shared_ptr<HttpInterface>& http) {
         return new ComposeAppManager(pconfig, bconfig, storage, http);
@@ -65,7 +65,7 @@ static void add_apps_header(std::vector<std::string>& headers, PackageConfig& co
   if (config.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     DockerAppManagerConfig dappcfg(config);
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(dappcfg.docker_apps, ","));
-  } else if (config.type == PACKAGE_MANAGER_COMPOSEAPP) {
+  } else if (config.type == ComposeAppManager::Name) {
     ComposeAppManager::Config cfg(config);
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(cfg.apps, ","));
   }
@@ -73,7 +73,7 @@ static void add_apps_header(std::vector<std::string>& headers, PackageConfig& co
 bool should_compare_docker_apps(const Config& config) {
   if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     return !DockerAppManagerConfig(config.pacman).docker_apps.empty();
-  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+  } else if (config.pacman.type == ComposeAppManager::Name) {
     return !ComposeAppManager::Config(config.pacman).apps.empty();
   }
   return false;
@@ -138,7 +138,7 @@ bool LiteClient::dockerAppsChanged() {
       boost::filesystem::remove(checksum);
       return true;
     }
-  } else if (config.pacman.type == PACKAGE_MANAGER_COMPOSEAPP) {
+  } else if (config.pacman.type == ComposeAppManager::Name) {
     ComposeAppManager::Config cacfg(config.pacman);
     if (appListChanged(cacfg.apps, cacfg.apps_root)) {
       return true;
