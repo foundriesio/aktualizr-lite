@@ -1,97 +1,8 @@
 #include "composeappmanager.h"
 
-#include <sys/statvfs.h>
+#include "composeapp.h"
 
-#include "boost/process.hpp"
-#include "json/json.h"
-
-struct ComposeApp {
-  ComposeApp(std::string name, const ComposeAppConfig& config, const Docker::RegistryClient& registry_client)
-      : name_{std::move(name)},
-        root_{config.apps_root / name_},
-        compose_{boost::filesystem::canonical(config.compose_bin).string() + " "},
-        registry_client_{registry_client} {}
-
-  static constexpr const char* const ArchiveExt{".tgz"};
-
-  struct Manifest : Json::Value {
-    static constexpr const char* const Format{"application/vnd.oci.image.manifest.v1+json"};
-    static constexpr const char* const Version{"v1"};
-
-    Manifest(const Json::Value& value = Json::Value()) : Json::Value(value) {
-      auto manifest_version{(*this)["annotations"]["compose-app"].asString()};
-      if (manifest_version.empty()) {
-        throw std::runtime_error("Got invalid App manifest, missing a manifest version: " +
-                                 Utils::jsonToCanonicalStr(value));
-      }
-      if (Version != manifest_version) {
-        throw std::runtime_error("Got unsupported App manifest version: " + Utils::jsonToCanonicalStr(value));
-      }
-    }
-
-    std::string archiveDigest() const {
-      auto digest{(*this)["layers"][0]["digest"].asString()};
-      if (digest.empty()) {
-        throw std::runtime_error("Got invalid App manifest, failed to extract App Archive digest from App manifest: " +
-                                 Utils::jsonToCanonicalStr(*this));
-      }
-      return digest;
-    }
-
-    size_t archiveSize() const {
-      uint64_t arch_size{(*this)["layers"][0]["size"].asUInt64()};
-      if (0 == arch_size || arch_size > std::numeric_limits<size_t>::max()) {
-        throw std::runtime_error("Invalid size of App Archive is specified in App manifest: " +
-                                 Utils::jsonToCanonicalStr(*this));
-      }
-
-      return arch_size;
-    }
-  };
-
-  // Utils::shell isn't interactive. The compose commands can take a few
-  // seconds to run, so we use boost::process:system to stream it to stdout/sterr
-  bool cmd_streaming(const std::string& cmd) {
-    LOG_DEBUG << "Running: " << cmd;
-    return boost::process::system(cmd, boost::process::start_dir = root_) == 0;
-  }
-
-  bool fetch(const std::string& app_uri) {
-    boost::filesystem::create_directories(root_);
-    //    if (cmd_streaming(compose_ + "download " + app_uri)) {
-    if (download(app_uri)) {
-      LOG_INFO << "Validating compose file";
-      if (cmd_streaming(compose_ + "config")) {
-        LOG_INFO << "Pulling containers";
-        return cmd_streaming(compose_ + "pull");
-      }
-    }
-    return false;
-  };
-
-  bool start() { return cmd_streaming(compose_ + "up --remove-orphans -d"); }
-
-  void remove() {
-    if (cmd_streaming(compose_ + "down")) {
-      boost::filesystem::remove_all(root_);
-    } else {
-      LOG_ERROR << "docker-compose was unable to bring down: " << root_;
-    }
-  }
-
- private:
-  bool download(const std::string& app_uri);
-  static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);
-  void extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction = true);
-
- private:
-  std::string name_;
-  boost::filesystem::path root_;
-  std::string compose_;
-  const Docker::RegistryClient& registry_client_;
-};
-
-ComposeAppConfig::ComposeAppConfig(const PackageConfig& pconfig) {
+ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
 
   if (raw.count("compose_apps") == 1) {
@@ -121,7 +32,8 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
                                      Docker::RegistryClient::HttpClientFactory registry_http_client_factory)
     : OstreeManager(pconfig, bconfig, storage, http),
       cfg_{pconfig},
-      registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)} {}
+      registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)},
+      compose_bin_{boost::filesystem::canonical(cfg_.compose_bin).string() + " "} {}
 
 std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(const Uptane::Target& t) const {
   std::vector<std::pair<std::string, std::string>> apps;
@@ -153,7 +65,7 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   bool passed = true;
   for (const auto& pair : getApps(target)) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
-    if (!ComposeApp(pair.first, cfg_, registry_client_).fetch(pair.second)) {
+    if (!Docker::ComposeApp(pair.first, cfg_.apps_root, compose_bin_, registry_client_).fetch(pair.second)) {
       passed = false;
     }
   }
@@ -180,7 +92,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   handleRemovedApps(target);
   for (const auto& pair : getApps(target)) {
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
-    if (!ComposeApp(pair.first, cfg_, registry_client_).start()) {
+    if (!Docker::ComposeApp(pair.first, cfg_.apps_root, compose_bin_, registry_client_).start()) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
     }
   };
@@ -215,75 +127,12 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
       if (std::find(cfg_.apps.begin(), cfg_.apps.end(), name) == cfg_.apps.end()) {
         LOG_WARNING << "Docker Compose App(" << name
                     << ") installed, but is now removed from configuration. Removing from system";
-        ComposeApp(name, cfg_, registry_client_).remove();
+        Docker::ComposeApp(name, cfg_.apps_root, compose_bin_, registry_client_).remove();
       } else if (std::find(target_apps.begin(), target_apps.end(), name) == target_apps.end()) {
         LOG_WARNING << "Docker Compose App(" << name
                     << ") configured, but not defined in installation target. Removing from system";
-        ComposeApp(name, cfg_, registry_client_).remove();
+        Docker::ComposeApp(name, cfg_.apps_root, compose_bin_, registry_client_).remove();
       }
-    }
-  }
-}
-
-bool ComposeApp::checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size) {
-  struct statvfs stat_buf {};
-  const int stat_res = statvfs(app_root.c_str(), &stat_buf);
-  if (stat_res < 0) {
-    LOG_WARNING << "Unable to read filesystem statistics: error code " << stat_res;
-    return false;
-  }
-  const uint64_t available_bytes = (static_cast<uint64_t>(stat_buf.f_bsize) * stat_buf.f_bavail);
-  const uint64_t reserved_bytes = 1 << 20;
-
-  out_available_size = (available_bytes - reserved_bytes);
-  return true;
-}
-
-bool ComposeApp::download(const std::string& app_uri) {
-  bool result = false;
-
-  try {
-    LOG_DEBUG << name_ << ": downloading App from Registry: " << app_uri;
-
-    Docker::Uri uri{Docker::Uri::parseUri(app_uri)};
-    Manifest manifest{registry_client_.getAppManifest(uri, Manifest::Format)};
-
-    const std::string archive_file_name{uri.digest.shortHash() + '.' + name_ + ArchiveExt};
-    Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
-
-    uint64_t available_storage;
-    if (checkAvailableStorageSpace(root_, available_storage)) {
-      // assume that an extracted files total size is up to 10x larger than the archive size
-      // 80% is a storage space watermark, we don't want to fill a volume above it
-      auto need_storage = manifest.archiveSize() * 10;
-      auto available_for_apps = static_cast<uint64_t>(available_storage * 0.8);
-      if (need_storage > available_for_apps) {
-        throw std::runtime_error("There is no sufficient storage space available to download App archive, available: " +
-                                 std::to_string(available_for_apps) + " need: " + std::to_string(need_storage));
-      }
-    } else {
-      LOG_WARNING << "Failed to get an available storage space, continuing with App archive download";
-    }
-
-    registry_client_.downloadBlob(archive_uri, root_ / archive_file_name, manifest.archiveSize());
-    extractAppArchive(archive_file_name);
-
-    result = true;
-    LOG_DEBUG << name_ << ": App has been downloaded";
-  } catch (const std::exception& exc) {
-    LOG_ERROR << name_ << ": failed to download App from Registry: " << exc.what();
-  }
-
-  return result;
-}
-
-void ComposeApp::extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction) {
-  if (!cmd_streaming("tar -xzf " + archive_file_name)) {
-    throw std::runtime_error("Failed to extract the compose app archive: " + archive_file_name);
-  }
-  if (delete_after_extraction) {
-    if (!cmd_streaming("rm -f " + archive_file_name)) {
-      throw std::runtime_error("Failed to remove the compose app archive: " + archive_file_name);
     }
   }
 }
