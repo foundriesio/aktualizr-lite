@@ -191,7 +191,7 @@ struct TestClient {
     config.pacman.type = PACKAGE_MANAGER_COMPOSEAPP;
     config.bootloader.reboot_sentinel_dir = tempdir->Path();
     config.pacman.sysroot = test_sysroot.string();
-    config.pacman.extra["compose_apps_root"] = (*tempdir / "apps").native();
+    apps_root = config.pacman.extra["compose_apps_root"] = (*tempdir / "apps").native();
     config.pacman.extra["compose_apps"] = apps;
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
     config.pacman.extra["docker_prune"] = "0";
@@ -221,6 +221,7 @@ struct TestClient {
   std::unique_ptr<ComposeAppManager> pacman;
   std::unique_ptr<KeyManager> keys;
   std::unique_ptr<Uptane::Fetcher> fetcher;
+  boost::filesystem::path apps_root;
 };
 
 TEST(ComposeApp, getApps) {
@@ -263,11 +264,11 @@ TEST(ComposeApp, fetch) {
   TestClient client("app2 doesnotexist", nullptr, &registry);  // only app2 can be fetched
   bool result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
   ASSERT_TRUE(result);
-  const std::string expected_file = (client.pacman->cfg_.apps_root / "app2"/ app_file_name).string();
+  const std::string expected_file = (client.apps_root / "app2"/ app_file_name).string();
   ASSERT_TRUE(boost::filesystem::exists(expected_file));
   std::string delivered_app_file_content = Utils::readFile(expected_file);
   ASSERT_EQ(delivered_app_file_content, app_content);
-  ASSERT_FALSE(boost::filesystem::exists(client.pacman->cfg_.apps_root / "app2"/ registry.archiveName()));
+  ASSERT_FALSE(boost::filesystem::exists(client.apps_root / "app2"/ registry.archiveName()));
 
   auto output = Utils::readFile(client.tempdir->Path() / "apps/app2/config.log", true);
   ASSERT_EQ("config", output);
