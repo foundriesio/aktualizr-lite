@@ -31,7 +31,7 @@ set(TEST_LIBS
 )
 
 add_aktualizr_test(NAME compose-apps
-  SOURCES ${AKLITE_DIR}/src/composeappmanager.cc composeapp_test.cc
+  SOURCES ${AKLITE_DIR}/src/composeappmanager.cc ${AKLITE_DIR}/src/docker.cc composeapp_test.cc
   PROJECT_WORKING_DIRECTORY ARGS ${PROJECT_BINARY_DIR}/aktualizr/ostree_repo
 )
 
@@ -40,7 +40,7 @@ target_include_directories(t_compose-apps PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_
 target_link_libraries(t_compose-apps ${TEST_LIBS})
 
 add_aktualizr_test(NAME lite-helpers
-  SOURCES helpers_test.cc ${AKLITE_DIR}/src/helpers.cc ${AKLITE_DIR}/src/composeappmanager.cc
+  SOURCES helpers_test.cc ${AKLITE_DIR}/src/helpers.cc ${AKLITE_DIR}/src/composeappmanager.cc ${AKLITE_DIR}/src/docker.cc
   ARGS ${PROJECT_BINARY_DIR}/aktualizr/ostree_repo
 )
 
