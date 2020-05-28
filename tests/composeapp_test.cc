@@ -193,7 +193,7 @@ struct TestClient {
     config.pacman.sysroot = test_sysroot.string();
     config.pacman.extra["compose_apps_root"] = (*tempdir / "apps").native();
     config.pacman.extra["compose_apps"] = apps;
-    config.pacman.extra["docker_compose_bin"] = "src/compose_fake.sh";
+    config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
     config.pacman.extra["docker_prune"] = "0";
     config.storage.path = tempdir->Path();
 
