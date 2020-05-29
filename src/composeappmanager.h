@@ -1,7 +1,8 @@
-#ifndef COMPOSE_APP_MANAGER_H_
-#define COMPOSE_APP_MANAGER_H_
+#ifndef AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_
+#define AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_
 
 #include "docker.h"
+#include "ostree.h"
 #include "package_manager/ostreemanager.h"
 
 class ComposeAppManager : public OstreeManager {
@@ -20,6 +21,7 @@ class ComposeAppManager : public OstreeManager {
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
+                    std::shared_ptr<OSTree::Sysroot> sysroot,
                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory =
                         Docker::RegistryClient::DefaultHttpClientFactory);
 
@@ -30,11 +32,13 @@ class ComposeAppManager : public OstreeManager {
 
   std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target& t) const;
   void handleRemovedApps(const Uptane::Target& target) const;
+  std::string getCurrentHash() const override;
 
  private:
   Config cfg_;
+  std::shared_ptr<OSTree::Sysroot> sysroot_;
   Docker::RegistryClient registry_client_;
   const std::string compose_bin_;
 };
 
-#endif  // COMPOSE_APP_MANAGER_H_
+#endif  // AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_

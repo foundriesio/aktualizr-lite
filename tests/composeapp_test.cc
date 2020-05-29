@@ -116,26 +116,6 @@ class FakeOtaClient: public HttpInterface {
 
 static boost::filesystem::path test_sysroot;
 
-static struct {
-  int serial{0};
-  std::string rev;
-} ostree_deployment;
-static std::string new_rev;
-
-extern "C" OstreeDeployment* ostree_sysroot_get_booted_deployment(OstreeSysroot* self) {
-  (void)self;
-  static GObjectUniquePtr<OstreeDeployment> dep;
-
-  dep.reset(ostree_deployment_new(0, "dummy-os", ostree_deployment.rev.c_str(), ostree_deployment.serial,
-                                  ostree_deployment.rev.c_str(), ostree_deployment.serial));
-  return dep.get();
-}
-
-extern "C" const char* ostree_deployment_get_csum(OstreeDeployment* self) {
-  (void)self;
-  return ostree_deployment.rev.c_str();
-}
-
 static void progress_cb(const Uptane::Target& target, const std::string& description, unsigned int progress) {
   (void)description;
   LOG_INFO << "progress_cb " << target << " " << progress;
@@ -171,16 +151,21 @@ struct TestClient {
              FakeRegistry* registry = nullptr, std::string ostree_server_url = "") {
     tempdir = std_::make_unique<TemporaryDirectory>();
 
-    Config config;
     config.logger.loglevel = 1;
     config.pacman.type = ComposeAppManager::Name;
     config.bootloader.reboot_sentinel_dir = tempdir->Path();
     config.pacman.sysroot = test_sysroot.string();
+    // this a name/title of a group of ostree-based rootfs deployments that share /var, aka "stateroot" or "osname"
+    // aktualizr supports just one stateroot, for test purposes a tool ./aktualizr/tests/ostree-scripts/makephysical.sh
+    // creates an ostree sysroot/rootfs with stateroot called "dummy-os" at build time and put it in build/aktualizr/ostree_repo/
+    // many tests use this build-time generated rootfs for testing purposes and should be aware of the hardcoded stateroot name
+    config.pacman.os = "dummy-os";
     apps_root = config.pacman.extra["compose_apps_root"] = (*tempdir / "apps").native();
     config.pacman.extra["compose_apps"] = apps;
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
     config.pacman.extra["docker_prune"] = "0";
     config.storage.path = tempdir->Path();
+
     if (!ostree_server_url.empty()) {
       config.pacman.ostree_server = ostree_server_url;
     }
@@ -198,11 +183,18 @@ struct TestClient {
         return std::make_shared<FakeOtaClient>(registry, headers);
       };
     }
-    pacman = std_::make_unique<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, registry_fake_http_client_factory);
+    pacman = std_::make_unique<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
+                                                  std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), false),
+                                                  registry_fake_http_client_factory);
     keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
     fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());
   }
 
+  const boost::filesystem::path getRebootSentinel() const {
+    return config.bootloader.reboot_sentinel_dir / config.bootloader.reboot_sentinel_name;
+  }
+
+  Config config;
   std::unique_ptr<TemporaryDirectory> tempdir;
   std::shared_ptr<INvStorage> storage;
   std::unique_ptr<ComposeAppManager> pacman;
@@ -399,8 +391,6 @@ TEST(ComposeApp, handleRemovedApps) {
 TEST(ComposeApp, install) {
   // Trick system into not doing an OSTreeManager install
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
-  ostree_deployment.serial = 1;
-  ostree_deployment.rev = sha;
 
   Json::Value target_json;
   target_json["hashes"]["sha256"] = sha;
@@ -413,6 +403,8 @@ TEST(ComposeApp, install) {
   // compose_fake script can run:
   boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
   ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install(target).result_code.num_code);
+//  boost::filesystem::remove(client.getRebootSentinel());
+//  auto install_result = client.pacman->finalizeInstall(target);
   std::string output = Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true);
   ASSERT_EQ("up --remove-orphans -d", output);
 }
