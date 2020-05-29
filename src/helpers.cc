@@ -178,10 +178,10 @@ static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(Pac
 
   GObjectUniquePtr<OstreeSysroot> sysroot_smart = OstreeManager::LoadSysroot(config.pacman.sysroot);
   OstreeDeployment* booted_deployment = ostree_sysroot_get_booted_deployment(sysroot_smart.get());
-  std::string current_hash = ostree_deployment_get_csum(booted_deployment);
   if (booted_deployment == nullptr) {
     throw std::runtime_error("Could not get booted deployment in " + config.pacman.sysroot.string());
   }
+  std::string current_hash = ostree_deployment_get_csum(booted_deployment);
 
   Bootloader bootloader(config.bootloader, storage);
 
