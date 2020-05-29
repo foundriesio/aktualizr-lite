@@ -8,7 +8,6 @@ tests_dir=$3
 compose_bin=$4
 #valgrind=$4
 valgrind=""
-mock_ostree=${build_dir}/liblite-mock.so
 
 dest_dir=$(mktemp -d)
 
@@ -87,13 +86,14 @@ type = "ostree+compose_apps"
 sysroot = "$OSTREE_SYSROOT"
 os = "dummy-os"
 docker_compose_bin = "${compose_bin}"
+booted = "0"
 EOF
 
 ## Check that we can do the info command
 $valgrind $aklite -h | grep "Command to execute: status, list, update"
 
 ## Check that we can do the list command
-out=$(OSTREE_HASH="foobar" LD_PRELOAD=$mock_ostree $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml list)
+out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml list)
 if [[ ! "$out" =~ "foo1" ]] ; then
     echo "ERROR: foo1 update missing"
     exit 1
@@ -110,12 +110,12 @@ sha=$(echo $update | cut -d\  -f2 | sed 's/\.0$//')
 echo "Adding new target: $name / $sha"
 add_target $name $sha
 
-OSTREE_HASH=$sha LD_PRELOAD=$mock_ostree $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update --update-name $name
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update --update-name $name
 ostree admin status
 
-OSTREE_HASH=$sha LD_PRELOAD=$mock_ostree $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to: Target(zlast"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to: Target(zlast"
 
-out=$(OSTREE_HASH="$sha" LD_PRELOAD=$mock_ostree $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml status)
+out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml status)
 if [[ ! "$out" =~ "Active image is: zlast	sha256:$sha" ]] ; then
     echo "ERROR: status incorrect:"
     echo $out
@@ -134,7 +134,7 @@ cat >$sota_dir/callback.sh <<EOF
 env >> ${sota_dir}/\$MESSAGE.log
 EOF
 chmod +x $sota_dir/callback.sh
-OSTREE_HASH=$sha LD_PRELOAD=$mock_ostree $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to: Target(promoted-zlast"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to: Target(promoted-zlast"
 for callback in download-pre download-post install-pre install-post ; do
   if [ -f ${sota_dir}/${callback}.log ] ; then
     grep "INSTALL_TARGET=promoted-zlast" ${sota_dir}/${callback}.log

@@ -29,9 +29,11 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
+                                     std::shared_ptr<OSTree::Sysroot> sysroot,
                                      Docker::RegistryClient::HttpClientFactory registry_http_client_factory)
     : OstreeManager(pconfig, bconfig, storage, http),
       cfg_{pconfig},
+      sysroot_{std::move(sysroot)},
       registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)},
       compose_bin_{boost::filesystem::canonical(cfg_.compose_bin).string() + " "} {}
 
@@ -136,3 +138,5 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
     }
   }
 }
+
+std::string ComposeAppManager::getCurrentHash() const { return sysroot_->getCurDeploymentHash(); }

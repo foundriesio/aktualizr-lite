@@ -8,6 +8,7 @@
 #include <boost/uuid/uuid_io.hpp>
 
 #include "helpers.h"
+#include "ostree.h"
 #include "package_manager/ostreemanager.h"
 #include "package_manager/packagemanagerfactory.h"
 
@@ -52,13 +53,21 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
   }
 }
 
-static __attribute__((constructor)) void init_pacman() {
+static void registerComposeAppManager(const std::shared_ptr<OSTree::Sysroot>& sysroot) {
+  static bool is_registered{false};
+
+  if (is_registered) {
+    return;
+  }
+
   PackageManagerFactory::registerPackageManager(
       ComposeAppManager::Name,
-      [](const PackageConfig& pconfig, const BootloaderConfig& bconfig, const std::shared_ptr<INvStorage>& storage,
-         const std::shared_ptr<HttpInterface>& http) {
-        return new ComposeAppManager(pconfig, bconfig, storage, http);
+      [sysroot](const PackageConfig& pconfig, const BootloaderConfig& bconfig,
+                const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http) {
+        return new ComposeAppManager(pconfig, bconfig, storage, http, sysroot);
       });
+
+  is_registered = true;
 }
 
 static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config) {
@@ -170,18 +179,16 @@ void LiteClient::storeDockerParamsDigest() {}
 bool LiteClient::dockerAppsChanged() { return false; }
 #endif
 
-static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(PackageManagerInterface& package_manager,
+static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OSTree::Sysroot& sysroot,
                                                                              INvStorage& storage, Config& config) {
   data::ResultCode::Numeric result_code = data::ResultCode::Numeric::kUnknown;
   boost::optional<Uptane::Target> pending_version;
   storage.loadInstalledVersions("", nullptr, &pending_version);
 
-  GObjectUniquePtr<OstreeSysroot> sysroot_smart = OstreeManager::LoadSysroot(config.pacman.sysroot);
-  OstreeDeployment* booted_deployment = ostree_sysroot_get_booted_deployment(sysroot_smart.get());
-  if (booted_deployment == nullptr) {
-    throw std::runtime_error("Could not get booted deployment in " + config.pacman.sysroot.string());
+  std::string current_hash = sysroot.getCurDeploymentHash();
+  if (current_hash.empty()) {
+    throw std::runtime_error("Could not get " + sysroot.type() + " deployment in " + sysroot.path());
   }
-  std::string current_hash = ostree_deployment_get_csum(booted_deployment);
 
   Bootloader bootloader(config.bootloader, storage);
 
@@ -266,11 +273,17 @@ LiteClient::LiteClient(Config& config_in)
   primary_ecu = ecu_serials[0];
 
   std::vector<std::string> headers;
-  GObjectUniquePtr<OstreeSysroot> sysroot_smart = OstreeManager::LoadSysroot(config.pacman.sysroot);
-  OstreeDeployment* deployment = ostree_sysroot_get_booted_deployment(sysroot_smart.get());
+  bool booted_sysroot = true;
+  if (config.pacman.extra.count("booted") == 1) {
+    booted_sysroot = boost::lexical_cast<bool>(config.pacman.extra.at("booted"));
+  }
+
+  auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), booted_sysroot);
+  auto cur_hash = ostree_sysroot->getCurDeploymentHash();
+
   std::string header("x-ats-ostreehash: ");
-  if (deployment != nullptr) {
-    header += ostree_deployment_get_csum(deployment);
+  if (!cur_hash.empty()) {
+    header += cur_hash;
   } else {
     header += "?";
   }
@@ -289,13 +302,14 @@ LiteClient::LiteClient(Config& config_in)
 
   http_client = std::make_shared<HttpClient>(&headers);
   report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
-  package_manager = PackageManagerFactory::makePackageManager(config.pacman, config.bootloader, storage, http_client);
 
-  std::pair<Uptane::Target, data::ResultCode::Numeric> pair = finalizeIfNeeded(*package_manager, *storage, config);
+  std::pair<Uptane::Target, data::ResultCode::Numeric> pair = finalizeIfNeeded(*ostree_sysroot, *storage, config);
   http_client->updateHeader("x-ats-target", pair.first.filename());
 
   KeyManager keys(storage, config.keymanagerConfig());
   keys.copyCertsToCurl(*http_client);
+
+  registerComposeAppManager(ostree_sysroot);
 
   primary =
       std::make_shared<SotaUptaneClient>(config, storage, http_client, nullptr, primary_ecu.first, primary_ecu.second);
