@@ -303,6 +303,9 @@ LiteClient::LiteClient(Config& config_in)
   http_client = std::make_shared<HttpClient>(&headers);
   report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
 
+  // finalizeIfNeeded it looks like copy-paste of SotaUptaneClient::finalizeAfterReboot
+  // can we use just SotaUptaneClient::finalizeAfterReboot or even maybe SotaUptaneClient::initialize ???
+  // in this case we could do our specific finalization, including starting apps, in ComposeAppManager::finalizeInstall
   std::pair<Uptane::Target, data::ResultCode::Numeric> pair = finalizeIfNeeded(*ostree_sysroot, *storage, config);
   http_client->updateHeader("x-ats-target", pair.first.filename());
 

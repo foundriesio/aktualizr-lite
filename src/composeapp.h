@@ -12,12 +12,14 @@ namespace Docker {
 class ComposeApp {
  public:
   static constexpr const char* const ArchiveExt{".tgz"};
+  static constexpr const char* const NeedStartFile{".need_start"};
 
  public:
   ComposeApp(std::string name, const boost::filesystem::path& root_dir, const std::string& compose_bin,
              const Docker::RegistryClient& registry_client);
 
   bool fetch(const std::string& app_uri);
+  bool up(bool no_start = false);
   bool start();
   void remove();
 

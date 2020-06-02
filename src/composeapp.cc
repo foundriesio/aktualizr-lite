@@ -22,7 +22,17 @@ bool ComposeApp::fetch(const std::string& app_uri) {
   return false;
 };
 
-bool ComposeApp::start() { return cmd_streaming(compose_ + "up --remove-orphans -d"); }
+bool ComposeApp::up(bool no_start) {
+  auto mode = no_start ? "--no-start" : "-d";
+
+  if (no_start) {
+    boost::filesystem::ofstream flag_file(root_ / NeedStartFile);
+  }
+
+  return cmd_streaming(compose_ + "up --remove-orphans " + mode);
+}
+
+bool ComposeApp::start() { return cmd_streaming(compose_ + "start"); }
 
 void ComposeApp::remove() {
   if (cmd_streaming(compose_ + "down")) {
