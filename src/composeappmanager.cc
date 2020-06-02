@@ -35,7 +35,15 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       cfg_{pconfig},
       sysroot_{std::move(sysroot)},
       registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)},
-      compose_bin_{boost::filesystem::canonical(cfg_.compose_bin).string() + " "} {}
+      compose_bin_{boost::filesystem::canonical(cfg_.compose_bin).string() + " "} {
+  for (const auto& app_name : cfg_.apps) {
+    auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeApp::NeedStartFile;
+    if (boost::filesystem::exists(need_start_flag)) {
+      Docker::ComposeApp(app_name, cfg_.apps_root, compose_bin_, registry_client_).start();
+      boost::filesystem::remove(need_start_flag);
+    }
+  }
+}
 
 std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(const Uptane::Target& t) const {
   std::vector<std::pair<std::string, std::string>> apps;
@@ -92,9 +100,11 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   }
 
   handleRemovedApps(target);
+
   for (const auto& pair : getApps(target)) {
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
-    if (!Docker::ComposeApp(pair.first, cfg_.apps_root, compose_bin_, registry_client_).start()) {
+    if (!Docker::ComposeApp(pair.first, cfg_.apps_root, compose_bin_, registry_client_)
+             .up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
     }
   };
