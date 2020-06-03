@@ -3,7 +3,7 @@ set -eEo pipefail
 
 echo $0 called with $*
 
-for x in download config pull down up; do
+for x in download config pull down up start; do
   if [ "$1" = "$x" ] ; then
     echo $* > $x.log
     if [ "$2" = "FAILTEST" ] ; then

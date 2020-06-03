@@ -9,6 +9,7 @@
 #include "http/httpinterface.h"
 
 #include "composeappmanager.h"
+#include "composeapp.h"
 
 
 class FakeRegistry {
@@ -50,9 +51,11 @@ class FakeRegistry {
     const std::string& baseURL() const {return base_url_; }
     Json::Value& manifest() { return manifest_; }
     const std::string& archiveName() const {return archive_name_; }
-    std::string getManifest() const { return Utils::jsonToCanonicalStr(manifest_); }
+    std::string getManifest() const { was_manifest_requested_ = true; return Utils::jsonToCanonicalStr(manifest_); }
     std::string getShortManifestHash() const { return manifest_hash_.substr(0, 7); }
     std::string getArchiveContent() const { return Utils::readFile(tgz_path_); }
+
+    bool wasManifestRequested() const { return was_manifest_requested_; }
 
   private:
     const std::string auth_url_;
@@ -62,6 +65,7 @@ class FakeRegistry {
     std::string manifest_hash_;
     boost::filesystem::path tgz_path_;
     std::string archive_name_;
+    mutable bool was_manifest_requested_{false};
 };
 
 class FakeOtaClient: public HttpInterface {
@@ -146,9 +150,28 @@ TEST(ComposeApp, Config) {
   ASSERT_FALSE(cfg.docker_prune);
 }
 
+class TestSysroot: public OSTree::Sysroot {
+ public:
+  using Hasher = std::function<std::string()>;
+
+ public:
+    TestSysroot(Hasher hasher, const std::string& sysroot_path):
+      OSTree::Sysroot(sysroot_path, false),
+      hasher_{std::move(hasher)} {}
+
+    virtual std::string getCurDeploymentHash() const {
+      return hasher_();
+    }
+
+ private:
+  Hasher hasher_;
+};
+
+
 struct TestClient {
   TestClient(const char* apps, const Uptane::Target* installedTarget = nullptr,
-             FakeRegistry* registry = nullptr, std::string ostree_server_url = "") {
+             FakeRegistry* registry = nullptr, std::string ostree_server_url = "",
+             bool force_update = false, TestSysroot::Hasher sysroot_hasher = nullptr) {
     tempdir = std_::make_unique<TemporaryDirectory>();
 
     config.logger.loglevel = 1;
@@ -164,28 +187,28 @@ struct TestClient {
     config.pacman.extra["compose_apps"] = apps;
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
     config.pacman.extra["docker_prune"] = "0";
+    config.pacman.extra["force_update"] = force_update?"1":"0";
     config.storage.path = tempdir->Path();
 
     if (!ostree_server_url.empty()) {
       config.pacman.ostree_server = ostree_server_url;
     }
-    config.pacman.extra["registry_auth_creds_endpoint"] = "http://hub-creds/";
 
     storage = INvStorage::newStorage(config.storage);
     if (installedTarget != nullptr) {
       storage->savePrimaryInstalledVersion(*installedTarget, InstalledVersionUpdateMode::kCurrent);
     }
-    std::shared_ptr<HttpInterface> http_client;
-    Docker::RegistryClient::HttpClientFactory registry_fake_http_client_factory;
+
     if (registry) {
       http_client = std::make_shared<FakeOtaClient>(registry);
       registry_fake_http_client_factory = [registry](const std::vector<std::string>* headers) {
         return std::make_shared<FakeOtaClient>(registry, headers);
       };
     }
-    pacman = std_::make_unique<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
-                                                  std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), false),
-                                                  registry_fake_http_client_factory);
+    sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), false) :
+                                                 std::make_shared<TestSysroot>(sysroot_hasher, config.pacman.sysroot.string());
+    pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
+                                                  sysroot, registry_fake_http_client_factory);
     keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
     fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());
   }
@@ -194,13 +217,22 @@ struct TestClient {
     return config.bootloader.reboot_sentinel_dir / config.bootloader.reboot_sentinel_name;
   }
 
+  void fakeReboot() {
+    boost::filesystem::remove(getRebootSentinel());
+    pacman.reset(new ComposeAppManager(config.pacman, config.bootloader, storage, http_client, sysroot, registry_fake_http_client_factory));
+  }
+
   Config config;
   std::unique_ptr<TemporaryDirectory> tempdir;
   std::shared_ptr<INvStorage> storage;
-  std::unique_ptr<ComposeAppManager> pacman;
+  std::shared_ptr<ComposeAppManager> pacman;
   std::unique_ptr<KeyManager> keys;
   std::unique_ptr<Uptane::Fetcher> fetcher;
   boost::filesystem::path apps_root;
+
+  std::shared_ptr<HttpInterface> http_client;
+  std::shared_ptr<OSTree::Sysroot> sysroot;
+  Docker::RegistryClient::HttpClientFactory registry_fake_http_client_factory;
 };
 
 TEST(ComposeApp, getApps) {
@@ -388,25 +420,174 @@ TEST(ComposeApp, handleRemovedApps) {
   ASSERT_TRUE(boost::filesystem::exists(apps / "app2"));
 }
 
-TEST(ComposeApp, install) {
-  // Trick system into not doing an OSTreeManager install
+TEST(ComposeApp, installApp) {
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
 
-  Json::Value target_json;
-  target_json["hashes"]["sha256"] = sha;
-  target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "";
-  Uptane::Target target("pull", target_json);
+  Json::Value installed_target_json;
+  installed_target_json["hashes"]["sha256"] = sha;
 
-  TestClient client("app1", &target);
+  // TODO: consider using test fixtures, parameterization and avoiding code, literal/constant/params duplication
 
-  // We are't doing a fetch, so we have to make this directory so that the
-  // compose_fake script can run:
-  boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
-  ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install(target).result_code.num_code);
-//  boost::filesystem::remove(client.getRebootSentinel());
-//  auto install_result = client.pacman->finalizeInstall(target);
-  std::string output = Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true);
-  ASSERT_EQ("up --remove-orphans -d", output);
+  // new App installation
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // existing App update (uri/hash does not match)
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "hub.io@factory/app1:sha256:12312312312";
+    Uptane::Target installed_target("pull", installed_target_json);
+
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, "myapp");
+    // fake that App has been already installed
+    boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // skipping an App update install because already installed
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    auto app_uri = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    // emulate situation when App is already installed on a system
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+    boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    // make sure that App manifest wasn't requested from Registry
+    ASSERT_FALSE(registry.wasManifestRequested());
+    // make sure that docker-compose config and pull were not called
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    // make sure that docker-compose up wasn't called
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // App update, DB thinks that App is installed, but it was removed from a system so we install it
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    auto app_uri = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    // emulate situation when App is already installed on a system but is not present on a file system
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+    //boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // forced App update, App is installed, but update was called with 'forced' option
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    auto app_uri = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    // emulate situation when App is already installed on a system but is not present on a file system
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub", true);
+    boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // App update if reboot, make sure App is not (re-)started before a system reboot and started just after reboot
+  {
+    // let the sota client and ostree package manager think that we are booted on some ref/hash
+    // that is different from the ref/hash that is actualy deployed in the test ostree sysroot (Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);)
+    std::string currently_installed_hash = "00208312202f3e3a02296faa548b9c0f2b1c147c8c29436e42c2f885d9a044f5";
+    TestSysroot::Hasher hash_provider{[&currently_installed_hash]{ return currently_installed_hash; } };
+
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub", false, hash_provider);
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kNeedCompletion, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_TRUE(boost::filesystem::exists(client.getRebootSentinel()));
+    ASSERT_TRUE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::NeedStartFile));
+
+    ASSERT_EQ("up --remove-orphans --no-start", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+
+    currently_installed_hash = sha;
+    client.fakeReboot();
+    // make sure App has been restarted after reboot
+    ASSERT_EQ("start", Utils::readFile(client.tempdir->Path() / "apps/app1/start.log", true));
+    ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::NeedStartFile));
+  }
 }
 
 #ifndef __NO_MAIN__

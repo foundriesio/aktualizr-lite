@@ -15,7 +15,7 @@ class Sysroot {
   const std::string& path() const { return path_; }
   std::string type() const { return booted_ ? "booted" : "staged"; }
 
-  std::string getCurDeploymentHash() const;
+  virtual std::string getCurDeploymentHash() const;
 
  private:
   const std::string path_;
