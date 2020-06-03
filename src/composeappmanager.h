@@ -17,6 +17,7 @@ class ComposeAppManager : public OstreeManager {
     boost::filesystem::path apps_root;
     boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
     bool docker_prune{true};
+    bool force_update{false};
   };
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -31,6 +32,7 @@ class ComposeAppManager : public OstreeManager {
   std::string name() const override { return Name; };
 
   std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target& t) const;
+  std::vector<std::pair<std::string, std::string>> getAppsToUpdate(const Uptane::Target& t) const;
   void handleRemovedApps(const Uptane::Target& target) const;
   std::string getCurrentHash() const override;
 
@@ -39,6 +41,8 @@ class ComposeAppManager : public OstreeManager {
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   Docker::RegistryClient registry_client_;
   const std::string compose_bin_;
+
+  std::vector<std::pair<std::string, std::string>> cur_apps_to_fetch_and_update_;
 };
 
 #endif  // AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_

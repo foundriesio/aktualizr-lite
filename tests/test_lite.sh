@@ -113,7 +113,7 @@ add_target $name $sha
 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update --update-name $name
 ostree admin status
 
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to: Target(zlast"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update -f | grep "Updating to: Target(zlast"
 
 out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml status)
 if [[ ! "$out" =~ "Active image is: zlast	sha256:$sha" ]] ; then

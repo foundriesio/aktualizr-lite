@@ -112,17 +112,30 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
   std::string version("latest");
+  bool force_update{false};
   if (variables_map.count("update-name") > 0) {
     version = variables_map["update-name"].as<std::string>();
   }
+  if (variables_map.count("force-update") > 0) {
+    force_update = variables_map["force-update"].as<bool>();
+  }
   LOG_INFO << "Finding " << version << " to update to...";
-  auto target = find_target(client.primary, hwid, client.tags, version);
-  if (target == nullptr) {
+  auto target_to_install = find_target(client.primary, hwid, client.tags, version);
+  if (target_to_install == nullptr) {
     LOG_INFO << "Already up-to-date";
     return 0;
   }
-  LOG_INFO << "Updating to: " << *target;
-  data::ResultCode::Numeric rc = do_update(client, *target);
+
+  if (!force_update) {
+    auto currently_installed_target = client.primary->getCurrent();
+    if (targets_eq(*target_to_install, currently_installed_target, true, client.config.pacman.extra["compose_apps_root"])) {
+      LOG_INFO << "Already up-to-date: the target '" << version << "' currently installed and running";
+      return 0;
+    }
+  }
+
+  LOG_INFO << "Updating to: " << *target_to_install;
+  data::ResultCode::Numeric rc = do_update(client, *target_to_install);
   if (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) {
     return 0;
   }
@@ -193,7 +206,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // easy way to find just the bad versions without api/storage changes. As a workaround we
       // just check if the version is known (old hash) and not current/pending and abort if so
       bool known_target_sha = known_local_target(client, *target, installed_versions);
-      if (!known_target_sha && !targets_eq(*target, current, compareDockerApps)) {
+      if (!known_target_sha && !targets_eq(*target, current, compareDockerApps, client.config.pacman.extra["compose_apps_root"])) {
         LOG_INFO << "Updating base image to: " << *target;
 
         data::ResultCode::Numeric rc = do_update(client, *target);
@@ -247,6 +260,7 @@ bpo::variables_map parse_options(int argc, char* argv[]) {
     subs += commands[i].name;
   }
   bpo::options_description description("aktualizr-lite command line options");
+
   // clang-format off
   // Try to keep these options in the same order as Config::updateFromCommandLine().
   // The first three are commandline only.
@@ -259,6 +273,7 @@ bpo::variables_map parse_options(int argc, char* argv[]) {
       ("ostree-server", bpo::value<std::string>(), "URL of the Ostree repository")
       ("primary-ecu-hardware-id", bpo::value<std::string>(), "hardware ID of primary ecu")
       ("update-name", bpo::value<std::string>(), "optional name of the update when running \"update\". default=latest")
+      ("force-update,f", bpo::bool_switch(), "optional flag to force an update. default=off")
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for update when in daemon mode.")
       ("update-lockfile", bpo::value<boost::filesystem::path>(), "If provided, an flock(2) is applied to this file before performing an update in daemon mode")
       ("download-lockfile", bpo::value<boost::filesystem::path>(), "If provided, an flock(2) is applied to this file before downloading an update in daemon mode")
@@ -319,6 +334,7 @@ int main(int argc, char* argv[]) {
     Config config(commandline_map);
     config.storage.uptane_metadata_path = BasedPath(config.storage.path / "metadata");
     config.telemetry.report_network = !config.tls.server.empty();
+    config.pacman.extra["force_update"] = commandline_map["force-update"].as<bool>()?"1":"0";
     LOG_DEBUG << "Current directory: " << boost::filesystem::current_path().string();
 
     std::string cmd = commandline_map["command"].as<std::string>();

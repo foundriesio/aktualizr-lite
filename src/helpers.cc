@@ -492,7 +492,8 @@ bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& co
   return true;
 }
 
-bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps) {
+bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps,
+                const boost::filesystem::path& app_root) {
   // target equality check looks at hashes
   if (t1.MatchTarget(t2)) {
     if (compareDockerApps) {
@@ -513,6 +514,11 @@ bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compare
       }
 
       // compose apps
+      // We are checking if Apps that are supposed to be installed (listed in the currenlty installed Target
+      // are actually present on a system. Apps are installed on non read-only mount point/folder so could be
+      // modified/removed somehow so we need to return 'false' here and let aklite update/re-install App(s) It's
+      // workaround, a proper solution for 'immutable Target' concept is installing Apps on read-only system (both
+      // meta-data and actuall container image layers)
       auto t1_capps = t1.custom_data()["docker_compose_apps"];
       auto t2_capps = t2.custom_data()["docker_compose_apps"];
       for (Json::ValueIterator i = t1_capps.begin(); i != t1_capps.end(); ++i) {
@@ -523,6 +529,10 @@ bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compare
         if ((*i)["uri"].asString() != t2_capps[app]["uri"].asString()) {
           return false;  // tuf target filename changed
         }
+        if (!app_root.empty() && boost::filesystem::exists(app_root) && !boost::filesystem::exists(app_root / app)) {
+          return false;  // Target app has been removed from filesystem
+        }
+
         t2_capps.removeMember(app);
       }
       if (t2_capps.size() > 0) {

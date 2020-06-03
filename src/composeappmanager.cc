@@ -24,6 +24,10 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
     boost::algorithm::to_lower(val);
     docker_prune = val != "0" && val != "false";
   }
+
+  if (raw.count("force_update") > 0) {
+    force_update = boost::lexical_cast<bool>(raw.at("force_update"));
+  }
 }
 
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -65,15 +69,57 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(cons
   return apps;
 }
 
+std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpdate(const Uptane::Target& t) const {
+  if (cfg_.force_update) {
+    LOG_INFO << "All Apps are forced to be updated";
+    return getApps(t);
+  }
+
+  std::vector<std::pair<std::string, std::string>> apps_to_update;
+
+  auto currently_installed_target_apps = OstreeManager::getCurrent().custom_data()["docker_compose_apps"];
+  auto new_target_apps = getApps(t);  // intersection of apps specified in Target and the configuration
+
+  for (const auto& app_pair : new_target_apps) {
+    const auto& app_name = app_pair.first;
+
+    auto app_data = currently_installed_target_apps.get(app_name, Json::nullValue);
+    if (app_data == Json::nullValue) {
+      // new app in Target
+      apps_to_update.push_back(app_pair);
+      LOG_INFO << app_name << " will be installed";
+      continue;
+    }
+
+    if (app_pair.second != app_data["uri"].asString()) {
+      // an existing App update
+      apps_to_update.push_back(app_pair);
+      LOG_INFO << app_name << " will be updated";
+      continue;
+    }
+
+    if (!boost::filesystem::exists(cfg_.apps_root / app_name)) {
+      // an App that is supposed to be installed has been removed somehow, let's install it again
+      apps_to_update.push_back(app_pair);
+      LOG_INFO << app_name << " will be re-installed";
+    }
+  }
+
+  return apps_to_update;
+}
+
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                                     FetcherProgressCb progress_cb, const api::FlowControlToken* token) {
   if (!OstreeManager::fetchTarget(target, fetcher, keys, progress_cb, token)) {
     return false;
   }
 
-  LOG_INFO << "Looking for Compose Apps to fetch";
+  LOG_INFO << "Looking for Compose Apps to be installed or updated...";
+  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target);
+  LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
+
   bool passed = true;
-  for (const auto& pair : getApps(target)) {
+  for (const auto& pair : cur_apps_to_fetch_and_update_) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
     if (!Docker::ComposeApp(pair.first, cfg_.apps_root, compose_bin_, registry_client_).fetch(pair.second)) {
       passed = false;
@@ -101,7 +147,8 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
 
   handleRemovedApps(target);
 
-  for (const auto& pair : getApps(target)) {
+  // make sure we install what we fecthed
+  for (const auto& pair : cur_apps_to_fetch_and_update_) {
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
     if (!Docker::ComposeApp(pair.first, cfg_.apps_root, compose_bin_, registry_client_)
              .up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
