@@ -14,6 +14,10 @@ class ComposeApp {
   static constexpr const char* const ArchiveExt{".tgz"};
   static constexpr const char* const NeedStartFile{".need_start"};
 
+  struct Cmd {
+    static const std::string Up;
+  };
+
  public:
   ComposeApp(std::string name, const boost::filesystem::path& root_dir, const std::string& compose_bin,
              const Docker::RegistryClient& registry_client);

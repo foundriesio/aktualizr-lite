@@ -6,6 +6,8 @@
 
 namespace Docker {
 
+const std::string ComposeApp::Cmd::Up{"up --remove-orphans --no-color "};
+
 ComposeApp::ComposeApp(std::string name, const boost::filesystem::path& root_dir, const std::string& compose_bin,
                        const Docker::RegistryClient& registry_client)
     : name_{std::move(name)}, root_{root_dir / name_}, compose_{compose_bin}, registry_client_{registry_client} {}
@@ -29,7 +31,7 @@ bool ComposeApp::up(bool no_start) {
     boost::filesystem::ofstream flag_file(root_ / NeedStartFile);
   }
 
-  return cmd_streaming(compose_ + "up --remove-orphans " + mode);
+  return cmd_streaming(compose_ + ComposeApp::Cmd::Up + mode);
 }
 
 bool ComposeApp::start() { return cmd_streaming(compose_ + "start"); }

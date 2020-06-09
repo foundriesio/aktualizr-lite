@@ -422,6 +422,7 @@ TEST(ComposeApp, handleRemovedApps) {
 
 TEST(ComposeApp, installApp) {
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
+  const std::string up_cmd_params = Docker::ComposeApp::Cmd::Up + "-d";
 
   Json::Value installed_target_json;
   installed_target_json["hashes"]["sha256"] = sha;
@@ -446,7 +447,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
-    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+    ASSERT_EQ(up_cmd_params, Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
   }
 
   // existing App update (uri/hash does not match)
@@ -471,7 +472,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
-    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+    ASSERT_EQ(up_cmd_params, Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
   }
 
   // skipping an App update install because already installed
@@ -525,7 +526,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
-    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+    ASSERT_EQ(up_cmd_params, Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
   }
 
   // forced App update, App is installed, but update was called with 'forced' option
@@ -551,7 +552,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
-    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+    ASSERT_EQ(up_cmd_params, Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
   }
 
   // App update if reboot, make sure App is not (re-)started before a system reboot and started just after reboot
@@ -580,7 +581,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_TRUE(boost::filesystem::exists(client.getRebootSentinel()));
     ASSERT_TRUE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::NeedStartFile));
 
-    ASSERT_EQ("up --remove-orphans --no-start", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+    ASSERT_EQ(Docker::ComposeApp::Cmd::Up + "--no-start", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
 
     currently_installed_hash = sha;
     client.fakeReboot();
