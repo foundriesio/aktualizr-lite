@@ -16,6 +16,7 @@ class ComposeApp {
 
   struct Cmd {
     static const std::string Up;
+    static const std::string Pull;
   };
 
  public:
