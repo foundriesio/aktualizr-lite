@@ -129,7 +129,7 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
 
   if (!force_update) {
     auto currently_installed_target = client.getCurrent();
-    if (targets_eq(*target_to_install, currently_installed_target, true, client.config.pacman.extra["compose_apps_root"])) {
+    if (client.isTargetCurrent(*target_to_install)) {
       LOG_INFO << "Already up-to-date: the target '" << version << "' currently installed and running";
       return 0;
     }
@@ -174,7 +174,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   client.storage->loadPrimaryInstallationLog(&installed_versions, false);
 
   while (true) {
-    LOG_INFO << "Refreshing Targets metadata";
+    LOG_INFO << "Checking for a new Target...";
     if (!client.checkForUpdates()) {
       LOG_WARNING << "Unable to update latest metadata";
       std::this_thread::sleep_for(std::chrono::seconds(10));
@@ -207,8 +207,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // easy way to find just the bad versions without api/storage changes. As a workaround we
       // just check if the version is known (old hash) and not current/pending and abort if so
       bool known_target_sha = known_local_target(client, *target, installed_versions);
-      if (!known_target_sha && !targets_eq(*target, current, compareDockerApps, client.config.pacman.extra["compose_apps_root"])) {
-        LOG_INFO << "Updating base image to: " << *target;
+      if (!known_target_sha && ! client.isTargetCurrent(*target)) {
+        LOG_INFO << "Got a new Target, updating base image to: " << *target;
 
         data::ResultCode::Numeric rc = do_update(client, *target);
         if (rc == data::ResultCode::Numeric::kOk) {
