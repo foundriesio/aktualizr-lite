@@ -456,14 +456,6 @@ std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& 
     }
   }
 
-  if (target.correlation_id().size() > 0) {
-    // send this asynchronously before `sendEvent`, so that the report timestamp
-    // would not be delayed by callbacks on events
-    for (const auto& ecu : target.ecus()) {
-      report_queue->enqueue(std_::make_unique<EcuDownloadCompletedReport>(ecu.first, target.correlation_id(), success));
-    }
-  }
-
   return {success, target};
 }
 
