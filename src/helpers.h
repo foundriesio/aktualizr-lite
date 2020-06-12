@@ -28,6 +28,11 @@ class Lock {
   int fd_;
 };
 
+// TODO:
+// 1) move LiteClient implementation out of helpers.* to lite_client.*
+// 2) improve implementation: makes fields private, get rid of aktualizr's redundant legacy,
+//  restructure code in order to minimize code duplication and improve on loose coupling, etc
+
 class LiteClient {
  public:
   LiteClient(Config& config_in);
@@ -35,7 +40,7 @@ class LiteClient {
   Config config;
   std::vector<std::string> tags;
   std::shared_ptr<INvStorage> storage;
-  std::shared_ptr<SotaUptaneClient> primary;
+
   std::pair<Uptane::EcuSerial, Uptane::HardwareIdentifier> primary_ecu;
   std::shared_ptr<HttpClient> http_client;
   boost::filesystem::path download_lockfile;
@@ -48,6 +53,13 @@ class LiteClient {
 
   bool dockerAppsChanged();
   void storeDockerParamsDigest();
+  Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
+  bool updateImageMeta();
+  bool checkImageMetaOffline();
+  Uptane::LazyTargetsList allTargets() const { return Uptane::LazyTargetsList(image_repo_, storage, uptane_fetcher_); }
+  TargetStatus VerifyTarget(const Uptane::Target& target) const { return package_manager_->verifyTarget(target); }
+  void reportNetworkInfo();
+  void reportHwInfo();
 
  private:
   FRIEND_TEST(helpers, locking);
@@ -65,9 +77,21 @@ class LiteClient {
 
   void writeCurrentTarget(const Uptane::Target& t);
 
+  data::InstallationResult installPackage(const Uptane::Target& target);
+  std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
+                                                const api::FlowControlToken* token = nullptr);
+
+ private:
   boost::filesystem::path callback_program;
-  std::shared_ptr<PackageManagerInterface> package_manager;
+  std::shared_ptr<PackageManagerInterface> package_manager_;
   std::unique_ptr<ReportQueue> report_queue;
+
+  Uptane::ImageRepository image_repo_;
+  std::shared_ptr<Uptane::Fetcher> uptane_fetcher_;
+
+  Uptane::Exception last_exception_{"", ""};
+  Json::Value last_network_info_reported_;
+  Json::Value last_hw_info_reported_;
 };
 
 bool should_compare_docker_apps(const Config& config);
