@@ -256,7 +256,6 @@ LiteClient::LiteClient(Config& config_in)
   primary_ecu = ecu_serials[0];
 
   std::vector<std::string> headers;
-  bool booted_sysroot = true;
   if (config.pacman.extra.count("booted") == 1) {
     booted_sysroot = boost::lexical_cast<bool>(config.pacman.extra.at("booted"));
   }
@@ -554,6 +553,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
+    is_reboot_required_ = booted_sysroot;
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
