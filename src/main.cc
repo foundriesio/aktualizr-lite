@@ -12,7 +12,7 @@ namespace bpo = boost::program_options;
 
 static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
-  auto target = client.primary->getCurrent();
+  auto target = client.getCurrent();
 
   if (target.MatchTarget(Uptane::Target::Unknown())) {
     LOG_INFO << "No active deployment found";
@@ -31,16 +31,16 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
   LOG_INFO << "Refreshing Targets metadata";
-  if (!client.primary->updateImageMeta()) {
+  if (!client.updateImageMeta()) {
     LOG_WARNING << "Unable to update latest metadata, using local copy";
-    if (!client.primary->checkImageMetaOffline()) {
+    if (!client.checkImageMetaOffline()) {
       LOG_ERROR << "Unable to use local copy of TUF data";
       return 1;
     }
   }
 
   LOG_INFO << "Updates available to " << hwid << ":";
-  for (auto& t : client.primary->allTargets()) {
+  for (auto& t : client.allTargets()) {
     if (!target_has_tags(t, client.tags)) {
       continue;
     }
@@ -54,13 +54,13 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
-static std::unique_ptr<Uptane::Target> find_target(const std::shared_ptr<SotaUptaneClient>& client,
+static std::unique_ptr<Uptane::Target> find_target(LiteClient& client,
                                                    Uptane::HardwareIdentifier& hwid,
                                                    const std::vector<std::string>& tags, const std::string& version) {
   std::unique_ptr<Uptane::Target> rv;
-  if (!client->updateImageMeta()) {
+  if (!client.updateImageMeta()) {
     LOG_WARNING << "Unable to update latest metadata, using local copy";
-    if (!client->checkImageMetaOffline()) {
+    if (!client.checkImageMetaOffline()) {
       LOG_ERROR << "Unable to use local copy of TUF data";
       throw std::runtime_error("Unable to find update");
     }
@@ -68,7 +68,7 @@ static std::unique_ptr<Uptane::Target> find_target(const std::shared_ptr<SotaUpt
 
   bool find_latest = (version == "latest");
   std::unique_ptr<Uptane::Target> latest = nullptr;
-  for (auto& t : client->allTargets()) {
+  for (auto& t : client.allTargets()) {
     if (!target_has_tags(t, tags)) {
       continue;
     }
@@ -99,7 +99,7 @@ static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target ta
     return rc;
   }
 
-  if (client.primary->VerifyTarget(target) != TargetStatus::kGood) {
+  if (client.VerifyTarget(target) != TargetStatus::kGood) {
     client.notifyInstallFinished(target, data::ResultCode::Numeric::kVerificationFailed);
     LOG_ERROR << "Downloaded target is invalid";
     return data::ResultCode::Numeric::kVerificationFailed;
@@ -120,14 +120,14 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
     force_update = variables_map["force-update"].as<bool>();
   }
   LOG_INFO << "Finding " << version << " to update to...";
-  auto target_to_install = find_target(client.primary, hwid, client.tags, version);
+  auto target_to_install = find_target(client, hwid, client.tags, version);
   if (target_to_install == nullptr) {
     LOG_INFO << "Already up-to-date";
     return 0;
   }
 
   if (!force_update) {
-    auto currently_installed_target = client.primary->getCurrent();
+    auto currently_installed_target = client.getCurrent();
     if (targets_eq(*target_to_install, currently_installed_target, true, client.config.pacman.extra["compose_apps_root"])) {
       LOG_INFO << "Already up-to-date: the target '" << version << "' currently installed and running";
       return 0;
@@ -161,7 +161,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     client.download_lockfile = variables_map["download-lockfile"].as<boost::filesystem::path>();
   }
 
-  auto current = client.primary->getCurrent();
+  auto current = client.getCurrent();
   LOG_INFO << "Active image is: " << current;
 
   uint64_t interval = client.config.uptane.polling_sec;
@@ -191,15 +191,15 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       firstLoop = false;
     }
 
-    client.primary->reportNetworkInfo();
+    client.reportNetworkInfo();
     // reportNetworkInfo already checks `telemetry.report_network`. We need a
     // way when not running in anonymous mode to decide if we should report
     // hwinfo to the server. This flag is a good one to (ab)use.
     if (client.config.telemetry.report_network) {
-      client.primary->reportHwInfo();
+      client.reportHwInfo();
     }
 
-    auto target = find_target(client.primary, hwid, client.tags, "latest");
+    auto target = find_target(client, hwid, client.tags, "latest");
     if (target != nullptr) {
       // This is a workaround for finding and avoiding bad updates after a rollback.
       // Rollback sets the installed version state to none instead of broken, so there is no

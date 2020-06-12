@@ -53,23 +53,6 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
   }
 }
 
-static void registerComposeAppManager(const std::shared_ptr<OSTree::Sysroot>& sysroot) {
-  static bool is_registered{false};
-
-  if (is_registered) {
-    return;
-  }
-
-  PackageManagerFactory::registerPackageManager(
-      ComposeAppManager::Name,
-      [sysroot](const PackageConfig& pconfig, const BootloaderConfig& bconfig,
-                const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http) {
-        return new ComposeAppManager(pconfig, bconfig, storage, http, sysroot);
-      });
-
-  is_registered = true;
-}
-
 static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config) {
   if (config.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     DockerAppManagerConfig dappcfg(config);
@@ -233,7 +216,7 @@ static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OST
 }
 
 LiteClient::LiteClient(Config& config_in)
-    : config(std::move(config_in)), primary_ecu(Uptane::EcuSerial::Unknown(), "") {
+    : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
   std::string pkey;
   storage = INvStorage::newStorage(config.storage);
   storage->importData(config.import);
@@ -301,6 +284,7 @@ LiteClient::LiteClient(Config& config_in)
   headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
 
   http_client = std::make_shared<HttpClient>(&headers);
+  uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
   report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
 
   // finalizeIfNeeded it looks like copy-paste of SotaUptaneClient::finalizeAfterReboot
@@ -312,10 +296,17 @@ LiteClient::LiteClient(Config& config_in)
   KeyManager keys(storage, config.keymanagerConfig());
   keys.copyCertsToCurl(*http_client);
 
-  registerComposeAppManager(ostree_sysroot);
-
-  primary =
-      std::make_shared<SotaUptaneClient>(config, storage, http_client, nullptr, primary_ecu.first, primary_ecu.second);
+  // TODO: consider improving this factory method
+  if (config.pacman.type == ComposeAppManager::Name) {
+    package_manager_ =
+        std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, ostree_sysroot);
+  } else if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
+    package_manager_ = std::make_shared<DockerAppManager>(config.pacman, config.bootloader, storage, http_client);
+  } else if (config.pacman.type == PACKAGE_MANAGER_OSTREE) {
+    package_manager_ = std::make_shared<OstreeManager>(config.pacman, config.bootloader, storage, http_client);
+  } else {
+    throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
+  }
 
   writeCurrentTarget(pair.first);
   if (pair.second != data::ResultCode::Numeric::kAlreadyProcessed) {
@@ -348,7 +339,7 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
 bool LiteClient::checkForUpdates() {
   Uptane::Target t = Uptane::Target::Unknown();
   callback("check-for-update-pre", t);
-  bool rc = primary->updateImageMeta();
+  bool rc = updateImageMeta();
   callback("check-for-update-post", t);
   return rc;
 }
@@ -410,6 +401,102 @@ void LiteClient::writeCurrentTarget(const Uptane::Target& t) {
   Utils::writeFile(config.storage.path / "current-target", ss.str());
 }
 
+data::InstallationResult LiteClient::installPackage(const Uptane::Target& target) {
+  LOG_INFO << "Installing package using " << package_manager_->name() << " package manager";
+  try {
+    return package_manager_->install(target);
+  } catch (std::exception& ex) {
+    return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, ex.what());
+  }
+}
+
+bool LiteClient::updateImageMeta() {
+  if (!image_repo_.updateMeta(*storage, *uptane_fetcher_)) {
+    last_exception_ = image_repo_.getLastException();
+    return false;
+  }
+  return true;
+}
+
+bool LiteClient::checkImageMetaOffline() {
+  if (!image_repo_.checkMetaOffline(*storage)) {
+    last_exception_ = image_repo_.getLastException();
+    return false;
+  }
+  return true;
+}
+
+std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& target,
+                                                          const api::FlowControlToken* token) {
+  KeyManager keys(storage, config.keymanagerConfig());
+  keys.loadKeys();
+  auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
+    // report_progress_cb(events_channel.get(), t, description, progress);
+    // TODO: consider make use of it for download progress reporting
+  };
+
+  bool success = false;
+  {
+    const int max_tries = 3;
+    int tries = 0;
+    std::chrono::milliseconds wait(500);
+
+    for (; tries < max_tries; tries++) {
+      success = package_manager_->fetchTarget(target, *uptane_fetcher_, keys, prog_cb, token);
+      // Skip trying to fetch the 'target' if control flow token transaction
+      // was set to the 'abort' or 'pause' state, see the CommandQueue and FlowControlToken.
+      if (success || (token != nullptr && !token->canContinue(false))) {
+        break;
+      } else if (tries < max_tries - 1) {
+        std::this_thread::sleep_for(wait);
+        wait *= 2;
+      }
+    }
+    if (!success) {
+      LOG_ERROR << "Download unsuccessful after " << tries << " attempts.";
+    }
+  }
+
+  if (target.correlation_id().size() > 0) {
+    // send this asynchronously before `sendEvent`, so that the report timestamp
+    // would not be delayed by callbacks on events
+    for (const auto& ecu : target.ecus()) {
+      report_queue->enqueue(std_::make_unique<EcuDownloadCompletedReport>(ecu.first, target.correlation_id(), success));
+    }
+  }
+
+  return {success, target};
+}
+
+void LiteClient::reportNetworkInfo() {
+  if (config.telemetry.report_network) {
+    LOG_DEBUG << "Reporting network information";
+    Json::Value network_info = Utils::getNetworkInfo();
+    if (network_info != last_network_info_reported_) {
+      HttpResponse response = http_client->put(config.tls.server + "/system_info/network", network_info);
+      if (response.isOk()) {
+        last_network_info_reported_ = network_info;
+      }
+    }
+
+  } else {
+    LOG_DEBUG << "Not reporting network information because telemetry is disabled";
+  }
+}
+
+void LiteClient::reportHwInfo() {
+  Json::Value hw_info = Utils::getHardwareInfo();
+  if (!hw_info.empty()) {
+    if (hw_info != last_hw_info_reported_) {
+      if (http_client->put(config.tls.server + "/system_info", hw_info).isOk()) {
+        last_hw_info_reported_ = hw_info;
+      }
+    }
+  } else {
+    LOG_WARNING << "Unable to fetch hardware information from host system.";
+  }
+}
+
 static std::unique_ptr<Lock> create_lock(boost::filesystem::path lockfile) {
   if (lockfile.empty()) {
     // Just return a dummy one that will safely "close"
@@ -448,7 +535,7 @@ data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target) {
     return data::ResultCode::Numeric::kInternalError;
   }
   notifyDownloadStarted(target);
-  if (!primary->downloadImage(target).first) {
+  if (!downloadImage(target).first) {
     notifyDownloadFinished(target, false);
     return data::ResultCode::Numeric::kDownloadFailed;
   }
@@ -463,7 +550,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   }
 
   notifyInstallStarted(target);
-  auto iresult = primary->PackageInstall(target);
+  auto iresult = installPackage(target);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
@@ -546,7 +633,7 @@ bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compare
 
 bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector<Uptane::Target>& installed_versions) {
   bool known_target = false;
-  auto current = client.primary->getCurrent();
+  auto current = client.getCurrent();
   boost::optional<Uptane::Target> pending;
   client.storage->loadPrimaryInstalledVersions(nullptr, &pending);
 
