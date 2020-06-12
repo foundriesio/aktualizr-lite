@@ -1,4 +1,5 @@
 #include <iostream>
+#include <unordered_map>
 
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
@@ -145,11 +146,11 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
   if (client.config.uptane.repo_server.empty()) {
     LOG_ERROR << "[uptane]/repo_server is not configured";
-    return 1;
+    return EXIT_FAILURE;
   }
   if (access(client.config.bootloader.reboot_command.c_str(), X_OK) != 0) {
     LOG_ERROR << "reboot command: " << client.config.bootloader.reboot_command << " is not executable";
-    return 1;
+    return EXIT_FAILURE;
   }
   bool firstLoop = true;
   bool compareDockerApps = should_compare_docker_apps(client.config);
@@ -217,27 +218,26 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
           // device's target name on the server.
           continue;
         } else if (rc == data::ResultCode::Numeric::kNeedCompletion) {
-          if (std::system(client.config.bootloader.reboot_command.c_str()) != 0) {
-            LOG_ERROR << "Unable to reboot system";
-            return 1;
-          }
+          // no point to continue running TUF cycle (check for update, download, install)
+          // since reboot is required to apply/finalize the currently installed update (aka pending update)
+            break;
         }
+
+       } else {
+        LOG_INFO << "Device is up-to-date";
       }
     }
     std::this_thread::sleep_for(std::chrono::seconds(interval));
-  }
-  return 0;
+  } // while true
+
+  return EXIT_SUCCESS;
 }
 
-struct SubCommand {
-  const char* name;
-  int (*main)(LiteClient&, const bpo::variables_map&);
-};
-static SubCommand commands[] = {
-    {"status", status_main},
-    {"list", list_main},
-    {"update", update_main},
+static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
     {"daemon", daemon_main},
+    {"update", update_main},
+    {"list", list_main},
+    {"status", status_main},
 };
 
 void check_info_options(const bpo::options_description& description, const bpo::variables_map& vm) {
@@ -253,11 +253,13 @@ void check_info_options(const bpo::options_description& description, const bpo::
 
 bpo::variables_map parse_options(int argc, char* argv[]) {
   std::string subs("Command to execute: ");
-  for (size_t i = 0; i < sizeof(commands) / sizeof(SubCommand); i++) {
-    if (i != 0) {
+  for (const auto& cmd : commands) {
+    static int indx = 0;
+    if (indx != 0) {
       subs += ", ";
     }
-    subs += commands[i].name;
+    subs += cmd.first;
+    ++indx;
   }
   bpo::options_description description("aktualizr-lite command line options");
 
@@ -325,7 +327,7 @@ int main(int argc, char* argv[]) {
 
   bpo::variables_map commandline_map = parse_options(argc, argv);
 
-  int r = EXIT_FAILURE;
+  int ret_val = EXIT_FAILURE;
   try {
     if (geteuid() != 0) {
       LOG_WARNING << "\033[31mRunning as non-root and may not work as expected!\033[0m\n";
@@ -335,19 +337,40 @@ int main(int argc, char* argv[]) {
     config.storage.uptane_metadata_path = BasedPath(config.storage.path / "metadata");
     config.telemetry.report_network = !config.tls.server.empty();
     config.pacman.extra["force_update"] = commandline_map["force-update"].as<bool>()?"1":"0";
+
     LOG_DEBUG << "Current directory: " << boost::filesystem::current_path().string();
 
     std::string cmd = commandline_map["command"].as<std::string>();
-    for (size_t i = 0; i < sizeof(commands) / sizeof(SubCommand); i++) {
-      if (cmd == commands[i].name) {
-        LiteClient client(config);
-        return commands[i].main(client, commandline_map);
+    auto cmd_to_run = commands.find(cmd);
+    if (cmd_to_run == commands.end()) {
+      throw bpo::invalid_option_value("Unsupported command: " + cmd);
+    }
+
+    std::pair<bool, std::string> is_reboot_required{false, ""};
+    {
+      LOG_DEBUG << "Running " << (*cmd_to_run).first;
+      LiteClient client(config);
+      ret_val = (*cmd_to_run).second(client, commandline_map);
+      is_reboot_required = client.isRebootRequired();
+    }
+
+    if (ret_val == EXIT_SUCCESS && is_reboot_required.first) {
+      LOG_INFO << "Device is going to reboot (" << is_reboot_required.second << ")";
+      if (setuid(0) != 0) {
+        LOG_ERROR << "Failed to set/verify a root user so cannot reboot system programmatically";
+      } else {
+        sync();
+        // let's try to reboot the system, if it fails we just throw an exception and exit the process
+        if (std::system(is_reboot_required.second.c_str()) != 0) {
+          throw std::runtime_error("Failed to execute the reboot command: " + config.bootloader.reboot_command);
+        }
       }
     }
-    throw bpo::invalid_option_value(cmd);
-    r = EXIT_SUCCESS;
+
   } catch (const std::exception& ex) {
     LOG_ERROR << ex.what();
+    ret_val = EXIT_FAILURE;
   }
-  return r;
+
+  return ret_val;
 }

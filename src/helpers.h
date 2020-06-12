@@ -50,6 +50,9 @@ class LiteClient {
   data::ResultCode::Numeric download(const Uptane::Target& target);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::ResultCode::Numeric rc);
+  std::pair<bool, std::string> isRebootRequired() const {
+    return {is_reboot_required_, config.bootloader.reboot_command};
+  }
 
   bool dockerAppsChanged();
   void storeDockerParamsDigest();
@@ -92,6 +95,8 @@ class LiteClient {
   Uptane::Exception last_exception_{"", ""};
   Json::Value last_network_info_reported_;
   Json::Value last_hw_info_reported_;
+  bool is_reboot_required_{false};
+  bool booted_sysroot{true};
 };
 
 bool should_compare_docker_apps(const Config& config);
