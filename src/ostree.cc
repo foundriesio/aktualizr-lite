@@ -7,12 +7,12 @@ Sysroot::Sysroot(const std::string& sysroot_path, bool booted) : path_{sysroot_p
 }
 
 std::string Sysroot::getCurDeploymentHash() const {
+  g_autoptr(GPtrArray) deployments = nullptr;
   OstreeDeployment* deployment = nullptr;
 
   if (booted_) {
     deployment = ostree_sysroot_get_booted_deployment(sysroot_.get());
   } else {
-    GPtrArray* deployments = nullptr;
     deployments = ostree_sysroot_get_deployments(sysroot_.get());
     if (deployments != nullptr && deployments->len > 0) {
       // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
