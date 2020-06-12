@@ -63,6 +63,7 @@ class LiteClient {
   TargetStatus VerifyTarget(const Uptane::Target& target) const { return package_manager_->verifyTarget(target); }
   void reportNetworkInfo();
   void reportHwInfo();
+  bool isTargetCurrent(const Uptane::Target& target) const;
 
  private:
   FRIEND_TEST(helpers, locking);
@@ -102,8 +103,7 @@ class LiteClient {
 bool should_compare_docker_apps(const Config& config);
 void generate_correlation_id(Uptane::Target& t);
 bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& config_tags);
-bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps,
-                const boost::filesystem::path& app_root = "");
+bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps);
 bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector<Uptane::Target>& installed_versions);
 void log_info_target(const std::string& prefix, const Config& config, const Uptane::Target& t);
 

@@ -579,56 +579,73 @@ bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& co
   return true;
 }
 
-bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps,
-                const boost::filesystem::path& app_root) {
-  // target equality check looks at hashes
-  if (t1.MatchTarget(t2)) {
-    if (compareDockerApps) {
-      auto t1_dapps = t1.custom_data()["docker_apps"];
-      auto t2_dapps = t2.custom_data()["docker_apps"];
-      for (Json::ValueIterator i = t1_dapps.begin(); i != t1_dapps.end(); ++i) {
-        auto app = i.key().asString();
-        if (!t2_dapps.isMember(app)) {
-          return false;  // an app has been removed
-        }
-        if ((*i)["filename"].asString() != t2_dapps[app]["filename"].asString()) {
-          return false;  // tuf target filename changed
-        }
-        t2_dapps.removeMember(app);
-      }
-      if (t2_dapps.size() > 0) {
-        return false;  // an app has been added
-      }
-
-      // compose apps
-      // We are checking if Apps that are supposed to be installed (listed in the currenlty installed Target
-      // are actually present on a system. Apps are installed on non read-only mount point/folder so could be
-      // modified/removed somehow so we need to return 'false' here and let aklite update/re-install App(s) It's
-      // workaround, a proper solution for 'immutable Target' concept is installing Apps on read-only system (both
-      // meta-data and actuall container image layers)
-      auto t1_capps = t1.custom_data()["docker_compose_apps"];
-      auto t2_capps = t2.custom_data()["docker_compose_apps"];
-      for (Json::ValueIterator i = t1_capps.begin(); i != t1_capps.end(); ++i) {
-        auto app = i.key().asString();
-        if (!t2_capps.isMember(app)) {
-          return false;  // an app has been removed
-        }
-        if ((*i)["uri"].asString() != t2_capps[app]["uri"].asString()) {
-          return false;  // tuf target filename changed
-        }
-        if (!app_root.empty() && boost::filesystem::exists(app_root) && !boost::filesystem::exists(app_root / app)) {
-          return false;  // Target app has been removed from filesystem
-        }
-
-        t2_capps.removeMember(app);
-      }
-      if (t2_capps.size() > 0) {
-        return false;  // an app has been added
-      }
-    }
-    return true;  // docker apps are the same, or there are none
+bool LiteClient::isTargetCurrent(const Uptane::Target& target) const {
+  if (!targets_eq(target, getCurrent(), true)) {
+    return false;
   }
-  return false;
+
+  if (package_manager_->name() == ComposeAppManager::Name) {
+    auto compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    if (compose_pacman == nullptr) {
+      LOG_ERROR << "Cannot downcast the package manager to a specific type";
+      return false;
+    }
+
+    return compose_pacman->getAppsToUpdate(target).size() == 0;
+  }
+
+  return true;
+}
+
+// TODO: this has to be refactored: target comparision should be in the package manager context
+// at least the logic that gets a list of apps and apps root folder since they are package manager specific.
+
+bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps) {
+  if (!t1.MatchTarget(t2)) {
+    return false;
+  }
+
+  if (!compareDockerApps) {
+    return true;
+  }
+
+  auto t1_dapps = t1.custom_data()["docker_apps"];
+  auto t2_dapps = t2.custom_data()["docker_apps"];
+  for (Json::ValueIterator i = t1_dapps.begin(); i != t1_dapps.end(); ++i) {
+    auto app = i.key().asString();
+    if (!t2_dapps.isMember(app)) {
+      return false;  // an app has been removed
+    }
+    if ((*i)["filename"].asString() != t2_dapps[app]["filename"].asString()) {
+      return false;  // tuf target filename changed
+    }
+    t2_dapps.removeMember(app);
+  }
+  if (t2_dapps.size() > 0) {
+    return false;  // an app has been added
+  }
+
+  // compose apps
+  // We are checking if Apps that are supposed to be installed (listed in the currenlty installed Target
+  // are actually present on a system. Apps are installed on non read-only mount point/folder so could be
+  // modified/removed somehow so we need to return 'false' here and let aklite update/re-install App(s) It's
+  // workaround, a proper solution for 'immutable Target' concept is installing Apps on read-only system (both
+  // meta-data and actuall container image layers)
+  auto t1_capps = t1.custom_data()["docker_compose_apps"];
+  auto t2_capps = t2.custom_data()["docker_compose_apps"];
+  for (Json::ValueIterator i = t1_capps.begin(); i != t1_capps.end(); ++i) {
+    auto app = i.key().asString();
+    if (!t2_capps.isMember(app)) {
+      return false;  // an app has been removed
+    }
+    if ((*i)["uri"].asString() != t2_capps[app]["uri"].asString()) {
+      return false;  // tuf target filename changed
+    }
+
+    t2_capps.removeMember(app);
+  }
+
+  return t2_capps.size() == 0;
 }
 
 bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector<Uptane::Target>& installed_versions) {

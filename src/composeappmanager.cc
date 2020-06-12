@@ -70,11 +70,6 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(cons
 }
 
 std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpdate(const Uptane::Target& t) const {
-  if (cfg_.force_update) {
-    LOG_INFO << "All Apps are forced to be updated";
-    return getApps(t);
-  }
-
   std::vector<std::pair<std::string, std::string>> apps_to_update;
 
   auto currently_installed_target_apps = OstreeManager::getCurrent().custom_data()["docker_compose_apps"];
@@ -114,8 +109,14 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
     return false;
   }
 
-  LOG_INFO << "Looking for Compose Apps to be installed or updated...";
-  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target);
+  if (cfg_.force_update) {
+    LOG_INFO << "All Apps are forced to be updated...";
+    cur_apps_to_fetch_and_update_ = getApps(target);
+  } else {
+    LOG_INFO << "Looking for Compose Apps to be installed or updated...";
+    cur_apps_to_fetch_and_update_ = getAppsToUpdate(target);
+  }
+
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
   bool passed = true;
