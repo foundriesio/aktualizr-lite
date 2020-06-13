@@ -252,8 +252,6 @@ TEST(helpers, callback) {
   ASSERT_TRUE(found_result);
 }
 
-#ifdef BUILD_DOCKERAPP
-
 static LiteClient createClient(TemporaryDirectory& cfg_dir,
                                std::map<std::string, std::string> extra,
                                std::string pacman_type = ComposeAppManager::Name) {
@@ -362,7 +360,6 @@ TEST(helpers, compose_containers_initialize) {
   boost::filesystem::create_directories(apps_root / "app1");
   ASSERT_FALSE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
 }
-#endif
 
 #ifndef __NO_MAIN__
 int main(int argc, char **argv) {

@@ -12,7 +12,6 @@
 #include "package_manager/ostreemanager.h"
 #include "package_manager/packagemanagerfactory.h"
 
-#ifdef BUILD_DOCKERAPP
 #include "composeappmanager.h"
 #include "package_manager/dockerappmanager.h"
 
@@ -141,26 +140,6 @@ bool LiteClient::dockerAppsChanged() {
 
   return false;
 }
-#else /* ! BUILD_DOCKERAPP */
-void log_info_target(const std::string& prefix, const Config& config, const Uptane::Target& t) {
-  auto name = t.filename();
-  if (t.custom_version().length() > 0) {
-    name = t.custom_version();
-  }
-  LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
-}
-
-#define add_apps_header(headers, config) \
-  {}
-
-bool should_compare_docker_apps(const Config& config) {
-  (void)config;
-  return false;
-}
-
-void LiteClient::storeDockerParamsDigest() {}
-bool LiteClient::dockerAppsChanged() { return false; }
-#endif
 
 static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OSTree::Sysroot& sysroot,
                                                                              INvStorage& storage, Config& config) {
