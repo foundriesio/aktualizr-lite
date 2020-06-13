@@ -46,7 +46,3 @@ target_include_directories(t_lite-helpers PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_
 target_link_libraries(t_lite-helpers ${TEST_LIBS})
 
 add_dependencies(t_lite-helpers make_ostree_sysroot)
-
-if (BUILD_DOCKERAPP)
-  target_compile_definitions(t_lite-helpers PRIVATE BUILD_DOCKERAPP)
-endif(BUILD_DOCKERAPP)
