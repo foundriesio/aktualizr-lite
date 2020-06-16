@@ -389,16 +389,21 @@ data::InstallationResult LiteClient::installPackage(const Uptane::Target& target
 }
 
 bool LiteClient::updateImageMeta() {
-  if (!image_repo_.updateMeta(*storage, *uptane_fetcher_)) {
-    last_exception_ = image_repo_.getLastException();
+  try {
+    image_repo_.updateMeta(*storage, *uptane_fetcher_);
+  } catch (const std::exception& e) {
+    LOG_ERROR << "Failed to update Image repo metadata: " << e.what();
     return false;
   }
+
   return true;
 }
 
 bool LiteClient::checkImageMetaOffline() {
-  if (!image_repo_.checkMetaOffline(*storage)) {
-    last_exception_ = image_repo_.getLastException();
+  try {
+    image_repo_.checkMetaOffline(*storage);
+  } catch (const std::exception& e) {
+    LOG_ERROR << "Failed to check Image repo metadata: " << e.what();
     return false;
   }
   return true;

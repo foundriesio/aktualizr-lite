@@ -93,7 +93,6 @@ class LiteClient {
   Uptane::ImageRepository image_repo_;
   std::shared_ptr<Uptane::Fetcher> uptane_fetcher_;
 
-  Uptane::Exception last_exception_{"", ""};
   Json::Value last_network_info_reported_;
   Json::Value last_hw_info_reported_;
   bool is_reboot_required_{false};
