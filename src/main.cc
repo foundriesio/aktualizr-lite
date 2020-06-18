@@ -351,7 +351,9 @@ int main(int argc, char* argv[]) {
       LOG_DEBUG << "Running " << (*cmd_to_run).first;
       LiteClient client(config);
       ret_val = (*cmd_to_run).second(client, commandline_map);
-      is_reboot_required = client.isRebootRequired();
+      if (cmd == "daemon") {
+        is_reboot_required = client.isRebootRequired();
+      }
     }
 
     if (ret_val == EXIT_SUCCESS && is_reboot_required.first) {
