@@ -285,7 +285,7 @@ TEST(ComposeApp, fetch) {
   auto output = Utils::readFile(client.tempdir->Path() / "apps/app2/config.log", true);
   ASSERT_EQ("config", output);
   output = Utils::readFile(client.tempdir->Path() / "apps/app2/pull.log", true);
-  ASSERT_EQ("pull", output);
+  ASSERT_EQ("pull --no-parallel", output);
   ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/doesnotexist"));
 }
 
@@ -443,7 +443,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_TRUE(registry.wasManifestRequested());
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
     ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
-    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
@@ -468,7 +468,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_TRUE(registry.wasManifestRequested());
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
     ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
-    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
@@ -522,7 +522,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_TRUE(registry.wasManifestRequested());
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
     ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
-    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
@@ -548,7 +548,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_TRUE(registry.wasManifestRequested());
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
     ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
-    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
@@ -574,7 +574,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_TRUE(registry.wasManifestRequested());
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
     ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
-    ASSERT_EQ("pull", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
     ASSERT_EQ(data::ResultCode::Numeric::kNeedCompletion, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     ASSERT_TRUE(boost::filesystem::exists(client.getRebootSentinel()));
