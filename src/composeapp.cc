@@ -16,7 +16,7 @@ bool ComposeApp::fetch(const std::string& app_uri) {
     LOG_INFO << "Validating compose file";
     if (cmd_streaming(compose_ + "config")) {
       LOG_INFO << "Pulling containers";
-      return cmd_streaming(compose_ + "pull");
+      return cmd_streaming(compose_ + "pull --no-parallel");
     }
   }
   return false;
