@@ -577,7 +577,7 @@ bool LiteClient::isTargetCurrent(const Uptane::Target& target) const {
 // at least the logic that gets a list of apps and apps root folder since they are package manager specific.
 
 bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps) {
-  if (!t1.MatchTarget(t2)) {
+  if (!match_target_base(t1, t2)) {
     return false;
   }
 
@@ -645,4 +645,25 @@ bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector
     }
   }
   return known_target;
+}
+
+bool match_target_base(const Uptane::Target& t1, const Uptane::Target& t2) {
+  if (t1.type() != t2.type()) {
+    return false;
+  }
+
+  if (t1.length() != t2.length()) {
+    return false;
+  }
+
+  if (t1.filename() != t2.filename()) {
+    return false;
+  }
+
+  // match just OSTREE commit
+  if (t1.sha256Hash() != t2.sha256Hash()) {
+    return false;
+  }
+
+  return true;
 }

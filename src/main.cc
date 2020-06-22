@@ -70,6 +70,15 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client,
   bool find_latest = (version == "latest");
   std::unique_ptr<Uptane::Target> latest = nullptr;
   for (auto& t : client.allTargets()) {
+
+    if (!t.IsValid()) {
+      continue;
+    }
+
+    if (!t.IsOstree()) {
+      continue;
+    }
+
     if (!target_has_tags(t, tags)) {
       continue;
     }
@@ -92,7 +101,6 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client,
 }
 
 static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target) {
-  target.InsertEcu({client.primary_ecu.first, client.primary_ecu.second});
   generate_correlation_id(target);
 
   data::ResultCode::Numeric rc = client.download(target);
@@ -122,10 +130,6 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   }
   LOG_INFO << "Finding " << version << " to update to...";
   auto target_to_install = find_target(client, hwid, client.tags, version);
-  if (target_to_install == nullptr) {
-    LOG_INFO << "Already up-to-date";
-    return 0;
-  }
 
   if (!force_update) {
     auto currently_installed_target = client.getCurrent();
@@ -185,7 +189,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // On first loop we need to see if we have a config change detected from
       // from the previous run. We need to make sure we have up-to-date
       // metadata, so this really needs to be inside the loop.
-      if (!current.MatchTarget(Uptane::Target::Unknown()) && client.dockerAppsChanged()) {
+      if (!match_target_base(current, Uptane::Target::Unknown()) && client.dockerAppsChanged()) {
         do_update(client, current);
       }
       client.storeDockerParamsDigest();
@@ -200,34 +204,41 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       client.reportHwInfo();
     }
 
-    auto target = find_target(client, hwid, client.tags, "latest");
-    if (target != nullptr) {
-      // This is a workaround for finding and avoiding bad updates after a rollback.
-      // Rollback sets the installed version state to none instead of broken, so there is no
-      // easy way to find just the bad versions without api/storage changes. As a workaround we
-      // just check if the version is known (old hash) and not current/pending and abort if so
-      bool known_target_sha = known_local_target(client, *target, installed_versions);
-      if (!known_target_sha && ! client.isTargetCurrent(*target)) {
-        LOG_INFO << "Got a new Target, updating base image to: " << *target;
+    try {
+      auto target = find_target(client, hwid, client.tags, "latest"); // target cannot be nullptr, an exception will be yielded if no target
 
-        data::ResultCode::Numeric rc = do_update(client, *target);
-        if (rc == data::ResultCode::Numeric::kOk) {
-          current = *target;
-          client.http_client->updateHeader("x-ats-target", current.filename());
-          // Start the loop over to call updateImagesMeta which will update this
-          // device's target name on the server.
-          continue;
-        } else if (rc == data::ResultCode::Numeric::kNeedCompletion) {
-          // no point to continue running TUF cycle (check for update, download, install)
-          // since reboot is required to apply/finalize the currently installed update (aka pending update)
-            break;
-        }
 
-       } else {
-        LOG_INFO << "Device is up-to-date";
+    // This is a workaround for finding and avoiding bad updates after a rollback.
+    // Rollback sets the installed version state to none instead of broken, so there is no
+    // easy way to find just the bad versions without api/storage changes. As a workaround we
+    // just check if the version is known (old hash) and not current/pending and abort if so
+    bool known_target_sha = known_local_target(client, *target, installed_versions);
+    if (!known_target_sha && ! client.isTargetCurrent(*target)) {
+      LOG_INFO << "Got a new Target, updating base image to: " << *target;
+
+      data::ResultCode::Numeric rc = do_update(client, *target);
+      if (rc == data::ResultCode::Numeric::kOk) {
+        current = *target;
+        client.http_client->updateHeader("x-ats-target", current.filename());
+        // Start the loop over to call updateImagesMeta which will update this
+        // device's target name on the server.
+        continue;
+      } else if (rc == data::ResultCode::Numeric::kNeedCompletion) {
+        // no point to continue running TUF cycle (check for update, download, install)
+        // since reboot is required to apply/finalize the currently installed update (aka pending update)
+          break;
       }
+
+     } else {
+      LOG_INFO << "Device is up-to-date";
     }
+
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to find or update Target: " <<  exc.what();
+    }
+
     std::this_thread::sleep_for(std::chrono::seconds(interval));
+
   } // while true
 
   return EXIT_SUCCESS;
