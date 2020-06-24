@@ -199,6 +199,19 @@ LiteClient::LiteClient(Config& config_in)
   std::string pkey;
   storage = INvStorage::newStorage(config.storage);
   storage->importData(config.import);
+  {
+    // hack: "fix" currently installed version that was imported from installed_versions
+    boost::optional<Uptane::Target> current_version;
+
+    storage->loadPrimaryInstalledVersions(&current_version, nullptr);
+    if (!!current_version && current_version->type() != "OSTREE") {
+      auto custom_data = current_version->custom_data();
+      custom_data["targetFormat"] = "OSTREE";
+      current_version->updateCustom(custom_data);
+      storage->clearInstalledVersions();
+      storage->savePrimaryInstalledVersion(*current_version, InstalledVersionUpdateMode::kCurrent);
+    }
+  }
 
   const std::map<std::string, std::string> raw = config.pacman.extra;
   if (raw.count("tags") == 1) {

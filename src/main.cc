@@ -201,7 +201,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     // easy way to find just the bad versions without api/storage changes. As a workaround we
     // just check if the version is known (old hash) and not current/pending and abort if so
     bool known_target_sha = known_local_target(client, *target, installed_versions);
-    if (!known_target_sha && ! client.isTargetCurrent(*target)) {
+    if (!known_target_sha && !client.isTargetCurrent(*target)) {
       LOG_INFO << "Got a new Target, updating base image to: " << *target;
 
       data::ResultCode::Numeric rc = do_update(client, *target);
