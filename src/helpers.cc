@@ -23,6 +23,7 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
   LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
   if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
     bool shown = false;
+    auto config_apps = DockerAppManagerConfig(config.pacman).docker_apps;
     auto apps = t.custom_data()["docker_apps"];
     for (Json::ValueIterator i = apps.begin(); i != apps.end(); ++i) {
       if (!shown) {
@@ -30,13 +31,17 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
         LOG_INFO << "\tDocker Apps:";
       }
       if ((*i).isObject() && (*i).isMember("filename")) {
-        LOG_INFO << "\t\t" << i.key().asString() << " -> " << (*i)["filename"].asString();
+        const auto& app = i.key().asString();
+        std::string app_status =
+            (config_apps.end() != std::find(config_apps.begin(), config_apps.end(), app)) ? "on" : "off";
+        LOG_INFO << "\t" << app_status << ": " << app << " -> " << (*i)["filename"].asString();
       } else {
         LOG_ERROR << "\t\tInvalid custom data for docker-app: " << i.key().asString();
       }
     }
   } else if (config.pacman.type == ComposeAppManager::Name) {
     bool shown = false;
+    auto config_apps = ComposeAppManager::Config(config.pacman).apps;
     auto bundles = t.custom_data()["docker_compose_apps"];
     for (Json::ValueIterator i = bundles.begin(); i != bundles.end(); ++i) {
       if (!shown) {
@@ -44,7 +49,10 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
         LOG_INFO << "\tDocker Compose Apps:";
       }
       if ((*i).isObject() && (*i).isMember("uri")) {
-        LOG_INFO << "\t\t" << i.key().asString() << " -> " << (*i)["uri"].asString();
+        const auto& app = i.key().asString();
+        std::string app_status =
+            (config_apps.end() != std::find(config_apps.begin(), config_apps.end(), app)) ? "on" : "off";
+        LOG_INFO << "\t" << app_status << ": " << app << " -> " << (*i)["uri"].asString();
       } else {
         LOG_ERROR << "\t\tInvalid custom data for docker_compose_apps: " << i.key().asString();
       }
@@ -648,20 +656,33 @@ bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector
 }
 
 bool match_target_base(const Uptane::Target& t1, const Uptane::Target& t2) {
-  if (t1.type() != t2.type()) {
+  if (t1.type() != t2.type() || t2.type() != "OSTREE") {
+    // both targets' type should be OSTREE, otherwise it's error
+    // but we don't throw an exception, just log an error message and let the update loop
+    // to do its work in a hope that the backend will send us a proper Target
+    LOG_ERROR << "Target formats mismatch: " << t1.type() << " != " << t2.type();
     return false;
   }
 
   if (t1.length() != t2.length()) {
+    // both targets' type should be OSTREE, as well as their lengths should be zero, otherwise it's error
+    // but we don't throw an exception, just log an error message and let the update loop
+    // to do its work in a hope that the backend will send us a proper Target
+    LOG_ERROR << "Target lengths differ: " << t1.length() << " != " << t2.length();
     return false;
   }
 
   if (t1.filename() != t2.filename()) {
+    // Any changes in Target means Target name/ID/version change, so this is a valid situation
+    // and  means that we need to proceed with Target update
+    LOG_INFO << "Target names differ " << t1.filename() << " != " << t2.filename();
     return false;
   }
 
-  // match just OSTREE commit
   if (t1.sha256Hash() != t2.sha256Hash()) {
+    // if 'filename' (aka target number/ID/version) are the same then the hashes are supposed to be the same too,
+    // so this is an error situation
+    LOG_ERROR << "Target hashes differ " << t1.sha256Hash() << " != " << t2.sha256Hash();
     return false;
   }
 
