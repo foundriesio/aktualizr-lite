@@ -101,6 +101,9 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client,
 }
 
 static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target) {
+  log_info_target("Updating Active Target: ", client.config, client.getCurrent());
+  log_info_target("To New Target: ", client.config, target);
+
   generate_correlation_id(target);
 
   data::ResultCode::Numeric rc = client.download(target);
@@ -129,7 +132,6 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   LOG_INFO << "Finding " << version << " to update to...";
   auto target_to_install = find_target(client, hwid, client.tags, version);
 
-  LOG_INFO << "Updating to: " << *target_to_install;
   data::ResultCode::Numeric rc = do_update(client, *target_to_install);
 
   return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk)?EXIT_SUCCESS:EXIT_FAILURE;
@@ -155,7 +157,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   }
 
   auto current = client.getCurrent();
-  LOG_INFO << "Active image is: " << current;
 
   uint64_t interval = client.config.uptane.polling_sec;
   if (variables_map.count("interval") > 0) {
@@ -166,6 +167,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   client.storage->loadPrimaryInstallationLog(&installed_versions, false);
 
   while (true) {
+    LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
     LOG_INFO << "Checking for a new Target...";
     if (!client.checkForUpdates()) {
       LOG_WARNING << "Unable to update latest metadata";
@@ -177,7 +179,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // On first loop we need to see if we have a config change detected from
       // from the previous run. We need to make sure we have up-to-date
       // metadata, so this really needs to be inside the loop.
-      if (!match_target_base(current, Uptane::Target::Unknown()) && client.dockerAppsChanged()) {
+      if (current.IsValid() && client.dockerAppsChanged()) {
         do_update(client, current);
       }
       client.storeDockerParamsDigest();
@@ -202,7 +204,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     // just check if the version is known (old hash) and not current/pending and abort if so
     bool known_target_sha = known_local_target(client, *target, installed_versions);
     if (!known_target_sha && ! client.isTargetCurrent(*target)) {
-      LOG_INFO << "Got a new Target, updating base image to: " << *target;
+      LOG_INFO << "Got a New Target !";
 
       data::ResultCode::Numeric rc = do_update(client, *target);
       if (rc == data::ResultCode::Numeric::kOk) {

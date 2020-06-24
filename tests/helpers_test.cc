@@ -91,8 +91,13 @@ TEST(helpers, target_has_tags) {
 }
 
 TEST(helpers, targets_eq) {
-  auto t1 = Uptane::Target::Unknown();
-  auto t2 = Uptane::Target::Unknown();
+  auto target_json = Json::Value();
+  target_json["length"] = 0;
+  target_json["custom"]["targetFormat"] = "OSTREE";
+
+  Uptane::Target t1{"target", target_json};
+  Uptane::Target t2{"target", target_json};
+
 
   // t1 should equal t2 when there a no docker-apps
   ASSERT_TRUE(targets_eq(t1, t2, false));
@@ -132,8 +137,12 @@ TEST(helpers, targets_eq) {
 }
 
 TEST(helpers, targets_eq_compose) {
-  auto t1 = Uptane::Target::Unknown();
-  auto t2 = Uptane::Target::Unknown();
+  auto target_json = Json::Value();
+  target_json["length"] = 0;
+  target_json["custom"]["targetFormat"] = "OSTREE";
+
+  Uptane::Target t1{"target", target_json};
+  Uptane::Target t2{"target", target_json};
 
   // t1 should equal t2 when there a no docker-apps
   ASSERT_TRUE(targets_eq(t1, t2, false));
