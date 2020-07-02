@@ -299,40 +299,40 @@ TEST(helpers, containers_initialize) {
   Uptane::Target target("test-finalize", target_json);
 
   // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged());
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
 
   // Add a new app
   apps_cfg["docker_apps"] = "app1";
 
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged());
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
 
   // No apps configured, but one installed:
   apps_cfg["docker_apps"] = "";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged());
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
 
   // One app configured, one app deployed
   apps_cfg["docker_apps"] = "app1";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged());
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
 
   // Docker app parameters enabled
   apps_cfg["docker_app_params"] = (cfg_dir / "foo.txt").native();
   Utils::writeFile(cfg_dir / "foo.txt", std::string("foo text content"));
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged());
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
 
   // Store the hash of the file and make sure no change is detected
   auto client = createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP);
   client.storeDockerParamsDigest();
-  ASSERT_FALSE(client.dockerAppsChanged());
+  ASSERT_FALSE(client.dockerAppsChanged(false));
 
   // Change the content
   Utils::writeFile(cfg_dir / "foo.txt", std::string("foo text content changed"));
-  ASSERT_TRUE(client.dockerAppsChanged());
+  ASSERT_TRUE(client.dockerAppsChanged(false));
 
   // Disable and ensure we detect the change
   apps_cfg["docker_app_params"] = "";
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged());
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
   ASSERT_FALSE(boost::filesystem::exists(cfg_dir / ".params-hash"));
 }
 
