@@ -54,7 +54,7 @@ class LiteClient {
     return {is_reboot_required_, config.bootloader.reboot_command};
   }
 
-  bool dockerAppsChanged();
+  bool dockerAppsChanged(bool check_target_apps = true);
   void storeDockerParamsDigest();
   Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
   bool updateImageMeta();
