@@ -27,7 +27,8 @@ class ComposeAppManager : public OstreeManager {
                         Docker::RegistryClient::DefaultHttpClientFactory);
 
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
-                   FetcherProgressCb progress_cb, const api::FlowControlToken* token) override;
+                   const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
+
   data::InstallationResult install(const Uptane::Target& target) const override;
   std::string name() const override { return Name; };
 
