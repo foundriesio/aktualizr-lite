@@ -87,6 +87,7 @@ class LiteClient {
 
  private:
   boost::filesystem::path callback_program;
+  std::unique_ptr<KeyManager> key_manager_;
   std::shared_ptr<PackageManagerInterface> package_manager_;
   std::unique_ptr<ReportQueue> report_queue;
 
