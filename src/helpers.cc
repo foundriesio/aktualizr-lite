@@ -296,8 +296,8 @@ LiteClient::LiteClient(Config& config_in)
   std::pair<Uptane::Target, data::ResultCode::Numeric> pair = finalizeIfNeeded(*ostree_sysroot, *storage, config);
   http_client->updateHeader("x-ats-target", pair.first.filename());
 
-  KeyManager keys(storage, config.keymanagerConfig());
-  keys.copyCertsToCurl(*http_client);
+  key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
+  key_manager_->copyCertsToCurl(*http_client);
 
   // TODO: consider improving this factory method
   if (config.pacman.type == ComposeAppManager::Name) {
@@ -436,8 +436,7 @@ bool LiteClient::checkImageMetaOffline() {
 
 std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& target,
                                                           const api::FlowControlToken* token) {
-  KeyManager keys(storage, config.keymanagerConfig());
-  keys.loadKeys();
+  key_manager_->loadKeys();
   auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
     // report_progress_cb(events_channel.get(), t, description, progress);
     // TODO: consider make use of it for download progress reporting
@@ -450,7 +449,7 @@ std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& 
     std::chrono::milliseconds wait(500);
 
     for (; tries < max_tries; tries++) {
-      success = package_manager_->fetchTarget(target, *uptane_fetcher_, keys, prog_cb, token);
+      success = package_manager_->fetchTarget(target, *uptane_fetcher_, *key_manager_, prog_cb, token);
       // Skip trying to fetch the 'target' if control flow token transaction
       // was set to the 'abort' or 'pause' state, see the CommandQueue and FlowControlToken.
       if (success || (token != nullptr && !token->canContinue(false))) {
