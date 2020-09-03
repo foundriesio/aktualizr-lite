@@ -4,6 +4,8 @@
 
 #include <boost/process.hpp>
 
+#include "utilities/utils.h"
+
 namespace Docker {
 
 ComposeApp::ComposeApp(std::string name, const boost::filesystem::path& root_dir, const std::string& compose_bin,
@@ -40,6 +42,54 @@ void ComposeApp::remove() {
   } else {
     LOG_ERROR << "docker-compose was unable to bring down: " << root_;
   }
+}
+
+// The given implementation is kind of best effort to detect whether App's container images are
+// installed & running with a minimum effort. This is rather a trade-off and is far from being an ideal solution.
+// The given implementation can detect missing container images of App as well as its removed or not created containers.
+// The implementation doesn't detect whether App's containers are stopped or not (provided that container instances
+// exists), for example, docker-compose stop, docker stop, or some kind of container process killing.
+bool ComposeApp::isRunning() const {
+  bool cmd_res{false};
+  std::string cmd_output;
+
+  std::tie(cmd_res, cmd_output) = cmd("config");
+  if (!cmd_res) {
+    LOG_WARNING << "Missing and incomplete App config: " << name_;
+    return false;
+  }
+
+  // calculate a number of container images that a given App consists of
+  std::string::size_type find_pos{0};
+  std::string::size_type line_pos{0};
+  int expected_container_number{0};
+
+  while ((find_pos = cmd_output.find("image:", line_pos)) != std::string::npos) {
+    if (cmd_output.substr(line_pos, (find_pos - line_pos)).find_first_of('#') == std::string::npos) {
+      ++expected_container_number;
+    }
+    line_pos = cmd_output.find('\n', find_pos);
+    ++find_pos;
+  }
+
+  // Get a number of running container images
+  std::tie(cmd_res, cmd_output) = cmd("ps -q");
+  if (!cmd_res) {
+    LOG_WARNING << "Failed to get a list of App's containers: " << name_;
+    return false;
+  }
+
+  int running_container_number =
+      std::count_if(cmd_output.begin(), cmd_output.end(), [](const char& symbol) { return symbol == '\n'; });
+
+  if (running_container_number < expected_container_number) {
+    LOG_DEBUG << "Number of running containers is less than a number of images specified in the compose file"
+              << "; App: " << name_ << "; expected container number: " << expected_container_number
+              << "; number of running containers: " << running_container_number;
+    return false;
+  }
+
+  return true;
 }
 
 // Private implementation
@@ -84,6 +134,14 @@ struct Manifest : Json::Value {
 bool ComposeApp::cmd_streaming(const std::string& cmd) {
   LOG_DEBUG << "Running: " << cmd;
   return boost::process::system(cmd, boost::process::start_dir = root_) == 0;
+}
+
+std::pair<bool, std::string> ComposeApp::cmd(const std::string& cmd) const {
+  auto compose_file = root_ / ComposeFile;
+  std::string out_str;
+  int exit_code = Utils::shell(compose_ + " -f " + compose_file.string() + " " + cmd, &out_str);
+
+  return {(exit_code == EXIT_SUCCESS), out_str};
 }
 
 bool ComposeApp::download(const std::string& app_uri) {

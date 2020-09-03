@@ -93,10 +93,21 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpd
       continue;
     }
 
-    if (!boost::filesystem::exists(cfg_.apps_root / app_name)) {
+    LOG_DEBUG << "checking if " << app_name << " is installed and running...";
+
+    if (!boost::filesystem::exists(cfg_.apps_root / app_name) ||
+        !boost::filesystem::exists(cfg_.apps_root / app_name / "docker-compose.yml")) {
       // an App that is supposed to be installed has been removed somehow, let's install it again
       apps_to_update.push_back(app_pair);
       LOG_INFO << app_name << " will be re-installed";
+      continue;
+    }
+
+    if (!Docker::ComposeApp(app_name, cfg_.apps_root, compose_bin_, registry_client_).isRunning()) {
+      // an App that is supposed to be installed and running is not fully installed or running
+      apps_to_update.push_back(app_pair);
+      LOG_INFO << app_name << " update will be completed";
+      continue;
     }
   }
 

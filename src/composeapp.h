@@ -13,6 +13,7 @@ class ComposeApp {
  public:
   static constexpr const char* const ArchiveExt{".tgz"};
   static constexpr const char* const NeedStartFile{".need_start"};
+  static constexpr const char* const ComposeFile{"docker-compose.yml"};
 
  public:
   ComposeApp(std::string name, const boost::filesystem::path& root_dir, const std::string& compose_bin,
@@ -22,9 +23,11 @@ class ComposeApp {
   bool up(bool no_start = false);
   bool start();
   void remove();
+  bool isRunning() const;
 
  private:
   bool cmd_streaming(const std::string& cmd);
+  std::pair<bool, std::string> cmd(const std::string& cmd) const;
   bool download(const std::string& app_uri);
   static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);
   void extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction = true);
