@@ -623,10 +623,36 @@ bool LiteClient::isTargetCurrent(const Uptane::Target& target) const {
       return false;
     }
 
-    return compose_pacman->getAppsToUpdate(target).size() == 0;
+    // Deamon Update Cycle/Loop, do non-full check if Target Apps are installed and running
+    return compose_pacman->checkForAppsToUpdate(target, boost::none);
   }
 
   return true;
+}
+
+bool LiteClient::checkAppsToUpdate(const Uptane::Target& target) const {
+  if (package_manager_->name() == ComposeAppManager::Name) {
+    auto compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    if (compose_pacman == nullptr) {
+      LOG_ERROR << "Cannot downcast the package manager to a specific type";
+      return false;
+    }
+    // first Update Cycle/Loop, do full check if Target Apps are installed and running
+    LOG_INFO << "Checking for Apps to be installed or updated...";
+    return compose_pacman->checkForAppsToUpdate(target, true);
+  }
+  return true;
+}
+
+void LiteClient::setAppsNotChecked() {
+  if (package_manager_->name() == ComposeAppManager::Name) {
+    auto compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    if (compose_pacman == nullptr) {
+      LOG_ERROR << "Cannot downcast the package manager to a specific type";
+    } else {
+      compose_pacman->setAppsNotChecked();
+    }
+  }
 }
 
 // TODO: this has to be refactored: target comparision should be in the package manager context
