@@ -55,8 +55,7 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
-static std::unique_ptr<Uptane::Target> find_target(LiteClient& client,
-                                                   Uptane::HardwareIdentifier& hwid,
+static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::HardwareIdentifier& hwid,
                                                    const std::vector<std::string>& tags, const std::string& version) {
   std::unique_ptr<Uptane::Target> rv;
   if (!client.updateImageMeta()) {
@@ -70,7 +69,6 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client,
   bool find_latest = (version == "latest");
   std::unique_ptr<Uptane::Target> latest = nullptr;
   for (auto& t : client.allTargets()) {
-
     if (!t.IsValid()) {
       continue;
     }
@@ -134,7 +132,8 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
 
   data::ResultCode::Numeric rc = do_update(client, *target_to_install);
 
-  return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk)?EXIT_SUCCESS:EXIT_FAILURE;
+  return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
+                                                                                                    : EXIT_FAILURE;
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
@@ -196,42 +195,42 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     client.reportHwInfo();
 
     try {
-      auto target = find_target(client, hwid, client.tags, "latest"); // target cannot be nullptr, an exception will be yielded if no target
+      // target cannot be nullptr, an exception will be yielded if no target
+      auto target = find_target(client, hwid, client.tags, "latest");
 
+      // This is a workaround for finding and avoiding bad updates after a rollback.
+      // Rollback sets the installed version state to none instead of broken, so there is no
+      // easy way to find just the bad versions without api/storage changes. As a workaround we
+      // just check if the version is known (old hash) and not current/pending and abort if so
+      bool known_target_sha = known_local_target(client, *target, installed_versions);
+      if (!known_target_sha && !client.isTargetCurrent(*target)) {
+        LOG_INFO << "Got a New Target!";
 
-    // This is a workaround for finding and avoiding bad updates after a rollback.
-    // Rollback sets the installed version state to none instead of broken, so there is no
-    // easy way to find just the bad versions without api/storage changes. As a workaround we
-    // just check if the version is known (old hash) and not current/pending and abort if so
-    bool known_target_sha = known_local_target(client, *target, installed_versions);
-    if (!known_target_sha && ! client.isTargetCurrent(*target)) {
-      LOG_INFO << "Got a New Target!";
-
-      data::ResultCode::Numeric rc = do_update(client, *target);
-      if (rc == data::ResultCode::Numeric::kOk) {
-        current = *target;
-        client.http_client->updateHeader("x-ats-target", current.filename());
-        // Start the loop over to call updateImagesMeta which will update this
-        // device's target name on the server.
-        continue;
-      } else if (rc == data::ResultCode::Numeric::kNeedCompletion) {
-        // no point to continue running TUF cycle (check for update, download, install)
-        // since reboot is required to apply/finalize the currently installed update (aka pending update)
+        data::ResultCode::Numeric rc = do_update(client, *target);
+        if (rc == data::ResultCode::Numeric::kOk) {
+          current = *target;
+          client.http_client->updateHeader("x-ats-target", current.filename());
+          // Start the loop over to call updateImagesMeta which will update this
+          // device's target name on the server.
+          continue;
+        } else if (rc == data::ResultCode::Numeric::kNeedCompletion) {
+          // no point to continue running TUF cycle (check for update, download, install)
+          // since reboot is required to apply/finalize the currently installed update (aka pending update)
           break;
+        }
+
+      } else {
+        LOG_INFO << "Device is up-to-date";
       }
 
-     } else {
-      LOG_INFO << "Device is up-to-date";
-    }
-
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to find or update Target: " <<  exc.what();
+      LOG_ERROR << "Failed to find or update Target: " << exc.what();
     }
 
     client.setAppsNotChecked();
     std::this_thread::sleep_for(std::chrono::seconds(interval));
 
-  } // while true
+  }  // while true
 
   return EXIT_SUCCESS;
 }
