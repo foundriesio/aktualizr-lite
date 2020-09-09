@@ -467,6 +467,28 @@ std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& 
   return {success, target};
 }
 
+void LiteClient::reportAktualizrConfiguration() {
+  if (!config.telemetry.report_config) {
+    LOG_DEBUG << "Not reporting libaktualizr configuration because telemetry is disabled";
+    return;
+  }
+
+  std::stringstream conf_ss;
+  config.writeToStream(conf_ss);
+  const std::string conf_str = conf_ss.str();
+  const Hash new_hash = Hash::generate(Hash::Type::kSha256, conf_str);
+  std::string stored_hash;
+  if (!(storage->loadDeviceDataHash("configuration", &stored_hash) &&
+        new_hash == Hash(Hash::Type::kSha256, stored_hash))) {
+    LOG_DEBUG << "Reporting libaktualizr configuration";
+    const HttpResponse response =
+        http_client->put(config.tls.server + "/system_info/config", "application/toml", conf_str);
+    if (response.isOk()) {
+      storage->storeDeviceDataHash("configuration", new_hash.HashString());
+    }
+  }
+}
+
 void LiteClient::reportNetworkInfo() {
   if (config.telemetry.report_network) {
     LOG_DEBUG << "Reporting network information";

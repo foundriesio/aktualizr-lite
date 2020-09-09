@@ -61,6 +61,7 @@ class LiteClient {
   bool checkImageMetaOffline();
   Uptane::LazyTargetsList allTargets() const { return Uptane::LazyTargetsList(image_repo_, storage, uptane_fetcher_); }
   TargetStatus VerifyTarget(const Uptane::Target& target) const { return package_manager_->verifyTarget(target); }
+  void reportAktualizrConfiguration();
   void reportNetworkInfo();
   void reportHwInfo();
   bool isTargetCurrent(const Uptane::Target& target) const;
