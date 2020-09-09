@@ -189,12 +189,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     }
 
     client.reportNetworkInfo();
-    // reportNetworkInfo already checks `telemetry.report_network`. We need a
-    // way when not running in anonymous mode to decide if we should report
-    // hwinfo to the server. This flag is a good one to (ab)use.
-    if (client.config.telemetry.report_network) {
-      client.reportHwInfo();
-    }
+    client.reportHwInfo();
 
     try {
       auto target = find_target(client, hwid, client.tags, "latest"); // target cannot be nullptr, an exception will be yielded if no target

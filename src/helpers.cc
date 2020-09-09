@@ -506,6 +506,10 @@ void LiteClient::reportNetworkInfo() {
 }
 
 void LiteClient::reportHwInfo() {
+  if (config.telemetry.report_network) {
+    LOG_DEBUG << "Not reporting hwinfo information because telemetry is disabled";
+    return;
+  }
   Json::Value hw_info = Utils::getHardwareInfo();
   if (!hw_info.empty()) {
     if (hw_info != last_hw_info_reported_) {
