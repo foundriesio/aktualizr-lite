@@ -509,7 +509,7 @@ void LiteClient::reportNetworkInfo() {
 }
 
 void LiteClient::reportHwInfo() {
-  if (config.telemetry.report_network) {
+  if (!config.telemetry.report_network) {
     LOG_DEBUG << "Not reporting hwinfo information because telemetry is disabled";
     return;
   }
