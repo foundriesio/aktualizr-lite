@@ -166,6 +166,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   std::vector<Uptane::Target> installed_versions;
   client.storage->loadPrimaryInstallationLog(&installed_versions, false);
 
+  client.reportAktualizrConfiguration();
+
   while (true) {
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
     LOG_INFO << "Checking for a new Target...";
@@ -187,12 +189,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     }
 
     client.reportNetworkInfo();
-    // reportNetworkInfo already checks `telemetry.report_network`. We need a
-    // way when not running in anonymous mode to decide if we should report
-    // hwinfo to the server. This flag is a good one to (ab)use.
-    if (client.config.telemetry.report_network) {
-      client.reportHwInfo();
-    }
+    client.reportHwInfo();
 
     try {
       auto target = find_target(client, hwid, client.tags, "latest"); // target cannot be nullptr, an exception will be yielded if no target
@@ -336,6 +333,7 @@ int main(int argc, char* argv[]) {
     Config config(commandline_map);
     config.storage.uptane_metadata_path = BasedPath(config.storage.path / "metadata");
     config.telemetry.report_network = !config.tls.server.empty();
+    config.telemetry.report_config = !config.tls.server.empty();
 
     LOG_DEBUG << "Current directory: " << boost::filesystem::current_path().string();
 
