@@ -1,6 +1,9 @@
 #ifndef AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_
 #define AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_
 
+#include <functional>
+
+#include "composeapp.h"
 #include "docker.h"
 #include "ostree.h"
 #include "package_manager/ostreemanager.h"
@@ -16,9 +19,13 @@ class ComposeAppManager : public OstreeManager {
     std::vector<std::string> apps;
     boost::filesystem::path apps_root;
     boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
+    boost::filesystem::path docker_bin{"/usr/bin/docker"};
     bool docker_prune{true};
     bool force_update{false};
+    bool full_status_check{false};
   };
+
+  using ComposeAppCtor = std::function<Docker::ComposeApp(const std::string& app)>;
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
@@ -33,7 +40,10 @@ class ComposeAppManager : public OstreeManager {
   std::string name() const override { return Name; };
 
   std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target& t) const;
-  std::vector<std::pair<std::string, std::string>> getAppsToUpdate(const Uptane::Target& t) const;
+  std::vector<std::pair<std::string, std::string>> getAppsToUpdate(const Uptane::Target& t,
+                                                                   bool full_status_check) const;
+  bool checkForAppsToUpdate(const Uptane::Target& target, boost::optional<bool> full_status_check_in);
+  void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
   std::string getCurrentHash() const override;
 
@@ -41,9 +51,9 @@ class ComposeAppManager : public OstreeManager {
   Config cfg_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   Docker::RegistryClient registry_client_;
-  const std::string compose_bin_;
-
   std::vector<std::pair<std::string, std::string>> cur_apps_to_fetch_and_update_;
+  bool are_apps_checked_{false};
+  ComposeAppCtor app_ctor_;
 };
 
 #endif  // AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_

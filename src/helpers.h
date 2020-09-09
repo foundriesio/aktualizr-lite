@@ -65,6 +65,8 @@ class LiteClient {
   void reportNetworkInfo();
   void reportHwInfo();
   bool isTargetCurrent(const Uptane::Target& target) const;
+  bool checkAppsToUpdate(const Uptane::Target& target) const;
+  void setAppsNotChecked();
 
  private:
   FRIEND_TEST(helpers, locking);

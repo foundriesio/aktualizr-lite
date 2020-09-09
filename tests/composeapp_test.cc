@@ -132,6 +132,7 @@ TEST(ComposeApp, Config) {
   config.pacman.extra["compose_apps_root"] = "apps-root";
   config.pacman.extra["compose_apps"] = "app1 app2";
   config.pacman.extra["docker_compose_bin"] = "compose";
+  config.pacman.extra["docker_bin"] = "docker";
 
   ComposeAppManager::Config cfg(config.pacman);
   ASSERT_TRUE(cfg.docker_prune);
@@ -140,6 +141,7 @@ TEST(ComposeApp, Config) {
   ASSERT_EQ("app2", cfg.apps[1]);
   ASSERT_EQ("apps-root", cfg.apps_root);
   ASSERT_EQ("compose", cfg.compose_bin);
+  ASSERT_EQ("docker", cfg.docker_bin);
 
   config.pacman.extra["docker_prune"] = "0";
   cfg = ComposeAppManager::Config(config.pacman);
@@ -186,6 +188,8 @@ struct TestClient {
     apps_root = config.pacman.extra["compose_apps_root"] = (*tempdir / "apps").native();
     config.pacman.extra["compose_apps"] = apps;
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+    boost::filesystem::copy("tests/docker_fake.sh", tempdir->Path() / "docker_fake.sh");
+    config.pacman.extra["docker_bin"] = (tempdir->Path() / "docker_fake.sh").string();
     config.pacman.extra["docker_prune"] = "0";
     config.pacman.extra["force_update"] = force_update?"1":"0";
     config.storage.path = tempdir->Path();
@@ -486,6 +490,9 @@ TEST(ComposeApp, installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+                     std::string("image: foo\n"));
+    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
@@ -502,7 +509,41 @@ TEST(ComposeApp, installApp) {
     ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
   }
 
-  // App update, DB thinks that App is installed, but it was removed from a system so we install it
+  // skipping an App update install because already installed
+  // Compose file has commented `image:` and two images are enabled
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    auto app_uri = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    // emulate situation when App is already installed on a system
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+    boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+                     std::string("image: foo\n #image: foo1\nimage: foo1\n"));
+    Utils::writeFile(client.tempdir->Path() / "ps.in",
+                     std::string("foo-container-id\nfoo1-container-id\n"));
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    // make sure that App manifest wasn't requested from Registry
+    ASSERT_FALSE(registry.wasManifestRequested());
+    // make sure that docker-compose config and pull were not called
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    // make sure that docker-compose up wasn't called
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // App update, DB thinks that App is installed, but App directory
+  // was removed from a system so we need to re-install it
   {
     TemporaryDirectory tmp_dir;
     FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
@@ -514,6 +555,93 @@ TEST(ComposeApp, installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
     //boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // App update, DB thinks that App is installed, but App Compose file
+  // was removed from a system so we need to re-install it
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    auto app_uri = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    // emulate situation when App is already installed on a system
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+    boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+//    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+//                     std::string(""));
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // App update, DB thinks that App is installed, App Compose file exists
+  // but one of App containers is not running
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    auto app_uri = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    // emulate situation when App is already installed on a system
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+                     std::string("image: foo\n"));
+    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string(""));
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // App update, DB thinks that App is installed, App Compose file exists
+  // but one of App containers is not running, two image are enabled and third one are commented
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    auto app_uri = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    // emulate situation when App is already installed on a system
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+                     std::string("image: foo   # image: foo image: foo\n      image:foo1\n"));
+    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("container-00\n"));
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
@@ -540,6 +668,9 @@ TEST(ComposeApp, installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub", true);
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+                     std::string("image: foo\n"));
+    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;

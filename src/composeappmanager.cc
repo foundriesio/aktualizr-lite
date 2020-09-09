@@ -1,7 +1,5 @@
 #include "composeappmanager.h"
 
-#include "composeapp.h"
-
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
 
@@ -19,6 +17,10 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
     compose_bin = raw.at("docker_compose_bin");
   }
 
+  if (raw.count("docker_bin") == 1) {
+    docker_bin = raw.at("docker_bin");
+  }
+
   if (raw.count("docker_prune") == 1) {
     std::string val = raw.at("docker_prune");
     boost::algorithm::to_lower(val);
@@ -27,6 +29,10 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
 
   if (raw.count("force_update") > 0) {
     force_update = boost::lexical_cast<bool>(raw.at("force_update"));
+  }
+
+  if (raw.count("full_status_check") > 0) {
+    full_status_check = boost::lexical_cast<bool>(raw.at("full_status_check"));
   }
 }
 
@@ -39,11 +45,14 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       cfg_{pconfig},
       sysroot_{std::move(sysroot)},
       registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)},
-      compose_bin_{boost::filesystem::canonical(cfg_.compose_bin).string() + " "} {
+      app_ctor_{[this](const std::string& app) {
+        return Docker::ComposeApp(app, cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
+                                  boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
+      }} {
   for (const auto& app_name : cfg_.apps) {
     auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeApp::NeedStartFile;
     if (boost::filesystem::exists(need_start_flag)) {
-      Docker::ComposeApp(app_name, cfg_.apps_root, compose_bin_, registry_client_).start();
+      app_ctor_(app_name).start();
       boost::filesystem::remove(need_start_flag);
     }
   }
@@ -69,7 +78,8 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(cons
   return apps;
 }
 
-std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpdate(const Uptane::Target& t) const {
+std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpdate(const Uptane::Target& t,
+                                                                                    bool full_status_check) const {
   std::vector<std::pair<std::string, std::string>> apps_to_update;
 
   auto currently_installed_target_apps = OstreeManager::getCurrent().custom_data()["docker_compose_apps"];
@@ -93,14 +103,39 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpd
       continue;
     }
 
-    if (!boost::filesystem::exists(cfg_.apps_root / app_name)) {
+    if (!boost::filesystem::exists(cfg_.apps_root / app_name) ||
+        !boost::filesystem::exists(cfg_.apps_root / app_name / Docker::ComposeApp::ComposeFile)) {
       // an App that is supposed to be installed has been removed somehow, let's install it again
       apps_to_update.push_back(app_pair);
       LOG_INFO << app_name << " will be re-installed";
+      continue;
+    }
+
+    if (!full_status_check) {
+      continue;
+    }
+
+    LOG_DEBUG << app_name << " performing full status check";
+    if (!app_ctor_(app_name).isRunning()) {
+      // an App that is supposed to be installed and running is not fully installed or running
+      apps_to_update.push_back(app_pair);
+      LOG_INFO << app_name << " update will be re-installed or completed";
+      continue;
     }
   }
 
   return apps_to_update;
+}
+
+bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target, boost::optional<bool> full_status_check_in) {
+  bool full_status_check = cfg_.full_status_check;
+  if (!!full_status_check_in) {
+    full_status_check = *full_status_check_in;
+  }
+
+  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, full_status_check);
+  are_apps_checked_ = true;
+  return cur_apps_to_fetch_and_update_.size() == 0;
 }
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
@@ -112,9 +147,11 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   if (cfg_.force_update) {
     LOG_INFO << "All Apps are forced to be updated...";
     cur_apps_to_fetch_and_update_ = getApps(target);
-  } else {
-    LOG_INFO << "Looking for Compose Apps to be installed or updated...";
-    cur_apps_to_fetch_and_update_ = getAppsToUpdate(target);
+  } else if (!are_apps_checked_) {
+    // non-daemon mode (force check) or a new Target to be applied in daemon mode,
+    // then do full check if Target Apps are installed and running
+    LOG_INFO << "Checking for Apps to be installed or updated...";
+    checkForAppsToUpdate(target, true);
   }
 
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
@@ -122,10 +159,11 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   bool passed = true;
   for (const auto& pair : cur_apps_to_fetch_and_update_) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
-    if (!Docker::ComposeApp(pair.first, cfg_.apps_root, compose_bin_, registry_client_).fetch(pair.second)) {
+    if (!app_ctor_(pair.first).fetch(pair.second)) {
       passed = false;
     }
   }
+  are_apps_checked_ = false;
   return passed;
 }
 
@@ -151,8 +189,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   // make sure we install what we fecthed
   for (const auto& pair : cur_apps_to_fetch_and_update_) {
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
-    if (!Docker::ComposeApp(pair.first, cfg_.apps_root, compose_bin_, registry_client_)
-             .up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
+    if (!app_ctor_(pair.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
     }
   };
@@ -187,11 +224,11 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
       if (std::find(cfg_.apps.begin(), cfg_.apps.end(), name) == cfg_.apps.end()) {
         LOG_WARNING << "Docker Compose App(" << name
                     << ") installed, but is now removed from configuration. Removing from system";
-        Docker::ComposeApp(name, cfg_.apps_root, compose_bin_, registry_client_).remove();
+        app_ctor_(name).remove();
       } else if (std::find(target_apps.begin(), target_apps.end(), name) == target_apps.end()) {
         LOG_WARNING << "Docker Compose App(" << name
                     << ") configured, but not defined in installation target. Removing from system";
-        Docker::ComposeApp(name, cfg_.apps_root, compose_bin_, registry_client_).remove();
+        app_ctor_(name).remove();
       }
     }
   }

@@ -181,7 +181,11 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // On first loop we need to see if we have a config change detected from
       // from the previous run. We need to make sure we have up-to-date
       // metadata, so this really needs to be inside the loop.
-      if (current.IsValid() && client.dockerAppsChanged()) {
+      // Also, check if Apps are actually installed and running
+      //
+      // TODO: remove client.dockerAppsChanged() once Docker App implementation is removed
+      // because client.checkAppsToUpdate can detect changes of the compose_app list in the config too
+      if (current.IsValid() && (client.dockerAppsChanged() || !client.checkAppsToUpdate(current))) {
         do_update(client, current);
       }
       client.storeDockerParamsDigest();
@@ -201,7 +205,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     // just check if the version is known (old hash) and not current/pending and abort if so
     bool known_target_sha = known_local_target(client, *target, installed_versions);
     if (!known_target_sha && ! client.isTargetCurrent(*target)) {
-      LOG_INFO << "Got a New Target !";
+      LOG_INFO << "Got a New Target!";
 
       data::ResultCode::Numeric rc = do_update(client, *target);
       if (rc == data::ResultCode::Numeric::kOk) {
@@ -224,6 +228,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       LOG_ERROR << "Failed to find or update Target: " <<  exc.what();
     }
 
+    client.setAppsNotChecked();
     std::this_thread::sleep_for(std::chrono::seconds(interval));
 
   } // while true
