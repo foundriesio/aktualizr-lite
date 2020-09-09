@@ -42,4 +42,4 @@ target_link_libraries(${TARGET_EXE} ${TARGET})
 install(TARGETS ${TARGET_EXE} RUNTIME DESTINATION bin COMPONENT ${TARGET_EXE})
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
-aktualizr_source_file_checks(${SRC} ${HEADERS})
+aktualizr_source_file_checks(main.cc ${SRC} ${HEADERS})
