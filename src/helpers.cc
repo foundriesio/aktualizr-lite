@@ -485,6 +485,8 @@ void LiteClient::reportAktualizrConfiguration() {
         http_client->put(config.tls.server + "/system_info/config", "application/toml", conf_str);
     if (response.isOk()) {
       storage->storeDeviceDataHash("configuration", new_hash.HashString());
+    } else {
+      LOG_DEBUG << "Unable to report libaktualizr configuration: " << response.getStatusStr();
     }
   }
 }
@@ -494,12 +496,13 @@ void LiteClient::reportNetworkInfo() {
     LOG_DEBUG << "Reporting network information";
     Json::Value network_info = Utils::getNetworkInfo();
     if (network_info != last_network_info_reported_) {
-      HttpResponse response = http_client->put(config.tls.server + "/system_info/network", network_info);
+      const HttpResponse response = http_client->put(config.tls.server + "/system_info/network", network_info);
       if (response.isOk()) {
         last_network_info_reported_ = network_info;
+      } else {
+        LOG_DEBUG << "Unable to report network information: " << response.getStatusStr();
       }
     }
-
   } else {
     LOG_DEBUG << "Not reporting network information because telemetry is disabled";
   }
@@ -513,8 +516,11 @@ void LiteClient::reportHwInfo() {
   Json::Value hw_info = Utils::getHardwareInfo();
   if (!hw_info.empty()) {
     if (hw_info != last_hw_info_reported_) {
-      if (http_client->put(config.tls.server + "/system_info", hw_info).isOk()) {
+      const HttpResponse response = http_client->put(config.tls.server + "/system_info", hw_info);
+      if (response.isOk()) {
         last_hw_info_reported_ = hw_info;
+      } else {
+        LOG_DEBUG << "Unable to report hwinfo information: " << response.getStatusStr();
       }
     }
   } else {
