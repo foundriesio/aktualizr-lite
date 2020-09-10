@@ -69,14 +69,6 @@ static void add_apps_header(std::vector<std::string>& headers, PackageConfig& co
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(cfg.apps, ","));
   }
 }
-bool should_compare_docker_apps(const Config& config) {
-  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
-    return !DockerAppManagerConfig(config.pacman).docker_apps.empty();
-  } else if (config.pacman.type == ComposeAppManager::Name) {
-    return !ComposeAppManager::Config(config.pacman).apps.empty();
-  }
-  return false;
-}
 
 void LiteClient::storeDockerParamsDigest() {
   DockerAppManagerConfig dappcfg(config.pacman);
@@ -509,7 +501,7 @@ void LiteClient::reportNetworkInfo() {
 }
 
 void LiteClient::reportHwInfo() {
-  if (config.telemetry.report_network) {
+  if (!config.telemetry.report_network) {
     LOG_DEBUG << "Not reporting hwinfo information because telemetry is disabled";
     return;
   }
