@@ -252,7 +252,7 @@ void check_info_options(const bpo::options_description& description, const bpo::
   }
 }
 
-bpo::variables_map parse_options(int argc, char* argv[]) {
+bpo::variables_map parse_options(int argc, char** argv) {
   std::string subs("Command to execute: ");
   for (const auto& cmd : commands) {
     static int indx = 0;
