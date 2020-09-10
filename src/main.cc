@@ -146,7 +146,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     return EXIT_FAILURE;
   }
   bool firstLoop = true;
-  bool compareDockerApps = should_compare_docker_apps(client.config);
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
   if (variables_map.count("update-lockfile") > 0) {
     client.update_lockfile = variables_map["update-lockfile"].as<boost::filesystem::path>();
