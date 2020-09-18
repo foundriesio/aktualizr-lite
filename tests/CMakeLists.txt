@@ -15,6 +15,7 @@ set_tests_properties(test_aktualizr-lite PROPERTIES DEPENDS uptane-generator)
 
 set(TEST_DEFS BOOST_LOG_DYN_LINK)
 set(TEST_INCS
+  ${AKTUALIZR_DIR}/include
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include
   ${GLIB_INCLUDE_DIRS}

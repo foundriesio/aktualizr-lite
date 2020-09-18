@@ -4,8 +4,8 @@
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
-#include "config/config.h"
 #include "helpers.h"
+#include "libaktualizr/config.h"
 
 #include "utilities/aktualizr_version.h"
 
@@ -334,7 +334,7 @@ int main(int argc, char* argv[]) {
     }
 
     Config config(commandline_map);
-    config.storage.uptane_metadata_path = BasedPath(config.storage.path / "metadata");
+    config.storage.uptane_metadata_path = utils::BasedPath(config.storage.path / "metadata");
     config.telemetry.report_network = !config.tls.server.empty();
     config.telemetry.report_config = !config.tls.server.empty();
 
