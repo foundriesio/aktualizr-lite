@@ -17,7 +17,7 @@ class ComposeAppManager : public OstreeManager {
     Config(const PackageConfig& pconfig);
 
     std::vector<std::string> apps;
-    boost::filesystem::path apps_root;
+    boost::filesystem::path apps_root{"/var/sota/compose-apps"};
     boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
     boost::filesystem::path docker_bin{"/usr/bin/docker"};
     bool docker_prune{true};
