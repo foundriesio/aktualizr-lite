@@ -1,6 +1,7 @@
 #include <iostream>
 #include <unordered_map>
 
+#include <boost/container/flat_map.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
@@ -40,8 +41,21 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
     }
   }
 
-  LOG_INFO << "Updates available to " << hwid << ":";
+  boost::container::flat_map<int, Uptane::Target> sorted_targets;
   for (auto& t : client.allTargets()) {
+    int ver = 0;
+    try {
+      std::stoi(t.custom_version(), nullptr, 0);
+    } catch (const std::invalid_argument& exc) {
+      LOG_ERROR << "Invalid version number format: " << t.custom_version();
+      ver = -1;
+    }
+    sorted_targets.emplace(ver, t);
+  }
+
+  LOG_INFO << "Updates available to " << hwid << ":";
+  for (auto& pair : sorted_targets) {
+    Uptane::Target t = pair.second;
     if (!target_has_tags(t, client.tags)) {
       continue;
     }
