@@ -7,6 +7,10 @@ set(HEADERS helpers.h composeappmanager.h docker.h composeapp.h ostree.h)
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
 
+if(ALLOW_MANUAL_ROLLBACK)
+  add_definitions(-DALLOW_MANUAL_ROLLBACK)
+endif(ALLOW_MANUAL_ROLLBACK)
+
 target_compile_definitions(${TARGET} PRIVATE BOOST_LOG_DYN_LINK)
 target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 

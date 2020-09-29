@@ -16,6 +16,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # OSTree is mandatory for aktualizr-lite
 option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
 
+option(ALLOW_MANUAL_ROLLBACK "Set to ON to build with support of manual rollbacks" OFF)
+
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
 # TODO: consider using the aktualizr repo/project for building the sota-tools
@@ -55,3 +57,4 @@ endif(BUILD_AKLITE)
 message(STATUS "BUILD_AKLITE: ${BUILD_AKLITE}")
 message(STATUS "BUILD_OSTREE: ${BUILD_OSTREE}")
 message(STATUS "BUILD_SOTA_TOOLS: ${BUILD_SOTA_TOOLS}")
+message(STATUS "ALLOW_MANUAL_ROLLBACK: ${ALLOW_MANUAL_ROLLBACK}")

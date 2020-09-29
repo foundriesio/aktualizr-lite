@@ -159,6 +159,12 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
     version = variables_map["update-name"].as<std::string>();
   }
 
+  // This is only available if -DALLOW_MANUAL_ROLLBACK is set in the CLI args below.
+  if (variables_map.count("clear-installed-versions") > 0) {
+    LOG_WARNING << "Clearing installed version history!!!";
+    client.storage->clearInstalledVersions();
+  }
+
   LOG_INFO << "Finding " << version << " to update to...";
   auto target_to_install = find_target(client, hwid, client.tags, version);
 
@@ -304,6 +310,9 @@ bpo::variables_map parse_options(int argc, char** argv) {
       ("ostree-server", bpo::value<std::string>(), "URL of the Ostree repository")
       ("primary-ecu-hardware-id", bpo::value<std::string>(), "hardware ID of primary ecu")
       ("update-name", bpo::value<std::string>(), "optional name of the update when running \"update\". default=latest")
+#ifdef ALLOW_MANUAL_ROLLBACK
+      ("clear-installed-versions", "DANGER - clear the history of installed updates before applying the given update. This is handy when doing test/debug and you need to rollback to an old version manually.")
+#endif
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for update when in daemon mode.")
       ("update-lockfile", bpo::value<boost::filesystem::path>(), "If provided, an flock(2) is applied to this file before performing an update in daemon mode")
       ("download-lockfile", bpo::value<boost::filesystem::path>(), "If provided, an flock(2) is applied to this file before downloading an update in daemon mode")
