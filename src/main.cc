@@ -45,26 +45,25 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   for (auto& t : client.allTargets()) {
     int ver = 0;
     try {
-      std::stoi(t.custom_version(), nullptr, 0);
+      ver = std::stoi(t.custom_version(), nullptr, 0);
     } catch (const std::invalid_argument& exc) {
       LOG_ERROR << "Invalid version number format: " << t.custom_version();
       ver = -1;
     }
-    sorted_targets.emplace(ver, t);
-  }
-
-  LOG_INFO << "Updates available to " << hwid << ":";
-  for (auto& pair : sorted_targets) {
-    Uptane::Target t = pair.second;
     if (!target_has_tags(t, client.tags)) {
       continue;
     }
     for (auto const& it : t.hardwareIds()) {
       if (it == hwid) {
-        log_info_target("", client.config, t);
+        sorted_targets.emplace(ver, t);
         break;
       }
     }
+  }
+
+  LOG_INFO << "Updates available to " << hwid << ":";
+  for (auto& pair : sorted_targets) {
+    log_info_target("", client.config, pair.second);
   }
   return 0;
 }
