@@ -19,6 +19,10 @@ if(BUILD_WITH_CLANG_TIDY)
 
 endif(BUILD_WITH_CLANG_TIDY)
 
+if(ALLOW_MANUAL_ROLLBACK)
+  add_definitions(-DALLOW_MANUAL_ROLLBACK)
+endif(ALLOW_MANUAL_ROLLBACK)
+
 target_compile_definitions(${TARGET} PRIVATE BOOST_LOG_DYN_LINK)
 target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 
