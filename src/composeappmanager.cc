@@ -58,15 +58,15 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
   }
 }
 
-std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(const Uptane::Target& t) const {
-  std::vector<std::pair<std::string, std::string>> apps;
+ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target& t) const {
+  AppsContainer apps;
 
   auto target_apps = t.custom_data()["docker_compose_apps"];
   for (Json::ValueIterator i = target_apps.begin(); i != target_apps.end(); ++i) {
     if ((*i).isObject() && (*i).isMember("uri")) {
       for (const auto& app : cfg_.apps) {
         if (i.key().asString() == app) {
-          apps.emplace_back(app, (*i)["uri"].asString());
+          apps[app] = (*i)["uri"].asString();
           break;
         }
       }
@@ -78,9 +78,9 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getApps(cons
   return apps;
 }
 
-std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpdate(const Uptane::Target& t,
-                                                                                    bool full_status_check) const {
-  std::vector<std::pair<std::string, std::string>> apps_to_update;
+ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t,
+                                                                    bool full_status_check) const {
+  AppsContainer apps_to_update;
 
   auto currently_installed_target_apps = OstreeManager::getCurrent().custom_data()["docker_compose_apps"];
   auto new_target_apps = getApps(t);  // intersection of apps specified in Target and the configuration
@@ -91,14 +91,14 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpd
     auto app_data = currently_installed_target_apps.get(app_name, Json::nullValue);
     if (app_data == Json::nullValue) {
       // new app in Target
-      apps_to_update.push_back(app_pair);
+      apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " will be installed";
       continue;
     }
 
     if (app_pair.second != app_data["uri"].asString()) {
       // an existing App update
-      apps_to_update.push_back(app_pair);
+      apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " will be updated";
       continue;
     }
@@ -106,7 +106,7 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpd
     if (!boost::filesystem::exists(cfg_.apps_root / app_name) ||
         !boost::filesystem::exists(cfg_.apps_root / app_name / Docker::ComposeApp::ComposeFile)) {
       // an App that is supposed to be installed has been removed somehow, let's install it again
-      apps_to_update.push_back(app_pair);
+      apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " will be re-installed";
       continue;
     }
@@ -118,10 +118,19 @@ std::vector<std::pair<std::string, std::string>> ComposeAppManager::getAppsToUpd
     LOG_DEBUG << app_name << " performing full status check";
     if (!app_ctor_(app_name).isRunning()) {
       // an App that is supposed to be installed and running is not fully installed or running
-      apps_to_update.push_back(app_pair);
+      apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " update will be re-installed or completed";
       continue;
     }
+  }
+
+  if (!full_status_check) {
+    // merge a list of the apps that were not fetched or updated successfully during the previous update cycle
+    // with a list of the apps that were detected as the one that are needed to be (re-)updated during non-full check.
+    // This is solely for the case if there is no new Target and aklite just does the non-full app check.
+    // There is no need to persist/store the list of apps to be updated in the DB because aklite does
+    // the full check just after its restart.
+    apps_to_update.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
   }
 
   return apps_to_update;
@@ -191,6 +200,8 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
     if (!app_ctor_(pair.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
+    } else {
+      cur_apps_to_fetch_and_update_.erase(pair.first);
     }
   };
 

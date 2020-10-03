@@ -2,6 +2,7 @@
 #define AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_
 
 #include <functional>
+#include <unordered_map>
 
 #include "composeapp.h"
 #include "docker.h"
@@ -26,6 +27,7 @@ class ComposeAppManager : public OstreeManager {
   };
 
   using ComposeAppCtor = std::function<Docker::ComposeApp(const std::string& app)>;
+  using AppsContainer = std::unordered_map<std::string, std::string>;
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
@@ -39,9 +41,8 @@ class ComposeAppManager : public OstreeManager {
   data::InstallationResult install(const Uptane::Target& target) const override;
   std::string name() const override { return Name; };
 
-  std::vector<std::pair<std::string, std::string>> getApps(const Uptane::Target& t) const;
-  std::vector<std::pair<std::string, std::string>> getAppsToUpdate(const Uptane::Target& t,
-                                                                   bool full_status_check) const;
+  AppsContainer getApps(const Uptane::Target& t) const;
+  AppsContainer getAppsToUpdate(const Uptane::Target& t, bool full_status_check) const;
   bool checkForAppsToUpdate(const Uptane::Target& target, boost::optional<bool> full_status_check_in);
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
@@ -51,7 +52,7 @@ class ComposeAppManager : public OstreeManager {
   Config cfg_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   Docker::RegistryClient registry_client_;
-  std::vector<std::pair<std::string, std::string>> cur_apps_to_fetch_and_update_;
+  mutable AppsContainer cur_apps_to_fetch_and_update_;
   bool are_apps_checked_{false};
   ComposeAppCtor app_ctor_;
 };
