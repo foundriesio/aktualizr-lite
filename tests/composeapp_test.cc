@@ -21,11 +21,11 @@ class FakeRegistry {
 
     std::string addApp(const std::string& app_repo, const std::string& app_name,
                        ManifestPostProcessor manifest_post_processor = nullptr,
-                       const std::string file_name = "docker-compose.yml",
+                       const std::string file_name = Docker::ComposeApp::ComposeFile,
                        std::string app_content = "some fake content qwertyuiop 1231313123123123") {
       // TODO compose a proper docker compose app here (bunch of files)
-      auto docker_flie = root_dir_ / app_name / file_name;
-      Utils::writeFile(docker_flie, app_content);
+      auto docker_file = root_dir_ / app_name / file_name;
+      Utils::writeFile(docker_file, app_content);
       tgz_path_ = root_dir_ / app_name / (app_name + ".tgz");
       std::string stdout_msg;
       boost::process::system("tar -czf " + tgz_path_.string() + " " + file_name, boost::process::start_dir = (root_dir_ / app_name));
@@ -254,10 +254,8 @@ TEST(ComposeApp, getApps) {
 
   auto apps = mgr->getApps(target);
   ASSERT_EQ(2, apps.size());
-  ASSERT_EQ("app1", apps[0].first);
-  ASSERT_EQ("n/a", apps[0].second);
-  ASSERT_EQ("app2", apps[1].first);
-  ASSERT_EQ("N/A", apps[1].second);
+  ASSERT_EQ("n/a", apps["app1"]);
+  ASSERT_EQ("N/A", apps["app2"]);
 }
 
 TEST(ComposeApp, fetch) {
@@ -718,6 +716,98 @@ TEST(ComposeApp, installApp) {
     // make sure App has been restarted after reboot
     ASSERT_EQ("start", Utils::readFile(client.tempdir->Path() / "apps/app1/start.log", true));
     ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::NeedStartFile));
+  }
+}
+
+TEST(ComposeApp, resumeAppUpdate) {
+  std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/0/1/0", true);
+
+  TemporaryDirectory tmp_dir;
+  FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+  // currently installed target, no any apps are installed
+  Json::Value installed_target_json;
+  installed_target_json["hashes"]["sha256"] = sha;
+  Uptane::Target installed_target("pull-initial", installed_target_json);
+
+  // target to install, it includes two apps
+  Json::Value target_to_install_json{installed_target_json};
+  target_to_install_json["hashes"]["sha256"] = sha;
+  target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, Docker::ComposeApp::ComposeFile, "myapp");
+  target_to_install_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2", nullptr, Docker::ComposeApp::ComposeFile, "myapp");
+  Uptane::Target target_to_install("pull", target_to_install_json);
+
+  {
+    // aklite is configure with one app (app1) while the target_to_install contains two apps
+    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
+
+    ASSERT_TRUE(client.pacman->fetchTarget(target_to_install, *(client.fetcher), *(client.keys), nullptr, nullptr));
+
+    // check if app1 was fetched
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ Docker::ComposeApp::ComposeFile).string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+    // check if app2 was NOT fecthed
+    ASSERT_FALSE(boost::filesystem::exists((client.apps_root / "app2").string()));
+
+    // install
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install(target_to_install).result_code.num_code);
+
+    // check if app1 was installed
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+
+    // store the currently installed Target
+    client.storage->savePrimaryInstalledVersion(target_to_install, InstalledVersionUpdateMode::kCurrent);
+
+    // Currently installed Target in the DB includes both apps, although just one was actually installed
+    // because we configure the client/packman with just one app (app1)
+    ASSERT_NE(client.pacman->getCurrent().custom_data()["docker_compose_apps"].get("app1", Json::nullValue), Json::nullValue);
+    ASSERT_NE(client.pacman->getCurrent().custom_data()["docker_compose_apps"].get("app2", Json::nullValue), Json::nullValue);
+
+    // reconfigure the app list
+    client.config.pacman.extra["compose_apps"] = "app1,app2";
+    // fake aklite restart
+    client.fakeReboot();
+
+    // make sure that app1 is installed and app2 is not after the reboot
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1").string()));
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ Docker::ComposeApp::ComposeFile).string()));
+    ASSERT_FALSE(boost::filesystem::exists((client.apps_root / "app2").string()));
+
+    // just after a reboot aklite does a full check but it's a pain to emulate it properly
+    // so we fake it by doing not a full check, which just checks is the app dir and file exists
+    // Thus is this case app1 will detecetd as running and app2 is not so an update only for app2 is required
+    client.pacman->checkForAppsToUpdate(target_to_install, false);
+    // try to fetch and install app2 this time, docker-compose pull is supposed to fail for app2
+    Utils::writeFile(client.apps_root / "app2"/ "pull.res", std::string("1"));
+    ASSERT_FALSE(client.pacman->fetchTarget(target_to_install, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    // The app2 dir should be created regardless of docker-compose pull failure
+    // since the compose app itself was fetched successfully
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app2").string()));
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app2"/ Docker::ComposeApp::ComposeFile).string()));
+
+    // emulate the next update cycle in a daemon mode
+    boost::filesystem::remove(client.tempdir->Path() / "apps/app1/pull.log");
+    boost::filesystem::remove(client.tempdir->Path() / "apps/app2/pull.log");
+    boost::filesystem::remove(client.tempdir->Path() / "apps/app1/up.log");
+    boost::filesystem::remove(client.tempdir->Path() / "apps/app2/up.log");
+    client.pacman->checkForAppsToUpdate(target_to_install, false);
+
+    // make app2 fetching succeed
+    Utils::writeFile(client.apps_root / "app2"/ "pull.res", std::string("0"));
+
+    ASSERT_TRUE(client.pacman->fetchTarget(target_to_install, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    // make sure app1 was not fetched since it has beel already fecthed and installed
+    ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1/pull.log"));
+    // make sure app2 was fetched
+    ASSERT_TRUE(boost::filesystem::exists(client.tempdir->Path() / "apps/app2/pull.log"));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install(target_to_install).result_code.num_code);
+    // make sure app1 installation wasn't invoked
+    ASSERT_NE("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+    // make sure app2 installation was invoked
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app2/up.log", true));
   }
 }
 
