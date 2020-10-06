@@ -104,34 +104,34 @@ TEST(helpers, targets_eq) {
   ASSERT_TRUE(targets_eq(t1, t2, true));
 
   auto custom = t1.custom_data();
-  custom["docker_apps"]["app1"]["filename"] = "app1-v1";
+  custom["docker_compose_apps"]["app1"]["uri"] = "app1-v1";
   t1.updateCustom(custom);
   ASSERT_TRUE(targets_eq(t1, t2, false));  // still equal, ignoring docker-apps
   ASSERT_FALSE(targets_eq(t1, t2, true));
 
   custom = t2.custom_data();
-  custom["docker_apps"]["app1"]["filename"] = "app1-v1";
+  custom["docker_compose_apps"]["app1"]["uri"] = "app1-v1";
   t2.updateCustom(custom);
   ASSERT_TRUE(targets_eq(t1, t2, true));
 
-  custom["docker_apps"]["app1"]["filename"] = "app1-v2";
+  custom["docker_compose_apps"]["app1"]["uri"] = "app1-v2";
   t2.updateCustom(custom);
   ASSERT_FALSE(targets_eq(t1, t2, true));  // version has changed
 
   // Get things the same again
-  custom["docker_apps"]["app1"]["filename"] = "app1-v1";
+  custom["docker_compose_apps"]["app1"]["uri"] = "app1-v1";
   t2.updateCustom(custom);
 
-  custom["docker_apps"]["app2"]["filename"] = "app2-v2";
+  custom["docker_compose_apps"]["app2"]["uri"] = "app2-v2";
   t2.updateCustom(custom);
   ASSERT_FALSE(targets_eq(t1, t2, true));  // t2 has an app that t1 doesn't
 
   custom = t1.custom_data();
-  custom["docker_apps"]["app2"]["filename"] = "app2-v1";
+  custom["docker_compose_apps"]["app2"]["uri"] = "app2-v1";
   t1.updateCustom(custom);
   ASSERT_FALSE(targets_eq(t1, t2, true));  // app2 versions differ
 
-  custom["docker_apps"]["app2"]["filename"] = "app2-v2";
+  custom["docker_compose_apps"]["app2"]["uri"] = "app2-v2";
   t1.updateCustom(custom);
   ASSERT_TRUE(targets_eq(t1, t2, true));
 }
@@ -286,9 +286,9 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
 TEST(helpers, containers_initialize) {
   TemporaryDirectory cfg_dir;
 
-  auto apps_root = cfg_dir / "docker_apps";
+  auto apps_root = cfg_dir / "compose_apps";
   std::map<std::string, std::string> apps_cfg;
-  apps_cfg["docker_apps_root"] = apps_root.native();
+  apps_cfg["compose_apps_root"] = apps_root.native();
 
   // std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 
@@ -299,41 +299,27 @@ TEST(helpers, containers_initialize) {
   Uptane::Target target("test-finalize", target_json);
 
   // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
 
   // Add a new app
-  apps_cfg["docker_apps"] = "app1";
+  apps_cfg["compose_apps"] = "app1";
 
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
 
   // No apps configured, but one installed:
-  apps_cfg["docker_apps"] = "";
+  apps_cfg["compose_apps"] = "";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
 
   // One app configured, one app deployed
-  apps_cfg["docker_apps"] = "app1";
+  apps_cfg["compose_apps"] = "app1";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
-
-  // Docker app parameters enabled
-  apps_cfg["docker_app_params"] = (cfg_dir / "foo.txt").native();
-  Utils::writeFile(cfg_dir / "foo.txt", std::string("foo text content"));
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
 
   // Store the hash of the file and make sure no change is detected
-  auto client = createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP);
+  auto client = createClient(cfg_dir, apps_cfg, ComposeAppManager::Name);
   client.storeDockerParamsDigest();
   ASSERT_FALSE(client.dockerAppsChanged(false));
-
-  // Change the content
-  Utils::writeFile(cfg_dir / "foo.txt", std::string("foo text content changed"));
-  ASSERT_TRUE(client.dockerAppsChanged(false));
-
-  // Disable and ensure we detect the change
-  apps_cfg["docker_app_params"] = "";
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, PACKAGE_MANAGER_OSTREEDOCKERAPP).dockerAppsChanged(false));
-  ASSERT_FALSE(boost::filesystem::exists(cfg_dir / ".params-hash"));
 }
 
 TEST(helpers, compose_containers_initialize) {

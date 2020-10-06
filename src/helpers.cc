@@ -295,8 +295,6 @@ LiteClient::LiteClient(Config& config_in)
   if (config.pacman.type == ComposeAppManager::Name) {
     package_manager_ =
         std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, ostree_sysroot);
-  } else if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
-    package_manager_ = std::make_shared<DockerAppManager>(config.pacman, config.bootloader, storage, http_client);
   } else if (config.pacman.type == PACKAGE_MANAGER_OSTREE) {
     package_manager_ = std::make_shared<OstreeManager>(config.pacman, config.bootloader, storage, http_client);
   } else {
