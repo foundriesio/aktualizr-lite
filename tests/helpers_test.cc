@@ -272,6 +272,10 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   config.pacman.extra["booted"] = "0";
   config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+  if (!boost::filesystem::exists(cfg_dir.Path() / "docker_fake.sh")) {
+    boost::filesystem::copy("tests/docker_fake.sh", cfg_dir.Path() / "docker_fake.sh");
+  }
+  config.pacman.extra["docker_bin"] = (cfg_dir.Path() / "docker_fake.sh").string();
 
   std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 
@@ -280,46 +284,6 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   target_json["custom"]["targetFormat"] = "OSTREE";
   target_json["length"] = 0;
   return LiteClient(config);
-}
-
-// Ensure we handle config changes of containers at start-up properly
-TEST(helpers, containers_initialize) {
-  TemporaryDirectory cfg_dir;
-
-  auto apps_root = cfg_dir / "compose_apps";
-  std::map<std::string, std::string> apps_cfg;
-  apps_cfg["compose_apps_root"] = apps_root.native();
-
-  // std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
-
-  Json::Value target_json;
-  target_json["hashes"]["sha256"] = "deadbeef";
-  target_json["custom"]["targetFormat"] = "OSTREE";
-  target_json["length"] = 0;
-  Uptane::Target target("test-finalize", target_json);
-
-  // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
-
-  // Add a new app
-  apps_cfg["compose_apps"] = "app1";
-
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
-
-  // No apps configured, but one installed:
-  apps_cfg["compose_apps"] = "";
-  boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
-
-  // One app configured, one app deployed
-  apps_cfg["compose_apps"] = "app1";
-  boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
-
-  // Store the hash of the file and make sure no change is detected
-  auto client = createClient(cfg_dir, apps_cfg, ComposeAppManager::Name);
-  client.storeDockerParamsDigest();
-  ASSERT_FALSE(client.dockerAppsChanged(false));
 }
 
 TEST(helpers, compose_containers_initialize) {
@@ -332,28 +296,36 @@ TEST(helpers, compose_containers_initialize) {
   // std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 
   Json::Value target_json;
-  target_json["hashes"]["sha256"] = "deadbeef";
+  target_json["hashes"]["sha256"] = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
   target_json["custom"]["targetFormat"] = "OSTREE";
+  target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "app1-uri";
   target_json["length"] = 0;
   Uptane::Target target("test-finalize", target_json);
 
   // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).checkAppsToUpdate(target));
 
   // Add a new app
   apps_cfg["compose_apps"] = "app1";
 
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).checkAppsToUpdate(target));
 
   // No apps configured, but one installed:
   apps_cfg["compose_apps"] = "";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).checkAppsToUpdate(target));
 
   // One app configured, one app deployed
   apps_cfg["compose_apps"] = "app1";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  // fake the "full check" and make it think that `app1` is running
+  Utils::writeFile(apps_root / "app1" / Docker::ComposeApp::ComposeFile, std::string("image: foo\n"));
+  Utils::writeFile(cfg_dir.Path() / "ps.in", std::string("foo-container-id\n"));
+  auto client = createClient(cfg_dir, apps_cfg);
+  // install the current Target
+  client.storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+  // make sure that nothing needs to be updated
+  ASSERT_FALSE(client.checkAppsToUpdate(target));
 }
 
 #ifndef __NO_MAIN__

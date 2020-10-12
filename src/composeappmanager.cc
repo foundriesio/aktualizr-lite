@@ -136,15 +136,38 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
   return apps_to_update;
 }
 
+ComposeAppManager::AppsContainer ComposeAppManager::getAppsToRemove(const Uptane::Target& t) const {
+  AppsContainer apps_to_remove;
+
+  auto new_target_apps = getApps(t);  // intersection of apps specified in Target and the configuration
+
+  if (!boost::filesystem::is_directory(cfg_.apps_root)) {
+    LOG_DEBUG << "cfg_.apps_root does not exist";
+    return apps_to_remove;
+  }
+
+  for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(cfg_.apps_root), {})) {
+    if (boost::filesystem::is_directory(entry)) {
+      std::string app_dir_name = entry.path().filename().native();
+      if (new_target_apps.count(app_dir_name) == 0) {
+        apps_to_remove.insert({app_dir_name, "app-uri"});
+        LOG_INFO << app_dir_name << " will be removed";
+      }
+    }
+  }
+  return apps_to_remove;
+}
+
 bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target, boost::optional<bool> full_status_check_in) {
   bool full_status_check = cfg_.full_status_check;
   if (!!full_status_check_in) {
     full_status_check = *full_status_check_in;
   }
 
+  auto apps_to_remove = getAppsToRemove(target);
   cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, full_status_check);
   are_apps_checked_ = true;
-  return cur_apps_to_fetch_and_update_.size() == 0;
+  return cur_apps_to_fetch_and_update_.size() > 0 || apps_to_remove.size() > 0;
 }
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
@@ -200,10 +223,13 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
     if (!app_ctor_(pair.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
-    } else {
-      cur_apps_to_fetch_and_update_.erase(pair.first);
     }
   };
+
+  // TODO: Do we want to keep trying to install app if it's failed for the first time?
+  // This all stuff about app fecthing and installation retrying and reporting to the backend
+  // require significant rework
+  cur_apps_to_fetch_and_update_.clear();
 
   if (cfg_.docker_prune) {
     LOG_INFO << "Pruning unused docker images";
@@ -217,31 +243,25 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   return res;
 }
 
-// Handle the case like:
-//  1) sota.toml is configured with 2 compose apps: "app1, app2"
-//  2) update is applied, so we are now running both app1 and app2
-//  3) sota.toml is updated with 1 docker app: "app1"
-// At this point we should stop app2 and remove it.
-void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
-  if (!boost::filesystem::is_directory(cfg_.apps_root)) {
-    LOG_DEBUG << "cfg_.apps_root does not exist";
-    return;
-  }
-  std::vector<std::string> target_apps = target.custom_data()["docker_compose_apps"].getMemberNames();
+/** Handle the two use-cases:
 
-  for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(cfg_.apps_root), {})) {
-    if (boost::filesystem::is_directory(entry)) {
-      std::string name = entry.path().filename().native();
-      if (std::find(cfg_.apps.begin(), cfg_.apps.end(), name) == cfg_.apps.end()) {
-        LOG_WARNING << "Docker Compose App(" << name
-                    << ") installed, but is now removed from configuration. Removing from system";
-        app_ctor_(name).remove();
-      } else if (std::find(target_apps.begin(), target_apps.end(), name) == target_apps.end()) {
-        LOG_WARNING << "Docker Compose App(" << name
-                    << ") configured, but not defined in installation target. Removing from system";
-        app_ctor_(name).remove();
-      }
-    }
+  1) sota.toml is configured with 2 compose apps: "app1, app2"
+  2) update is applied, so we are now running both app1 and app2
+  3) sota.toml is updated with 1 docker app: "app1", no new Target
+ At this point we should stop app2 and remove it.
+
+  1) sota.toml is configured with 2 compose apps: "app1, app2"
+  2) update is applied, so we are now running both app1 and app2
+  3) new Target includes just app1, no configuration change
+ At this point we should stop app2 and remove it.
+*/
+void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
+  auto apps_to_remove = getAppsToRemove(target);
+
+  for (const auto& app_pair : apps_to_remove) {
+    LOG_WARNING << "Docker Compose App(" << app_pair.first
+                << ") installed, but is now removed from configuration or Target. Removing from system";
+    app_ctor_(app_pair.first).remove();
   }
 }
 

@@ -193,13 +193,9 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // from the previous run. We need to make sure we have up-to-date
       // metadata, so this really needs to be inside the loop.
       // Also, check if Apps are actually installed and running
-      //
-      // TODO: remove client.dockerAppsChanged() once Docker App implementation is removed
-      // because client.checkAppsToUpdate can detect changes of the compose_app list in the config too
-      if (current.IsValid() && (client.dockerAppsChanged() || !client.checkAppsToUpdate(current))) {
+      if (current.IsValid() && client.checkAppsToUpdate(current)) {
         do_update(client, current);
       }
-      client.storeDockerParamsDigest();
       firstLoop = false;
     }
 

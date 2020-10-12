@@ -13,33 +13,16 @@
 #include "package_manager/packagemanagerfactory.h"
 
 #include "composeappmanager.h"
-#include "package_manager/dockerappmanager.h"
 
 void log_info_target(const std::string& prefix, const Config& config, const Uptane::Target& t) {
   auto name = t.filename();
   if (t.custom_version().length() > 0) {
     name = t.custom_version();
   }
+
   LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
-  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
-    bool shown = false;
-    auto config_apps = DockerAppManagerConfig(config.pacman).docker_apps;
-    auto apps = t.custom_data()["docker_apps"];
-    for (Json::ValueIterator i = apps.begin(); i != apps.end(); ++i) {
-      if (!shown) {
-        shown = true;
-        LOG_INFO << "\tDocker Apps:";
-      }
-      if ((*i).isObject() && (*i).isMember("filename")) {
-        const auto& app = i.key().asString();
-        std::string app_status =
-            (config_apps.end() != std::find(config_apps.begin(), config_apps.end(), app)) ? "on" : "off";
-        LOG_INFO << "\t" << app_status << ": " << app << " -> " << (*i)["filename"].asString();
-      } else {
-        LOG_ERROR << "\t\tInvalid custom data for docker-app: " << i.key().asString();
-      }
-    }
-  } else if (config.pacman.type == ComposeAppManager::Name) {
+
+  if (config.pacman.type == ComposeAppManager::Name) {
     bool shown = false;
     auto config_apps = ComposeAppManager::Config(config.pacman).apps;
     auto bundles = t.custom_data()["docker_compose_apps"];
@@ -61,101 +44,11 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
 }
 
 static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config) {
-  if (config.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
-    DockerAppManagerConfig dappcfg(config);
-    headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(dappcfg.docker_apps, ","));
-  } else if (config.type == ComposeAppManager::Name) {
+  if (config.type == ComposeAppManager::Name) {
+    // TODO: Consider header renaming
     ComposeAppManager::Config cfg(config);
     headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(cfg.apps, ","));
   }
-}
-
-void LiteClient::storeDockerParamsDigest() {
-  DockerAppManagerConfig dappcfg(config.pacman);
-  auto digest = config.storage.path / ".params-hash";
-  if (boost::filesystem::exists(dappcfg.docker_app_params)) {
-    Utils::writeFile(digest, Crypto::sha256digest(Utils::readFile(dappcfg.docker_app_params)));
-  } else {
-    unlink(digest.c_str());
-  }
-}
-
-static bool appListChanged(const Json::Value& target_apps, std::vector<std::string>& cfg_apps_in,
-                           const boost::filesystem::path& apps_dir) {
-  // Did the list of installed versus running apps change:
-  std::vector<std::string> found;
-  if (boost::filesystem::is_directory(apps_dir)) {
-    for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(apps_dir), {})) {
-      if (boost::filesystem::is_directory(entry)) {
-        found.emplace_back(entry.path().filename().native());
-      }
-    }
-  }
-  // don't take into consideration the apps that are listed in the config but are not present in Target
-  // do take into consideration the apps that are found on a file system but are not present in Target
-  // since they should be removed, so we need to trigger the installation procedure that will remove them
-  auto cfg_apps_filtered_end = cfg_apps_in.end();
-  if (!target_apps.isNull()) {
-    cfg_apps_filtered_end =
-        std::remove_if(cfg_apps_in.begin(), cfg_apps_in.end(),
-                       [&target_apps](const std::string& app) { return !target_apps.isMember(app.c_str()); });
-  }
-  std::vector<std::string> cfg_apps{cfg_apps_in.begin(), cfg_apps_filtered_end};
-  std::sort(found.begin(), found.end());
-  std::sort(cfg_apps.begin(), cfg_apps.end());
-  if (found != cfg_apps) {
-    LOG_INFO << "Config change detected: list of apps has changed";
-    return true;
-  }
-  return false;
-}
-
-bool LiteClient::dockerAppsChanged(bool check_target_apps) {
-  if (config.pacman.type == PACKAGE_MANAGER_OSTREEDOCKERAPP) {
-    DockerAppManagerConfig dappcfg(config.pacman);
-    Json::Value target_apps{Json::nullValue};
-
-    if (check_target_apps) {
-      target_apps = getCurrent().custom_data()["docker_apps"];
-    }
-
-    if (appListChanged(target_apps, dappcfg.docker_apps, dappcfg.docker_apps_root)) {
-      return true;
-    }
-    // Did the docker app configuration change
-    auto checksum = config.storage.path / ".params-hash";
-    if (boost::filesystem::exists(dappcfg.docker_app_params)) {
-      if (dappcfg.docker_apps.size() == 0) {
-        // there's no point checking for changes - nothing is running
-        return false;
-      }
-
-      if (boost::filesystem::exists(checksum)) {
-        std::string cur = Utils::readFile(checksum);
-        std::string now = Crypto::sha256digest(Utils::readFile(dappcfg.docker_app_params));
-        if (cur != now) {
-          LOG_INFO << "Config change detected: docker-app-params content has changed";
-          return true;
-        }
-      } else {
-        LOG_INFO << "Config change detected: docker-app-params have been defined";
-        return true;
-      }
-    } else if (boost::filesystem::exists(checksum)) {
-      LOG_INFO << "Config change detected: docker-app parameters have been removed";
-      boost::filesystem::remove(checksum);
-      return true;
-    }
-  } else if (config.pacman.type == ComposeAppManager::Name) {
-    ComposeAppManager::Config cacfg(config.pacman);
-    if (appListChanged(getCurrent().custom_data()["docker_compose_apps"], cacfg.apps, cacfg.apps_root)) {
-      return true;
-    }
-  } else {
-    return false;
-  }
-
-  return false;
 }
 
 static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OSTree::Sysroot& sysroot,
@@ -602,7 +495,7 @@ bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& co
 }
 
 bool LiteClient::isTargetCurrent(const Uptane::Target& target) const {
-  if (!targets_eq(target, getCurrent(), true)) {
+  if (!targets_eq(target, getCurrent(), package_manager_->name() == ComposeAppManager::Name)) {
     return false;
   }
 
@@ -628,10 +521,10 @@ bool LiteClient::checkAppsToUpdate(const Uptane::Target& target) const {
       return false;
     }
     // first Update Cycle/Loop, do full check if Target Apps are installed and running
-    LOG_INFO << "Checking for Apps to be installed or updated...";
+    LOG_INFO << "Checking for Apps to be installed, updated or removed...";
     return compose_pacman->checkForAppsToUpdate(target, true);
   }
-  return true;
+  return false;
 }
 
 void LiteClient::setAppsNotChecked() {
@@ -648,37 +541,19 @@ void LiteClient::setAppsNotChecked() {
 // TODO: this has to be refactored: target comparision should be in the package manager context
 // at least the logic that gets a list of apps and apps root folder since they are package manager specific.
 
-bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps) {
+bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareComposeApps) {
   if (!match_target_base(t1, t2)) {
     return false;
   }
 
-  if (!compareDockerApps) {
+  if (!compareComposeApps) {
     return true;
   }
 
-  auto t1_dapps = t1.custom_data()["docker_apps"];
-  auto t2_dapps = t2.custom_data()["docker_apps"];
-  for (Json::ValueIterator i = t1_dapps.begin(); i != t1_dapps.end(); ++i) {
-    auto app = i.key().asString();
-    if (!t2_dapps.isMember(app)) {
-      return false;  // an app has been removed
-    }
-    if ((*i)["filename"].asString() != t2_dapps[app]["filename"].asString()) {
-      return false;  // tuf target filename changed
-    }
-    t2_dapps.removeMember(app);
-  }
-  if (t2_dapps.size() > 0) {
-    return false;  // an app has been added
-  }
-
-  // compose apps
-  // We are checking if Apps that are supposed to be installed (listed in the currenlty installed Target
-  // are actually present on a system. Apps are installed on non read-only mount point/folder so could be
-  // modified/removed somehow so we need to return 'false' here and let aklite update/re-install App(s) It's
-  // workaround, a proper solution for 'immutable Target' concept is installing Apps on read-only system (both
-  // meta-data and actuall container image layers)
+  // TODO: Consider removing it
+  // This is useless verification because a list of Apps cannot be changed without changing of Target's version
+  // If two Targets has the same version they are supposed to have the same list of Apps, if the versions
+  // are different then `match_target_base` will return false
   auto t1_capps = t1.custom_data()["docker_compose_apps"];
   auto t2_capps = t2.custom_data()["docker_compose_apps"];
   for (Json::ValueIterator i = t1_capps.begin(); i != t1_capps.end(); ++i) {

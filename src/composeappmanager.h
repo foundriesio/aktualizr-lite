@@ -43,6 +43,7 @@ class ComposeAppManager : public OstreeManager {
 
   AppsContainer getApps(const Uptane::Target& t) const;
   AppsContainer getAppsToUpdate(const Uptane::Target& t, bool full_status_check) const;
+  AppsContainer getAppsToRemove(const Uptane::Target& t) const;
   bool checkForAppsToUpdate(const Uptane::Target& target, boost::optional<bool> full_status_check_in);
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
