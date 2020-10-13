@@ -49,7 +49,7 @@ class RegistryClient {
   static HttpClientFactory DefaultHttpClientFactory;
 
  public:
-  RegistryClient(const std::string& treehub_endpoint, const std::shared_ptr<HttpInterface>& ota_lite_client,
+  RegistryClient(const std::string& treehub_endpoint, std::shared_ptr<HttpInterface> ota_lite_client,
                  HttpClientFactory http_client_factory);
 
   Json::Value getAppManifest(const Uri& uri, const std::string& format) const;

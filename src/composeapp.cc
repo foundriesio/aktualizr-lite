@@ -1,17 +1,16 @@
 #include "composeapp.h"
 
 #include <sys/statvfs.h>
-
 #include <boost/process.hpp>
 
 namespace Docker {
 
-ComposeApp::ComposeApp(std::string name, const boost::filesystem::path& root_dir, const std::string& compose_bin,
-                       const std::string& docker_bin, const Docker::RegistryClient& registry_client)
+ComposeApp::ComposeApp(std::string name, const boost::filesystem::path& root_dir, std::string compose_bin,
+                       std::string docker_bin, const Docker::RegistryClient& registry_client)
     : name_{std::move(name)},
       root_{root_dir / name_},
-      compose_{compose_bin},
-      docker_{docker_bin},
+      compose_{std::move(compose_bin)},
+      docker_{std::move(docker_bin)},
       registry_client_{registry_client} {}
 
 bool ComposeApp::fetch(const std::string& app_uri) {
@@ -27,7 +26,7 @@ bool ComposeApp::fetch(const std::string& app_uri) {
 };
 
 bool ComposeApp::up(bool no_start) {
-  auto mode = no_start ? "--no-start" : "-d";
+  const auto* mode = no_start ? "--no-start" : "-d";
 
   if (no_start) {
     boost::filesystem::ofstream flag_file(root_ / NeedStartFile);
@@ -95,7 +94,7 @@ struct Manifest : Json::Value {
   static constexpr const char* const Format{"application/vnd.oci.image.manifest.v1+json"};
   static constexpr const char* const Version{"v1"};
 
-  Manifest(const Json::Value& value = Json::Value()) : Json::Value(value) {
+  explicit Manifest(const Json::Value& value = Json::Value()) : Json::Value(value) {
     auto manifest_version{(*this)["annotations"]["compose-app"].asString()};
     if (manifest_version.empty()) {
       throw std::runtime_error("Got invalid App manifest, missing a manifest version: " +
@@ -130,10 +129,11 @@ struct Manifest : Json::Value {
 // seconds to run, so we use boost::process:system to stream it to stdout/sterr
 bool ComposeApp::cmd_streaming(const std::string& cmd) {
   LOG_DEBUG << "Running: " << cmd;
-  return boost::process::system(cmd, boost::process::start_dir = root_) == 0;
+  int exit_code = boost::process::system(cmd, boost::process::start_dir = root_);
+  return exit_code == 0;
 }
 
-std::pair<bool, std::string> ComposeApp::cmd(const std::string& cmd) const {
+std::pair<bool, std::string> ComposeApp::cmd(const std::string& cmd) {
   std::string out_str;
   int exit_code = Utils::shell(cmd, &out_str, true);
   LOG_TRACE << "Command: " << cmd << "\n" << out_str;

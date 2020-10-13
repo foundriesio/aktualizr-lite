@@ -10,7 +10,7 @@ namespace OSTree {
 
 class Sysroot {
  public:
-  Sysroot(const std::string& sysroot_path, bool booted = true);
+  Sysroot(std::string sysroot_path, bool booted = true);
 
   const std::string& path() const { return path_; }
   std::string type() const { return booted_ ? "booted" : "staged"; }

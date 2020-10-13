@@ -89,7 +89,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
     const auto& app_name = app_pair.first;
 
     auto app_data = currently_installed_target_apps.get(app_name, Json::nullValue);
-    if (app_data == Json::nullValue) {
+    if (app_data.empty()) {
       // new app in Target
       apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " will be installed";
@@ -144,7 +144,7 @@ bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target, boost
 
   cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, full_status_check);
   are_apps_checked_ = true;
-  return cur_apps_to_fetch_and_update_.size() == 0;
+  return cur_apps_to_fetch_and_update_.empty();
 }
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,

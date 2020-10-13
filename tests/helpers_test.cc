@@ -299,26 +299,26 @@ TEST(helpers, containers_initialize) {
   Uptane::Target target("test-finalize", target_json);
 
   // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged(false));
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged());
 
   // Add a new app
   apps_cfg["compose_apps"] = "app1";
 
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged(false));
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged());
 
   // No apps configured, but one installed:
   apps_cfg["compose_apps"] = "";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged(false));
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged());
 
   // One app configured, one app deployed
   apps_cfg["compose_apps"] = "app1";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged(false));
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged());
 
   // Store the hash of the file and make sure no change is detected
   auto client = createClient(cfg_dir, apps_cfg, ComposeAppManager::Name);
-  ASSERT_FALSE(client.composeAppsChanged(false));
+  ASSERT_FALSE(client.composeAppsChanged());
 }
 
 TEST(helpers, compose_containers_initialize) {

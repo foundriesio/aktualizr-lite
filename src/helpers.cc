@@ -44,7 +44,7 @@ static void add_apps_header(std::vector<std::string>& headers, PackageConfig& co
   if (config.type == ComposeAppManager::Name) {
     ComposeAppManager::Config cfg(config);
     // TODO: consider this header renaming
-    headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(cfg.apps, ","));
+    headers.emplace_back("x-ats-dockerapps: ");
   }
 }
 
@@ -78,7 +78,7 @@ static bool appListChanged(const Json::Value& target_apps, std::vector<std::stri
   return false;
 }
 
-bool LiteClient::composeAppsChanged(bool check_target_apps) {
+bool LiteClient::composeAppsChanged() const {
   if (config.pacman.type == ComposeAppManager::Name) {
     ComposeAppManager::Config cacfg(config.pacman);
     if (appListChanged(getCurrent().custom_data()["docker_compose_apps"], cacfg.apps, cacfg.apps_root)) {
@@ -209,7 +209,7 @@ LiteClient::LiteClient(Config& config_in)
     headers.emplace_back("x-ats-primary: " + primary_ecu.first.ToString());
   }
 
-  headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
+  headers.emplace_back("x-ats-tags: ");
 
   http_client = std::make_shared<HttpClient>(&headers);
   uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
@@ -241,7 +241,7 @@ LiteClient::LiteClient(Config& config_in)
 }
 
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {
-  if (callback_program.size() == 0) {
+  if (callback_program.empty()) {
     return;
   }
   auto env = boost::this_process::environment();
@@ -252,7 +252,7 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
   if (!install_target.MatchTarget(Uptane::Target::Unknown())) {
     env_copy["INSTALL_TARGET"] = install_target.filename();
   }
-  if (result.size() > 0) {
+  if (!result.empty()) {
     env_copy["RESULT"] = result;
   }
 
@@ -307,21 +307,21 @@ void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::ResultCode
   }
 }
 
-void LiteClient::writeCurrentTarget(const Uptane::Target& t) {
+void LiteClient::writeCurrentTarget(const Uptane::Target& t) const {
   std::stringstream ss;
   ss << "TARGET_NAME=\"" << t.filename() << "\"\n";
   ss << "CUSTOM_VERSION=\"" << t.custom_version() << "\"\n";
   Json::Value custom = t.custom_data();
   std::string tmp = custom["lmp-manifest-sha"].asString();
-  if (tmp.size() > 0) {
+  if (!tmp.empty()) {
     ss << "LMP_MANIFEST_SHA=\"" << tmp << "\"\n";
   }
   tmp = custom["meta-subscriber-overrides-sha"].asString();
-  if (tmp.size() > 0) {
+  if (!tmp.empty()) {
     ss << "META_SUBSCRIBER_OVERRIDES_SHA=\"" << tmp << "\"\n";
   }
   tmp = custom["containers-sha"].asString();
-  if (tmp.size() > 0) {
+  if (!tmp.empty()) {
     ss << "CONTAINERS_SHA=\"" << tmp << "\"\n";
   }
   Utils::writeFile(config.storage.path / "current-target", ss.str());
@@ -471,8 +471,8 @@ static std::unique_ptr<Lock> create_lock(boost::filesystem::path lockfile) {
   return std_::make_unique<Lock>(fd);
 }
 
-std::unique_ptr<Lock> LiteClient::getDownloadLock() { return create_lock(download_lockfile); }
-std::unique_ptr<Lock> LiteClient::getUpdateLock() { return create_lock(update_lockfile); }
+std::unique_ptr<Lock> LiteClient::getDownloadLock() const { return create_lock(download_lockfile); }
+std::unique_ptr<Lock> LiteClient::getUpdateLock() const { return create_lock(update_lockfile); }
 
 void generate_correlation_id(Uptane::Target& t) {
   std::string id = t.custom_version();
@@ -540,7 +540,7 @@ bool LiteClient::isTargetCurrent(const Uptane::Target& target) const {
   }
 
   if (package_manager_->name() == ComposeAppManager::Name) {
-    auto compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
     if (compose_pacman == nullptr) {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
       return false;
@@ -555,7 +555,7 @@ bool LiteClient::isTargetCurrent(const Uptane::Target& target) const {
 
 bool LiteClient::checkAppsToUpdate(const Uptane::Target& target) const {
   if (package_manager_->name() == ComposeAppManager::Name) {
-    auto compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
     if (compose_pacman == nullptr) {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
       return false;
@@ -569,7 +569,7 @@ bool LiteClient::checkAppsToUpdate(const Uptane::Target& target) const {
 
 void LiteClient::setAppsNotChecked() {
   if (package_manager_->name() == ComposeAppManager::Name) {
-    auto compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
     if (compose_pacman == nullptr) {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
     } else {
@@ -610,7 +610,7 @@ bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compare
     t2_capps.removeMember(app);
   }
 
-  return t2_capps.size() == 0;
+  return t2_capps.empty();
 }
 
 bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector<Uptane::Target>& installed_versions) {
