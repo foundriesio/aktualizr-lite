@@ -99,14 +99,14 @@ TEST(helpers, targets_eq) {
   Uptane::Target t2{"target", target_json};
 
 
-  // t1 should equal t2 when there a no docker-apps
+  // t1 should equal t2 when there a no compose-apps
   ASSERT_TRUE(targets_eq(t1, t2, false));
   ASSERT_TRUE(targets_eq(t1, t2, true));
 
   auto custom = t1.custom_data();
   custom["docker_compose_apps"]["app1"]["uri"] = "app1-v1";
   t1.updateCustom(custom);
-  ASSERT_TRUE(targets_eq(t1, t2, false));  // still equal, ignoring docker-apps
+  ASSERT_TRUE(targets_eq(t1, t2, false));  // still equal, ignoring compose-apps
   ASSERT_FALSE(targets_eq(t1, t2, true));
 
   custom = t2.custom_data();
@@ -144,14 +144,14 @@ TEST(helpers, targets_eq_compose) {
   Uptane::Target t1{"target", target_json};
   Uptane::Target t2{"target", target_json};
 
-  // t1 should equal t2 when there a no docker-apps
+  // t1 should equal t2 when there a no compose-apps
   ASSERT_TRUE(targets_eq(t1, t2, false));
   ASSERT_TRUE(targets_eq(t1, t2, true));
 
   auto custom = t1.custom_data();
   custom["docker_compose_apps"]["app1"]["uri"] = "app1-v1";
   t1.updateCustom(custom);
-  ASSERT_TRUE(targets_eq(t1, t2, false));  // still equal, ignoring docker-apps
+  ASSERT_TRUE(targets_eq(t1, t2, false));  // still equal, ignoring compose-apps
   ASSERT_FALSE(targets_eq(t1, t2, true));
 
   custom = t2.custom_data();
@@ -299,27 +299,26 @@ TEST(helpers, containers_initialize) {
   Uptane::Target target("test-finalize", target_json);
 
   // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged(false));
 
   // Add a new app
   apps_cfg["compose_apps"] = "app1";
 
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged(false));
 
   // No apps configured, but one installed:
   apps_cfg["compose_apps"] = "";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged(false));
 
   // One app configured, one app deployed
   apps_cfg["compose_apps"] = "app1";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).dockerAppsChanged(false));
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged(false));
 
   // Store the hash of the file and make sure no change is detected
   auto client = createClient(cfg_dir, apps_cfg, ComposeAppManager::Name);
-  client.storeDockerParamsDigest();
-  ASSERT_FALSE(client.dockerAppsChanged(false));
+  ASSERT_FALSE(client.composeAppsChanged(false));
 }
 
 TEST(helpers, compose_containers_initialize) {
@@ -338,22 +337,22 @@ TEST(helpers, compose_containers_initialize) {
   Uptane::Target target("test-finalize", target_json);
 
   // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
 
   // Add a new app
   apps_cfg["compose_apps"] = "app1";
 
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
 
   // No apps configured, but one installed:
   apps_cfg["compose_apps"] = "";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
 
   // One app configured, one app deployed
   apps_cfg["compose_apps"] = "app1";
   boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).dockerAppsChanged());
+  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
 }
 
 #ifndef __NO_MAIN__
