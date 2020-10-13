@@ -14,7 +14,7 @@ build=$(mktemp -d -p $here)
 cd $build
 
 # do clang-tidy during compilation
-../cmake-init.sh -DBUILD_WITH_CLANG_TIDY=ON
+../cmake-init.sh
 ninja aklite-tests
 
 # do additional clang-tidying in the aktualizr way
