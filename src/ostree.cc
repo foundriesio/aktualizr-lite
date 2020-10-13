@@ -2,7 +2,7 @@
 
 namespace OSTree {
 
-Sysroot::Sysroot(const std::string& sysroot_path, bool booted) : path_{sysroot_path}, booted_{booted} {
+Sysroot::Sysroot(std::string sysroot_path, bool booted) : path_{std::move(sysroot_path)}, booted_{booted} {
   sysroot_ = OstreeManager::LoadSysroot(path_);
 }
 

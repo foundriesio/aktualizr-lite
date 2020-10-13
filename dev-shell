@@ -9,7 +9,7 @@ cd $here
 
 if ! docker image inspect $container 2>/dev/null 1>/dev/null ; then
 	echo "Container not found, doing one time docker build"
-	docker build -t $container -f ./aktualizr/docker/Dockerfile.debian.testing .
+	docker build -t $container -f ./aktualizr/docker/Dockerfile.ubuntu.focal .
 fi
 
 if [ -n "$CCACHE_DIR" ] ; then

@@ -5,9 +5,9 @@
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
+#include "crypto/keymanager.h"
 #include "helpers.h"
 #include "libaktualizr/config.h"
-#include "crypto/keymanager.h"
 
 #include "utilities/aktualizr_version.h"
 
@@ -61,7 +61,7 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   }
 
   boost::container::flat_map<int, Uptane::Target> sorted_targets;
-  for (auto& t : client.allTargets()) {
+  for (const auto& t : client.allTargets()) {
     int ver = 0;
     try {
       ver = std::stoi(t.custom_version(), nullptr, 0);
@@ -72,7 +72,7 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
     if (!target_has_tags(t, client.tags)) {
       continue;
     }
-    for (auto const& it : t.hardwareIds()) {
+    for (const auto& it : t.hardwareIds()) {
       if (it == hwid) {
         sorted_targets.emplace(ver, t);
         break;
@@ -100,7 +100,7 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::H
 
   bool find_latest = (version == "latest");
   std::unique_ptr<Uptane::Target> latest = nullptr;
-  for (auto& t : client.allTargets()) {
+  for (const auto& t : client.allTargets()) {
     if (!t.IsValid()) {
       continue;
     }

@@ -16,8 +16,8 @@ class ComposeApp {
   static constexpr const char* const ComposeFile{"docker-compose.yml"};
 
  public:
-  ComposeApp(std::string name, const boost::filesystem::path& root_dir, const std::string& compose_bin,
-             const std::string& docker_bin, const Docker::RegistryClient& registry_client);
+  ComposeApp(std::string name, const boost::filesystem::path& root_dir, std::string compose_bin, std::string docker_bin,
+             const Docker::RegistryClient& registry_client);
 
   bool fetch(const std::string& app_uri);
   bool up(bool no_start = false);
@@ -27,7 +27,7 @@ class ComposeApp {
 
  private:
   bool cmd_streaming(const std::string& cmd);
-  std::pair<bool, std::string> cmd(const std::string& cmd) const;
+  static std::pair<bool, std::string> cmd(const std::string& cmd);
   bool download(const std::string& app_uri);
   static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);
   void extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction = true);

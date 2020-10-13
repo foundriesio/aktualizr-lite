@@ -65,10 +65,9 @@ const std::string RegistryClient::ManifestEndpoint{"/manifests/"};
 const std::string RegistryClient::BlobEndpoint{"/blobs/"};
 const std::string RegistryClient::SupportedRegistryVersion{"/v2/"};
 
-RegistryClient::RegistryClient(const std::string& treehub_endpoint,
-                               const std::shared_ptr<HttpInterface>& ota_lite_client,
+RegistryClient::RegistryClient(const std::string& treehub_endpoint, std::shared_ptr<HttpInterface> ota_lite_client,
                                HttpClientFactory http_client_factory)
-    : ota_lite_client_{ota_lite_client}, http_client_factory_{std::move(http_client_factory)} {
+    : ota_lite_client_{std::move(ota_lite_client)}, http_client_factory_{std::move(http_client_factory)} {
   // There is an assumption that the treehub and the registry auth endpoints share the same base URL,
   // so let's try to deduce the registry auth endpoint from the received URL to the treehub
   if (!treehub_endpoint.empty()) {
@@ -153,7 +152,7 @@ struct DownloadCtx {
 static size_t DownloadHandler(char* data, size_t buf_size, size_t buf_numb, void* user_ctx) {
   assert(user_ctx);
 
-  auto download_ctx = reinterpret_cast<DownloadCtx*>(user_ctx);
+  auto* download_ctx = reinterpret_cast<DownloadCtx*>(user_ctx);
   return download_ctx->write(data, (buf_size * buf_numb));
 }
 

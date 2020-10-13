@@ -54,7 +54,7 @@ class LiteClient {
     return {is_reboot_required_, config.bootloader.reboot_command};
   }
 
-  bool composeAppsChanged(bool check_target_apps = true);
+  bool composeAppsChanged() const;
   Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
   bool updateImageMeta();
   bool checkImageMetaOffline();
@@ -74,15 +74,15 @@ class LiteClient {
 
   void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
 
-  std::unique_ptr<Lock> getDownloadLock();
-  std::unique_ptr<Lock> getUpdateLock();
+  std::unique_ptr<Lock> getDownloadLock() const;
+  std::unique_ptr<Lock> getUpdateLock() const;
 
   void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event);
   void notifyDownloadStarted(const Uptane::Target& t);
   void notifyDownloadFinished(const Uptane::Target& t, bool success);
   void notifyInstallStarted(const Uptane::Target& t);
 
-  void writeCurrentTarget(const Uptane::Target& t);
+  void writeCurrentTarget(const Uptane::Target& t) const;
 
   data::InstallationResult installPackage(const Uptane::Target& target);
   std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
