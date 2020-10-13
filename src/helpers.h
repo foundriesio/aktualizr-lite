@@ -54,8 +54,7 @@ class LiteClient {
     return {is_reboot_required_, config.bootloader.reboot_command};
   }
 
-  bool dockerAppsChanged(bool check_target_apps = true);
-  void storeDockerParamsDigest();
+  bool composeAppsChanged(bool check_target_apps = true);
   Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
   bool updateImageMeta();
   bool checkImageMetaOffline();
@@ -105,7 +104,7 @@ class LiteClient {
 
 void generate_correlation_id(Uptane::Target& t);
 bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& config_tags);
-bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareDockerApps);
+bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compareApps);
 bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector<Uptane::Target>& installed_versions);
 void log_info_target(const std::string& prefix, const Config& config, const Uptane::Target& t);
 bool match_target_base(const Uptane::Target& t1, const Uptane::Target& t2);
