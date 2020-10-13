@@ -6,6 +6,8 @@
 #include "http/httpclient.h"
 #include "test_utils.h"
 #include "utilities/utils.h"
+#include "storage/invstorage.h"
+#include "uptane/fetcher.h"
 #include "http/httpinterface.h"
 
 #include "composeappmanager.h"
