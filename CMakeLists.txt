@@ -15,9 +15,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # OSTree is mandatory for aktualizr-lite
 option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
-option(BUILD_DOCKERAPP "Set to ON to compile with package manager support of docker-app" ON)
-# always build with DOCKERAPP for aktualizr-lite, optional only for aktualizr
-set(BUILD_DOCKERAPP ON)
 option(BUILD_WITH_CLANG_TIDY "Set to ON to do clang-tidy during source compilation" OFF)
 
 # If we build the sota tools we don't need aklite (???) and vice versa
@@ -58,6 +55,5 @@ endif(BUILD_AKLITE)
 # Use `-LH` options (cmake <args> -LH) to output all variables
 message(STATUS "BUILD_AKLITE: ${BUILD_AKLITE}")
 message(STATUS "BUILD_OSTREE: ${BUILD_OSTREE}")
-message(STATUS "BUILD_DOCKERAPP: ${BUILD_DOCKERAPP}")
 message(STATUS "BUILD_SOTA_TOOLS: ${BUILD_SOTA_TOOLS}")
 message(STATUS "BUILD_WITH_CLANG_TIDY: ${BUILD_WITH_CLANG_TIDY}")
