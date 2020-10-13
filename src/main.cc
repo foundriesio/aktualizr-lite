@@ -7,6 +7,7 @@
 
 #include "helpers.h"
 #include "libaktualizr/config.h"
+#include "crypto/keymanager.h"
 
 #include "utilities/aktualizr_version.h"
 
