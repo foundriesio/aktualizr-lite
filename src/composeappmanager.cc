@@ -200,10 +200,12 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
     if (!app_ctor_(pair.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
-    } else {
-      cur_apps_to_fetch_and_update_.erase(pair.first);
     }
   };
+
+  // there is no much reason in re-trying to install app if its installation has failed for the first time
+  // TODO: we might add more advanced logic here, e.g. try to install a few times and then fail
+  cur_apps_to_fetch_and_update_.clear();
 
   if (cfg_.docker_prune) {
     LOG_INFO << "Pruning unused docker images";
