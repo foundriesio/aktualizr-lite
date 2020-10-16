@@ -16,6 +16,24 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
   auto target = client.getCurrent();
 
+  try {
+    LOG_INFO << "Device UUID: " << client.getDeviceID();
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to get a device UUID: " << exc.what();
+  }
+
+  const auto http_res = client.http_client->get(client.config.tls.server + "/device", HttpInterface::kNoLimit);
+  if (http_res.isOk()) {
+    const Json::Value device_info = http_res.getJson();
+    if (!device_info.empty()) {
+      LOG_INFO << "Device name: " << device_info["Name"].asString();
+    } else {
+      LOG_WARNING << "Failed to get a device name from a device info: " << device_info;
+    }
+  } else {
+    LOG_WARNING << "Failed to get a device info: " << http_res.getStatusStr();
+  }
+
   if (target.MatchTarget(Uptane::Target::Unknown())) {
     LOG_INFO << "No active deployment found";
   } else {

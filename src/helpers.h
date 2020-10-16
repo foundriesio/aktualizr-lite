@@ -66,6 +66,7 @@ class LiteClient {
   bool isTargetCurrent(const Uptane::Target& target) const;
   bool checkAppsToUpdate(const Uptane::Target& target) const;
   void setAppsNotChecked();
+  std::string getDeviceID() const { return key_manager_->getCN(); }
 
  private:
   FRIEND_TEST(helpers, locking);
