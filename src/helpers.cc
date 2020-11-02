@@ -578,6 +578,8 @@ void LiteClient::setAppsNotChecked() {
   }
 }
 
+std::string LiteClient::getDeviceID() const { return key_manager_->getCN(); }
+
 // TODO: this has to be refactored: target comparision should be in the package manager context
 // at least the logic that gets a list of apps and apps root folder since they are package manager specific.
 
