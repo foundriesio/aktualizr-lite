@@ -31,7 +31,9 @@ void log_info_target(const std::string& prefix, const Config& config, const Upta
       if ((*i).isObject() && (*i).isMember("uri")) {
         const auto& app = i.key().asString();
         std::string app_status =
-            (config_apps.end() != std::find(config_apps.begin(), config_apps.end(), app)) ? "on" : "off";
+            (!config_apps || (*config_apps).end() != std::find((*config_apps).begin(), (*config_apps).end(), app))
+                ? "on"
+                : "off";
         LOG_INFO << "\t" << app_status << ": " << app << " -> " << (*i)["uri"].asString();
       } else {
         LOG_ERROR << "\t\tInvalid custom data for docker_compose_apps: " << i.key().asString();
@@ -81,9 +83,14 @@ static bool appListChanged(const Json::Value& target_apps, std::vector<std::stri
 bool LiteClient::composeAppsChanged() const {
   if (config.pacman.type == ComposeAppManager::Name) {
     ComposeAppManager::Config cacfg(config.pacman);
-    if (appListChanged(getCurrent().custom_data()["docker_compose_apps"], cacfg.apps, cacfg.apps_root)) {
+    if (!cacfg.apps) {
+      // `compose_apps` is not specified in the config at all
+      return false;
+    }
+    if (appListChanged(getCurrent().custom_data()["docker_compose_apps"], *cacfg.apps, cacfg.apps_root)) {
       return true;
     }
+
   } else {
     return false;
   }

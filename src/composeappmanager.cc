@@ -5,11 +5,14 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
 
   if (raw.count("compose_apps") == 1) {
     std::string val = raw.at("compose_apps");
+    // if compose_apps is specified then `apps` optional configuration variable is initialized with an empty vector
+    apps = boost::make_optional(std::vector<std::string>());
     if (val.length() > 0) {
       // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
-      boost::split(apps, val, boost::is_any_of(", "), boost::token_compress_on);
+      boost::split(*apps, val, boost::is_any_of(", "), boost::token_compress_on);
     }
   }
+
   if (raw.count("compose_apps_root") == 1) {
     apps_root = raw.at("compose_apps_root");
   }
@@ -49,7 +52,9 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
         return Docker::ComposeApp(app, cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
                                   boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
       }} {
-  for (const auto& app_name : cfg_.apps) {
+  const auto& current_apps = getApps(getCurrent());
+  for (const auto& app_pair : current_apps) {
+    const auto& app_name = app_pair.first;
     auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeApp::NeedStartFile;
     if (boost::filesystem::exists(need_start_flag)) {
       app_ctor_(app_name).start();
@@ -64,12 +69,23 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
   auto target_apps = t.custom_data()["docker_compose_apps"];
   for (Json::ValueIterator i = target_apps.begin(); i != target_apps.end(); ++i) {
     if ((*i).isObject() && (*i).isMember("uri")) {
-      for (const auto& app : cfg_.apps) {
-        if (i.key().asString() == app) {
-          apps[app] = (*i)["uri"].asString();
-          break;
+      const auto& target_app_name = i.key().asString();
+      const auto& target_app_uri = (*i)["uri"].asString();
+
+      if (!!cfg_.apps) {
+        // if `compose_apps` is specified in the config then add the current Target app only if it listed in
+        // `compose_apps`
+        for (const auto& app : *(cfg_.apps)) {
+          if (target_app_name == app) {
+            apps[target_app_name] = target_app_uri;
+            break;
+          }
         }
+      } else {
+        // if `compose_apps` is not specified just add all Target's apps
+        apps[target_app_name] = target_app_uri;
       }
+
     } else {
       LOG_ERROR << "Invalid custom data for docker_compose_app: " << i.key().asString() << " -> " << *i;
     }
@@ -232,16 +248,17 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
   }
   std::vector<std::string> target_apps = target.custom_data()["docker_compose_apps"].getMemberNames();
 
+  const auto& current_apps = getApps(target);
+
   for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(cfg_.apps_root), {})) {
     if (boost::filesystem::is_directory(entry)) {
       std::string name = entry.path().filename().native();
-      if (std::find(cfg_.apps.begin(), cfg_.apps.end(), name) == cfg_.apps.end()) {
+      if (current_apps.find(name) == current_apps.end()) {
         LOG_WARNING << "Docker Compose App(" << name
-                    << ") installed, but is now removed from configuration. Removing from system";
-        app_ctor_(name).remove();
-      } else if (std::find(target_apps.begin(), target_apps.end(), name) == target_apps.end()) {
-        LOG_WARNING << "Docker Compose App(" << name
-                    << ") configured, but not defined in installation target. Removing from system";
+                    << ") installed, "
+                       "but is either removed from configuration or not defined in current Target. "
+                       "Removing from system";
+
         app_ctor_(name).remove();
       }
     }
