@@ -17,7 +17,7 @@ class ComposeAppManager : public OstreeManager {
    public:
     Config(const PackageConfig& pconfig);
 
-    std::vector<std::string> apps;
+    boost::optional<std::vector<std::string>> apps;
     boost::filesystem::path apps_root{"/var/sota/compose-apps"};
     boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
     boost::filesystem::path docker_bin{"/usr/bin/docker"};
@@ -41,6 +41,8 @@ class ComposeAppManager : public OstreeManager {
   data::InstallationResult install(const Uptane::Target& target) const override;
   std::string name() const override { return Name; };
 
+  // Returns an intersection of Target's Apps and Apps listed in the config (sota.toml:compose_apps)
+  // If Apps are not specified in the config then all Target's Apps are returned
   AppsContainer getApps(const Uptane::Target& t) const;
   AppsContainer getAppsToUpdate(const Uptane::Target& t, bool full_status_check) const;
   bool checkForAppsToUpdate(const Uptane::Target& target, boost::optional<bool> full_status_check_in);

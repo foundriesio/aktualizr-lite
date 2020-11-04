@@ -138,9 +138,9 @@ TEST(ComposeApp, Config) {
 
   ComposeAppManager::Config cfg(config.pacman);
   ASSERT_TRUE(cfg.docker_prune);
-  ASSERT_EQ(2, cfg.apps.size());
-  ASSERT_EQ("app1", cfg.apps[0]);
-  ASSERT_EQ("app2", cfg.apps[1]);
+  ASSERT_EQ(2, (*cfg.apps).size());
+  ASSERT_EQ("app1", (*cfg.apps)[0]);
+  ASSERT_EQ("app2", (*cfg.apps)[1]);
   ASSERT_EQ("apps-root", cfg.apps_root);
   ASSERT_EQ("compose", cfg.compose_bin);
   ASSERT_EQ("docker", cfg.docker_bin);
@@ -173,7 +173,7 @@ class TestSysroot: public OSTree::Sysroot {
 
 
 struct TestClient {
-  TestClient(const char* apps, const Uptane::Target* installedTarget = nullptr,
+  TestClient(const char* apps = nullptr, const Uptane::Target* installedTarget = nullptr,
              FakeRegistry* registry = nullptr, std::string ostree_server_url = "",
              bool force_update = false, TestSysroot::Hasher sysroot_hasher = nullptr) {
     tempdir = std_::make_unique<TemporaryDirectory>();
@@ -188,7 +188,9 @@ struct TestClient {
     // many tests use this build-time generated rootfs for testing purposes and should be aware of the hardcoded stateroot name
     config.pacman.os = "dummy-os";
     apps_root = config.pacman.extra["compose_apps_root"] = (*tempdir / "apps").native();
-    config.pacman.extra["compose_apps"] = apps;
+    if (apps != nullptr) {
+      config.pacman.extra["compose_apps"] = apps;
+    }
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
     boost::filesystem::copy("tests/docker_fake.sh", tempdir->Path() / "docker_fake.sh");
     config.pacman.extra["docker_bin"] = (tempdir->Path() / "docker_fake.sh").string();
@@ -258,6 +260,65 @@ TEST(ComposeApp, getApps) {
   ASSERT_EQ(2, apps.size());
   ASSERT_EQ("n/a", apps["app1"]);
   ASSERT_EQ("N/A", apps["app2"]);
+}
+
+TEST(ComposeApp, getAppsIfAppsAreNotSpecified) {
+  auto mgr = TestClient().pacman;
+
+  std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
+  Json::Value target_json;
+  target_json["hashes"]["sha256"] = sha;
+  target_json["custom"]["targetFormat"] = "OSTREE";
+  target_json["length"] = 0;
+  target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "app1_uri";
+  target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "app2_uri";
+  Uptane::Target target("pull", target_json);
+
+  auto apps = mgr->getApps(target);
+  ASSERT_EQ(2, apps.size());
+  ASSERT_EQ("app1_uri", apps["app1"]);
+  ASSERT_EQ("app2_uri", apps["app2"]);
+}
+
+TEST(ComposeApp, getAppsIfAppsSpecifiedButEmpty) {
+  const std::vector<const char*> test_cases = {"", " ", ","};
+
+  for (const auto& empty_app_list: test_cases) {
+    auto mgr = TestClient(empty_app_list).pacman;
+
+    std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
+    Json::Value target_json;
+    target_json["hashes"]["sha256"] = sha;
+    target_json["custom"]["targetFormat"] = "OSTREE";
+    target_json["length"] = 0;
+    target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "app1_uri";
+    target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "app2_uri";
+    Uptane::Target target("pull", target_json);
+
+    auto apps = mgr->getApps(target);
+    ASSERT_EQ(0, apps.size());
+  }
+}
+
+TEST(ComposeApp, getAppsIfAppsSpecifiedAndNotEmpty) {
+  const std::vector<const char*> test_cases = {"app1", "app1,", ",app1"};
+
+  for (const auto& empty_app_list: test_cases) {
+    auto mgr = TestClient(empty_app_list).pacman;
+
+    std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
+    Json::Value target_json;
+    target_json["hashes"]["sha256"] = sha;
+    target_json["custom"]["targetFormat"] = "OSTREE";
+    target_json["length"] = 0;
+    target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "app1_uri";
+    target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "app2_uri";
+    Uptane::Target target("pull", target_json);
+
+    auto apps = mgr->getApps(target);
+    ASSERT_EQ(1, apps.size());
+    ASSERT_EQ("app1_uri", apps["app1"]);
+  }
 }
 
 TEST(ComposeApp, fetch) {
@@ -451,6 +512,58 @@ TEST(ComposeApp, installApp) {
 
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // new App installation and compose_app is not specified
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client(nullptr, &installed_target, &registry, "https://my-ota/treehub");
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    ASSERT_TRUE(registry.wasManifestRequested());
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ "myapp").string()));
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+  }
+
+  // Target App is not installed because `compose_apps` is specified and is an empty list
+  {
+    TemporaryDirectory tmp_dir;
+    FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
+
+    auto app_uri = registry.addApp("test_repo", "app1", nullptr, "myapp");
+
+    // emulate situation when App is already installed on a system
+    installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+    Uptane::Target installed_target("pull", installed_target_json);
+    TestClient client("", &installed_target, &registry, "https://my-ota/treehub");
+    boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+                     std::string("image: foo\n"));
+    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
+
+    Json::Value target_to_install_json{installed_target_json};
+    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
+
+    ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
+    // make sure that App manifest wasn't requested from Registry
+    ASSERT_FALSE(registry.wasManifestRequested());
+    // make sure that docker-compose config and pull were not called
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    // make sure that docker-compose up wasn't called
+    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
   }
 
   // existing App update (uri/hash does not match)
