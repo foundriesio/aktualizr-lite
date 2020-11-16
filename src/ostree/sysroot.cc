@@ -1,4 +1,4 @@
-#include "ostree.h"
+#include "sysroot.h"
 
 namespace OSTree {
 

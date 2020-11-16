@@ -6,7 +6,7 @@
 
 #include "composeapp.h"
 #include "docker.h"
-#include "ostree.h"
+#include "ostree/sysroot.h"
 #include "package_manager/ostreemanager.h"
 
 class ComposeAppManager : public OstreeManager {
