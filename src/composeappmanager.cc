@@ -16,6 +16,18 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("compose_apps_root") == 1) {
     apps_root = raw.at("compose_apps_root");
   }
+  if (raw.count("compose_apps_tree") == 1) {
+    apps_tree = raw.at("compose_apps_tree");
+  }
+  if (raw.count("create_apps_tree") == 1) {
+    create_apps_tree = boost::lexical_cast<bool>(raw.at("create_apps_tree"));
+  }
+  if (raw.count("images_data_root") == 1) {
+    images_data_root = raw.at("images_data_root");
+  }
+  if (raw.count("docker_images_reload_cmd") == 1) {
+    docker_images_reload_cmd = raw.at("docker_images_reload_cmd");
+  }
   if (raw.count("docker_compose_bin") == 1) {
     compose_bin = raw.at("docker_compose_bin");
   }
@@ -52,6 +64,13 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
         return Docker::ComposeApp(app, cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
                                   boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
       }} {
+  try {
+    app_tree_ = std::make_unique<ComposeAppTree>(cfg_.apps_tree.string(), cfg_.apps_root.string(),
+                                                 cfg_.images_data_root.string(), cfg_.create_apps_tree);
+  } catch (const std::exception& exc) {
+    LOG_DEBUG << "Failed to initialize Compose App Tree (ostree) at " << cfg_.apps_tree << ". Error: " << exc.what();
+  }
+
   const auto& current_apps = getApps(getCurrent());
   for (const auto& app_pair : current_apps) {
     const auto& app_name = app_pair.first;
@@ -182,10 +201,18 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
   bool passed = true;
-  for (const auto& pair : cur_apps_to_fetch_and_update_) {
-    LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
-    if (!app_ctor_(pair.first).fetch(pair.second)) {
-      passed = false;
+  const auto& branch_to_pull = target.custom_data()["compose-apps-branch"].asString();
+  const auto& commit_hash_to_pull = target.custom_data()["compose-apps-hash"].asString();
+  if (app_tree_ && !branch_to_pull.empty()) {
+    LOG_INFO << "Pulling from App Tree; branch: " << branch_to_pull << " commit: " << commit_hash_to_pull;
+    app_tree_->pull(config.ostree_server, keys, commit_hash_to_pull);
+    app_tree_->pull(config.ostree_server, keys, branch_to_pull);
+  } else {
+    for (const auto& pair : cur_apps_to_fetch_and_update_) {
+      LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
+      if (!app_ctor_(pair.first).fetch(pair.second)) {
+        passed = false;
+      }
     }
   }
   are_apps_checked_ = false;
@@ -212,6 +239,25 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
 
   handleRemovedApps(target);
 
+  const auto& commit_hash_to_install = target.custom_data()["compose-apps-hash"].asString();
+  if (app_tree_ && !commit_hash_to_install.empty()) {
+    LOG_INFO << "Checking out updated Apps: " << commit_hash_to_install;
+    const_cast<ComposeAppManager*>(this)->app_tree_->checkout(commit_hash_to_install);
+
+    LOG_INFO << "Reloading the docker image and layer store to enable the update... ";
+    {
+      const auto& cmd = cfg_.docker_images_reload_cmd;
+      std::string out_str;
+      int exit_code = Utils::shell(cmd, &out_str, true);
+      LOG_TRACE << "Command: " << cmd << "\n" << out_str;
+
+      if (exit_code != EXIT_SUCCESS) {
+        LOG_ERROR << "Failed to reload the docker image and layer store, command failed: " << out_str;
+        return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not reload docker store");
+      }
+    }
+    LOG_INFO << "Updated docker images has been successfully enabled";
+  }
   // make sure we install what we fecthed
   for (const auto& pair : cur_apps_to_fetch_and_update_) {
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;

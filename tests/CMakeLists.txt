@@ -19,7 +19,7 @@ set(TEST_INCS
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include
   ${GLIB_INCLUDE_DIRS}
-  ${LIBOSTREE_INCLUDE_DIRS}
+  ${LIBOSTREE_INCLUDE_DIRS}non_init_repo_dir
   ${AKLITE_DIR}/src
 )
 set(TEST_LIBS

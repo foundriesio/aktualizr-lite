@@ -267,6 +267,7 @@ LiteClient::LiteClient(Config& config_in)
   update_request_headers(http_client, current_target, config.pacman);
 
   key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
+  key_manager_->loadKeys();
   key_manager_->copyCertsToCurl(*http_client);
 
   // TODO: consider improving this factory method
