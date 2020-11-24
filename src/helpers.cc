@@ -125,11 +125,13 @@ bool LiteClient::composeAppsChanged() const {
   return false;
 }
 
-static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OSTree::Sysroot& sysroot,
-                                                                             INvStorage& storage, Config& config) {
+static std::tuple<Uptane::Target, Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OSTree::Sysroot& sysroot,
+                                                                                              INvStorage& storage,
+                                                                                              Config& config) {
   data::ResultCode::Numeric result_code = data::ResultCode::Numeric::kUnknown;
   boost::optional<Uptane::Target> pending_version;
-  storage.loadInstalledVersions("", nullptr, &pending_version);
+  boost::optional<Uptane::Target> current_version;
+  storage.loadInstalledVersions("", &current_version, &pending_version);
 
   std::string current_hash = sysroot.getCurDeploymentHash();
   if (current_hash.empty()) {
@@ -147,6 +149,8 @@ static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OST
       if (bootloader.rebootDetected()) {
         bootloader.rebootFlagClear();
       }
+      // Installation was successful, so both currently installed Target and Target that has been applied are the same
+      return std::tie(target, target, result_code);
     } else {
       if (bootloader.rebootDetected()) {
         LOG_ERROR << "Expected to boot on " << target.sha256Hash() << " but found " << current_hash
@@ -158,8 +162,9 @@ static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OST
         // Update still pending as no reboot was detected
         result_code = data::ResultCode::Numeric::kNeedCompletion;
       }
+      // Installation was not successful
+      return std::tie(*current_version, target, result_code);
     }
-    return std::make_pair(target, result_code);
   }
 
   std::vector<Uptane::Target> installed_versions;
@@ -172,10 +177,12 @@ static std::pair<Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OST
   std::vector<Uptane::Target>::reverse_iterator it;
   for (it = installed_versions.rbegin(); it != installed_versions.rend(); it++) {
     if (it->sha256Hash() == current_hash) {
-      return std::make_pair(*it, data::ResultCode::Numeric::kAlreadyProcessed);
+      result_code = data::ResultCode::Numeric::kAlreadyProcessed;
+      return std::tie(*it, *it, result_code);
     }
   }
-  return std::make_pair(Uptane::Target::Unknown(), result_code);
+  Uptane::Target unknown_target{Uptane::Target::Unknown()};
+  return std::tie(unknown_target, unknown_target, result_code);
 }
 
 LiteClient::LiteClient(Config& config_in)
@@ -252,8 +259,12 @@ LiteClient::LiteClient(Config& config_in)
   // finalizeIfNeeded it looks like copy-paste of SotaUptaneClient::finalizeAfterReboot
   // can we use just SotaUptaneClient::finalizeAfterReboot or even maybe SotaUptaneClient::initialize ???
   // in this case we could do our specific finalization, including starting apps, in ComposeAppManager::finalizeInstall
-  std::pair<Uptane::Target, data::ResultCode::Numeric> pair = finalizeIfNeeded(*ostree_sysroot, *storage, config);
-  update_request_headers(http_client, pair.first, config.pacman);
+  Uptane::Target current_target{Uptane::Target::Unknown()};
+  Uptane::Target target_been_applied{Uptane::Target::Unknown()};
+  data::ResultCode::Numeric target_installation_result;
+  std::tie(current_target, target_been_applied, target_installation_result) =
+      finalizeIfNeeded(*ostree_sysroot, *storage, config);
+  update_request_headers(http_client, current_target, config.pacman);
 
   key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
   key_manager_->copyCertsToCurl(*http_client);
@@ -268,9 +279,9 @@ LiteClient::LiteClient(Config& config_in)
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
 
-  writeCurrentTarget(pair.first);
-  if (pair.second != data::ResultCode::Numeric::kAlreadyProcessed) {
-    notifyInstallFinished(pair.first, pair.second);
+  writeCurrentTarget(current_target);
+  if (target_installation_result != data::ResultCode::Numeric::kAlreadyProcessed) {
+    notifyInstallFinished(target_been_applied, target_installation_result);
   }
 }
 
