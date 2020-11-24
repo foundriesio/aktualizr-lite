@@ -46,7 +46,34 @@ static void add_apps_header(std::vector<std::string>& headers, PackageConfig& co
   if (config.type == ComposeAppManager::Name) {
     ComposeAppManager::Config cfg(config);
     // TODO: consider this header renaming
-    headers.emplace_back("x-ats-dockerapps: ");
+    if (!!cfg.apps) {
+      headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(*cfg.apps, ","));
+    } else {
+      headers.emplace_back("x-ats-dockerapps: ");
+    }
+  }
+}
+
+static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
+                                   PackageConfig& config) {
+  http_client->updateHeader("x-ats-target", target.filename());
+
+  if (config.type == ComposeAppManager::Name) {
+    ComposeAppManager::Config cfg(config);
+
+    // If App list was not specified in the config then we need to update the request header with a list of
+    // Apps specified in the currently installed Target
+    if (!cfg.apps) {
+      std::list<std::string> apps;
+      auto target_apps = target.custom_data()["docker_compose_apps"];
+      for (Json::ValueIterator ii = target_apps.begin(); ii != target_apps.end(); ++ii) {
+        if ((*ii).isObject() && (*ii).isMember("uri")) {
+          const auto& target_app_name = ii.key().asString();
+          apps.push_back(target_app_name);
+        }
+      }
+      http_client->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
+    }
   }
 }
 
@@ -216,7 +243,7 @@ LiteClient::LiteClient(Config& config_in)
     headers.emplace_back("x-ats-primary: " + primary_ecu.first.ToString());
   }
 
-  headers.emplace_back("x-ats-tags: ");
+  headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
 
   http_client = std::make_shared<HttpClient>(&headers);
   uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
@@ -226,7 +253,7 @@ LiteClient::LiteClient(Config& config_in)
   // can we use just SotaUptaneClient::finalizeAfterReboot or even maybe SotaUptaneClient::initialize ???
   // in this case we could do our specific finalization, including starting apps, in ComposeAppManager::finalizeInstall
   std::pair<Uptane::Target, data::ResultCode::Numeric> pair = finalizeIfNeeded(*ostree_sysroot, *storage, config);
-  http_client->updateHeader("x-ats-target", pair.first.filename());
+  update_request_headers(http_client, pair.first, config.pacman);
 
   key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
   key_manager_->copyCertsToCurl(*http_client);
