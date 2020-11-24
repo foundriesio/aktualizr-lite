@@ -2,9 +2,11 @@
 #define AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_
 
 #include <functional>
+#include <memory>
 #include <unordered_map>
 
 #include "composeapp.h"
+#include "composeapptree.h"
 #include "docker.h"
 #include "ostree/sysroot.h"
 #include "package_manager/ostreemanager.h"
@@ -24,6 +26,10 @@ class ComposeAppManager : public OstreeManager {
     bool docker_prune{true};
     bool force_update{false};
     bool full_status_check{false};
+    boost::filesystem::path apps_tree{"/var/sota/compose-apps-tree"};
+    bool create_apps_tree{false};
+    boost::filesystem::path images_data_root{"/var/lib/docker"};
+    std::string docker_images_reload_cmd{"systemctl reload docker"};
   };
 
   using ComposeAppCtor = std::function<Docker::ComposeApp(const std::string& app)>;
@@ -57,6 +63,7 @@ class ComposeAppManager : public OstreeManager {
   mutable AppsContainer cur_apps_to_fetch_and_update_;
   bool are_apps_checked_{false};
   ComposeAppCtor app_ctor_;
+  std::unique_ptr<ComposeAppTree> app_tree_;
 };
 
 #endif  // AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_

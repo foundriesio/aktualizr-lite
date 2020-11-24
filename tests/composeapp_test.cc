@@ -191,6 +191,8 @@ struct TestClient {
     if (apps != nullptr) {
       config.pacman.extra["compose_apps"] = apps;
     }
+    config.pacman.extra["compose_apps_tree"] = (tempdir->Path() / "apps-tree").string();
+    config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
     boost::filesystem::copy("tests/docker_fake.sh", tempdir->Path() / "docker_fake.sh");
     config.pacman.extra["docker_bin"] = (tempdir->Path() / "docker_fake.sh").string();
@@ -215,9 +217,9 @@ struct TestClient {
     }
     sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), false) :
                                                  std::make_shared<TestSysroot>(sysroot_hasher, config.pacman.sysroot.string());
+    keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
     pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
                                                   sysroot, registry_fake_http_client_factory);
-    keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
     fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());
   }
 

@@ -33,6 +33,8 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.os = "dummy-os";
   config.pacman.extra["booted"] = "0";
+  config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
+  config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
   std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
@@ -52,6 +54,8 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.os = "dummy-os";
   config.pacman.extra["booted"] = "0";
+  config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
+  config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
 
   target_json["hashes"]["sha256"] = "abcd";
   Uptane::Target new_target("test-finalize", target_json);
@@ -272,6 +276,8 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   config.pacman.extra["booted"] = "0";
   config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+  config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
+  config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
 
   std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 
