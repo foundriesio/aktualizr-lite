@@ -214,13 +214,27 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     }
 
     if (firstLoop) {
+      // TODO: Consider removing `if firstLoop` at all or improving it
+      // e.g. the following is redundtant if there is a new Target so we might wanna run it after `find_target`
+
       // On first loop we need to see if we have a config change detected from
       // from the previous run. We need to make sure we have up-to-date
       // metadata, so this really needs to be inside the loop.
       // Also, check if Apps are actually installed and running
       if (current.IsValid() && (client.composeAppsChanged() || !client.checkAppsToUpdate(current))) {
         do_update(client, current);
+      } else {
+        // client.checkAppsToUpdate(current) checks currently installed and running apps against
+        // the list of apps specified in the config taking into account the current Target.
+        // Then it informs (sets internal flag) the package manager that Apps are checked and
+        // a list of Apps to be installed is prepared, so during an update apps checking is avoided.
+        // Since, in this case we check apps for the current Target, so if a new Target is downloaded
+        // then do_update() will skip Apps comparison thus any new App in the new Target won't be updated.
+        // Therefore, we need to clear the flag that indicates that Apps are checked to make the following
+        // do_update do Apps checking against a new Target
+        client.setAppsNotChecked();
       }
+
       firstLoop = false;
     }
 
