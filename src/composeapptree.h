@@ -12,6 +12,7 @@ class ComposeAppTree {
   static constexpr const char* const RemoteDefName{"treehub"};
   static constexpr const char* const ImagesDir{"/images"};
   static constexpr const char* const AppsDir{"/apps"};
+  static constexpr const char* const Whiteouts{"/.whiteouts"};
 
  public:
   ComposeAppTree(const std::string& tree_path, std::string apps_dir, std::string images_dir, bool create = false);
@@ -22,11 +23,13 @@ class ComposeAppTree {
 
  private:
   void addRemote(const std::string& tree_remote, const KeyManager& key_manager);
+  void applyWhiteouts(const std::string& hash);
 
  private:
   OSTree::Repo repo_;
   const std::string apps_dir_;
   const std::string images_dir_;
+  const std::string whiteouts_filepath_;
 };
 
 #endif  // AKTUALIZR_LITE_COMPOSE_APP_TREE_H
