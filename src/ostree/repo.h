@@ -17,8 +17,8 @@ class Repo {
   void addRemote(const std::string& name, const std::string& url, const std::string& ca, const std::string& cert,
                  const std::string& key);
 
-  void pull(const std::string& remote_name, const std::string& ref);
-  void checkout(const std::string& hash, const std::string& src_dir, const std::string& dst_dir);
+  void pull(const std::string& remote_name, const std::string& branch, const std::string& commit_hash);
+  void checkout(const std::string& commit_hash, const std::string& src_dir, const std::string& dst_dir);
 
  private:
   void init(bool create);

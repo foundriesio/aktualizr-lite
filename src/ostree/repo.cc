@@ -73,22 +73,38 @@ void Repo::addRemote(const std::string& name, const std::string& url, const std:
   }
 }
 
-void Repo::pull(const std::string& remote_name, const std::string& ref) {
+void Repo::pull(const std::string& remote_name, const std::string& branch, const std::string& commit_hash) {
   OstreeAsyncProgress* progress =
       ostree_async_progress_new_and_connect(ostree_repo_pull_default_console_progress_changed, nullptr);
   OstreeRepoPullFlags pull_flags = OSTREE_REPO_PULL_FLAGS_NONE;
-  std::array<char*, 2> ref_to_fetch{const_cast<char*>(ref.c_str()), nullptr};
-  // char* ref_to_fetch[] = {const_cast<char*>(ref.c_str()), nullptr};
+  std::array<char*, 2> ref_to_fetch{const_cast<char*>(branch.c_str()), nullptr};
+  std::array<char*, 2> commit_id{const_cast<char*>(commit_hash.c_str()), nullptr};
+
+  GVariantBuilder builder;
+  g_autoptr(GVariant) pull_options = nullptr;
   g_autoptr(GError) error = nullptr;
-  gboolean pull_result = ostree_repo_pull(repo_, remote_name.c_str(), reinterpret_cast<char**>(&ref_to_fetch),
-                                          pull_flags, progress, nullptr, &error);
+
+  g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
+
+  g_variant_builder_add(
+      &builder, "{s@v}", "refs",
+      g_variant_new_variant(g_variant_new_strv(reinterpret_cast<const char* const*>(&ref_to_fetch), -1)));
+
+  g_variant_builder_add(
+      &builder, "{s@v}", "override-commit-ids",
+      g_variant_new_variant(g_variant_new_strv(reinterpret_cast<const char* const*>(&commit_id), -1)));
+
+  pull_options = g_variant_ref_sink(g_variant_builder_end(&builder));
+
+  gboolean pull_result =
+      ostree_repo_pull_with_options(repo_, remote_name.c_str(), pull_options, progress, nullptr, &error);
 
   if (0 == pull_result) {
-    throw std::runtime_error("Failed to pull " + ref + ": " + error->message);
+    throw std::runtime_error("Failed to pull " + branch + "@" + commit_hash + ": " + error->message);
   }
 }
 
-void Repo::checkout(const std::string& hash, const std::string& src_dir, const std::string& dst_dir) {
+void Repo::checkout(const std::string& commit_hash, const std::string& src_dir, const std::string& dst_dir) {
   const char* const OSTREE_GIO_FAST_QUERYINFO =
       "standard::name,standard::type,standard::size,standard::is-symlink,standard::symlink-target,unix::device,unix::"
       "inode,unix::mode,unix::uid,unix::gid,unix::rdev";
@@ -101,8 +117,8 @@ void Repo::checkout(const std::string& hash, const std::string& src_dir, const s
 
   {
     g_autoptr(GError) error = nullptr;
-    if (0 == ostree_repo_read_commit(repo_, hash.c_str(), &root, nullptr, nullptr, &error)) {
-      throw std::runtime_error("Failed to read commit " + hash + ": " + error->message);
+    if (0 == ostree_repo_read_commit(repo_, commit_hash.c_str(), &root, nullptr, nullptr, &error)) {
+      throw std::runtime_error("Failed to read commit " + commit_hash + ": " + error->message);
     }
   }
 
@@ -122,7 +138,7 @@ void Repo::checkout(const std::string& hash, const std::string& src_dir, const s
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
     if (0 == ostree_repo_checkout_tree(repo_, checkout_mode, overwrite_mode, dst, OSTREE_REPO_FILE(src), file_info,
                                        nullptr, &error)) {
-      throw std::runtime_error("Failed to checkout tree form repo " + hash + ": " + error->message);
+      throw std::runtime_error("Failed to checkout tree form repo " + commit_hash + ": " + error->message);
     }
   }
 }
