@@ -52,16 +52,17 @@ TEST_F(OSTreeTest, AddRemote) {
 //TEST_F(OSTreeTest, Pull) {
 //  ASSERT_TRUE(isRepoInited());
 //  repo_->addRemote("treehub", "http://localhost:8787", "", "", "");
-//  repo_->pull("treehub", "test");
+//  repo_->pull("treehub", "test", "7b5019ad0a1021e0368226844409f5015c1101b1370af2cc56e963f8d3e4f0cd");
 //}
 
 //TEST_F(OSTreeTest, Checkout) {
 //  ASSERT_TRUE(isRepoInited());
+//  const std::string commit_hash{"da7751c062967482bd7ac4b4d03f3c921d201e5ebc5f7d66449a5a59769d2384"};
 //  repo_->addRemote("treehub", "http://localhost:8787", "", "", "");
-//  repo_->pull("treehub", "test");
+//  repo_->pull("treehub", "test", commit_hash);
 //  const std::string dir_to_checkout_to = mkdtemp(const_cast<char*>((testing::TempDir() + "OSTreeTest-folder-XXXXXX").c_str()));
 //  try {
-//    repo_->checkout("test", "/", dir_to_checkout_to);
+//    repo_->checkout(commit_hash, "/", dir_to_checkout_to);
 //  } catch (const std::exception& exc) {
 
 //  }

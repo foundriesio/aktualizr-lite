@@ -201,12 +201,10 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
   bool passed = true;
-  const auto& branch_to_pull = target.custom_data()["compose-apps-branch"].asString();
-  const auto& commit_hash_to_pull = target.custom_data()["compose-apps-hash"].asString();
-  if (app_tree_ && !branch_to_pull.empty()) {
-    LOG_INFO << "Pulling from App Tree; branch: " << branch_to_pull << " commit: " << commit_hash_to_pull;
-    app_tree_->pull(config.ostree_server, keys, commit_hash_to_pull);
-    app_tree_->pull(config.ostree_server, keys, branch_to_pull);
+  const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
+  if (app_tree_ && !apps_uri.empty()) {
+    LOG_INFO << "Fetching Apps Tree -> " << apps_uri;
+    app_tree_->pull(config.ostree_server, keys, apps_uri);
   } else {
     for (const auto& pair : cur_apps_to_fetch_and_update_) {
       LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
@@ -239,10 +237,10 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
 
   handleRemovedApps(target);
 
-  const auto& commit_hash_to_install = target.custom_data()["compose-apps-hash"].asString();
-  if (app_tree_ && !commit_hash_to_install.empty()) {
-    LOG_INFO << "Checking out updated Apps: " << commit_hash_to_install;
-    const_cast<ComposeAppManager*>(this)->app_tree_->checkout(commit_hash_to_install);
+  const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
+  if (app_tree_ && !apps_uri.empty()) {
+    LOG_INFO << "Checking out updated Apps: " << apps_uri;
+    const_cast<ComposeAppManager*>(this)->app_tree_->checkout(apps_uri);
 
     LOG_INFO << "Reloading the docker image and layer store to enable the update... ";
     {

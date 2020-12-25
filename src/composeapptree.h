@@ -13,17 +13,19 @@ class ComposeAppTree {
   static constexpr const char* const ImagesDir{"/images"};
   static constexpr const char* const AppsDir{"/apps"};
   static constexpr const char* const Whiteouts{"/.whiteouts"};
+  using Uri = std::tuple<std::string, std::string>;
 
  public:
   ComposeAppTree(const std::string& tree_path, std::string apps_dir, std::string images_dir, bool create = false);
 
  public:
-  void pull(const std::string& remote_url, const KeyManager& key_manager, const std::string& hash);
-  void checkout(const std::string& hash);
+  void pull(const std::string& remote_url, const KeyManager& key_manager, const std::string& uri);
+  void checkout(const std::string& uri_str);
 
  private:
   void addRemote(const std::string& tree_remote, const KeyManager& key_manager);
   void applyWhiteouts(const std::string& hash);
+  static Uri parseUri(const std::string& uri);
 
  private:
   OSTree::Repo repo_;

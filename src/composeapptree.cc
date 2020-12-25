@@ -9,15 +9,20 @@ ComposeAppTree::ComposeAppTree(const std::string& tree_path, std::string apps_di
       images_dir_{std::move(images_dir)},
       whiteouts_filepath_{(boost::filesystem::path{images_dir_} / Whiteouts).string()} {}
 
-void ComposeAppTree::pull(const std::string& remote_url, const KeyManager& key_manager, const std::string& hash) {
+void ComposeAppTree::pull(const std::string& remote_url, const KeyManager& key_manager, const std::string& uri) {
   addRemote(remote_url, key_manager);
-  repo_.pull(RemoteDefName, hash);
+  std::string branch;
+  std::string commit_hash;
+  std::tie(branch, commit_hash) = parseUri(uri);
+  repo_.pull(RemoteDefName, branch, commit_hash);
 }
 
-void ComposeAppTree::checkout(const std::string& hash) {
-  repo_.checkout(hash, AppsDir, apps_dir_);
-  repo_.checkout(hash, ImagesDir, images_dir_);
-  applyWhiteouts(hash);
+void ComposeAppTree::checkout(const std::string& uri_str) {
+  const auto uri = parseUri(uri_str);
+  const auto& commit_hash = std::get<1>(uri);
+  repo_.checkout(commit_hash, AppsDir, apps_dir_);
+  repo_.checkout(commit_hash, ImagesDir, images_dir_);
+  applyWhiteouts(commit_hash);
 }
 
 void ComposeAppTree::addRemote(const std::string& tree_remote, const KeyManager& key_manager) {
@@ -57,4 +62,14 @@ void ComposeAppTree::applyWhiteouts(const std::string& hash) {
       LOG_ERROR << "Failed to create a non-regular file: " << dst_file << strerror(errno);
     }
   }
+}
+
+ComposeAppTree::Uri ComposeAppTree::parseUri(const std::string& uri) {
+  const auto uri_separator_indx = uri.find_first_of('@');
+  if (uri_separator_indx == std::string::npos) {
+    throw std::invalid_argument("Invalid app uri: " + uri);
+  }
+  const auto branch{uri.substr(0, uri_separator_indx)};
+  const auto commit_hash{uri.substr(uri_separator_indx + 1)};
+  return ComposeAppTree::Uri{branch, commit_hash};
 }
