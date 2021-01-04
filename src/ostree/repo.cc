@@ -18,7 +18,7 @@ Repo::~Repo() {
 }
 
 void Repo::init(bool create) {
-  OstreeRepoMode mode = OSTREE_REPO_MODE_BARE_USER;
+  OstreeRepoMode mode = OSTREE_REPO_MODE_BARE;
   g_autoptr(GFile) path = nullptr;
   g_autoptr(OstreeRepo) repo = nullptr;
   g_autoptr(GError) error = nullptr;
