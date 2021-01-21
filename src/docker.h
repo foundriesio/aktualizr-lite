@@ -4,7 +4,7 @@
 #include <limits>
 #include <string>
 
-#include <http/httpinterface.h>
+#include <http/httpclient.h>
 
 namespace Docker {
 
@@ -32,6 +32,24 @@ struct Uri {
   const std::string factory;
   const std::string repo;
   const std::string registryHostname;
+};
+
+struct ComposeService {
+  ComposeService(std::string name, std::string state) : name(name), state(state) {}
+  const std::string name;
+  const std::string state;
+};
+
+class Engine {
+ public:
+  using ClientFactory = std::function<std::shared_ptr<HttpInterface>()>;
+  static ClientFactory DefaultClientFactory;
+
+  Engine(ClientFactory client_factory) : client_factory_(client_factory){};
+  std::map<std::string, std::vector<ComposeService>> composeApps() const;
+
+ private:
+  ClientFactory client_factory_;
 };
 
 class RegistryClient {

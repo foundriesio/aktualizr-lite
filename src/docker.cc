@@ -58,6 +58,50 @@ HashedDigest::HashedDigest(const std::string& hash_digest) : digest_{boost::algo
   short_hash_ = hash_.substr(0, 7);
 }
 
+class EngineClient : public HttpClient {
+ public:
+  EngineClient() { curlEasySetoptWrapper(curl, CURLOPT_UNIX_SOCKET_PATH, "/var/run/docker.sock"); }
+};
+
+Engine::ClientFactory Engine::DefaultClientFactory = []() { return std::make_shared<EngineClient>(); };
+
+static constexpr int64_t max_container_resp = 1024 * 1024 * 16;
+
+std::map<std::string, std::vector<ComposeService>> Engine::composeApps() const {
+  std::map<std::string, std::vector<ComposeService>> projects;
+  auto resp = client_factory_()->get("http://foo/containers/json", max_container_resp);
+  if (resp.http_status_code != 200) {
+    LOG_ERROR << "Unable to list containers";
+    return projects;
+  }
+  auto data = resp.getJson();
+  for (Json::ValueIterator i = data.begin(); i != data.end(); ++i) {
+    std::string proj;
+    std::string svc;
+
+    auto labels = (*i)["Labels"];
+    for (Json::ValueIterator l = labels.begin(); l != labels.end(); ++l) {
+      auto key = l.key().asString();
+      if (key == "com.docker.compose.project") {
+        proj = (*l).asString();
+      }
+      if (key == "com.docker.compose.service") {
+        svc = (*l).asString();
+      }
+    }
+
+    if (!proj.empty() && !svc.empty()) {
+      auto services = projects.find(proj);
+      if (services == projects.end()) {
+        projects.emplace(proj, std::vector<ComposeService>());
+        services = projects.find(proj);
+      }
+      services->second.emplace_back(svc, (*i)["State"].asString());
+    }
+  }
+  return projects;
+}
+
 RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
     [](const std::vector<std::string>* headers) { return std::make_shared<HttpClient>(headers); };
 
