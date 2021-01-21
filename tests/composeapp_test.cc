@@ -156,7 +156,6 @@ TEST(ComposeApp, Config) {
   config.pacman.extra["compose_apps_root"] = "apps-root";
   config.pacman.extra["compose_apps"] = "app1 app2";
   config.pacman.extra["docker_compose_bin"] = "compose";
-  config.pacman.extra["docker_bin"] = "docker";
 
   ComposeAppManager::Config cfg(config.pacman);
   ASSERT_TRUE(cfg.docker_prune);
@@ -165,7 +164,6 @@ TEST(ComposeApp, Config) {
   ASSERT_EQ("app2", (*cfg.apps)[1]);
   ASSERT_EQ("apps-root", cfg.apps_root);
   ASSERT_EQ("compose", cfg.compose_bin);
-  ASSERT_EQ("docker", cfg.docker_bin);
 
   config.pacman.extra["docker_prune"] = "0";
   cfg = ComposeAppManager::Config(config.pacman);
@@ -214,8 +212,6 @@ struct TestClient {
       config.pacman.extra["compose_apps"] = apps;
     }
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
-    boost::filesystem::copy("tests/docker_fake.sh", tempdir->Path() / "docker_fake.sh");
-    config.pacman.extra["docker_bin"] = (tempdir->Path() / "docker_fake.sh").string();
     config.pacman.extra["docker_prune"] = "0";
     config.pacman.extra["force_update"] = force_update?"1":"0";
     config.storage.path = tempdir->Path();

@@ -6,11 +6,10 @@
 namespace Docker {
 
 ComposeApp::ComposeApp(std::string name, const boost::filesystem::path& root_dir, std::string compose_bin,
-                       std::string docker_bin, const Docker::RegistryClient& registry_client)
+                       const Docker::RegistryClient& registry_client)
     : name_{std::move(name)},
       root_{root_dir / name_},
       compose_{std::move(compose_bin)},
-      docker_{std::move(docker_bin)},
       registry_client_{registry_client} {}
 
 bool ComposeApp::fetch(const std::string& app_uri) {

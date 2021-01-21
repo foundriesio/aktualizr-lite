@@ -16,7 +16,7 @@ class ComposeApp {
   static constexpr const char* const ComposeFile{"docker-compose.yml"};
 
  public:
-  ComposeApp(std::string name, const boost::filesystem::path& root_dir, std::string compose_bin, std::string docker_bin,
+  ComposeApp(std::string name, const boost::filesystem::path& root_dir, std::string compose_bin,
              const Docker::RegistryClient& registry_client);
 
   bool fetch(const std::string& app_uri);
@@ -36,7 +36,6 @@ class ComposeApp {
   const std::string name_;
   const boost::filesystem::path root_;
   const std::string compose_;
-  const std::string docker_;
   const Docker::RegistryClient& registry_client_;
 };
 

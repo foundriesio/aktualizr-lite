@@ -20,10 +20,6 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
     compose_bin = raw.at("docker_compose_bin");
   }
 
-  if (raw.count("docker_bin") == 1) {
-    docker_bin = raw.at("docker_bin");
-  }
-
   if (raw.count("docker_prune") == 1) {
     std::string val = raw.at("docker_prune");
     boost::algorithm::to_lower(val);
@@ -52,7 +48,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       engine_client_{std::move(engine_client_factory)},
       app_ctor_{[this](const std::string& app) {
         return Docker::ComposeApp(app, cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
-                                  boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
+                                  registry_client_);
       }} {
   const auto& current_apps = getApps(getCurrent());
   for (const auto& app_pair : current_apps) {

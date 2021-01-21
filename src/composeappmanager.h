@@ -20,7 +20,6 @@ class ComposeAppManager : public OstreeManager {
     boost::optional<std::vector<std::string>> apps;
     boost::filesystem::path apps_root{"/var/sota/compose-apps"};
     boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
-    boost::filesystem::path docker_bin{"/usr/bin/docker"};
     bool docker_prune{true};
     bool force_update{false};
     bool full_status_check{false};
