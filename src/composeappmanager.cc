@@ -43,11 +43,13 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
                                      std::shared_ptr<OSTree::Sysroot> sysroot,
-                                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory)
+                                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory,
+                                     Docker::Engine::ClientFactory engine_client_factory)
     : OstreeManager(pconfig, bconfig, storage, http),
       cfg_{pconfig},
       sysroot_{std::move(sysroot)},
       registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)},
+      engine_client_{std::move(engine_client_factory)},
       app_ctor_{[this](const std::string& app) {
         return Docker::ComposeApp(app, cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
                                   boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
@@ -101,6 +103,8 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
   auto currently_installed_target_apps = OstreeManager::getCurrent().custom_data()["docker_compose_apps"];
   auto new_target_apps = getApps(t);  // intersection of apps specified in Target and the configuration
 
+  auto reported_apps = engine_client_.composeApps();
+
   for (const auto& app_pair : new_target_apps) {
     const auto& app_name = app_pair.first;
 
@@ -132,12 +136,14 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
     }
 
     LOG_DEBUG << app_name << " performing full status check";
-    if (!app_ctor_(app_name).isRunning()) {
+    auto app_it = reported_apps.find(app_name);
+    if (app_it == reported_apps.end() || !app_ctor_(app_name).isRunning((*app_it).second)) {
       // an App that is supposed to be installed and running is not fully installed or running
       apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " update will be re-installed or completed";
       continue;
     }
+    LOG_INFO << app_name << " appears to be up-to-date";
   }
 
   if (!full_status_check) {

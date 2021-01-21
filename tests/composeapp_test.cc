@@ -120,6 +120,28 @@ class FakeOtaClient: public HttpInterface {
   const std::vector<std::string>* headers_;
 };
 
+class FakeEngineClient : public HttpInterface {
+  public:
+    HttpResponse get(const std::string &url, int64_t maxsize) override {
+       return HttpResponse(resp, 200, CURLE_OK, "");
+    }
+    HttpResponse download(const std::string &url, curl_write_callback write_cb, curl_xferinfo_callback progress_cb, void *userp, curl_off_t from) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    std::future<HttpResponse> downloadAsync(const std::string&, curl_write_callback, curl_xferinfo_callback, void*, curl_off_t, CurlHandler*) override {
+      std::promise<HttpResponse> resp_promise;
+      resp_promise.set_value(HttpResponse("", 500, CURLE_OK, ""));
+      return resp_promise.get_future();
+    }
+    HttpResponse post(const std::string&, const std::string&, const std::string&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    HttpResponse post(const std::string&, const Json::Value&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    HttpResponse put(const std::string&, const std::string&, const std::string&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    HttpResponse put(const std::string&, const Json::Value&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    void setCerts(const std::string&, CryptoSource, const std::string&, CryptoSource, const std::string&, CryptoSource) override {}
+
+    static std::string resp;
+};
+
+std::string FakeEngineClient::resp = "[]";
+
 static boost::filesystem::path test_sysroot;
 
 static void progress_cb(const Uptane::Target& target, const std::string& description, unsigned int progress) {
@@ -213,10 +235,14 @@ struct TestClient {
         return std::make_shared<FakeOtaClient>(registry, headers);
       };
     }
+
+    engine_fake_client_factory = []() {
+      return std::make_shared<FakeEngineClient>();
+    };
     sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), false) :
                                                  std::make_shared<TestSysroot>(sysroot_hasher, config.pacman.sysroot.string());
     pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
-                                                  sysroot, registry_fake_http_client_factory);
+                                                  sysroot, registry_fake_http_client_factory, engine_fake_client_factory);
     keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
     fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());
   }
@@ -227,7 +253,7 @@ struct TestClient {
 
   void fakeReboot() {
     boost::filesystem::remove(getRebootSentinel());
-    pacman.reset(new ComposeAppManager(config.pacman, config.bootloader, storage, http_client, sysroot, registry_fake_http_client_factory));
+    pacman.reset(new ComposeAppManager(config.pacman, config.bootloader, storage, http_client, sysroot, registry_fake_http_client_factory, engine_fake_client_factory));
   }
 
   Config config;
@@ -241,6 +267,7 @@ struct TestClient {
   std::shared_ptr<HttpInterface> http_client;
   std::shared_ptr<OSTree::Sysroot> sysroot;
   Docker::RegistryClient::HttpClientFactory registry_fake_http_client_factory;
+  Docker::Engine::ClientFactory engine_fake_client_factory;
 };
 
 TEST(ComposeApp, getApps) {
@@ -549,7 +576,17 @@ TEST(ComposeApp, installApp) {
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
     Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
                      std::string("image: foo\n"));
-    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
+    FakeEngineClient::resp = R"~~~~(
+[
+  {
+    "State": "running",
+    "Labels": {
+      "com.docker.compose.project": "app1",
+      "com.docker.compose.service": "foo-svc"
+    }
+  }
+]
+)~~~~";
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
@@ -605,7 +642,6 @@ TEST(ComposeApp, installApp) {
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
     Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
                      std::string("image: foo\n"));
-    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
@@ -637,8 +673,24 @@ TEST(ComposeApp, installApp) {
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
     Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
                      std::string("image: foo\n #image: foo1\nimage: foo1\n"));
-    Utils::writeFile(client.tempdir->Path() / "ps.in",
-                     std::string("foo-container-id\nfoo1-container-id\n"));
+    FakeEngineClient::resp = R"~~~~(
+[
+  {
+    "State": "running",
+    "Labels": {
+      "com.docker.compose.project": "app1",
+      "com.docker.compose.service": "foo1"
+    }
+  },
+  {
+    "State": "running",
+    "Labels": {
+      "com.docker.compose.project": "app1",
+      "com.docker.compose.service": "foo2"
+    }
+  }
+]
+)~~~~";
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
@@ -725,7 +777,7 @@ TEST(ComposeApp, installApp) {
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
     Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
                      std::string("image: foo\n"));
-    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string(""));
+    FakeEngineClient::resp = "[]";
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
@@ -754,7 +806,17 @@ TEST(ComposeApp, installApp) {
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
     Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
                      std::string("image: foo   # image: foo image: foo\n      image:foo1\n"));
-    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("container-00\n"));
+    FakeEngineClient::resp = R"~~~~(
+[
+  {
+    "State": "running",
+    "Labels": {
+      "com.docker.compose.project": "app1",
+      "com.docker.compose.service": "foo"
+    }
+  }
+]
+)~~~~";
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
@@ -783,7 +845,6 @@ TEST(ComposeApp, installApp) {
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
     Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
                      std::string("image: foo\n"));
-    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;

@@ -45,7 +45,7 @@ void ComposeApp::remove() {
   }
 }
 
-bool ComposeApp::isRunning() {
+bool ComposeApp::isRunning(const std::vector<ComposeService>& reported_services) {
   bool cmd_res{false};
   std::string cmd_output;
   std::tie(cmd_res, cmd_output) = cmd("cat " + (root_ / ComposeFile).string());
@@ -67,16 +67,12 @@ bool ComposeApp::isRunning() {
     ++find_pos;
   }
 
-  // Get a number of running container images
-  std::tie(cmd_res, cmd_output) =
-      cmd(docker_ + "ps -q --filter=status=running --filter=label=com.docker.compose.project=" + name_);
-  if (!cmd_res) {
-    LOG_WARNING << "Failed to get a list of App's containers: " << name_;
-    return false;
+  int running_container_number = 0;
+  for (const auto& svc : reported_services) {
+    if (svc.state == "running") {
+      running_container_number += 1;
+    }
   }
-
-  int running_container_number =
-      std::count_if(cmd_output.begin(), cmd_output.end(), [](const char& symbol) { return symbol == '\n'; });
 
   if (running_container_number < expected_container_number) {
     LOG_DEBUG << "Number of running containers is less than a number of images specified in the compose file"

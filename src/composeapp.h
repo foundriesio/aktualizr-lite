@@ -23,7 +23,7 @@ class ComposeApp {
   bool up(bool no_start = false);
   bool start();
   void remove();
-  bool isRunning();
+  bool isRunning(const std::vector<ComposeService>& reported_services);
 
  private:
   bool cmd_streaming(const std::string& cmd);

@@ -33,7 +33,8 @@ class ComposeAppManager : public OstreeManager {
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
                     std::shared_ptr<OSTree::Sysroot> sysroot,
                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory =
-                        Docker::RegistryClient::DefaultHttpClientFactory);
+                        Docker::RegistryClient::DefaultHttpClientFactory,
+                    Docker::Engine::ClientFactory engine_client_factory = Docker::Engine::DefaultClientFactory);
 
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
@@ -54,6 +55,7 @@ class ComposeAppManager : public OstreeManager {
   Config cfg_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   Docker::RegistryClient registry_client_;
+  Docker::Engine engine_client_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;
   bool are_apps_checked_{false};
   ComposeAppCtor app_ctor_;
