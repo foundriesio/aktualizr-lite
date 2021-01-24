@@ -125,10 +125,10 @@ bool LiteClient::composeAppsChanged() const {
   return false;
 }
 
-static std::tuple<Uptane::Target, Uptane::Target, data::ResultCode::Numeric> finalizeIfNeeded(OSTree::Sysroot& sysroot,
-                                                                                              INvStorage& storage,
-                                                                                              Config& config) {
-  data::ResultCode::Numeric result_code = data::ResultCode::Numeric::kUnknown;
+static std::tuple<Uptane::Target, Uptane::Target, data::InstallationResult> finalizeIfNeeded(OSTree::Sysroot& sysroot,
+                                                                                             INvStorage& storage,
+                                                                                             Config& config) {
+  data::InstallationResult ir{data::ResultCode::Numeric::kUnknown, ""};
   boost::optional<Uptane::Target> pending_version;
   boost::optional<Uptane::Target> current_version;
   storage.loadInstalledVersions("", &current_version, &pending_version);
@@ -145,25 +145,27 @@ static std::tuple<Uptane::Target, Uptane::Target, data::ResultCode::Numeric> fin
     if (current_hash == target.sha256Hash()) {
       LOG_INFO << "Marking target install complete for: " << target;
       storage.saveInstalledVersion("", target, InstalledVersionUpdateMode::kCurrent);
-      result_code = data::ResultCode::Numeric::kOk;
+      ir.result_code = data::ResultCode::Numeric::kOk;
       if (bootloader.rebootDetected()) {
         bootloader.rebootFlagClear();
       }
       // Installation was successful, so both currently installed Target and Target that has been applied are the same
-      return std::tie(target, target, result_code);
+      return std::tie(target, target, ir);
     } else {
       if (bootloader.rebootDetected()) {
-        LOG_ERROR << "Expected to boot on " << target.sha256Hash() << " but found " << current_hash
-                  << ", system might have experienced a rollback";
+        std::string err = "Expected to boot on " + target.sha256Hash() + " buf found " + current_hash +
+                          ", system might have experienced a rollback";
+        LOG_ERROR << err;
         storage.saveInstalledVersion("", target, InstalledVersionUpdateMode::kNone);
         bootloader.rebootFlagClear();
-        result_code = data::ResultCode::Numeric::kInstallFailed;
+        ir.result_code = data::ResultCode::Numeric::kInstallFailed;
+        ir.description = err;
       } else {
         // Update still pending as no reboot was detected
-        result_code = data::ResultCode::Numeric::kNeedCompletion;
+        ir.result_code = data::ResultCode::Numeric::kNeedCompletion;
       }
       // Installation was not successful
-      return std::tie(*current_version, target, result_code);
+      return std::tie(*current_version, target, ir);
     }
   }
 
@@ -177,12 +179,12 @@ static std::tuple<Uptane::Target, Uptane::Target, data::ResultCode::Numeric> fin
   std::vector<Uptane::Target>::reverse_iterator it;
   for (it = installed_versions.rbegin(); it != installed_versions.rend(); it++) {
     if (it->sha256Hash() == current_hash) {
-      result_code = data::ResultCode::Numeric::kAlreadyProcessed;
-      return std::tie(*it, *it, result_code);
+      ir.result_code = data::ResultCode::Numeric::kAlreadyProcessed;
+      return std::tie(*it, *it, ir);
     }
   }
   Uptane::Target unknown_target{Uptane::Target::Unknown()};
-  return std::tie(unknown_target, unknown_target, result_code);
+  return std::tie(unknown_target, unknown_target, ir);
 }
 
 LiteClient::LiteClient(Config& config_in)
@@ -261,7 +263,7 @@ LiteClient::LiteClient(Config& config_in)
   // in this case we could do our specific finalization, including starting apps, in ComposeAppManager::finalizeInstall
   Uptane::Target current_target{Uptane::Target::Unknown()};
   Uptane::Target target_been_applied{Uptane::Target::Unknown()};
-  data::ResultCode::Numeric target_installation_result;
+  data::InstallationResult target_installation_result;
   std::tie(current_target, target_been_applied, target_installation_result) =
       finalizeIfNeeded(*ostree_sysroot, *storage, config);
   update_request_headers(http_client, current_target, config.pacman);
@@ -281,7 +283,7 @@ LiteClient::LiteClient(Config& config_in)
   }
 
   writeCurrentTarget(current_target);
-  if (target_installation_result != data::ResultCode::Numeric::kAlreadyProcessed) {
+  if (target_installation_result.result_code != data::ResultCode::Numeric::kAlreadyProcessed) {
     notifyInstallFinished(target_been_applied, target_installation_result);
   }
 }
@@ -339,17 +341,28 @@ void LiteClient::notifyInstallStarted(const Uptane::Target& t) {
   notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 
-void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::ResultCode::Numeric rc) {
-  if (rc == data::ResultCode::Numeric::kNeedCompletion) {
+class DetailedInstallCompletedReport : public EcuInstallationCompletedReport {
+ public:
+  DetailedInstallCompletedReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, bool success,
+                                 const std::string& details)
+      : EcuInstallationCompletedReport(ecu, correlation_id, success) {
+    custom["details"] = details;
+  }
+};
+
+void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir) {
+  if (ir.needCompletion()) {
     callback("install-post", t, "NEEDS_COMPLETION");
     notify(t, std_::make_unique<EcuInstallationAppliedReport>(primary_ecu.first, t.correlation_id()));
-  } else if (rc == data::ResultCode::Numeric::kOk) {
+  } else if (ir.result_code == data::ResultCode::Numeric::kOk) {
     callback("install-post", t, "OK");
     writeCurrentTarget(t);
-    notify(t, std_::make_unique<EcuInstallationCompletedReport>(primary_ecu.first, t.correlation_id(), true));
+    notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu.first, t.correlation_id(), true,
+                                                                ir.description));
   } else {
     callback("install-post", t, "FAILED");
-    notify(t, std_::make_unique<EcuInstallationCompletedReport>(primary_ecu.first, t.correlation_id(), false));
+    notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu.first, t.correlation_id(), false,
+                                                                ir.description));
   }
 }
 
@@ -562,7 +575,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
     LOG_ERROR << "Unable to install update: " << iresult.description;
     // let go of the lock since we couldn't update
   }
-  notifyInstallFinished(target, iresult.result_code.num_code);
+  notifyInstallFinished(target, iresult);
   return iresult.result_code.num_code;
 }
 
