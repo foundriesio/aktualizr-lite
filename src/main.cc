@@ -142,7 +142,8 @@ static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target ta
   }
 
   if (client.VerifyTarget(target) != TargetStatus::kGood) {
-    client.notifyInstallFinished(target, data::ResultCode::Numeric::kVerificationFailed);
+    data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+    client.notifyInstallFinished(target, res);
     LOG_ERROR << "Downloaded target is invalid";
     return data::ResultCode::Numeric::kVerificationFailed;
   }

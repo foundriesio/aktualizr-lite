@@ -49,7 +49,7 @@ class LiteClient {
   bool checkForUpdates();
   data::ResultCode::Numeric download(const Uptane::Target& target);
   data::ResultCode::Numeric install(const Uptane::Target& target);
-  void notifyInstallFinished(const Uptane::Target& t, data::ResultCode::Numeric rc);
+  void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
   std::pair<bool, std::string> isRebootRequired() const {
     return {is_reboot_required_, config.bootloader.reboot_command};
   }
