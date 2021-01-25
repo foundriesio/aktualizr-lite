@@ -130,13 +130,13 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::H
   throw std::runtime_error("Unable to find update");
 }
 
-static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target) {
+static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target, const std::string& reason) {
   log_info_target("Updating Active Target: ", client.config, client.getCurrent());
   log_info_target("To New Target: ", client.config, target);
 
   generate_correlation_id(target);
 
-  data::ResultCode::Numeric rc = client.download(target);
+  data::ResultCode::Numeric rc = client.download(target, reason);
   if (rc != data::ResultCode::Numeric::kOk) {
     return rc;
   }
@@ -169,7 +169,8 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   LOG_INFO << "Finding " << version << " to update to...";
   auto target_to_install = find_target(client, hwid, client.tags, version);
 
-  data::ResultCode::Numeric rc = do_update(client, *target_to_install);
+  std::string reason = "Manual update to " + version;
+  data::ResultCode::Numeric rc = do_update(client, *target_to_install, reason);
 
   return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
                                                                                                     : EXIT_FAILURE;
@@ -224,7 +225,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // metadata, so this really needs to be inside the loop.
       // Also, check if Apps are actually installed and running
       if (current.IsValid() && (client.composeAppsChanged() || !client.checkAppsToUpdate(current))) {
-        do_update(client, current);
+        do_update(client, current, "Compose apps changed");
       } else {
         // client.checkAppsToUpdate(current) checks currently installed and running apps against
         // the list of apps specified in the config taking into account the current Target.
@@ -255,7 +256,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       if (!known_target_sha && !client.isTargetCurrent(*target)) {
         LOG_INFO << "Got a New Target!";
 
-        data::ResultCode::Numeric rc = do_update(client, *target);
+        std::string reason = "Updating from " + current.filename() + " to " + target->filename();
+        data::ResultCode::Numeric rc = do_update(client, *target, reason);
         if (rc == data::ResultCode::Numeric::kOk) {
           current = *target;
           client.http_client->updateHeader("x-ats-target", current.filename());

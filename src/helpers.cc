@@ -326,9 +326,17 @@ void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> ev
   }
 }
 
-void LiteClient::notifyDownloadStarted(const Uptane::Target& t) {
+class DetailedDownloadReport : public EcuDownloadStartedReport {
+ public:
+  DetailedDownloadReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, const std::string& details)
+      : EcuDownloadStartedReport(ecu, correlation_id) {
+    custom["details"] = details;
+  }
+};
+
+void LiteClient::notifyDownloadStarted(const Uptane::Target& t, const std::string& reason) {
   callback("download-pre", t);
-  notify(t, std_::make_unique<EcuDownloadStartedReport>(primary_ecu.first, t.correlation_id()));
+  notify(t, std_::make_unique<DetailedDownloadReport>(primary_ecu.first, t.correlation_id(), reason));
 }
 
 void LiteClient::notifyDownloadFinished(const Uptane::Target& t, bool success) {
@@ -542,12 +550,12 @@ void generate_correlation_id(Uptane::Target& t) {
   t.setCorrelationId(id + "-" + boost::uuids::to_string(tmp));
 }
 
-data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target) {
+data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target, const std::string& reason) {
   std::unique_ptr<Lock> lock = getDownloadLock();
   if (lock == nullptr) {
     return data::ResultCode::Numeric::kInternalError;
   }
-  notifyDownloadStarted(target);
+  notifyDownloadStarted(target, reason);
   if (!downloadImage(target).first) {
     notifyDownloadFinished(target, false);
     return data::ResultCode::Numeric::kDownloadFailed;
