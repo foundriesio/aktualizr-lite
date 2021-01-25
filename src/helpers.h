@@ -47,7 +47,7 @@ class LiteClient {
   boost::filesystem::path update_lockfile;
 
   bool checkForUpdates();
-  data::ResultCode::Numeric download(const Uptane::Target& target);
+  data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
   std::pair<bool, std::string> isRebootRequired() const {
@@ -78,7 +78,7 @@ class LiteClient {
   std::unique_ptr<Lock> getUpdateLock() const;
 
   void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event);
-  void notifyDownloadStarted(const Uptane::Target& t);
+  void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
   void notifyDownloadFinished(const Uptane::Target& t, bool success);
   void notifyInstallStarted(const Uptane::Target& t);
 
