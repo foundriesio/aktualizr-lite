@@ -349,6 +349,14 @@ void LiteClient::notifyInstallStarted(const Uptane::Target& t) {
   notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 
+class DetailedAppliedReport : public EcuInstallationAppliedReport {
+ public:
+  DetailedAppliedReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, const std::string& details)
+      : EcuInstallationAppliedReport(ecu, correlation_id) {
+    custom["details"] = details;
+  }
+};
+
 class DetailedInstallCompletedReport : public EcuInstallationCompletedReport {
  public:
   DetailedInstallCompletedReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, bool success,
@@ -361,7 +369,7 @@ class DetailedInstallCompletedReport : public EcuInstallationCompletedReport {
 void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir) {
   if (ir.needCompletion()) {
     callback("install-post", t, "NEEDS_COMPLETION");
-    notify(t, std_::make_unique<EcuInstallationAppliedReport>(primary_ecu.first, t.correlation_id()));
+    notify(t, std_::make_unique<DetailedAppliedReport>(primary_ecu.first, t.correlation_id(), ir.description));
   } else if (ir.result_code == data::ResultCode::Numeric::kOk) {
     callback("install-post", t, "OK");
     writeCurrentTarget(t);
