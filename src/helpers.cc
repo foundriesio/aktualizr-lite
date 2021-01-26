@@ -370,7 +370,19 @@ void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::Installati
   if (ir.needCompletion()) {
     callback("install-post", t, "NEEDS_COMPLETION");
     notify(t, std_::make_unique<DetailedAppliedReport>(primary_ecu.first, t.correlation_id(), ir.description));
-  } else if (ir.result_code == data::ResultCode::Numeric::kOk) {
+    return;
+  }
+
+  if (package_manager_->name() == ComposeAppManager::Name) {
+    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    if (compose_pacman == nullptr) {
+      LOG_ERROR << "Cannot downcast the package manager to a specific type";
+    } else {
+      ir.description += "\n# Apps running:\n" + compose_pacman->containerDetails();
+    }
+  }
+
+  if (ir.result_code == data::ResultCode::Numeric::kOk) {
     callback("install-post", t, "OK");
     writeCurrentTarget(t);
     notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu.first, t.correlation_id(), true,
