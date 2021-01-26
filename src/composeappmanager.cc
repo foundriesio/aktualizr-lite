@@ -270,10 +270,15 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     LOG_INFO << "Updated docker images has been successfully enabled";
   }
   // make sure we install what we fecthed
+  if (!cur_apps_to_fetch_and_update_.empty()) {
+    res.description += "\n# Apps installed:";
+  }
   for (const auto& pair : cur_apps_to_fetch_and_update_) {
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
     if (!app_ctor_(pair.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
+    } else {
+      res.description += "\n" + pair.second;
     }
   };
 
@@ -323,3 +328,17 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
 }
 
 std::string ComposeAppManager::getCurrentHash() const { return sysroot_->getCurDeploymentHash(); }
+
+std::string ComposeAppManager::containerDetails() const {
+  std::string cmd = cfg_.docker_bin.string();
+  cmd +=
+      " ps --format 'App({{.Label \"com.docker.compose.project\"}}) Service({{.Label "
+      "\"com.docker.compose.service\"}} {{.Label \"io.compose-spec.config-hash\"}})'";
+  std::string out_str;
+  int exit_code = Utils::shell(cmd, &out_str, true);
+  LOG_TRACE << "Command: " << cmd << "\n" << out_str;
+  if (exit_code != EXIT_SUCCESS) {
+    out_str = "Unable to run `docker ps`";
+  }
+  return out_str;
+}
