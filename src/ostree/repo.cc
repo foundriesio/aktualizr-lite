@@ -108,7 +108,7 @@ void Repo::checkout(const std::string& commit_hash, const std::string& src_dir, 
   const char* const OSTREE_GIO_FAST_QUERYINFO =
       "standard::name,standard::type,standard::size,standard::is-symlink,standard::symlink-target,unix::device,unix::"
       "inode,unix::mode,unix::uid,unix::gid,unix::rdev";
-  OstreeRepoCheckoutMode checkout_mode = OSTREE_REPO_CHECKOUT_MODE_USER;
+  OstreeRepoCheckoutMode checkout_mode = OSTREE_REPO_CHECKOUT_MODE_NONE;
   OstreeRepoCheckoutOverwriteMode overwrite_mode = OSTREE_REPO_CHECKOUT_OVERWRITE_UNION_FILES;
   g_autoptr(GFile) root = nullptr;
   g_autoptr(GFile) src = nullptr;
