@@ -204,7 +204,14 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
   if (app_tree_ && !apps_uri.empty()) {
     LOG_INFO << "Fetching Apps Tree -> " << apps_uri;
-    app_tree_->pull(config.ostree_server, keys, apps_uri);
+
+    try {
+      app_tree_->pull(config.ostree_server, keys, apps_uri);
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to pull Apps Tree; uri: " << apps_uri << ", err: " << exc.what();
+      passed = false;
+    }
+
   } else {
     for (const auto& pair : cur_apps_to_fetch_and_update_) {
       LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
@@ -240,7 +247,13 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
   if (app_tree_ && !apps_uri.empty()) {
     LOG_INFO << "Checking out updated Apps: " << apps_uri;
-    const_cast<ComposeAppManager*>(this)->app_tree_->checkout(apps_uri);
+    try {
+      const_cast<ComposeAppManager*>(this)->app_tree_->checkout(apps_uri);
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to checkout Apps from the ostree repo; uri: " << apps_uri << ", err: " << exc.what();
+      return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed,
+                                      "Could not checkout Apps from the ostree repo");
+    }
 
     LOG_INFO << "Reloading the docker image and layer store to enable the update... ";
     {
