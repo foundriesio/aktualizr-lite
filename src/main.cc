@@ -98,6 +98,8 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::H
     }
   }
 
+  // if a new version of targets.json hasn't been downloaded why do we do the following search
+  // for the latest ??? It's really needed just for the forced update to a specific version
   bool find_latest = (version == "latest");
   std::unique_ptr<Uptane::Target> latest = nullptr;
   for (const auto& t : client.allTargets()) {
