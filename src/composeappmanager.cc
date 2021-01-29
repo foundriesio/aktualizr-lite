@@ -82,6 +82,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
   }
 }
 
+// Returns an intersection of apps specified in Target and the configuration
 ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target& t) const {
   AppsContainer apps;
 
