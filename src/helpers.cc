@@ -621,35 +621,22 @@ bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& co
   return true;
 }
 
-bool LiteClient::isTargetCurrent(const Uptane::Target& target) const {
-  if (!targets_eq(target, getCurrent(), true)) {
-    return false;
-  }
+bool LiteClient::isTargetActive(const Uptane::Target& target) const { return targets_eq(target, getCurrent(), true); }
 
+bool LiteClient::appsInSync(bool full_check) const {
   if (package_manager_->name() == ComposeAppManager::Name) {
     auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
     if (compose_pacman == nullptr) {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
       return false;
     }
-
-    // Deamon Update Cycle/Loop, do non-full check if Target Apps are installed and running
-    return compose_pacman->checkForAppsToUpdate(target, boost::none);
-  }
-
-  return true;
-}
-
-bool LiteClient::checkAppsToUpdate(const Uptane::Target& target) const {
-  if (package_manager_->name() == ComposeAppManager::Name) {
-    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
-    if (compose_pacman == nullptr) {
-      LOG_ERROR << "Cannot downcast the package manager to a specific type";
-      return false;
+    LOG_INFO << "Checking Active Target status...";
+    auto no_any_app_to_update = compose_pacman->checkForAppsToUpdate(getCurrent(), full_check);
+    if (full_check && no_any_app_to_update) {
+      compose_pacman->handleRemovedApps(getCurrent());
     }
-    // first Update Cycle/Loop, do full check if Target Apps are installed and running
-    LOG_INFO << "Checking for Apps to be installed or updated...";
-    return compose_pacman->checkForAppsToUpdate(target, true);
+
+    return no_any_app_to_update;
   }
   return true;
 }
@@ -678,13 +665,8 @@ bool targets_eq(const Uptane::Target& t1, const Uptane::Target& t2, bool compare
   if (!compareApps) {
     return true;
   }
-
-  // compose apps
-  // We are checking if Apps that are supposed to be installed (listed in the currenlty installed Target
-  // are actually present on a system. Apps are installed on non read-only mount point/folder so could be
-  // modified/removed somehow so we need to return 'false' here and let aklite update/re-install App(s) It's
-  // workaround, a proper solution for 'immutable Target' concept is installing Apps on read-only system (both
-  // meta-data and actuall container image layers)
+  // TODO: there is no reason to compare Target's apps, if lists of apps are different then
+  // Target versions are supposed to be different
   auto t1_capps = t1.custom_data()["docker_compose_apps"];
   auto t2_capps = t2.custom_data()["docker_compose_apps"];
   for (Json::ValueIterator i = t1_capps.begin(); i != t1_capps.end(); ++i) {
@@ -726,6 +708,10 @@ bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector
 }
 
 bool match_target_base(const Uptane::Target& t1, const Uptane::Target& t2) {
+  if (t1.filename() != t2.filename()) {
+    return false;
+  }
+
   if (t1.type() != t2.type() || t2.type() != "OSTREE") {
     // both targets' type should be OSTREE, otherwise it's error
     // but we don't throw an exception, just log an error message and let the update loop
@@ -739,13 +725,6 @@ bool match_target_base(const Uptane::Target& t1, const Uptane::Target& t2) {
     // but we don't throw an exception, just log an error message and let the update loop
     // to do its work in a hope that the backend will send us a proper Target
     LOG_ERROR << "Target lengths differ: " << t1.length() << " != " << t2.length();
-    return false;
-  }
-
-  if (t1.filename() != t2.filename()) {
-    // Any changes in Target means Target name/ID/version change, so this is a valid situation
-    // and  means that we need to proceed with Target update
-    LOG_INFO << "Target names differ " << t1.filename() << " != " << t2.filename();
     return false;
   }
 

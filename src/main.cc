@@ -147,7 +147,28 @@ static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target ta
     data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
     client.notifyInstallFinished(target, res);
     LOG_ERROR << "Downloaded target is invalid";
-    return data::ResultCode::Numeric::kVerificationFailed;
+    return res.result_code.num_code;
+  }
+
+  return client.install(target);
+}
+
+static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
+  auto target = client.getCurrent();
+  LOG_INFO << "Syncing Active Target Apps";
+
+  generate_correlation_id(target);
+
+  data::ResultCode::Numeric rc = client.download(target, "Sync active Target Apps");
+  if (rc != data::ResultCode::Numeric::kOk) {
+    return rc;
+  }
+
+  if (client.VerifyTarget(target) != TargetStatus::kGood) {
+    data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+    client.notifyInstallFinished(target, res);
+    LOG_ERROR << "Downloaded target is invalid";
+    return res.result_code.num_code;
   }
 
   return client.install(target);
@@ -187,7 +208,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     LOG_ERROR << "reboot command: " << client.config.bootloader.reboot_command << " is not executable";
     return EXIT_FAILURE;
   }
-  bool firstLoop = true;
+  bool first_loop = true;
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
   if (variables_map.count("update-lockfile") > 0) {
     client.update_lockfile = variables_map["update-lockfile"].as<boost::filesystem::path>();
@@ -211,6 +232,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   while (true) {
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
     LOG_INFO << "Checking for a new Target...";
+
     if (!client.checkForUpdates()) {
       LOG_WARNING << "Unable to update latest metadata, going to sleep for " << interval
                   << " seconds before starting a new update cycle";
@@ -218,50 +240,26 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       continue;  // There's no point trying to look for an update
     }
 
-    if (firstLoop) {
-      // TODO: Consider removing `if firstLoop` at all or improving it
-      // e.g. the following is redundtant if there is a new Target so we might wanna run it after `find_target`
-
-      // On first loop we need to see if we have a config change detected from
-      // from the previous run. We need to make sure we have up-to-date
-      // metadata, so this really needs to be inside the loop.
-      // Also, check if Apps are actually installed and running
-      if (current.IsValid() && (client.composeAppsChanged() || !client.checkAppsToUpdate(current))) {
-        do_update(client, current, "Compose apps changed");
-      } else {
-        // client.checkAppsToUpdate(current) checks currently installed and running apps against
-        // the list of apps specified in the config taking into account the current Target.
-        // Then it informs (sets internal flag) the package manager that Apps are checked and
-        // a list of Apps to be installed is prepared, so during an update apps checking is avoided.
-        // Since, in this case we check apps for the current Target, so if a new Target is downloaded
-        // then do_update() will skip Apps comparison thus any new App in the new Target won't be updated.
-        // Therefore, we need to clear the flag that indicates that Apps are checked to make the following
-        // do_update do Apps checking against a new Target
-        client.setAppsNotChecked();
-      }
-
-      firstLoop = false;
-    }
-
     client.reportNetworkInfo();
     client.reportHwInfo();
 
     try {
       // target cannot be nullptr, an exception will be yielded if no target
-      auto target = find_target(client, hwid, client.tags, "latest");
+      auto found_latest_target = find_target(client, hwid, client.tags, "latest");
 
       // This is a workaround for finding and avoiding bad updates after a rollback.
       // Rollback sets the installed version state to none instead of broken, so there is no
       // easy way to find just the bad versions without api/storage changes. As a workaround we
       // just check if the version is known (old hash) and not current/pending and abort if so
-      bool known_target_sha = known_local_target(client, *target, installed_versions);
-      if (!known_target_sha && !client.isTargetCurrent(*target)) {
-        LOG_INFO << "Got a New Target!";
+      bool known_target_sha = known_local_target(client, *found_latest_target, installed_versions);
 
-        std::string reason = "Updating from " + current.filename() + " to " + target->filename();
-        data::ResultCode::Numeric rc = do_update(client, *target, reason);
+      LOG_INFO << "Latest Target: " << found_latest_target->filename();
+      if (!known_target_sha && !client.isTargetActive(*found_latest_target)) {
+        // New Target is available, try to update a device with it
+        std::string reason = "Updating from " + current.filename() + " to " + found_latest_target->filename();
+        data::ResultCode::Numeric rc = do_update(client, *found_latest_target, reason);
         if (rc == data::ResultCode::Numeric::kOk) {
-          current = *target;
+          current = *found_latest_target;
           client.http_client->updateHeader("x-ats-target", current.filename());
           // Start the loop over to call updateImagesMeta which will update this
           // device's target name on the server.
@@ -273,6 +271,9 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         }
 
       } else {
+        if (!client.appsInSync(first_loop)) {
+          do_app_sync(client);
+        }
         LOG_INFO << "Device is up-to-date";
       }
 
@@ -281,6 +282,9 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     }
 
     client.setAppsNotChecked();
+    if (first_loop) {
+      first_loop = false;
+    }
     std::this_thread::sleep_for(std::chrono::seconds(interval));
 
   }  // while true
