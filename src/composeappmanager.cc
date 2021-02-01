@@ -311,6 +311,8 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
   }
   std::vector<std::string> target_apps = target.custom_data()["docker_compose_apps"].getMemberNames();
 
+  // an intersection of apps specified in Target and the configuration
+  // i.e. the apps that are supposed to be installed and running
   const auto& current_apps = getApps(target);
 
   for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(cfg_.apps_root), {})) {
