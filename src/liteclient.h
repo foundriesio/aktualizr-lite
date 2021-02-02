@@ -53,7 +53,7 @@ class LiteClient {
   void reportNetworkInfo();
   void reportHwInfo();
   bool isTargetActive(const Uptane::Target& target) const;
-  bool appsInSync(bool full_check) const;
+  bool appsInSync() const;
   void setAppsNotChecked();
   std::string getDeviceID() const;
 
