@@ -25,7 +25,6 @@ class ComposeAppManager : public OstreeManager {
     boost::filesystem::path docker_bin{"/usr/bin/docker"};
     bool docker_prune{true};
     bool force_update{false};
-    bool full_status_check{false};
     boost::filesystem::path apps_tree{"/var/sota/compose-apps-tree"};
     bool create_apps_tree{false};
     boost::filesystem::path images_data_root{"/var/lib/docker"};
@@ -50,8 +49,8 @@ class ComposeAppManager : public OstreeManager {
   // Returns an intersection of Target's Apps and Apps listed in the config (sota.toml:compose_apps)
   // If Apps are not specified in the config then all Target's Apps are returned
   AppsContainer getApps(const Uptane::Target& t) const;
-  AppsContainer getAppsToUpdate(const Uptane::Target& t, bool full_status_check) const;
-  bool checkForAppsToUpdate(const Uptane::Target& target, boost::optional<bool> full_status_check_in);
+  AppsContainer getAppsToUpdate(const Uptane::Target& t) const;
+  bool checkForAppsToUpdate(const Uptane::Target& target);
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
   std::string getCurrentHash() const override;

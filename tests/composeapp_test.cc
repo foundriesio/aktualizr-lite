@@ -895,7 +895,7 @@ TEST(ComposeApp, resumeAppUpdate) {
     // just after a reboot aklite does a full check but it's a pain to emulate it properly
     // so we fake it by doing not a full check, which just checks is the app dir and file exists
     // Thus is this case app1 will detecetd as running and app2 is not so an update only for app2 is required
-    client.pacman->checkForAppsToUpdate(target_to_install, false);
+    client.pacman->checkForAppsToUpdate(target_to_install);
     // try to fetch and install app2 this time, docker-compose pull is supposed to fail for app2
     Utils::writeFile(client.apps_root / "app2"/ "pull.res", std::string("1"));
     ASSERT_FALSE(client.pacman->fetchTarget(target_to_install, *(client.fetcher), *(client.keys), nullptr, nullptr));
@@ -909,7 +909,16 @@ TEST(ComposeApp, resumeAppUpdate) {
     boost::filesystem::remove(client.tempdir->Path() / "apps/app2/pull.log");
     boost::filesystem::remove(client.tempdir->Path() / "apps/app1/up.log");
     boost::filesystem::remove(client.tempdir->Path() / "apps/app2/up.log");
-    client.pacman->checkForAppsToUpdate(target_to_install, false);
+
+    // emulate app1 running and app2 is not fully running, just one container is running while
+    // app2 consists of two
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+                     std::string("image: foo\n"));
+    Utils::writeFile(client.tempdir->Path() / "apps/app2" / Docker::ComposeApp::ComposeFile,
+                     std::string("image: foo\nimage: foo\n"));
+    Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
+
+    client.pacman->checkForAppsToUpdate(target_to_install);
 
     // make app2 fetching succeed
     Utils::writeFile(client.apps_root / "app2"/ "pull.res", std::string("0"));

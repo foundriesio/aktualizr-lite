@@ -45,10 +45,6 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("force_update") > 0) {
     force_update = boost::lexical_cast<bool>(raw.at("force_update"));
   }
-
-  if (raw.count("full_status_check") > 0) {
-    full_status_check = boost::lexical_cast<bool>(raw.at("full_status_check"));
-  }
 }
 
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -114,8 +110,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
   return apps;
 }
 
-ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t,
-                                                                    bool full_status_check) const {
+ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t) const {
   AppsContainer apps_to_update;
 
   auto currently_installed_target_apps = OstreeManager::getCurrent().custom_data()["docker_compose_apps"];
@@ -147,10 +142,6 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
       continue;
     }
 
-    if (!full_status_check) {
-      continue;
-    }
-
     LOG_DEBUG << app_name << " performing full status check";
     if (!app_ctor_(app_name).isRunning()) {
       // an App that is supposed to be installed and running is not fully installed or running
@@ -160,25 +151,11 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
     }
   }
 
-  if (!full_status_check) {
-    // merge a list of the apps that were not fetched or updated successfully during the previous update cycle
-    // with a list of the apps that were detected as the one that are needed to be (re-)updated during non-full check.
-    // This is solely for the case if there is no new Target and aklite just does the non-full app check.
-    // There is no need to persist/store the list of apps to be updated in the DB because aklite does
-    // the full check just after its restart.
-    apps_to_update.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
-  }
-
   return apps_to_update;
 }
 
-bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target, boost::optional<bool> full_status_check_in) {
-  bool full_status_check = cfg_.full_status_check;
-  if (!!full_status_check_in) {
-    full_status_check = *full_status_check_in;
-  }
-
-  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, full_status_check);
+bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
+  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target);
   are_apps_checked_ = true;
   return cur_apps_to_fetch_and_update_.empty();
 }
@@ -196,7 +173,7 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
     // non-daemon mode (force check) or a new Target to be applied in daemon mode,
     // then do full check if Target Apps are installed and running
     LOG_INFO << "Checking for Apps to be installed or updated...";
-    checkForAppsToUpdate(target, true);
+    checkForAppsToUpdate(target);
   }
 
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";

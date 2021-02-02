@@ -208,7 +208,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     LOG_ERROR << "reboot command: " << client.config.bootloader.reboot_command << " is not executable";
     return EXIT_FAILURE;
   }
-  bool first_loop = true;
+
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
   if (variables_map.count("update-lockfile") > 0) {
     client.update_lockfile = variables_map["update-lockfile"].as<boost::filesystem::path>();
@@ -271,7 +271,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         }
 
       } else {
-        if (!client.appsInSync(first_loop)) {
+        if (!client.appsInSync()) {
           do_app_sync(client);
         }
         LOG_INFO << "Device is up-to-date";
@@ -282,9 +282,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     }
 
     client.setAppsNotChecked();
-    if (first_loop) {
-      first_loop = false;
-    }
     std::this_thread::sleep_for(std::chrono::seconds(interval));
 
   }  // while true
