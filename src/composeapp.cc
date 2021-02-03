@@ -5,13 +5,19 @@
 
 namespace Docker {
 
-ComposeApp::ComposeApp(std::string name, const boost::filesystem::path& root_dir, std::string compose_bin,
-                       std::string docker_bin, const Docker::RegistryClient& registry_client)
+ComposeApp::ComposeApp(std::string name, std::string uri, const boost::filesystem::path& root_dir,
+                       std::string compose_bin, std::string docker_bin, const Docker::RegistryClient& registry_client)
     : name_{std::move(name)},
       root_{root_dir / name_},
       compose_{std::move(compose_bin)},
       docker_{std::move(docker_bin)},
-      registry_client_{registry_client} {}
+      registry_client_{registry_client},
+      uri_{std::move(uri)} {
+  if (boost::filesystem::exists(root_ / NeedStartFile)) {
+    start();
+    boost::filesystem::remove(root_ / NeedStartFile);
+  }
+}
 
 bool ComposeApp::fetch(const std::string& app_uri) {
   boost::filesystem::create_directories(root_);
@@ -19,7 +25,11 @@ bool ComposeApp::fetch(const std::string& app_uri) {
     LOG_INFO << "Validating compose file";
     if (cmd_streaming(compose_ + "config")) {
       LOG_INFO << "Pulling containers";
-      return cmd_streaming(compose_ + "pull --no-parallel");
+      const auto pull_res = cmd_streaming(compose_ + "pull --no-parallel");
+      if (pull_res) {
+        uri_ = app_uri;
+      }
+      return pull_res;
     }
   }
   return false;
@@ -45,7 +55,21 @@ void ComposeApp::remove() {
   }
 }
 
-bool ComposeApp::isRunning() {
+bool ComposeApp::isInstalled(const std::string& uri) const {
+  // TODO: We need to come up with something like in isRunning to determine whether the app
+  // along with its images is actually installed
+  // There is nothing in Target that can be bound to docker-compose.yml content
+  // and docker image ls output
+  // so we just check isRunning here too
+  return boost::filesystem::exists(root_) && boost::filesystem::exists(root_ / ComposeFile) && uri == uri_ &&
+         isRunning(uri);
+}
+
+bool ComposeApp::isRunning(const std::string& uri) const {
+  if (uri != uri_) {
+    return false;
+  }
+
   bool cmd_res{false};
   std::string cmd_output;
   std::tie(cmd_res, cmd_output) = cmd("cat " + (root_ / ComposeFile).string());

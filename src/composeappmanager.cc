@@ -1,5 +1,7 @@
 #include "composeappmanager.h"
 
+#include "target.h"
+
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
 
@@ -55,11 +57,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     : OstreeManager(pconfig, bconfig, storage, http),
       cfg_{pconfig},
       sysroot_{std::move(sysroot)},
-      registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)},
-      app_ctor_{[this](const std::string& app) {
-        return Docker::ComposeApp(app, cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
-                                  boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
-      }} {
+      registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)} {
   try {
     app_tree_ = std::make_unique<ComposeAppTree>(cfg_.apps_tree.string(), cfg_.apps_root.string(),
                                                  cfg_.images_data_root.string(), cfg_.create_apps_tree);
@@ -67,120 +65,62 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     LOG_DEBUG << "Failed to initialize Compose App Tree (ostree) at " << cfg_.apps_tree << ". Error: " << exc.what();
   }
 
-  const auto& current_apps = getApps(getCurrent());
+  Target::Apps current_apps;
+  try {
+    // Get all Target Apps
+    Uptane::Target current_target = OstreeManager::getCurrent();
+    if (current_target.IsValid()) {
+      current_apps = Target::targetApps(current_target, boost::none);
+    }
+  } catch (const std::exception& exp) {
+    LOG_WARNING << "Failed to get Target Apps: " << exp.what();
+  }
+
   for (const auto& app_pair : current_apps) {
-    const auto& app_name = app_pair.first;
-    auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeApp::NeedStartFile;
-    if (boost::filesystem::exists(need_start_flag)) {
-      app_ctor_(app_name).start();
-      boost::filesystem::remove(need_start_flag);
-    }
+    apps_[app_pair.first] = createApp(app_pair.first, app_pair.second);
   }
 }
 
-// Returns an intersection of apps specified in Target and the configuration
-ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target& t) const {
-  AppsContainer apps;
 
-  auto target_apps = t.custom_data()["docker_compose_apps"];
-  for (Json::ValueIterator i = target_apps.begin(); i != target_apps.end(); ++i) {
-    if ((*i).isObject() && (*i).isMember("uri")) {
-      const auto& target_app_name = i.key().asString();
-      const auto& target_app_uri = (*i)["uri"].asString();
+Uptane::Target ComposeAppManager::getCurrent() const {
+  LOG_ERROR << ">>>>> Getting current from DB";
+  Uptane::Target current_from_ostree_manager = OstreeManager::getCurrent();
 
-      if (!!cfg_.apps) {
-        // if `compose_apps` is specified in the config then add the current Target app only if it listed in
-        // `compose_apps`
-        for (const auto& app : *(cfg_.apps)) {
-          if (target_app_name == app) {
-            apps[target_app_name] = target_app_uri;
-            break;
-          }
-        }
-      } else {
-        // if `compose_apps` is not specified just add all Target's apps
-        apps[target_app_name] = target_app_uri;
-      }
+  if (!current_from_ostree_manager.IsValid()) {
+    return current_from_ostree_manager;
+  }
 
-    } else {
-      LOG_ERROR << "Invalid custom data for docker_compose_app: " << i.key().asString() << " -> " << *i;
+  // shortlisted Target apps
+  const auto target_apps = Target::targetApps(current_from_ostree_manager, cfg_.apps);
+  std::vector<std::string> installed_and_running_apps;
+
+  for (const auto& app: target_apps) {
+    auto compose_app = Docker::ComposeApp(app.first, app.second,
+                                          cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
+                                          boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
+
+    if (compose_app.isInstalled(app.second) and compose_app.isRunning(app.second)) {
+      installed_and_running_apps.push_back(app.first);
     }
   }
 
-  return apps;
-}
+  Target::shortlistTargetApps(current_from_ostree_manager, installed_and_running_apps);
 
-ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t) const {
-  AppsContainer apps_to_update;
-
-  auto currently_installed_target_apps = OstreeManager::getCurrent().custom_data()["docker_compose_apps"];
-  auto new_target_apps = getApps(t);  // intersection of apps specified in Target and the configuration
-
-  for (const auto& app_pair : new_target_apps) {
-    const auto& app_name = app_pair.first;
-
-    auto app_data = currently_installed_target_apps.get(app_name, Json::nullValue);
-    if (app_data.empty()) {
-      // new app in Target
-      apps_to_update.insert(app_pair);
-      LOG_INFO << app_name << " will be installed";
-      continue;
-    }
-
-    if (app_pair.second != app_data["uri"].asString()) {
-      // an existing App update
-      apps_to_update.insert(app_pair);
-      LOG_INFO << app_name << " will be updated";
-      continue;
-    }
-
-    if (!boost::filesystem::exists(cfg_.apps_root / app_name) ||
-        !boost::filesystem::exists(cfg_.apps_root / app_name / Docker::ComposeApp::ComposeFile)) {
-      // an App that is supposed to be installed has been removed somehow, let's install it again
-      apps_to_update.insert(app_pair);
-      LOG_INFO << app_name << " will be re-installed";
-      continue;
-    }
-
-    LOG_DEBUG << app_name << " performing full status check";
-    if (!app_ctor_(app_name).isRunning()) {
-      // an App that is supposed to be installed and running is not fully installed or running
-      apps_to_update.insert(app_pair);
-      LOG_INFO << app_name << " update will be re-installed or completed";
-      continue;
-    }
-  }
-
-  return apps_to_update;
-}
-
-bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
-  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target);
-  are_apps_checked_ = true;
-  return cur_apps_to_fetch_and_update_.empty();
+  return current_from_ostree_manager;
 }
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                                     const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
-  if (!OstreeManager::fetchTarget(target, fetcher, keys, progress_cb, token)) {
-    return false;
+  if (getCurrent().sha256Hash() != target.sha256Hash()) {
+    if (!OstreeManager::fetchTarget(target, fetcher, keys, progress_cb, token)) {
+      return false;
+    }
   }
-
-  if (cfg_.force_update) {
-    LOG_INFO << "All Apps are forced to be updated...";
-    cur_apps_to_fetch_and_update_ = getApps(target);
-  } else if (!are_apps_checked_) {
-    // non-daemon mode (force check) or a new Target to be applied in daemon mode,
-    // then do full check if Target Apps are installed and running
-    LOG_INFO << "Checking for Apps to be installed or updated...";
-    checkForAppsToUpdate(target);
-  }
-
-  LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
   bool passed = true;
   const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
   if (app_tree_ && !apps_uri.empty()) {
+    // ostree-based apps case
     LOG_INFO << "Fetching Apps Tree -> " << apps_uri;
 
     try {
@@ -191,14 +131,22 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
     }
 
   } else {
-    for (const auto& pair : cur_apps_to_fetch_and_update_) {
-      LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
-      if (!app_ctor_(pair.first).fetch(pair.second)) {
-        passed = false;
+    // regular compose apps case
+    //bool force_update = Target::isForcedTarget(target);
+    for (const auto& target_app : Target::targetApps(target, cfg_.apps)) {
+      if (0 == apps_.count(target_app.first)) {
+        // new app to fetch and install
+        LOG_INFO << "New App detected: " << target_app.first;
+        apps_[target_app.first] = createApp(target_app.first, target_app.second);
+      }
+      auto app = apps_.at(target_app.first);
+      LOG_INFO << "Fetching " << target_app.first << " ->  " << target_app.second;
+      if (!app->fetch(target_app.second)) {
+        LOG_ERROR << "Failed to fetch app " << target_app.first;
+        return false;
       }
     }
   }
-  are_apps_checked_ = false;
   return passed;
 }
 
@@ -216,11 +164,10 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
       return res;
     }
   } else {
-    LOG_INFO << "Target " << target.sha256Hash() << " is same as current";
-    res = data::InstallationResult(data::ResultCode::Numeric::kOk, "OSTree hash already installed, same as current");
+    LOG_DEBUG << "Target " << target.sha256Hash() << " is same as current";
+    res = data::InstallationResult(data::ResultCode::Numeric::kAlreadyProcessed,
+                                   "OSTree hash already installed, same as current");
   }
-
-  handleRemovedApps(target);
 
   const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
   if (app_tree_ && !apps_uri.empty()) {
@@ -247,33 +194,42 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
     LOG_INFO << "Updated docker images has been successfully enabled";
   }
-  // make sure we install what we fecthed
-  if (!cur_apps_to_fetch_and_update_.empty()) {
-    res.description += "\n# Apps installed:";
-  }
-  for (const auto& pair : cur_apps_to_fetch_and_update_) {
-    LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
-    if (!app_ctor_(pair.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
-      res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
-    } else {
-      res.description += "\n" + pair.second;
-    }
-  };
 
-  // there is no much reason in re-trying to install app if its installation has failed for the first time
-  // TODO: we might add more advanced logic here, e.g. try to install a few times and then fail
-  cur_apps_to_fetch_and_update_.clear();
+  res.description += "\n# Apps installed:";
 
-  if (cfg_.docker_prune) {
-    LOG_INFO << "Pruning unused docker images";
-    // Utils::shell which isn't interactive, we'll use std::system so that
-    // stdout/stderr is streamed while docker sets things up.
-    if (std::system("docker image prune -a -f --filter=\"label!=aktualizr-no-prune\"") != 0) {
-      LOG_WARNING << "Unable to prune unused docker images";
+  int installed_apps_numb{0};
+  for (const auto& target_app : Target::targetApps(target, cfg_.apps)) {
+    auto app = apps_.at(target_app.first);
+
+    LOG_INFO << "Installing " << target_app.first << " ->  " << target_app.second;
+    if (!app->up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
+      res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed,
+                                     "Could not install app " + target_app.first);
+      break;
     }
+    res.description += "\n" + target_app.first + "->" + target_app.second;
+    ++installed_apps_numb;
   }
+
+  if (res.result_code == data::ResultCode::Numeric::kAlreadyProcessed && installed_apps_numb > 0) {
+    // if the Target ostree-based rootfs is already installed and at least one of the apps was (re-)installed
+    // then set the installation result code to OK
+    res.result_code = data::ResultCode::Numeric::kOk;
+  }
+
+  // TODO: containerDetails outputs an empty stuff
+  res.description += "\n# Apps running:\n" + containerDetails();
 
   return res;
+}
+
+data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target& target) {
+  auto ir = OstreeManager::finalizeInstall(target);
+  if (ir.result_code != data::ResultCode::Numeric::kAlreadyProcessed ||
+      ir.result_code != data::ResultCode::Numeric::kNeedCompletion) {
+    ir.description += "\n# Apps running:\n" + containerDetails();
+  }
+  return ir;
 }
 
 // Handle the case like:
@@ -281,28 +237,48 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
 //  2) update is applied, so we are now running both app1 and app2
 //  3) sota.toml is updated with 1 docker app: "app1"
 // At this point we should stop app2 and remove it.
-void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
+void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) {
   if (!boost::filesystem::is_directory(cfg_.apps_root)) {
     LOG_DEBUG << "cfg_.apps_root does not exist";
     return;
   }
-  std::vector<std::string> target_apps = target.custom_data()["docker_compose_apps"].getMemberNames();
 
-  // an intersection of apps specified in Target and the configuration
-  // i.e. the apps that are supposed to be installed and running
-  const auto& current_apps = getApps(target);
+  int removed_app_numb = 0;
+  const Target::Apps target_apps = Target::targetApps(target, cfg_.apps);
 
   for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(cfg_.apps_root), {})) {
     if (boost::filesystem::is_directory(entry)) {
       std::string name = entry.path().filename().native();
-      if (current_apps.find(name) == current_apps.end()) {
-        LOG_WARNING << "Docker Compose App(" << name
-                    << ") installed, "
-                       "but is either removed from configuration or not defined in current Target. "
-                       "Removing from system";
 
-        app_ctor_(name).remove();
+      if (target_apps.end() != std::find_if(target_apps.begin(), target_apps.end(),
+                                            [&name](const Target::App& app) { return name == app.first; })) {
+        // The App that was found on the disk is in the current Target App list
+        continue;
       }
+
+      LOG_WARNING << "Docker Compose App(" << name
+                  << ") installed, "
+                     "but is either removed from configuration or not defined in current Target. "
+                     "Removing from system";
+
+      Docker::ComposeApp::Ptr app_to_remove;
+      if (0 == apps_.count(name)) {
+        app_to_remove = const_cast<ComposeAppManager*>(this)->createApp(name, "");
+      } else {
+        app_to_remove = apps_.at(name);
+      }
+      app_to_remove->remove();
+      apps_.erase(name);
+      ++removed_app_numb;
+    }
+  }
+
+  if (cfg_.docker_prune) {
+    LOG_INFO << "Pruning unused docker images";
+    // Utils::shell which isn't interactive, we'll use std::system so that
+    // stdout/stderr is streamed while docker sets things up.
+    if (std::system("docker image prune -a -f --filter=\"label!=aktualizr-no-prune\"") != 0) {
+      LOG_WARNING << "Unable to prune unused docker images";
     }
   }
 }
@@ -321,4 +297,10 @@ std::string ComposeAppManager::containerDetails() const {
     out_str = "Unable to run `docker ps`";
   }
   return out_str;
+}
+
+Docker::ComposeApp::Ptr ComposeAppManager::createApp(const std::string& name, const std::string& uri) {
+  return std::make_shared<Docker::ComposeApp>(
+      name, uri, cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
+      boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
 }

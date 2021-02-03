@@ -11,19 +11,21 @@ namespace Docker {
 
 class ComposeApp {
  public:
+  using Ptr = std::shared_ptr<ComposeApp>;
   static constexpr const char* const ArchiveExt{".tgz"};
   static constexpr const char* const NeedStartFile{".need_start"};
   static constexpr const char* const ComposeFile{"docker-compose.yml"};
 
  public:
-  ComposeApp(std::string name, const boost::filesystem::path& root_dir, std::string compose_bin, std::string docker_bin,
-             const Docker::RegistryClient& registry_client);
+  ComposeApp(std::string name, std::string uri, const boost::filesystem::path& root_dir, std::string compose_bin,
+             std::string docker_bin, const Docker::RegistryClient& registry_client);
 
   bool fetch(const std::string& app_uri);
   bool up(bool no_start = false);
   bool start();
   void remove();
-  bool isRunning();
+  bool isInstalled(const std::string& uri) const;
+  bool isRunning(const std::string& uri) const;
 
  private:
   bool cmd_streaming(const std::string& cmd);
@@ -38,6 +40,8 @@ class ComposeApp {
   const std::string compose_;
   const std::string docker_;
   const Docker::RegistryClient& registry_client_;
+
+  std::string uri_;
 };
 
 }  // namespace Docker

@@ -31,8 +31,9 @@ class ComposeAppManager : public OstreeManager {
     std::string docker_images_reload_cmd{"systemctl reload docker"};
   };
 
-  using ComposeAppCtor = std::function<Docker::ComposeApp(const std::string& app)>;
+  using ComposeAppCtor = std::function<Docker::ComposeApp(const std::string& name, const std::string& uri)>;
   using AppsContainer = std::unordered_map<std::string, std::string>;
+  using Apps = std::unordered_map<std::string, Docker::ComposeApp::Ptr>;
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
@@ -40,20 +41,21 @@ class ComposeAppManager : public OstreeManager {
                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory =
                         Docker::RegistryClient::DefaultHttpClientFactory);
 
+  std::string name() const override { return Name; };
+
+  Uptane::Target getCurrent() const override;
+
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
   data::InstallationResult install(const Uptane::Target& target) const override;
-  std::string name() const override { return Name; };
+  data::InstallationResult finalizeInstall(const Uptane::Target& target) override;
 
-  // Returns an intersection of Target's Apps and Apps listed in the config (sota.toml:compose_apps)
-  // If Apps are not specified in the config then all Target's Apps are returned
-  AppsContainer getApps(const Uptane::Target& t) const;
-  AppsContainer getAppsToUpdate(const Uptane::Target& t) const;
-  bool checkForAppsToUpdate(const Uptane::Target& target);
-  void setAppsNotChecked() { are_apps_checked_ = false; }
-  void handleRemovedApps(const Uptane::Target& target) const;
+  void handleRemovedApps(const Uptane::Target& target);
+
+ private:
   std::string getCurrentHash() const override;
+  Docker::ComposeApp::Ptr createApp(const std::string& name, const std::string& uri);
   // Return a description of what `docker ps` sees
   std::string containerDetails() const;
 
@@ -61,10 +63,9 @@ class ComposeAppManager : public OstreeManager {
   Config cfg_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   Docker::RegistryClient registry_client_;
-  mutable AppsContainer cur_apps_to_fetch_and_update_;
-  bool are_apps_checked_{false};
-  ComposeAppCtor app_ctor_;
+
   std::unique_ptr<ComposeAppTree> app_tree_;
+  Apps apps_;
 };
 
 #endif  // AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_

@@ -1,8 +1,25 @@
 set(TARGET_EXE aktualizr-lite)
 set(TARGET ${MAIN_TARGET_LIB})
 
-set(SRC helpers.cc liteclient.cc composeappmanager.cc docker.cc composeapp.cc composeapptree.cc ostree/sysroot.cc ostree/repo.cc)
-set(HEADERS helpers.h liteclient.h composeappmanager.h docker.h composeapp.h composeapptree.h ostree/sysroot.h ostree/repo.h)
+set(SRC helpers.cc
+        target.cc
+        docker.cc
+        composeapp.cc
+        ostree/sysroot.cc
+        composeappmanager.cc
+        liteclient.cc
+        ostree/repo.cc
+        composeapptree.cc)
+
+set(HEADERS helpers.h
+        target.h
+        docker.h
+        composeapp.h
+        ostree/sysroot.h
+        composeappmanager.h
+        liteclient.h
+        ostree/repo.h
+        composeapptree.h )
 
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
