@@ -31,7 +31,7 @@ ctest -V -R test_aktualizr-lite
 
 # test building the sota tools
 rm -rf ./*
-../cmake-init.sh -DBUILD_DOCKERAPP=OFF -DBUILD_SOTA_TOOLS=ON
+../cmake-init.sh -DBUILD_SOTA_TOOLS=ON
 ninja all
 if [[ ! -f ./aktualizr/src/sota_tools/garage-sign/bin/garage-sign ]]; then
   echo "Failed to build garage-sign!"

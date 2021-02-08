@@ -21,15 +21,15 @@ git submodule update --init --recursive
 ```
 Initialize a build directory
 ```
-cmake -S . -B build -DBUILD_DOCKERAPP=ON -DCMAKE_BUILD_TYPE=Debug
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 ```
 if you prefer Ninja backend
 ```
-cmake -S . -B build -DBUILD_DOCKERAPP=ON -DCMAKE_BUILD_TYPE=Debug -GNinja
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -GNinja
 ```
 turn on clang-tidy
 ```
-cmake -S . -B build -DBUILD_DOCKERAPP=ON -DCMAKE_BUILD_TYPE=Debug -GNinja  -DCLANG_TIDY=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -GNinja  -DCLANG_TIDY=ON
 ```
 Build aktualizr-lite
 ```
