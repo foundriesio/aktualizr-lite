@@ -224,8 +224,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     interval = variables_map["interval"].as<uint64_t>();
   }
 
-  std::vector<Uptane::Target> installed_versions;
-  client.storage->loadPrimaryInstallationLog(&installed_versions, false);
+  std::vector<Uptane::Target> known_but_not_installed_versions;
+  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
 
   client.reportAktualizrConfiguration();
 
@@ -250,8 +250,9 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // This is a workaround for finding and avoiding bad updates after a rollback.
       // Rollback sets the installed version state to none instead of broken, so there is no
       // easy way to find just the bad versions without api/storage changes. As a workaround we
-      // just check if the version is known (old hash) and not current/pending and abort if so
-      bool known_target_sha = known_local_target(client, *found_latest_target, installed_versions);
+      // just check if the version is not current nor pending nor known (old hash) and never been succesfully installed,
+      // if so then skip an update to the such version/Target
+      bool known_target_sha = known_local_target(client, *found_latest_target, known_but_not_installed_versions);
 
       LOG_INFO << "Latest Target: " << found_latest_target->filename();
       if (!known_target_sha && !client.isTargetActive(*found_latest_target)) {
