@@ -106,7 +106,8 @@ bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& co
   return true;
 }
 
-bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector<Uptane::Target>& installed_versions) {
+bool known_local_target(LiteClient& client, const Uptane::Target& t,
+                        std::vector<Uptane::Target>& known_but_not_installed_versions) {
   bool known_target = false;
   auto current = client.getCurrent();
   boost::optional<Uptane::Target> pending;
@@ -114,7 +115,7 @@ bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector
 
   if (t.sha256Hash() != current.sha256Hash()) {
     std::vector<Uptane::Target>::reverse_iterator it;
-    for (it = installed_versions.rbegin(); it != installed_versions.rend(); it++) {
+    for (it = known_but_not_installed_versions.rbegin(); it != known_but_not_installed_versions.rend(); it++) {
       if (it->sha256Hash() == t.sha256Hash()) {
         // Make sure installed version is not what is currently pending
         if ((pending != boost::none) && (it->sha256Hash() == pending->sha256Hash())) {
@@ -127,4 +128,22 @@ bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector
     }
   }
   return known_target;
+}
+
+void get_known_but_not_installed_versions(LiteClient& client,
+                                          std::vector<Uptane::Target>& known_but_not_installed_versions) {
+  std::vector<Uptane::Target> known_versions;
+  client.storage->loadPrimaryInstallationLog(&known_versions, false);
+
+  std::vector<Uptane::Target> installed_versions;
+  client.storage->loadPrimaryInstallationLog(&installed_versions, true);
+
+  for (const auto& t : known_versions) {
+    if (installed_versions.end() ==
+        std::find_if(installed_versions.begin(), installed_versions.end(),
+                     [&t](const Uptane::Target& t1) { return t.filename() == t1.filename(); })) {
+      // known but never successfully installed version
+      known_but_not_installed_versions.push_back(t);
+    }
+  }
 }

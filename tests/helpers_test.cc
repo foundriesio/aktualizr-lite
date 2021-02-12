@@ -270,6 +270,105 @@ TEST(helpers, compose_containers_initialize) {
   ASSERT_FALSE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
 }
 
+TEST(helpers, rollback_versions) {
+  TemporaryDirectory cfg_dir;
+  std::map<std::string, std::string> apps_cfg;
+  LiteClient client = createClient(cfg_dir, apps_cfg);
+
+  std::vector<Uptane::Target> known_but_not_installed_versions;
+  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+
+  Json::Value target_json;
+  target_json["hashes"]["sha256"] = "sha-01";
+  target_json["custom"]["targetFormat"] = "OSTREE";
+  target_json["length"] = 0;
+  Uptane::Target target_01{"target-01", target_json};
+
+  // new Target was installed but not applied/finalized, reboot is required
+  // in this case we should have zero known_but_not_installed versions
+  client.storage->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kPending);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+
+  // a device is succesfully rebooted on the new Target, so we still have zero "known but not installed"
+  client.storage->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kCurrent);
+  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+
+
+  target_json["hashes"]["sha256"] = "sha-02";
+  Uptane::Target target_02{"target-02", target_json};
+
+  // new Target was installed but not applied/finalized, reboot is required
+  // in this case we should have zero known_but_not_installed versions
+  ASSERT_FALSE(known_local_target(client, target_02, known_but_not_installed_versions));
+  client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kPending);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+
+  // a device is succesfully rebooted on the new Target, so we still have zero "known but not installed"
+  client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
+  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+  ASSERT_FALSE(known_local_target(client, target_02, known_but_not_installed_versions));
+
+  target_json["hashes"]["sha256"] = "sha-03";
+  Uptane::Target target_03{"target-03", target_json};
+
+  // new Target was installed but not applied/finalized, reboot is required
+  // in this case we should have zero known_but_not_installed versions
+  ASSERT_FALSE(known_local_target(client, target_03, known_but_not_installed_versions));
+  client.storage->savePrimaryInstalledVersion(target_03, InstalledVersionUpdateMode::kPending);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+
+  // rollback has happened
+  client.storage->savePrimaryInstalledVersion(target_03, InstalledVersionUpdateMode::kNone);
+  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 1);
+  ASSERT_EQ(known_but_not_installed_versions[0].filename(), "target-03");
+  ASSERT_TRUE(known_local_target(client, target_03, known_but_not_installed_versions));
+
+  boost::optional<Uptane::Target> current_version;
+  client.storage->loadPrimaryInstalledVersions(&current_version, nullptr);
+  ASSERT_TRUE(current_version);
+  ASSERT_EQ(current_version->filename(), "target-02");
+
+  target_json["hashes"]["sha256"] = "sha-04";
+  Uptane::Target target_04{"target-04", target_json};
+
+  // new Target
+  ASSERT_FALSE(known_local_target(client, target_04, known_but_not_installed_versions));
+  client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kPending);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 1);
+
+  // reboot
+  client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kCurrent);
+  known_but_not_installed_versions.clear();
+  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
+  ASSERT_FALSE(known_local_target(client, target_04, known_but_not_installed_versions));
+  ASSERT_EQ(known_but_not_installed_versions.size(), 1);
+
+  client.storage->loadPrimaryInstalledVersions(&current_version, nullptr);
+  ASSERT_TRUE(current_version);
+  ASSERT_EQ(current_version->filename(), "target-04");
+
+  // manual update to target-02
+  ASSERT_FALSE(known_local_target(client, target_02, known_but_not_installed_versions));
+  client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
+
+  // go back to daemon mode and try to install the latest which is target-04
+  ASSERT_FALSE(known_local_target(client, target_04, known_but_not_installed_versions));
+  client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kPending);
+  // reboot
+  client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kCurrent);
+  known_but_not_installed_versions.clear();
+
+  // make sure that there is only one "bad" version after all updates
+  known_but_not_installed_versions.clear();
+  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
+  ASSERT_EQ(known_but_not_installed_versions.size(), 1);
+  ASSERT_TRUE(known_local_target(client, target_03, known_but_not_installed_versions));
+}
+
 #ifndef __NO_MAIN__
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
