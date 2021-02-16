@@ -100,6 +100,8 @@ TEST(helpers, locking) {
   config.storage.path = cfg_dir.Path();
   config.pacman.sysroot = test_sysroot;
   config.pacman.extra["booted"] = "0";
+  config.pacman.os = "dummy-os";
+  config.pacman.type = ComposeAppManager::Name;
 
   LiteClient client(config);
   client.update_lockfile = cfg_dir / "update_lock";
@@ -130,6 +132,8 @@ TEST(helpers, callback) {
   bad_config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   bad_config.pacman.sysroot = test_sysroot;
   bad_config.pacman.extra["booted"] = "0";
+  bad_config.pacman.os = "dummy-os";
+  bad_config.pacman.type = ComposeAppManager::Name;
   bad_config.storage.path = cfg_dir.Path();
   bad_config.pacman.extra["callback_program"] = "This does not exist";
 
@@ -142,6 +146,8 @@ TEST(helpers, callback) {
   config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   config.pacman.sysroot = test_sysroot;
   config.pacman.extra["booted"] = "0";
+  config.pacman.os = "dummy-os";
+  config.pacman.type = ComposeAppManager::Name;
   config.storage.path = cfg_dir.Path();
 
   std::string cb = (cfg_dir / "callback.sh").native();

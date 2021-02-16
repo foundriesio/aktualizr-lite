@@ -276,6 +276,15 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   return res;
 }
 
+data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target& target) {
+  auto ir = OstreeManager::finalizeInstall(target);
+  if (ir.result_code != data::ResultCode::Numeric::kAlreadyProcessed ||
+      ir.result_code != data::ResultCode::Numeric::kNeedCompletion) {
+    ir.description += "\n# Apps running:\n" + containerDetails();
+  }
+  return ir;
+}
+
 // Handle the case like:
 //  1) sota.toml is configured with 2 compose apps: "app1, app2"
 //  2) update is applied, so we are now running both app1 and app2
