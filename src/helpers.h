@@ -5,7 +5,6 @@
 
 #include "liteclient.h"
 
-void generate_correlation_id(Uptane::Target& t);
 bool known_local_target(LiteClient& client, const Uptane::Target& t, std::vector<Uptane::Target>& installed_versions);
 void get_known_but_not_installed_versions(LiteClient& client,
                                           std::vector<Uptane::Target>& known_but_not_installed_versions);

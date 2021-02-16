@@ -9,6 +9,7 @@
 #include "helpers.h"
 #include "libaktualizr/config.h"
 
+#include "target.h"
 #include "utilities/aktualizr_version.h"
 
 namespace bpo = boost::program_options;
@@ -73,7 +74,7 @@ static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target ta
   log_info_target("Updating Active Target: ", client.config, client.getCurrent());
   log_info_target("To New Target: ", client.config, target);
 
-  generate_correlation_id(target);
+  Target::setCorrelationID(target);
 
   data::ResultCode::Numeric rc = client.download(target, reason);
   if (rc != data::ResultCode::Numeric::kOk) {
@@ -94,7 +95,7 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
   auto target = client.getCurrent();
   LOG_INFO << "Syncing Active Target Apps";
 
-  generate_correlation_id(target);
+  Target::setCorrelationID(target);
 
   data::ResultCode::Numeric rc = client.download(target, "Sync active Target Apps");
   if (rc != data::ResultCode::Numeric::kOk) {
