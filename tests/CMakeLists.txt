@@ -50,6 +50,15 @@ target_link_libraries(t_lite-helpers ${TEST_LIBS})
 add_dependencies(t_lite-helpers make_ostree_sysroot)
 set_tests_properties(test_lite-helpers PROPERTIES LABELS "aklite:helpers")
 
+add_aktualizr_test(NAME target
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_target.cc
+  PROJECT_WORKING_DIRECTORY
+)
+
+target_compile_definitions(t_target PRIVATE ${TEST_DEFS})
+target_include_directories(t_target PRIVATE ${TEST_INCS})
+target_link_libraries(t_target ${TEST_LIBS})
+
 add_aktualizr_test(NAME ostree
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_ostree.cc
   PROJECT_WORKING_DIRECTORY

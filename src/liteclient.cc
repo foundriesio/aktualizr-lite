@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sys/file.h>
 
+#include <boost/container/flat_map.hpp>
 #include <boost/process.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -10,8 +11,11 @@
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
 
+#include "target.h"
+
 LiteClient::LiteClient(Config& config_in)
-    : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
+    : config{std::move(config_in)},
+      primary_ecu_{Uptane::EcuSerial::Unknown(), config.provision.primary_ecu_hardware_id} {
   std::string pkey;
   storage = INvStorage::newStorage(config.storage);
   storage->importData(config.import);
@@ -21,7 +25,7 @@ LiteClient::LiteClient(Config& config_in)
     std::string val = raw.at("tags");
     if (val.length() > 0) {
       // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
-      boost::split(tags, val, boost::is_any_of(", "), boost::token_compress_on);
+      boost::split(tags_, val, boost::is_any_of(", "), boost::token_compress_on);
     }
   }
 
@@ -48,7 +52,7 @@ LiteClient::LiteClient(Config& config_in)
     ecu_serials.emplace_back(Uptane::EcuSerial(serial), Uptane::HardwareIdentifier(hwid));
     storage->storeEcuSerials(ecu_serials);
   }
-  primary_ecu = ecu_serials[0];
+  primary_ecu_ = ecu_serials[0];
 
   std::vector<std::string> headers;
   if (config.pacman.extra.count("booted") == 1) {
@@ -70,10 +74,10 @@ LiteClient::LiteClient(Config& config_in)
   if (!config.telemetry.report_network) {
     // Provide the random primary ECU serial so our backend will have some
     // idea of the number of unique devices using the system
-    headers.emplace_back("x-ats-primary: " + primary_ecu.first.ToString());
+    headers.emplace_back("x-ats-primary: " + primary_ecu_.first.ToString());
   }
 
-  headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
+  headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags_, ","));
 
   http_client = std::make_shared<HttpClient>(&headers);
   uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
@@ -122,6 +126,82 @@ LiteClient::LiteClient(Config& config_in)
   }
 }
 
+bool LiteClient::checkForUpdates() {
+  Uptane::Target t = Uptane::Target::Unknown();
+  callback("check-for-update-pre", t);
+  bool rc = updateImageMeta();
+  callback("check-for-update-post", t);
+  return rc;
+}
+
+std::unique_ptr<Uptane::Target> LiteClient::getTarget(const std::string& version) {
+  std::unique_ptr<Uptane::Target> rv;
+  if (!updateImageMeta()) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy";
+    if (!checkImageMetaOffline()) {
+      LOG_ERROR << "Unable to use local copy of TUF data";
+      throw std::runtime_error("Unable to find update");
+    }
+  }
+
+  // if a new version of targets.json hasn't been downloaded why do we do the following search
+  // for the latest ??? It's really needed just for the forced update to a specific version
+  bool find_latest = (version == "latest");
+  std::unique_ptr<Uptane::Target> latest = nullptr;
+  for (const auto& t : allTargets()) {
+    if (!t.IsValid()) {
+      continue;
+    }
+
+    if (!t.IsOstree()) {
+      continue;
+    }
+
+    if (!Target::hasTag(t, tags_)) {
+      continue;
+    }
+    for (auto const& it : t.hardwareIds()) {
+      if (it == primary_ecu_.second) {
+        if (find_latest) {
+          if (latest == nullptr || Target::Version(latest->custom_version()) < Target::Version(t.custom_version())) {
+            latest = std_::make_unique<Uptane::Target>(t);
+          }
+        } else if (version == t.filename() || version == t.custom_version()) {
+          return std_::make_unique<Uptane::Target>(t);
+        }
+      }
+    }
+  }
+  if (find_latest && latest != nullptr) {
+    return latest;
+  }
+  throw std::runtime_error("Unable to find update");
+}
+
+boost::container::flat_map<int, Uptane::Target> LiteClient::getTargets() {
+  // TODO: bring getTarget and getTargets to common ground
+  boost::container::flat_map<int, Uptane::Target> sorted_targets;
+  for (const auto& t : allTargets()) {
+    int ver = 0;
+    try {
+      ver = std::stoi(t.custom_version(), nullptr, 0);
+    } catch (const std::invalid_argument& exc) {
+      LOG_ERROR << "Invalid version number format: " << t.custom_version();
+      ver = -1;
+    }
+    if (!Target::hasTag(t, tags_)) {
+      continue;
+    }
+    for (const auto& it : t.hardwareIds()) {
+      if (it == primary_ecu_.second) {
+        sorted_targets.emplace(ver, t);
+        break;
+      }
+    }
+  }
+  return sorted_targets;
+}
+
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {
   if (callback_program.empty()) {
     return;
@@ -144,14 +224,6 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
   }
 }
 
-bool LiteClient::checkForUpdates() {
-  Uptane::Target t = Uptane::Target::Unknown();
-  callback("check-for-update-pre", t);
-  bool rc = updateImageMeta();
-  callback("check-for-update-post", t);
-  return rc;
-}
-
 void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) {
   if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
@@ -170,17 +242,17 @@ class DetailedDownloadReport : public EcuDownloadStartedReport {
 
 void LiteClient::notifyDownloadStarted(const Uptane::Target& t, const std::string& reason) {
   callback("download-pre", t);
-  notify(t, std_::make_unique<DetailedDownloadReport>(primary_ecu.first, t.correlation_id(), reason));
+  notify(t, std_::make_unique<DetailedDownloadReport>(primary_ecu_.first, t.correlation_id(), reason));
 }
 
 void LiteClient::notifyDownloadFinished(const Uptane::Target& t, bool success) {
   callback("download-post", t, success ? "OK" : "FAILED");
-  notify(t, std_::make_unique<EcuDownloadCompletedReport>(primary_ecu.first, t.correlation_id(), success));
+  notify(t, std_::make_unique<EcuDownloadCompletedReport>(primary_ecu_.first, t.correlation_id(), success));
 }
 
 void LiteClient::notifyInstallStarted(const Uptane::Target& t) {
   callback("install-pre", t);
-  notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu.first, t.correlation_id()));
+  notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu_.first, t.correlation_id()));
 }
 
 class DetailedAppliedReport : public EcuInstallationAppliedReport {
@@ -203,18 +275,18 @@ class DetailedInstallCompletedReport : public EcuInstallationCompletedReport {
 void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir) {
   if (ir.needCompletion()) {
     callback("install-post", t, "NEEDS_COMPLETION");
-    notify(t, std_::make_unique<DetailedAppliedReport>(primary_ecu.first, t.correlation_id(), ir.description));
+    notify(t, std_::make_unique<DetailedAppliedReport>(primary_ecu_.first, t.correlation_id(), ir.description));
     return;
   }
 
   if (ir.result_code == data::ResultCode::Numeric::kOk) {
     callback("install-post", t, "OK");
     writeCurrentTarget(t);
-    notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu.first, t.correlation_id(), true,
+    notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu_.first, t.correlation_id(), true,
                                                                 ir.description));
   } else {
     callback("install-post", t, "FAILED");
-    notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu.first, t.correlation_id(), false,
+    notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu_.first, t.correlation_id(), false,
                                                                 ir.description));
   }
 }
