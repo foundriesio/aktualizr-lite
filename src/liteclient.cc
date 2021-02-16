@@ -81,21 +81,10 @@ LiteClient::LiteClient(Config& config_in)
   uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
   report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
 
-  // finalizeIfNeeded it looks like copy-paste of SotaUptaneClient::finalizeAfterReboot
-  // can we use just SotaUptaneClient::finalizeAfterReboot or even maybe SotaUptaneClient::initialize ???
-  // in this case we could do our specific finalization, including starting apps, in ComposeAppManager::finalizeInstall
-  Uptane::Target current_target{Uptane::Target::Unknown()};
-  Uptane::Target target_been_applied{Uptane::Target::Unknown()};
-  data::InstallationResult target_installation_result;
-  std::tie(current_target, target_been_applied, target_installation_result) =
-      finalizeIfNeeded(*ostree_sysroot, *storage, config);
-  update_request_headers(http_client, current_target, config.pacman);
-
   key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
   key_manager_->loadKeys();
   key_manager_->copyCertsToCurl(*http_client);
 
-  // TODO: consider improving this factory method
   if (config.pacman.type == ComposeAppManager::Name) {
     package_manager_ =
         std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, ostree_sysroot);
@@ -105,10 +94,28 @@ LiteClient::LiteClient(Config& config_in)
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
 
-  writeCurrentTarget(current_target);
-  if (target_installation_result.result_code != data::ResultCode::Numeric::kAlreadyProcessed) {
-    notifyInstallFinished(target_been_applied, target_installation_result);
+  {
+    // finalize a pending update if any
+    boost::optional<Uptane::Target> pending_target;
+    storage->loadInstalledVersions("", nullptr, &pending_target);
+
+    if (!!pending_target) {
+      data::InstallationResult update_finalization_result = package_manager_->finalizeInstall(*pending_target);
+      if (update_finalization_result.isSuccess()) {
+        LOG_INFO << "Marking target install complete for: " << *pending_target;
+        storage->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kCurrent);
+      }
+
+      if (update_finalization_result.result_code != data::ResultCode::Numeric::kAlreadyProcessed ||
+          update_finalization_result.result_code != data::ResultCode::Numeric::kNeedCompletion) {
+        notifyInstallFinished(*pending_target, update_finalization_result);
+      }
+    }
   }
+
+  const auto current_target = getCurrent();
+  update_request_headers(http_client, current_target, config.pacman);
+  writeCurrentTarget(current_target);
 }
 
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {
@@ -194,15 +201,6 @@ void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::Installati
     callback("install-post", t, "NEEDS_COMPLETION");
     notify(t, std_::make_unique<DetailedAppliedReport>(primary_ecu.first, t.correlation_id(), ir.description));
     return;
-  }
-
-  if (package_manager_->name() == ComposeAppManager::Name) {
-    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
-    if (compose_pacman == nullptr) {
-      LOG_ERROR << "Cannot downcast the package manager to a specific type";
-    } else {
-      ir.description += "\n# Apps running:\n" + compose_pacman->containerDetails();
-    }
   }
 
   if (ir.result_code == data::ResultCode::Numeric::kOk) {
@@ -466,67 +464,6 @@ void LiteClient::add_apps_header(std::vector<std::string>& headers, PackageConfi
       headers.emplace_back("x-ats-dockerapps: ");
     }
   }
-}
-
-std::tuple<Uptane::Target, Uptane::Target, data::InstallationResult> LiteClient::finalizeIfNeeded(
-    OSTree::Sysroot& sysroot, INvStorage& storage, Config& config) {
-  data::InstallationResult ir{data::ResultCode::Numeric::kUnknown, ""};
-  boost::optional<Uptane::Target> pending_version;
-  boost::optional<Uptane::Target> current_version;
-  storage.loadInstalledVersions("", &current_version, &pending_version);
-
-  std::string current_hash = sysroot.getCurDeploymentHash();
-  if (current_hash.empty()) {
-    throw std::runtime_error("Could not get " + sysroot.type() + " deployment in " + sysroot.path());
-  }
-
-  Bootloader bootloader(config.bootloader, storage);
-
-  if (!!pending_version) {
-    const Uptane::Target& target = *pending_version;
-    if (current_hash == target.sha256Hash()) {
-      LOG_INFO << "Marking target install complete for: " << target;
-      storage.saveInstalledVersion("", target, InstalledVersionUpdateMode::kCurrent);
-      ir.result_code = data::ResultCode::Numeric::kOk;
-      if (bootloader.rebootDetected()) {
-        bootloader.rebootFlagClear();
-      }
-      // Installation was successful, so both currently installed Target and Target that has been applied are the same
-      return std::tie(target, target, ir);
-    } else {
-      if (bootloader.rebootDetected()) {
-        std::string err = "Expected to boot on " + target.sha256Hash() + " buf found " + current_hash +
-                          ", system might have experienced a rollback";
-        LOG_ERROR << err;
-        storage.saveInstalledVersion("", target, InstalledVersionUpdateMode::kNone);
-        bootloader.rebootFlagClear();
-        ir.result_code = data::ResultCode::Numeric::kInstallFailed;
-        ir.description = err;
-      } else {
-        // Update still pending as no reboot was detected
-        ir.result_code = data::ResultCode::Numeric::kNeedCompletion;
-      }
-      // Installation was not successful
-      return std::tie(*current_version, target, ir);
-    }
-  }
-
-  std::vector<Uptane::Target> installed_versions;
-  storage.loadPrimaryInstallationLog(&installed_versions, false);
-
-  // Version should be in installed versions. Its possible that multiple
-  // targets could have the same sha256Hash. In this case the safest assumption
-  // is that the most recent (the reverse of the vector) target is what we
-  // should return.
-  std::vector<Uptane::Target>::reverse_iterator it;
-  for (it = installed_versions.rbegin(); it != installed_versions.rend(); it++) {
-    if (it->sha256Hash() == current_hash) {
-      ir.result_code = data::ResultCode::Numeric::kAlreadyProcessed;
-      return std::tie(*it, *it, ir);
-    }
-  }
-  Uptane::Target unknown_target{Uptane::Target::Unknown()};
-  return std::tie(unknown_target, unknown_target, ir);
 }
 
 void LiteClient::update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
