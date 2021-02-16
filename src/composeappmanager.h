@@ -40,11 +40,12 @@ class ComposeAppManager : public OstreeManager {
                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory =
                         Docker::RegistryClient::DefaultHttpClientFactory);
 
+  std::string name() const override { return Name; };
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
   data::InstallationResult install(const Uptane::Target& target) const override;
-  std::string name() const override { return Name; };
+  data::InstallationResult finalizeInstall(const Uptane::Target& target) override;
 
   // Returns an intersection of Target's Apps and Apps listed in the config (sota.toml:compose_apps)
   // If Apps are not specified in the config then all Target's Apps are returned
@@ -53,6 +54,8 @@ class ComposeAppManager : public OstreeManager {
   bool checkForAppsToUpdate(const Uptane::Target& target);
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
+
+ private:
   std::string getCurrentHash() const override;
   // Return a description of what `docker ps` sees
   std::string containerDetails() const;

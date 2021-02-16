@@ -77,10 +77,6 @@ class LiteClient {
   std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
                                                 const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
-
-  static std::tuple<Uptane::Target, Uptane::Target, data::InstallationResult> finalizeIfNeeded(OSTree::Sysroot& sysroot,
-                                                                                               INvStorage& storage,
-                                                                                               Config& config);
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
                                      PackageConfig& config);
 
