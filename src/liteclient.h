@@ -26,16 +26,30 @@ class LiteClient {
  public:
   LiteClient(Config& config_in);
 
+  // Check for new TUF metadata at the TUF server
+  bool checkForUpdates();
+
+  // Get Target of a specific version
+  std::unique_ptr<Uptane::Target> getTarget(const std::string& version = "latest");
+
+  /**
+   * @brief Return a sorted map of applicable Targets
+   *
+   * Iterates through all available Targets and cherry picks those that matches
+   * the given client hardware ID and tags.
+   *
+   * @return a sorted map of applicable Targets
+   */
+  boost::container::flat_map<int, Uptane::Target> getTargets();
+
+  // TODO: move all these fields to the private scope
   Config config;
-  std::vector<std::string> tags;
   std::shared_ptr<INvStorage> storage;
 
-  std::pair<Uptane::EcuSerial, Uptane::HardwareIdentifier> primary_ecu;
   std::shared_ptr<HttpClient> http_client;
   boost::filesystem::path download_lockfile;
   boost::filesystem::path update_lockfile;
 
-  bool checkForUpdates();
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
@@ -47,7 +61,6 @@ class LiteClient {
   Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
   bool updateImageMeta();
   bool checkImageMetaOffline();
-  const std::vector<Uptane::Target>& allTargets() const { return image_repo_.getTargets()->targets; }
   TargetStatus VerifyTarget(const Uptane::Target& target) const { return package_manager_->verifyTarget(target); }
   void reportAktualizrConfiguration();
   void reportNetworkInfo();
@@ -60,6 +73,8 @@ class LiteClient {
  private:
   FRIEND_TEST(helpers, locking);
   FRIEND_TEST(helpers, callback);
+
+  const std::vector<Uptane::Target>& allTargets() const { return image_repo_.getTargets()->targets; }
 
   void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
 
@@ -81,6 +96,9 @@ class LiteClient {
                                      PackageConfig& config);
 
  private:
+  std::vector<std::string> tags_;
+  std::pair<Uptane::EcuSerial, Uptane::HardwareIdentifier> primary_ecu_;
+
   boost::filesystem::path callback_program;
   std::unique_ptr<KeyManager> key_manager_;
   std::shared_ptr<PackageManagerInterface> package_manager_;

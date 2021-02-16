@@ -92,20 +92,6 @@ void generate_correlation_id(Uptane::Target& t) {
   t.setCorrelationId(id + "-" + boost::uuids::to_string(tmp));
 }
 
-bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& config_tags) {
-  if (!config_tags.empty()) {
-    auto tags = t.custom_data()["tags"];
-    for (Json::ValueIterator i = tags.begin(); i != tags.end(); ++i) {
-      auto tag = (*i).asString();
-      if (std::find(config_tags.begin(), config_tags.end(), tag) != config_tags.end()) {
-        return true;
-      }
-    }
-    return false;
-  }
-  return true;
-}
-
 bool known_local_target(LiteClient& client, const Uptane::Target& t,
                         std::vector<Uptane::Target>& known_but_not_installed_versions) {
   bool known_target = false;
