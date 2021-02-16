@@ -12,6 +12,7 @@ add_test(test_aktualizr-lite
 )
 
 set_tests_properties(test_aktualizr-lite PROPERTIES DEPENDS uptane-generator)
+set_tests_properties(test_aktualizr-lite PROPERTIES LABELS "aklite:lite-client")
 
 set(TEST_DEFS BOOST_LOG_DYN_LINK)
 set(TEST_INCS
@@ -36,6 +37,7 @@ add_aktualizr_test(NAME compose-apps
 target_compile_definitions(t_compose-apps PRIVATE ${TEST_DEFS})
 target_include_directories(t_compose-apps PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_INCS})
 target_link_libraries(t_compose-apps ${TEST_LIBS})
+set_tests_properties(test_compose-apps PROPERTIES LABELS "aklite:compose-apps")
 
 add_aktualizr_test(NAME lite-helpers
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> helpers_test.cc
@@ -47,6 +49,7 @@ target_include_directories(t_lite-helpers PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_
 target_link_libraries(t_lite-helpers ${TEST_LIBS})
 
 add_dependencies(t_lite-helpers make_ostree_sysroot)
+set_tests_properties(test_lite-helpers PROPERTIES LABELS "aklite:helpers")
 
 add_aktualizr_test(NAME target
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_target.cc
@@ -56,6 +59,7 @@ add_aktualizr_test(NAME target
 target_compile_definitions(t_target PRIVATE ${TEST_DEFS})
 target_include_directories(t_target PRIVATE ${TEST_INCS})
 target_link_libraries(t_target ${TEST_LIBS})
+set_tests_properties(test_target PROPERTIES LABELS "aklite:target")
 
 add_aktualizr_test(NAME ostree
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_ostree.cc
@@ -65,3 +69,4 @@ add_aktualizr_test(NAME ostree
 target_compile_definitions(t_ostree PRIVATE ${TEST_DEFS})
 target_include_directories(t_ostree PRIVATE ${TEST_INCS})
 target_link_libraries(t_ostree ${TEST_LIBS})
+set_tests_properties(test_ostree PROPERTIES LABELS "aklite:ostree")
