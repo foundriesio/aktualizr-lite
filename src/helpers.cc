@@ -1,8 +1,5 @@
 #include "helpers.h"
 
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
-
 #include "composeappmanager.h"
 
 void log_info_target(const std::string& prefix, const Config& config, const Uptane::Target& t) {
@@ -81,15 +78,6 @@ bool LiteClient::composeAppsChanged() const {
   }
 
   return false;
-}
-
-void generate_correlation_id(Uptane::Target& t) {
-  std::string id = t.custom_version();
-  if (id.empty()) {
-    id = t.filename();
-  }
-  boost::uuids::uuid tmp = boost::uuids::random_generator()();
-  t.setCorrelationId(id + "-" + boost::uuids::to_string(tmp));
 }
 
 bool known_local_target(LiteClient& client, const Uptane::Target& t,

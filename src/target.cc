@@ -1,5 +1,8 @@
 #include "target.h"
 
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
+
 bool Target::hasTag(const Uptane::Target& target, const std::vector<std::string>& tags) {
   if (tags.empty()) {
     return true;
@@ -13,4 +16,13 @@ bool Target::hasTag(const Uptane::Target& target, const std::vector<std::string>
     }
   }
   return false;
+}
+
+void Target::setCorrelationID(Uptane::Target& target) {
+  std::string id = target.custom_version();
+  if (id.empty()) {
+    id = target.filename();
+  }
+  boost::uuids::uuid tmp = boost::uuids::random_generator()();
+  target.setCorrelationId(id + "-" + boost::uuids::to_string(tmp));
 }

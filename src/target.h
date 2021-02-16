@@ -19,6 +19,7 @@ class Target {
 
  public:
   static bool hasTag(const Uptane::Target& target, const std::vector<std::string>& tags);
+  static void setCorrelationID(Uptane::Target& target);
 };
 
 #endif  // AKTUALIZR_LITE_TARGET_H_
