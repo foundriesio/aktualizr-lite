@@ -14,6 +14,7 @@ add_test(test_aktualizr-lite
 set_tests_properties(test_aktualizr-lite PROPERTIES DEPENDS uptane-generator)
 set_tests_properties(test_aktualizr-lite PROPERTIES LABELS "aklite:aktualizr-lite")
 
+
 set(TEST_DEFS BOOST_LOG_DYN_LINK)
 set(TEST_INCS
   ${AKTUALIZR_DIR}/include
@@ -58,6 +59,7 @@ add_aktualizr_test(NAME target
 target_compile_definitions(t_target PRIVATE ${TEST_DEFS})
 target_include_directories(t_target PRIVATE ${TEST_INCS})
 target_link_libraries(t_target ${TEST_LIBS})
+set_tests_properties(test_target PROPERTIES LABELS "aklite:target")
 
 add_aktualizr_test(NAME ostree
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_ostree.cc

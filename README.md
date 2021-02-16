@@ -48,11 +48,10 @@ cmake --build build --target aklite-tests
 ### Test
 ```
 cd build
-ctest -V -R test_aktualizr-lite
-ctest -V -R test_lite-helpers
+ctest -L aklite
 ```
 
-==== Build and test in a docker container
+#### Build and test in a docker container
 ```
 ./unit-test
 ```
