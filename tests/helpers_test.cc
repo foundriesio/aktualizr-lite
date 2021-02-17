@@ -157,87 +157,44 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   return LiteClient(config);
 }
 
-// Ensure we handle config changes of containers at start-up properly
-TEST(helpers, containers_initialize) {
-  TemporaryDirectory cfg_dir;
+//TEST(helpers, compose_containers_initialize) {
+//  TemporaryDirectory cfg_dir;
 
-  auto apps_root = cfg_dir / "compose_apps";
-  std::map<std::string, std::string> apps_cfg;
-  apps_cfg["compose_apps_root"] = apps_root.native();
+//  auto apps_root = cfg_dir / "compose_apps";
+//  std::map<std::string, std::string> apps_cfg;
+//  apps_cfg["compose_apps_root"] = apps_root.native();
 
-  // std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
+//  // std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 
-  Json::Value target_json;
-  target_json["hashes"]["sha256"] = "deadbeef";
-  target_json["custom"]["targetFormat"] = "OSTREE";
-  target_json["length"] = 0;
-  Uptane::Target target("test-finalize", target_json);
+//  Json::Value target_json;
+//  target_json["hashes"]["sha256"] = "deadbeef";
+//  target_json["custom"]["targetFormat"] = "OSTREE";
+//  target_json["length"] = 0;
+//  Uptane::Target target("test-finalize", target_json);
 
-  // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged());
+//  // Nothing different - all empty
+//  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
 
-  // Add a new app
-  apps_cfg["compose_apps"] = "app1";
+//  // Add a new app
+//  apps_cfg["compose_apps"] = "app1";
 
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged());
+//  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
 
-  // No apps configured, but one installed:
-  apps_cfg["compose_apps"] = "";
-  boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged());
+//  // No apps configured, but one installed:
+//  apps_cfg["compose_apps"] = "";
+//  boost::filesystem::create_directories(apps_root / "app1");
+//  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
 
-  // One app configured, one app deployed
-  apps_cfg["compose_apps"] = "app1";
-  boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg, ComposeAppManager::Name).composeAppsChanged());
-
-  // Store the hash of the file and make sure no change is detected
-  auto client = createClient(cfg_dir, apps_cfg, ComposeAppManager::Name);
-  ASSERT_FALSE(client.composeAppsChanged());
-}
-
-TEST(helpers, compose_containers_initialize) {
-  TemporaryDirectory cfg_dir;
-
-  auto apps_root = cfg_dir / "compose_apps";
-  std::map<std::string, std::string> apps_cfg;
-  apps_cfg["compose_apps_root"] = apps_root.native();
-
-  // std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
-
-  Json::Value target_json;
-  target_json["hashes"]["sha256"] = "deadbeef";
-  target_json["custom"]["targetFormat"] = "OSTREE";
-  target_json["length"] = 0;
-  Uptane::Target target("test-finalize", target_json);
-
-  // Nothing different - all empty
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
-
-  // Add a new app
-  apps_cfg["compose_apps"] = "app1";
-
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
-
-  // No apps configured, but one installed:
-  apps_cfg["compose_apps"] = "";
-  boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_TRUE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
-
-  // One app configured, one app deployed
-  apps_cfg["compose_apps"] = "app1";
-  boost::filesystem::create_directories(apps_root / "app1");
-  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
-}
+//  // One app configured, one app deployed
+//  apps_cfg["compose_apps"] = "app1";
+//  boost::filesystem::create_directories(apps_root / "app1");
+//  ASSERT_FALSE(createClient(cfg_dir, apps_cfg).composeAppsChanged());
+//}
 
 TEST(helpers, rollback_versions) {
   TemporaryDirectory cfg_dir;
   std::map<std::string, std::string> apps_cfg;
   LiteClient client = createClient(cfg_dir, apps_cfg);
-
-  std::vector<Uptane::Target> known_but_not_installed_versions;
-  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
 
   Json::Value target_json;
   target_json["hashes"]["sha256"] = "sha-01";
@@ -248,12 +205,13 @@ TEST(helpers, rollback_versions) {
   // new Target was installed but not applied/finalized, reboot is required
   // in this case we should have zero known_but_not_installed versions
   client.storage->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kPending);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+  client.setInvalidTargets();
+  ASSERT_TRUE(client.isTargetValid(target_01));
 
   // a device is succesfully rebooted on the new Target, so we still have zero "known but not installed"
   client.storage->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kCurrent);
-  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+  client.setInvalidTargets();
+  ASSERT_TRUE(client.isTargetValid(target_01));
 
 
   target_json["hashes"]["sha256"] = "sha-02";
@@ -261,31 +219,34 @@ TEST(helpers, rollback_versions) {
 
   // new Target was installed but not applied/finalized, reboot is required
   // in this case we should have zero known_but_not_installed versions
-  ASSERT_FALSE(known_local_target(client, target_02, known_but_not_installed_versions));
+  ASSERT_TRUE(client.isTargetValid(target_02));
   client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kPending);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+  ASSERT_TRUE(client.isTargetValid(target_01));
+  ASSERT_TRUE(client.isTargetValid(target_02));
 
   // a device is succesfully rebooted on the new Target, so we still have zero "known but not installed"
   client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
-  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
-  ASSERT_FALSE(known_local_target(client, target_02, known_but_not_installed_versions));
+  client.setInvalidTargets();
+  ASSERT_TRUE(client.isTargetValid(target_01));
+  ASSERT_TRUE(client.isTargetValid(target_02));
 
   target_json["hashes"]["sha256"] = "sha-03";
   Uptane::Target target_03{"target-03", target_json};
 
   // new Target was installed but not applied/finalized, reboot is required
   // in this case we should have zero known_but_not_installed versions
-  ASSERT_FALSE(known_local_target(client, target_03, known_but_not_installed_versions));
+  ASSERT_TRUE(client.isTargetValid(target_03));
   client.storage->savePrimaryInstalledVersion(target_03, InstalledVersionUpdateMode::kPending);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 0);
+  ASSERT_TRUE(client.isTargetValid(target_01));
+  ASSERT_TRUE(client.isTargetValid(target_02));
+  ASSERT_TRUE(client.isTargetValid(target_03));
 
   // rollback has happened
   client.storage->savePrimaryInstalledVersion(target_03, InstalledVersionUpdateMode::kNone);
-  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 1);
-  ASSERT_EQ(known_but_not_installed_versions[0].filename(), "target-03");
-  ASSERT_TRUE(known_local_target(client, target_03, known_but_not_installed_versions));
+  client.setInvalidTargets();
+  ASSERT_TRUE(client.isTargetValid(target_01));
+  ASSERT_TRUE(client.isTargetValid(target_02));
+  ASSERT_FALSE(client.isTargetValid(target_03));
 
   boost::optional<Uptane::Target> current_version;
   client.storage->loadPrimaryInstalledVersions(&current_version, nullptr);
@@ -296,37 +257,40 @@ TEST(helpers, rollback_versions) {
   Uptane::Target target_04{"target-04", target_json};
 
   // new Target
-  ASSERT_FALSE(known_local_target(client, target_04, known_but_not_installed_versions));
+  ASSERT_TRUE(client.isTargetValid(target_04));
   client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kPending);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 1);
+  ASSERT_TRUE(client.isTargetValid(target_01));
+  ASSERT_TRUE(client.isTargetValid(target_02));
+  ASSERT_FALSE(client.isTargetValid(target_03));
+  ASSERT_TRUE(client.isTargetValid(target_04));
 
   // reboot
   client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kCurrent);
-  known_but_not_installed_versions.clear();
-  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
-  ASSERT_FALSE(known_local_target(client, target_04, known_but_not_installed_versions));
-  ASSERT_EQ(known_but_not_installed_versions.size(), 1);
+  client.setInvalidTargets();
+  ASSERT_TRUE(client.isTargetValid(target_01));
+  ASSERT_TRUE(client.isTargetValid(target_02));
+  ASSERT_FALSE(client.isTargetValid(target_03));
+  ASSERT_TRUE(client.isTargetValid(target_04));
 
   client.storage->loadPrimaryInstalledVersions(&current_version, nullptr);
   ASSERT_TRUE(current_version);
   ASSERT_EQ(current_version->filename(), "target-04");
 
   // manual update to target-02
-  ASSERT_FALSE(known_local_target(client, target_02, known_but_not_installed_versions));
+  ASSERT_TRUE(client.isTargetValid(target_02));
   client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
 
   // go back to daemon mode and try to install the latest which is target-04
-  ASSERT_FALSE(known_local_target(client, target_04, known_but_not_installed_versions));
+  ASSERT_TRUE(client.isTargetValid(target_04));
   client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kPending);
   // reboot
   client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kCurrent);
-  known_but_not_installed_versions.clear();
+  client.setInvalidTargets();
 
-  // make sure that there is only one "bad" version after all updates
-  known_but_not_installed_versions.clear();
-  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
-  ASSERT_EQ(known_but_not_installed_versions.size(), 1);
-  ASSERT_TRUE(known_local_target(client, target_03, known_but_not_installed_versions));
+  ASSERT_TRUE(client.isTargetValid(target_01));
+  ASSERT_TRUE(client.isTargetValid(target_02));
+  ASSERT_FALSE(client.isTargetValid(target_03));
+  ASSERT_TRUE(client.isTargetValid(target_04));
 }
 
 #ifndef __NO_MAIN__

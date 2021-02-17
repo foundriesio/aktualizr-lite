@@ -65,51 +65,9 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
 
   LOG_INFO << "Available updates: ";
   for (auto& pair : sorted_targets) {
-    log_info_target("", client.config, pair.second);
+    client.logTarget("", pair.second);
   }
   return 0;
-}
-
-static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target, const std::string& reason) {
-  log_info_target("Updating Active Target: ", client.config, client.getCurrent());
-  log_info_target("To New Target: ", client.config, target);
-
-  Target::setCorrelationID(target);
-
-  data::ResultCode::Numeric rc = client.download(target, reason);
-  if (rc != data::ResultCode::Numeric::kOk) {
-    return rc;
-  }
-
-  if (client.VerifyTarget(target) != TargetStatus::kGood) {
-    data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
-    client.notifyInstallFinished(target, res);
-    LOG_ERROR << "Downloaded target is invalid";
-    return res.result_code.num_code;
-  }
-
-  return client.install(target);
-}
-
-static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
-  auto target = client.getCurrent();
-  LOG_INFO << "Syncing Active Target Apps";
-
-  Target::setCorrelationID(target);
-
-  data::ResultCode::Numeric rc = client.download(target, "Sync active Target Apps");
-  if (rc != data::ResultCode::Numeric::kOk) {
-    return rc;
-  }
-
-  if (client.VerifyTarget(target) != TargetStatus::kGood) {
-    data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
-    client.notifyInstallFinished(target, res);
-    LOG_ERROR << "Downloaded target is invalid";
-    return res.result_code.num_code;
-  }
-
-  return client.install(target);
 }
 
 static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
@@ -128,8 +86,7 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   LOG_INFO << "Finding " << version << " to update to...";
   const auto target_to_install = client.getTarget(version);
 
-  std::string reason = "Manual update to " + version;
-  data::ResultCode::Numeric rc = do_update(client, *target_to_install, reason);
+  data::ResultCode::Numeric rc = client.update(*target_to_install, true);
 
   return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
                                                                                                     : EXIT_FAILURE;
@@ -157,9 +114,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     interval = variables_map["interval"].as<uint64_t>();
   }
 
-  std::vector<Uptane::Target> known_but_not_installed_versions;
-  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
-
   client.reportAktualizrConfiguration();
 
   while (true) {
@@ -180,42 +134,25 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     try {
       // target cannot be nullptr, an exception will be yielded if no target
       const auto found_latest_target = client.getTarget();
-
-      // This is a workaround for finding and avoiding bad updates after a rollback.
-      // Rollback sets the installed version state to none instead of broken, so there is no
-      // easy way to find just the bad versions without api/storage changes. As a workaround we
-      // just check if the version is not current nor pending nor known (old hash) and never been succesfully installed,
-      // if so then skip an update to the such version/Target
-      bool known_target_sha = known_local_target(client, *found_latest_target, known_but_not_installed_versions);
-
       LOG_INFO << "Latest Target: " << found_latest_target->filename();
-      if (!known_target_sha && !client.isTargetActive(*found_latest_target)) {
-        // New Target is available, try to update a device with it
-        std::string reason = "Updating from " + current.filename() + " to " + found_latest_target->filename();
-        data::ResultCode::Numeric rc = do_update(client, *found_latest_target, reason);
-        if (rc == data::ResultCode::Numeric::kOk) {
-          client.http_client->updateHeader("x-ats-target", found_latest_target->filename());
-          // Start the loop over to call updateImagesMeta which will update this
-          // device's target name on the server.
-          continue;
-        } else if (rc == data::ResultCode::Numeric::kNeedCompletion) {
-          // no point to continue running TUF cycle (check for update, download, install)
-          // since reboot is required to apply/finalize the currently installed update (aka pending update)
-          break;
-        }
 
-      } else {
-        if (!client.appsInSync()) {
-          do_app_sync(client);
-        }
+      data::ResultCode::Numeric rc = client.update(*found_latest_target);
+      if (rc == data::ResultCode::Numeric::kNeedCompletion) {
+        // no point to continue running TUF cycle (check for update, download, install)
+        // since reboot is required to apply/finalize the currently installed update (aka pending update)
+        break;
+      }
+
+      if (rc == data::ResultCode::Numeric::kOk || rc == data::ResultCode::Numeric::kAlreadyProcessed) {
         LOG_INFO << "Device is up-to-date";
+      } else {
+        LOG_ERROR << "Failed to update or sync the latest Target: " + data::ResultCode(rc).toString();
       }
 
     } catch (const std::exception& exc) {
       LOG_ERROR << "Failed to find or update Target: " << exc.what();
     }
 
-    client.setAppsNotChecked();
     std::this_thread::sleep_for(std::chrono::seconds(interval));
 
   }  // while true

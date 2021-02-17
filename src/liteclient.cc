@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <sys/file.h>
+#include <vector>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/process.hpp>
@@ -124,6 +125,7 @@ LiteClient::LiteClient(Config& config_in)
     // we send the installation finished report event.
     notifyInstallFinished(*pending_target, update_finalization_result);
   }
+  setInvalidTargets();
 }
 
 Uptane::Target LiteClient::getCurrent(bool refresh) {
@@ -207,6 +209,117 @@ boost::container::flat_map<int, Uptane::Target> LiteClient::getTargets() {
     }
   }
   return sorted_targets;
+}
+
+// Update a device to the given Target
+data::ResultCode::Numeric LiteClient::update(Uptane::Target& target, bool force_update) {
+  data::ResultCode::Numeric update_result = data::ResultCode::Numeric::kUnknown;
+  std::string download_reason;
+  auto current_target = getCurrent();
+
+  Uptane::Target target_to_update{target};
+
+  UpdateType update_type = UpdateType::kNewTargetUpdate;
+  if (force_update) {
+    update_type = UpdateType::kTargetForcedUpdate;
+  } else if (target.filename() == current_target.filename() || !isTargetValid(target)) {
+    update_type = UpdateType::kCurrentTargetSync;
+    target_to_update = current_target;
+  }
+
+  // set an update correlation ID to "bind" all report events generated during a single update together
+  // so the backend can know to which of the updates specific events are related to
+  Target::setCorrelationID(target_to_update);
+
+  // prepare for an update
+  switch (update_type) {
+    case UpdateType::kNewTargetUpdate: {
+      logTarget("Updating Active Target: ", current_target);
+      logTarget("To New Target: ", target_to_update);
+      download_reason = "Updating from " + current_target.filename() + " to " + target_to_update.filename();
+
+      appsInSync();
+      break;
+    }
+    case UpdateType::kCurrentTargetSync: {
+      logTarget("Syncing current Target: ", target_to_update);
+      download_reason = "Syncing current Target " + target_to_update.filename();
+
+      if (appsInSync() && target_to_update.sha256Hash() == current_target.sha256Hash()) {
+        setAppsNotChecked();
+        return data::ResultCode::Numeric::kAlreadyProcessed;
+      }
+
+      break;
+    }
+    case UpdateType::kTargetForcedUpdate: {
+      logTarget("Updating to Target: ", target);
+      download_reason = "Manual update to Target " + target.filename();
+      break;
+    }
+    default: {
+      // this shouldn't really happen at the runtime
+      throw std::runtime_error("Unsupported type of update:  " + std::to_string(update_type));
+    }
+  }
+
+  // do update, i.e. download and install
+  do {
+    update_result = download(target_to_update, download_reason);
+
+    // TODO: it should be really just `download` and `install`
+    if (update_result != data::ResultCode::Numeric::kOk) {
+      break;
+    }
+
+    if (VerifyTarget(target_to_update) != TargetStatus::kGood) {
+      // why do we do it here not inside of packman->download() ???
+      data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+      // why do we send notifyInstallFinished if notifyInstallStarted hasn't been called ?
+      notifyInstallFinished(target_to_update, res);
+      LOG_ERROR << "Downloaded target is invalid";
+      update_result = res.result_code.num_code;
+      break;
+    }
+
+    update_result = install(target_to_update);
+
+    if (update_result == data::ResultCode::Numeric::kOk) {
+      current_target_ = target_to_update;
+      http_client->updateHeader("x-ats-target", current_target_.filename());
+    }
+  } while (false);  // update scope
+
+  setAppsNotChecked();
+  return update_result;
+}
+
+bool LiteClient::isTargetValid(const Uptane::Target& target) const {
+  const auto current = getCurrent();
+
+  // Make sure that Target is not what is currently installed
+  if (target.sha256Hash() == current.sha256Hash()) {
+    return true;
+  }
+
+  boost::optional<Uptane::Target> pending;
+  storage->loadPrimaryInstalledVersions(nullptr, &pending);
+
+  // Make sure that Target is not what is currently pending
+  if (!!pending && (target.sha256Hash() == pending->sha256Hash())) {
+    return true;
+  }
+
+  std::vector<Uptane::Target>::const_reverse_iterator it;
+  for (it = invalid_targets_.rbegin(); it != invalid_targets_.rend(); it++) {
+    if (it->sha256Hash() == target.sha256Hash()) {
+      // TODO: remove it from here
+      LOG_INFO << "Target sha256Hash " << target.sha256Hash() << " known locally (rollback?), skipping";
+      return false;
+    }
+  }
+
+  return true;
 }
 
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {
@@ -537,6 +650,36 @@ void LiteClient::setAppsNotChecked() {
 
 std::string LiteClient::getDeviceID() const { return key_manager_->getCN(); }
 
+void LiteClient::logTarget(const std::string& prefix, const Uptane::Target& t) const {
+  auto name = t.filename();
+  if (t.custom_version().length() > 0) {
+    name = t.custom_version();
+  }
+  LOG_INFO << prefix + name << "\tsha256:" << t.sha256Hash();
+
+  if (config.pacman.type == ComposeAppManager::Name) {
+    bool shown = false;
+    auto config_apps = ComposeAppManager::Config(config.pacman).apps;
+    auto bundles = t.custom_data()["docker_compose_apps"];
+    for (Json::ValueIterator i = bundles.begin(); i != bundles.end(); ++i) {
+      if (!shown) {
+        shown = true;
+        LOG_INFO << "\tDocker Compose Apps:";
+      }
+      if ((*i).isObject() && (*i).isMember("uri")) {
+        const auto& app = i.key().asString();
+        std::string app_status =
+            (!config_apps || (*config_apps).end() != std::find((*config_apps).begin(), (*config_apps).end(), app))
+                ? "on"
+                : "off";
+        LOG_INFO << "\t" << app_status << ": " << app << " -> " << (*i)["uri"].asString();
+      } else {
+        LOG_ERROR << "\t\tInvalid custom data for docker_compose_apps: " << i.key().asString();
+      }
+    }
+  }
+}
+
 void LiteClient::add_apps_header(std::vector<std::string>& headers, PackageConfig& config) {
   if (config.type == ComposeAppManager::Name) {
     ComposeAppManager::Config cfg(config);
@@ -568,6 +711,25 @@ void LiteClient::update_request_headers(std::shared_ptr<HttpClient>& http_client
         }
       }
       http_client->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
+    }
+  }
+}
+
+void LiteClient::setInvalidTargets() {
+  invalid_targets_.clear();
+
+  std::vector<Uptane::Target> known_versions;
+  storage->loadPrimaryInstallationLog(&known_versions, false);
+
+  std::vector<Uptane::Target> installed_versions;
+  storage->loadPrimaryInstallationLog(&installed_versions, true);
+
+  for (const auto& t : known_versions) {
+    if (installed_versions.end() ==
+        std::find_if(installed_versions.begin(), installed_versions.end(),
+                     [&t](const Uptane::Target& t1) { return t.filename() == t1.filename(); })) {
+      // known but never successfully installed version
+      invalid_targets_.push_back(t);
     }
   }
 }

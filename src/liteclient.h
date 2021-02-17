@@ -24,6 +24,9 @@ class Lock {
 
 class LiteClient {
  public:
+  enum UpdateType { kNewTargetUpdate = 0, kCurrentTargetSync, kTargetForcedUpdate };
+
+ public:
   LiteClient(Config& config_in);
 
   // Get currently installed (TODO: and running (active) Target)
@@ -45,6 +48,9 @@ class LiteClient {
    */
   boost::container::flat_map<int, Uptane::Target> getTargets();
 
+  // Update a device to the given Target
+  data::ResultCode::Numeric update(Uptane::Target& target, bool force_update = false);
+
   // TODO: move all these fields to the private scope
   Config config;
   std::shared_ptr<INvStorage> storage;
@@ -60,7 +66,6 @@ class LiteClient {
     return {is_reboot_required_, config.bootloader.reboot_command};
   }
 
-  bool composeAppsChanged() const;
   Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
   bool updateImageMeta();
   bool checkImageMetaOffline();
@@ -72,12 +77,15 @@ class LiteClient {
   bool appsInSync() const;
   void setAppsNotChecked();
   std::string getDeviceID() const;
+  void logTarget(const std::string& prefix, const Uptane::Target& t) const;
 
  private:
   FRIEND_TEST(helpers, locking);
   FRIEND_TEST(helpers, callback);
+  FRIEND_TEST(helpers, rollback_versions);
 
   const std::vector<Uptane::Target>& allTargets() const { return image_repo_.getTargets()->targets; }
+  bool isTargetValid(const Uptane::Target& target) const;
 
   void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
 
@@ -98,6 +106,8 @@ class LiteClient {
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
                                      PackageConfig& config);
 
+  void setInvalidTargets();
+
  private:
   std::vector<std::string> tags_;
   std::pair<Uptane::EcuSerial, Uptane::HardwareIdentifier> primary_ecu_;
@@ -115,6 +125,7 @@ class LiteClient {
   bool is_reboot_required_{false};
   bool booted_sysroot{true};
 
+  std::vector<Uptane::Target> invalid_targets_;
   Uptane::Target current_target_{Uptane::Target::Unknown()};
 };
 

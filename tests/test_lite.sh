@@ -115,7 +115,7 @@ add_target $name $sha
 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update --update-name $name
 ostree admin status
 
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: zlast"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to Target: zlast"
 
 out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml status)
 if [[ ! "$out" =~ "Active image is: zlast	sha256:$sha" ]] ; then
@@ -136,7 +136,7 @@ cat >$sota_dir/callback.sh <<EOF
 env >> ${sota_dir}/\$MESSAGE.log
 EOF
 chmod +x $sota_dir/callback.sh
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: promoted-zlast"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "Updating to Target: promoted-zlast"
 for callback in download-pre download-post install-pre install-post ; do
   if [ -f ${sota_dir}/${callback}.log ] ; then
     grep "INSTALL_TARGET=promoted-zlast" ${sota_dir}/${callback}.log
