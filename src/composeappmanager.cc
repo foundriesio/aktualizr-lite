@@ -67,7 +67,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     LOG_DEBUG << "Failed to initialize Compose App Tree (ostree) at " << cfg_.apps_tree << ". Error: " << exc.what();
   }
 
-  const auto& current_apps = getApps(getCurrent());
+  const auto& current_apps = getApps(OstreeManager::getCurrent());
   for (const auto& app_pair : current_apps) {
     const auto& app_name = app_pair.first;
     auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeApp::NeedStartFile;
@@ -76,6 +76,12 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       boost::filesystem::remove(need_start_flag);
     }
   }
+}
+
+Uptane::Target ComposeAppManager::getCurrent() const {
+  // TODO: shortlist apps listed in the current Target returned from DB
+  // to make sure that we return Target with apps that are actually currently installed and running
+  return OstreeManager::getCurrent();
 }
 
 // Returns an intersection of apps specified in Target and the configuration

@@ -126,6 +126,13 @@ LiteClient::LiteClient(Config& config_in)
   }
 }
 
+Uptane::Target LiteClient::getCurrent(bool refresh) {
+  if (refresh || !current_target_.IsValid()) {
+    current_target_ = package_manager_->getCurrent();
+  }
+  return current_target_;
+}
+
 bool LiteClient::checkForUpdates() {
   Uptane::Target t = Uptane::Target::Unknown();
   callback("check-for-update-pre", t);
