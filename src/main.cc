@@ -16,7 +16,7 @@ namespace bpo = boost::program_options;
 
 static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
-  auto target = client.getCurrent();
+  auto target = client.getCurrent(true);
 
   try {
     LOG_INFO << "Device UUID: " << client.getDeviceID();
@@ -152,8 +152,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     client.download_lockfile = variables_map["download-lockfile"].as<boost::filesystem::path>();
   }
 
-  auto current = client.getCurrent();
-
   uint64_t interval = client.config.uptane.polling_sec;
   if (variables_map.count("interval") > 0) {
     interval = variables_map["interval"].as<uint64_t>();
@@ -165,6 +163,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   client.reportAktualizrConfiguration();
 
   while (true) {
+    const auto& current = client.getCurrent(true);
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
     LOG_INFO << "Checking for a new Target...";
 
@@ -195,8 +194,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         std::string reason = "Updating from " + current.filename() + " to " + found_latest_target->filename();
         data::ResultCode::Numeric rc = do_update(client, *found_latest_target, reason);
         if (rc == data::ResultCode::Numeric::kOk) {
-          current = *found_latest_target;
-          client.http_client->updateHeader("x-ats-target", current.filename());
+          client.http_client->updateHeader("x-ats-target", found_latest_target->filename());
           // Start the loop over to call updateImagesMeta which will update this
           // device's target name on the server.
           continue;

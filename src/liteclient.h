@@ -26,6 +26,9 @@ class LiteClient {
  public:
   LiteClient(Config& config_in);
 
+  // Get currently installed (TODO: and running (active) Target)
+  Uptane::Target getCurrent(bool refresh = false);
+
   // Check for new TUF metadata at the TUF server
   bool checkForUpdates();
 
@@ -111,6 +114,8 @@ class LiteClient {
   Json::Value last_hw_info_reported_;
   bool is_reboot_required_{false};
   bool booted_sysroot{true};
+
+  Uptane::Target current_target_{Uptane::Target::Unknown()};
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

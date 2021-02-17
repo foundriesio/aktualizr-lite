@@ -29,7 +29,7 @@ TEST(helpers, lite_client_finalize) {
   Uptane::Target target("test-finalize", target_json);
 
   storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
-  ASSERT_TRUE(target.MatchHash(LiteClient(config).getCurrent().hashes()[0]));
+  ASSERT_TRUE(target.MatchHash(LiteClient(config).getCurrent(true).hashes()[0]));
 
   config = Config();  // Create a new config since LiteClient std::move's it
   config.storage.path = cfg_dir.Path();
@@ -44,7 +44,7 @@ TEST(helpers, lite_client_finalize) {
   target_json["hashes"]["sha256"] = "abcd";
   Uptane::Target new_target("test-finalize", target_json);
   storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
-  ASSERT_FALSE(new_target.MatchHash(LiteClient(config).getCurrent().hashes()[0]));
+  ASSERT_FALSE(new_target.MatchHash(LiteClient(config).getCurrent(true).hashes()[0]));
 }
 
 
