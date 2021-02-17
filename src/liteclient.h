@@ -59,9 +59,6 @@ class LiteClient {
   boost::filesystem::path download_lockfile;
   boost::filesystem::path update_lockfile;
 
-  data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
-  data::ResultCode::Numeric install(const Uptane::Target& target);
-  void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
   std::pair<bool, std::string> isRebootRequired() const {
     return {is_reboot_required_, config.bootloader.reboot_command};
   }
@@ -73,9 +70,6 @@ class LiteClient {
   void reportAktualizrConfiguration();
   void reportNetworkInfo();
   void reportHwInfo();
-  bool isTargetActive(const Uptane::Target& target) const;
-  bool appsInSync() const;
-  void setAppsNotChecked();
   std::string getDeviceID() const;
   void logTarget(const std::string& prefix, const Uptane::Target& t) const;
 
@@ -87,6 +81,15 @@ class LiteClient {
   const std::vector<Uptane::Target>& allTargets() const { return image_repo_.getTargets()->targets; }
   bool isTargetValid(const Uptane::Target& target) const;
 
+  data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
+  std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
+                                                const api::FlowControlToken* token = nullptr);
+
+  data::ResultCode::Numeric install(const Uptane::Target& target);
+  data::InstallationResult installPackage(const Uptane::Target& target);
+
+  void prune(Uptane::Target& target);
+
   void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
 
   std::unique_ptr<Lock> getDownloadLock() const;
@@ -96,12 +99,10 @@ class LiteClient {
   void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
   void notifyDownloadFinished(const Uptane::Target& t, bool success);
   void notifyInstallStarted(const Uptane::Target& t);
+  void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
 
   void writeCurrentTarget(const Uptane::Target& t) const;
 
-  data::InstallationResult installPackage(const Uptane::Target& target);
-  std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
-                                                const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
                                      PackageConfig& config);

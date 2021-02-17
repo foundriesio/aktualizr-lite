@@ -235,20 +235,17 @@ data::ResultCode::Numeric LiteClient::update(Uptane::Target& target, bool force_
   switch (update_type) {
     case UpdateType::kNewTargetUpdate: {
       logTarget("Updating Active Target: ", current_target);
-      logTarget("To New Target: ", target_to_update);
-      download_reason = "Updating from " + current_target.filename() + " to " + target_to_update.filename();
+      logTarget("To New Target: ", target);
+      download_reason = "Updating from " + current_target.filename() + " to " + target.filename();
 
-      appsInSync();
+      target_to_update = Target::subtractCurrentApps(target, current_target);
       break;
     }
     case UpdateType::kCurrentTargetSync: {
-      logTarget("Syncing current Target: ", target_to_update);
-      download_reason = "Syncing current Target " + target_to_update.filename();
+      logTarget("Syncing current Target: ", target);
+      download_reason = "Syncing current Target " + target.filename();
 
-      if (appsInSync() && target_to_update.sha256Hash() == current_target.sha256Hash()) {
-        setAppsNotChecked();
-        return data::ResultCode::Numeric::kAlreadyProcessed;
-      }
+      target_to_update = Target::subtractCurrentApps(target, current_target);
 
       break;
     }
@@ -283,6 +280,7 @@ data::ResultCode::Numeric LiteClient::update(Uptane::Target& target, bool force_
     }
 
     update_result = install(target_to_update);
+    prune(target);
 
     if (update_result == data::ResultCode::Numeric::kOk) {
       current_target_ = target_to_update;
@@ -290,7 +288,6 @@ data::ResultCode::Numeric LiteClient::update(Uptane::Target& target, bool force_
     }
   } while (false);  // update scope
 
-  setAppsNotChecked();
   return update_result;
 }
 
@@ -438,6 +435,18 @@ data::InstallationResult LiteClient::installPackage(const Uptane::Target& target
   } catch (std::exception& ex) {
     return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, ex.what());
   }
+}
+
+void LiteClient::prune(Uptane::Target& target) {
+  if (package_manager_->name() == PACKAGE_MANAGER_OSTREE) {
+    return;
+  }
+  assert(package_manager_->name() == ComposeAppManager::Name);
+
+  auto* compose_app_manager = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+  assert(compose_app_manager != nullptr);
+
+  compose_app_manager->handleRemovedApps(target);
 }
 
 bool LiteClient::updateImageMeta() {
@@ -613,39 +622,6 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   }
   notifyInstallFinished(target, iresult);
   return iresult.result_code.num_code;
-}
-
-bool LiteClient::isTargetActive(const Uptane::Target& target) const {
-  return target.filename() == getCurrent().filename();
-}
-
-bool LiteClient::appsInSync() const {
-  if (package_manager_->name() == ComposeAppManager::Name) {
-    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
-    if (compose_pacman == nullptr) {
-      LOG_ERROR << "Cannot downcast the package manager to a specific type";
-      return false;
-    }
-    LOG_INFO << "Checking Active Target status...";
-    auto no_any_app_to_update = compose_pacman->checkForAppsToUpdate(getCurrent());
-    if (no_any_app_to_update) {
-      compose_pacman->handleRemovedApps(getCurrent());
-    }
-
-    return no_any_app_to_update;
-  }
-  return true;
-}
-
-void LiteClient::setAppsNotChecked() {
-  if (package_manager_->name() == ComposeAppManager::Name) {
-    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
-    if (compose_pacman == nullptr) {
-      LOG_ERROR << "Cannot downcast the package manager to a specific type";
-    } else {
-      compose_pacman->setAppsNotChecked();
-    }
-  }
 }
 
 std::string LiteClient::getDeviceID() const { return key_manager_->getCN(); }

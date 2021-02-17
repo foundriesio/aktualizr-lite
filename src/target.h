@@ -9,6 +9,10 @@
 class Target {
  public:
   static constexpr const char* const TagField{"tags"};
+  static constexpr const char* const ComposeAppField{"docker_compose_apps"};
+
+  using App = std::pair<std::string, std::string>;
+  using Apps = std::vector<App>;
 
   struct Version {
     std::string raw_ver;
@@ -20,6 +24,10 @@ class Target {
  public:
   static bool hasTag(const Uptane::Target& target, const std::vector<std::string>& tags);
   static void setCorrelationID(Uptane::Target& target);
+
+  static Apps targetApps(const Uptane::Target& target, boost::optional<std::vector<std::string>> shortlist);
+  static void shortlistTargetApps(Uptane::Target& target, std::vector<std::string> shortlist);
+  static Uptane::Target subtractCurrentApps(Uptane::Target& target, Uptane::Target& current);
 };
 
 #endif  // AKTUALIZR_LITE_TARGET_H_
