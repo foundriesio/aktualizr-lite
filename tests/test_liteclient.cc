@@ -2,7 +2,6 @@
 
 #include <boost/filesystem.hpp>
 #include <boost/process.hpp>
-#include <boost/process/env.hpp>
 
 #include "libaktualizr/types.h"
 #include "logging/logging.h"
@@ -18,6 +17,7 @@
 
 #include "ostree/repo.h"
 #include "helpers.h"
+
 
 static std::string run_cmd(const std::string &executable_to_run,
                            const std::vector<std::string> &executable_args,
@@ -130,6 +130,7 @@ class TreehubMock {
 };
 
 std::string TreehubMock::ServerPath;
+
 
 class TufRepoMock {
  public:
@@ -368,6 +369,7 @@ TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
   reboot(client);
   ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
 }
+
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
