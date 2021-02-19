@@ -12,6 +12,7 @@ add_test(test_aktualizr-lite
 )
 
 set_tests_properties(test_aktualizr-lite PROPERTIES DEPENDS uptane-generator)
+set_tests_properties(test_aktualizr-lite PROPERTIES LABELS "aklite:aktualizr-lite")
 
 set(TEST_DEFS BOOST_LOG_DYN_LINK)
 set(TEST_INCS
@@ -36,6 +37,7 @@ add_aktualizr_test(NAME compose-apps
 target_compile_definitions(t_compose-apps PRIVATE ${TEST_DEFS})
 target_include_directories(t_compose-apps PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_INCS})
 target_link_libraries(t_compose-apps ${TEST_LIBS})
+set_tests_properties(test_compose-apps PROPERTIES LABELS "aklite:compose-apps")
 
 add_aktualizr_test(NAME lite-helpers
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> helpers_test.cc
@@ -45,8 +47,8 @@ add_aktualizr_test(NAME lite-helpers
 target_compile_definitions(t_lite-helpers PRIVATE ${TEST_DEFS})
 target_include_directories(t_lite-helpers PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_INCS})
 target_link_libraries(t_lite-helpers ${TEST_LIBS})
-
 add_dependencies(t_lite-helpers make_ostree_sysroot)
+set_tests_properties(test_lite-helpers PROPERTIES LABELS "aklite:helpers")
 
 add_aktualizr_test(NAME ostree
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_ostree.cc
@@ -56,3 +58,17 @@ add_aktualizr_test(NAME ostree
 target_compile_definitions(t_ostree PRIVATE ${TEST_DEFS})
 target_include_directories(t_ostree PRIVATE ${TEST_INCS})
 target_link_libraries(t_ostree ${TEST_LIBS})
+set_tests_properties(test_ostree PROPERTIES LABELS "aklite:ostree")
+
+add_aktualizr_test(NAME liteclient
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_liteclient.cc
+  PROJECT_WORKING_DIRECTORY ARGS ${AKTUALIZR_DIR}/tests/fake_http_server/fake_test_server.py
+	${AKTUALIZR_DIR}/tests/sota_tools/treehub_server.py
+	${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+)
+
+target_compile_definitions(t_liteclient PRIVATE ${TEST_DEFS})
+target_include_directories(t_liteclient PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_liteclient ${TEST_LIBS} uptane_generator_lib testutilities)
+add_dependencies(t_liteclient make_ostree_sysroot)
+set_tests_properties(test_liteclient PROPERTIES LABELS "aklite:liteclient")
