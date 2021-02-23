@@ -204,12 +204,12 @@ TEST(helpers, rollback_versions) {
 
   // new Target was installed but not applied/finalized, reboot is required
   // in this case we should have zero known_but_not_installed versions
-  client.storage->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kPending);
+  client.storage_->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kPending);
   client.setInvalidTargets();
   ASSERT_TRUE(client.isTargetValid(target_01));
 
   // a device is succesfully rebooted on the new Target, so we still have zero "known but not installed"
-  client.storage->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kCurrent);
+  client.storage_->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kCurrent);
   client.setInvalidTargets();
   ASSERT_TRUE(client.isTargetValid(target_01));
 
@@ -220,12 +220,12 @@ TEST(helpers, rollback_versions) {
   // new Target was installed but not applied/finalized, reboot is required
   // in this case we should have zero known_but_not_installed versions
   ASSERT_TRUE(client.isTargetValid(target_02));
-  client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kPending);
+  client.storage_->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kPending);
   ASSERT_TRUE(client.isTargetValid(target_01));
   ASSERT_TRUE(client.isTargetValid(target_02));
 
   // a device is succesfully rebooted on the new Target, so we still have zero "known but not installed"
-  client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
+  client.storage_->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
   client.setInvalidTargets();
   ASSERT_TRUE(client.isTargetValid(target_01));
   ASSERT_TRUE(client.isTargetValid(target_02));
@@ -236,20 +236,20 @@ TEST(helpers, rollback_versions) {
   // new Target was installed but not applied/finalized, reboot is required
   // in this case we should have zero known_but_not_installed versions
   ASSERT_TRUE(client.isTargetValid(target_03));
-  client.storage->savePrimaryInstalledVersion(target_03, InstalledVersionUpdateMode::kPending);
+  client.storage_->savePrimaryInstalledVersion(target_03, InstalledVersionUpdateMode::kPending);
   ASSERT_TRUE(client.isTargetValid(target_01));
   ASSERT_TRUE(client.isTargetValid(target_02));
   ASSERT_TRUE(client.isTargetValid(target_03));
 
   // rollback has happened
-  client.storage->savePrimaryInstalledVersion(target_03, InstalledVersionUpdateMode::kNone);
+  client.storage_->savePrimaryInstalledVersion(target_03, InstalledVersionUpdateMode::kNone);
   client.setInvalidTargets();
   ASSERT_TRUE(client.isTargetValid(target_01));
   ASSERT_TRUE(client.isTargetValid(target_02));
   ASSERT_FALSE(client.isTargetValid(target_03));
 
   boost::optional<Uptane::Target> current_version;
-  client.storage->loadPrimaryInstalledVersions(&current_version, nullptr);
+  client.storage_->loadPrimaryInstalledVersions(&current_version, nullptr);
   ASSERT_TRUE(current_version);
   ASSERT_EQ(current_version->filename(), "target-02");
 
@@ -258,33 +258,33 @@ TEST(helpers, rollback_versions) {
 
   // new Target
   ASSERT_TRUE(client.isTargetValid(target_04));
-  client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kPending);
+  client.storage_->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kPending);
   ASSERT_TRUE(client.isTargetValid(target_01));
   ASSERT_TRUE(client.isTargetValid(target_02));
   ASSERT_FALSE(client.isTargetValid(target_03));
   ASSERT_TRUE(client.isTargetValid(target_04));
 
   // reboot
-  client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kCurrent);
+  client.storage_->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kCurrent);
   client.setInvalidTargets();
   ASSERT_TRUE(client.isTargetValid(target_01));
   ASSERT_TRUE(client.isTargetValid(target_02));
   ASSERT_FALSE(client.isTargetValid(target_03));
   ASSERT_TRUE(client.isTargetValid(target_04));
 
-  client.storage->loadPrimaryInstalledVersions(&current_version, nullptr);
+  client.storage_->loadPrimaryInstalledVersions(&current_version, nullptr);
   ASSERT_TRUE(current_version);
   ASSERT_EQ(current_version->filename(), "target-04");
 
   // manual update to target-02
   ASSERT_TRUE(client.isTargetValid(target_02));
-  client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
+  client.storage_->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
 
   // go back to daemon mode and try to install the latest which is target-04
   ASSERT_TRUE(client.isTargetValid(target_04));
-  client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kPending);
+  client.storage_->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kPending);
   // reboot
-  client.storage->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kCurrent);
+  client.storage_->savePrimaryInstalledVersion(target_04, InstalledVersionUpdateMode::kCurrent);
   client.setInvalidTargets();
 
   ASSERT_TRUE(client.isTargetValid(target_01));

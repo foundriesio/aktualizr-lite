@@ -18,8 +18,8 @@ LiteClient::LiteClient(Config& config_in)
     : config{std::move(config_in)},
       primary_ecu_{Uptane::EcuSerial::Unknown(), config.provision.primary_ecu_hardware_id} {
   std::string pkey;
-  storage = INvStorage::newStorage(config.storage);
-  storage->importData(config.import);
+  storage_ = INvStorage::newStorage(config.storage);
+  storage_->importData(config.import);
 
   const std::map<std::string, std::string> raw = config.pacman.extra;
   if (raw.count("tags") == 1) {
@@ -39,7 +39,7 @@ LiteClient::LiteClient(Config& config_in)
   }
 
   EcuSerials ecu_serials;
-  if (!storage->loadEcuSerials(&ecu_serials)) {
+  if (!storage_->loadEcuSerials(&ecu_serials)) {
     // Set a "random" serial so we don't get warning messages.
     std::string serial = config.provision.primary_ecu_serial;
     std::string hwid = config.provision.primary_ecu_hardware_id;
@@ -51,7 +51,7 @@ LiteClient::LiteClient(Config& config_in)
       serial = boost::uuids::to_string(tmp);
     }
     ecu_serials.emplace_back(Uptane::EcuSerial(serial), Uptane::HardwareIdentifier(hwid));
-    storage->storeEcuSerials(ecu_serials);
+    storage_->storeEcuSerials(ecu_serials);
   }
   primary_ecu_ = ecu_serials[0];
 
@@ -80,28 +80,27 @@ LiteClient::LiteClient(Config& config_in)
 
   headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags_, ","));
 
-  http_client = std::make_shared<HttpClient>(&headers);
-  uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
-  report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
+  http_client_ = std::make_shared<HttpClient>(&headers);
+  uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client_);
+  report_queue = std_::make_unique<ReportQueue>(config, http_client_, storage_);
 
-  key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
+  key_manager_ = std_::make_unique<KeyManager>(storage_, config.keymanagerConfig());
   key_manager_->loadKeys();
-  key_manager_->copyCertsToCurl(*http_client);
+  key_manager_->copyCertsToCurl(*http_client_);
 
   if (config.pacman.type == ComposeAppManager::Name) {
     package_manager_ =
-        std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, ostree_sysroot);
+        std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage_, http_client_, ostree_sysroot);
   } else if (config.pacman.type == PACKAGE_MANAGER_OSTREE) {
-    package_manager_ = std::make_shared<OstreeManager>(config.pacman, config.bootloader, storage, http_client);
+    package_manager_ = std::make_shared<OstreeManager>(config.pacman, config.bootloader, storage_, http_client_);
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
 
   data::InstallationResult update_finalization_result{data::ResultCode::Numeric::kNeedCompletion, ""};
-
   // check if there is a pending update/installation/Target
   boost::optional<Uptane::Target> pending_target;
-  storage->loadInstalledVersions("", nullptr, &pending_target);
+  storage_->loadInstalledVersions("", nullptr, &pending_target);
 
   // finalize a pending update/installation if any
   if (!!pending_target) {
@@ -109,15 +108,15 @@ LiteClient::LiteClient(Config& config_in)
     update_finalization_result = package_manager_->finalizeInstall(*pending_target);
     if (update_finalization_result.isSuccess()) {
       LOG_INFO << "Marking target install complete for: " << *pending_target;
-      storage->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kCurrent);
+      storage_->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kCurrent);
     } else if (data::ResultCode::Numeric::kInstallFailed == update_finalization_result.result_code.num_code) {
       // rollback has happenned, unset is_pending and was_installed flags of the given Target record in DB
-      storage->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kNone);
+      storage_->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kNone);
     }
   }
 
   const auto current_target = getCurrent();
-  update_request_headers(http_client, current_target, config.pacman);
+  update_request_headers(http_client_, current_target, config.pacman);
   writeCurrentTarget(current_target);
 
   if (data::ResultCode::Numeric::kNeedCompletion != update_finalization_result.result_code.num_code) {
@@ -135,24 +134,27 @@ Uptane::Target LiteClient::getCurrent(bool refresh) {
   return current_target_;
 }
 
-bool LiteClient::checkForUpdates() {
+void LiteClient::checkForUpdates() {
   Uptane::Target t = Uptane::Target::Unknown();
+  // why do we send Uptane::Target::Unknown() to the backend???
   callback("check-for-update-pre", t);
+
   bool rc = updateImageMeta();
+
+  if (!rc) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy";
+    rc = checkImageMetaOffline();
+  }
+
   callback("check-for-update-post", t);
-  return rc;
+  if (!rc) {
+    LOG_ERROR << "Unable to use local copy of TUF data";
+    throw std::runtime_error("Unable to find update");
+  }
 }
 
 std::unique_ptr<Uptane::Target> LiteClient::getTarget(const std::string& version) {
   std::unique_ptr<Uptane::Target> rv;
-  if (!updateImageMeta()) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy";
-    if (!checkImageMetaOffline()) {
-      LOG_ERROR << "Unable to use local copy of TUF data";
-      throw std::runtime_error("Unable to find update");
-    }
-  }
-
   // if a new version of targets.json hasn't been downloaded why do we do the following search
   // for the latest ??? It's really needed just for the forced update to a specific version
   bool find_latest = (version == "latest");
@@ -212,7 +214,11 @@ boost::container::flat_map<int, Uptane::Target> LiteClient::getTargets() {
 }
 
 // Update a device to the given Target
-data::ResultCode::Numeric LiteClient::update(Uptane::Target& target, bool force_update) {
+data::ResultCode::Numeric LiteClient::update(const std::string& version, bool force_update) {
+  checkForUpdates();
+
+  Uptane::Target target{*getTarget(version)};
+
   data::ResultCode::Numeric update_result = data::ResultCode::Numeric::kUnknown;
   std::string download_reason;
   auto current_target = getCurrent();
@@ -264,18 +270,7 @@ data::ResultCode::Numeric LiteClient::update(Uptane::Target& target, bool force_
   do {
     update_result = download(target_to_update, download_reason);
 
-    // TODO: it should be really just `download` and `install`
     if (update_result != data::ResultCode::Numeric::kOk) {
-      break;
-    }
-
-    if (VerifyTarget(target_to_update) != TargetStatus::kGood) {
-      // why do we do it here not inside of packman->download() ???
-      data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
-      // why do we send notifyInstallFinished if notifyInstallStarted hasn't been called ?
-      notifyInstallFinished(target_to_update, res);
-      LOG_ERROR << "Downloaded target is invalid";
-      update_result = res.result_code.num_code;
       break;
     }
 
@@ -284,14 +279,15 @@ data::ResultCode::Numeric LiteClient::update(Uptane::Target& target, bool force_
 
     if (update_result == data::ResultCode::Numeric::kOk) {
       current_target_ = target_to_update;
-      http_client->updateHeader("x-ats-target", current_target_.filename());
+      http_client_->updateHeader("x-ats-target", current_target_.filename());
     }
+
   } while (false);  // update scope
 
   return update_result;
 }
 
-bool LiteClient::isTargetValid(const Uptane::Target& target) const {
+bool LiteClient::isTargetValid(const Uptane::Target& target) {
   const auto current = getCurrent();
 
   // Make sure that Target is not what is currently installed
@@ -300,7 +296,7 @@ bool LiteClient::isTargetValid(const Uptane::Target& target) const {
   }
 
   boost::optional<Uptane::Target> pending;
-  storage->loadPrimaryInstalledVersions(nullptr, &pending);
+  storage_->loadPrimaryInstalledVersions(nullptr, &pending);
 
   // Make sure that Target is not what is currently pending
   if (!!pending && (target.sha256Hash() == pending->sha256Hash())) {
@@ -451,7 +447,7 @@ void LiteClient::prune(Uptane::Target& target) {
 
 bool LiteClient::updateImageMeta() {
   try {
-    image_repo_.updateMeta(*storage, *uptane_fetcher_);
+    image_repo_.updateMeta(*storage_, *uptane_fetcher_);
   } catch (const std::exception& e) {
     LOG_ERROR << "Failed to update Image repo metadata: " << e.what();
     return false;
@@ -462,7 +458,7 @@ bool LiteClient::updateImageMeta() {
 
 bool LiteClient::checkImageMetaOffline() {
   try {
-    image_repo_.checkMetaOffline(*storage);
+    image_repo_.checkMetaOffline(*storage_);
   } catch (const std::exception& e) {
     LOG_ERROR << "Failed to check Image repo metadata: " << e.what();
     return false;
@@ -514,13 +510,13 @@ void LiteClient::reportAktualizrConfiguration() {
   const std::string conf_str = conf_ss.str();
   const Hash new_hash = Hash::generate(Hash::Type::kSha256, conf_str);
   std::string stored_hash;
-  if (!(storage->loadDeviceDataHash("configuration", &stored_hash) &&
+  if (!(storage_->loadDeviceDataHash("configuration", &stored_hash) &&
         new_hash == Hash(Hash::Type::kSha256, stored_hash))) {
     LOG_DEBUG << "Reporting libaktualizr configuration";
     const HttpResponse response =
-        http_client->put(config.tls.server + "/system_info/config", "application/toml", conf_str);
+        http_client_->put(config.tls.server + "/system_info/config", "application/toml", conf_str);
     if (response.isOk()) {
-      storage->storeDeviceDataHash("configuration", new_hash.HashString());
+      storage_->storeDeviceDataHash("configuration", new_hash.HashString());
     } else {
       LOG_DEBUG << "Unable to report libaktualizr configuration: " << response.getStatusStr();
     }
@@ -532,7 +528,7 @@ void LiteClient::reportNetworkInfo() {
     LOG_DEBUG << "Reporting network information";
     Json::Value network_info = Utils::getNetworkInfo();
     if (network_info != last_network_info_reported_) {
-      const HttpResponse response = http_client->put(config.tls.server + "/system_info/network", network_info);
+      const HttpResponse response = http_client_->put(config.tls.server + "/system_info/network", network_info);
       if (response.isOk()) {
         last_network_info_reported_ = network_info;
       } else {
@@ -552,7 +548,7 @@ void LiteClient::reportHwInfo() {
   Json::Value hw_info = Utils::getHardwareInfo();
   if (!hw_info.empty()) {
     if (hw_info != last_hw_info_reported_) {
-      const HttpResponse response = http_client->put(config.tls.server + "/system_info", hw_info);
+      const HttpResponse response = http_client_->put(config.tls.server + "/system_info", hw_info);
       if (response.isOk()) {
         last_hw_info_reported_ = hw_info;
       } else {
@@ -611,11 +607,14 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   auto iresult = installPackage(target);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
-    storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
+    storage_->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
     is_reboot_required_ = booted_sysroot;
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
-    storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+    storage_->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+  } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kAlreadyProcessed) {
+    LOG_INFO << "Device is already in sync with the given Target: " << target.filename();
+    storage_->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
   } else {
     LOG_ERROR << "Unable to install update: " << iresult.description;
     // let go of the lock since we couldn't update
@@ -625,6 +624,22 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
 }
 
 std::string LiteClient::getDeviceID() const { return key_manager_->getCN(); }
+
+std::tuple<bool, Json::Value> LiteClient::getDeviceInfo() {
+  const auto http_res = http_client_->get(config.tls.server + "/device", HttpInterface::kNoLimit);
+
+  bool res{false};
+  Json::Value device_info;
+
+  if (http_res.isOk()) {
+    device_info = http_res.getJson();
+    res = true;
+  } else {
+    device_info["err"] = http_res.getStatusStr();
+  }
+
+  return {res, device_info};
+}
 
 void LiteClient::logTarget(const std::string& prefix, const Uptane::Target& t) const {
   auto name = t.filename();
@@ -695,10 +710,10 @@ void LiteClient::setInvalidTargets() {
   invalid_targets_.clear();
 
   std::vector<Uptane::Target> known_versions;
-  storage->loadPrimaryInstallationLog(&known_versions, false);
+  storage_->loadPrimaryInstallationLog(&known_versions, false);
 
   std::vector<Uptane::Target> installed_versions;
-  storage->loadPrimaryInstallationLog(&installed_versions, true);
+  storage_->loadPrimaryInstallationLog(&installed_versions, true);
 
   for (const auto& t : known_versions) {
     if (installed_versions.end() ==

@@ -165,7 +165,8 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
   } else {
     LOG_INFO << "Target " << target.sha256Hash() << " is same as current";
-    res = data::InstallationResult(data::ResultCode::Numeric::kOk, "OSTree hash already installed, same as current");
+    res = data::InstallationResult(data::ResultCode::Numeric::kAlreadyProcessed,
+                                   "OSTree hash already installed, same as current");
   }
 
   const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();

@@ -24,16 +24,18 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
     LOG_WARNING << "Failed to get a device UUID: " << exc.what();
   }
 
-  const auto http_res = client.http_client->get(client.config.tls.server + "/device", HttpInterface::kNoLimit);
-  if (http_res.isOk()) {
-    const Json::Value device_info = http_res.getJson();
+  bool fetch_device_info_res;
+  Json::Value device_info;
+  std::tie(fetch_device_info_res, device_info) = client.getDeviceInfo();
+
+  if (fetch_device_info_res) {
     if (!device_info.empty()) {
       LOG_INFO << "Device name: " << device_info["Name"].asString();
     } else {
       LOG_WARNING << "Failed to get a device name from a device info: " << device_info;
     }
   } else {
-    LOG_WARNING << "Failed to get a device info: " << http_res.getStatusStr();
+    LOG_WARNING << "Failed to get a device info: " << device_info.get("err", "unknown error");
   }
 
   if (target.MatchTarget(Uptane::Target::Unknown())) {
@@ -80,13 +82,10 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   // This is only available if -DALLOW_MANUAL_ROLLBACK is set in the CLI args below.
   if (variables_map.count("clear-installed-versions") > 0) {
     LOG_WARNING << "Clearing installed version history!!!";
-    client.storage->clearInstalledVersions();
+    client.clearInstalledVersions();
   }
 
-  LOG_INFO << "Finding " << version << " to update to...";
-  const auto target_to_install = client.getTarget(version);
-
-  data::ResultCode::Numeric rc = client.update(*target_to_install, true);
+  data::ResultCode::Numeric rc = client.update(version, true);
 
   return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
                                                                                                     : EXIT_FAILURE;
@@ -115,28 +114,16 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   }
 
   client.reportAktualizrConfiguration();
+  client.reportNetworkInfo();
+  client.reportHwInfo();
 
   while (true) {
     const auto& current = client.getCurrent(true);
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
     LOG_INFO << "Checking for a new Target...";
 
-    if (!client.checkForUpdates()) {
-      LOG_WARNING << "Unable to update latest metadata, going to sleep for " << interval
-                  << " seconds before starting a new update cycle";
-      std::this_thread::sleep_for(std::chrono::seconds(interval));
-      continue;  // There's no point trying to look for an update
-    }
-
-    client.reportNetworkInfo();
-    client.reportHwInfo();
-
     try {
-      // target cannot be nullptr, an exception will be yielded if no target
-      const auto found_latest_target = client.getTarget();
-      LOG_INFO << "Latest Target: " << found_latest_target->filename();
-
-      data::ResultCode::Numeric rc = client.update(*found_latest_target);
+      data::ResultCode::Numeric rc = client.update();
       if (rc == data::ResultCode::Numeric::kNeedCompletion) {
         // no point to continue running TUF cycle (check for update, download, install)
         // since reboot is required to apply/finalize the currently installed update (aka pending update)
@@ -148,7 +135,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       } else {
         LOG_ERROR << "Failed to update or sync the latest Target: " + data::ResultCode(rc).toString();
       }
-
     } catch (const std::exception& exc) {
       LOG_ERROR << "Failed to find or update Target: " << exc.what();
     }

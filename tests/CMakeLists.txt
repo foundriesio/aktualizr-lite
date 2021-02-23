@@ -71,6 +71,9 @@ target_include_directories(t_ostree PRIVATE ${TEST_INCS})
 target_link_libraries(t_ostree ${TEST_LIBS})
 set_tests_properties(test_ostree PROPERTIES LABELS "aklite:ostree")
 
+
+
+
 add_aktualizr_test(NAME liteclient
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_liteclient.cc
   PROJECT_WORKING_DIRECTORY ARGS ${AKTUALIZR_DIR}/tests/fake_http_server/fake_test_server.py

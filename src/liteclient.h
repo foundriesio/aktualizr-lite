@@ -32,11 +32,8 @@ class LiteClient {
   // Get currently installed (TODO: and running (active) Target)
   Uptane::Target getCurrent(bool refresh = false);
 
-  // Check for new TUF metadata at the TUF server
-  bool checkForUpdates();
-
-  // Get Target of a specific version
-  std::unique_ptr<Uptane::Target> getTarget(const std::string& version = "latest");
+  // Update a device to the given Target version
+  data::ResultCode::Numeric update(const std::string& version = "latest", bool force_update = false);
 
   /**
    * @brief Return a sorted map of applicable Targets
@@ -48,14 +45,9 @@ class LiteClient {
    */
   boost::container::flat_map<int, Uptane::Target> getTargets();
 
-  // Update a device to the given Target
-  data::ResultCode::Numeric update(Uptane::Target& target, bool force_update = false);
-
   // TODO: move all these fields to the private scope
   Config config;
-  std::shared_ptr<INvStorage> storage;
 
-  std::shared_ptr<HttpClient> http_client;
   boost::filesystem::path download_lockfile;
   boost::filesystem::path update_lockfile;
 
@@ -63,7 +55,6 @@ class LiteClient {
     return {is_reboot_required_, config.bootloader.reboot_command};
   }
 
-  Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
   bool updateImageMeta();
   bool checkImageMetaOffline();
   TargetStatus VerifyTarget(const Uptane::Target& target) const { return package_manager_->verifyTarget(target); }
@@ -71,15 +62,23 @@ class LiteClient {
   void reportNetworkInfo();
   void reportHwInfo();
   std::string getDeviceID() const;
+  std::tuple<bool, Json::Value> getDeviceInfo();
   void logTarget(const std::string& prefix, const Uptane::Target& t) const;
+  void clearInstalledVersions() { storage_->clearInstalledVersions(); }
 
  private:
   FRIEND_TEST(helpers, locking);
   FRIEND_TEST(helpers, callback);
   FRIEND_TEST(helpers, rollback_versions);
 
+  // Check for new TUF metadata at the TUF server
+  void checkForUpdates();
+
+  // Get Target of a specific version
+  std::unique_ptr<Uptane::Target> getTarget(const std::string& version = "latest");
+
   const std::vector<Uptane::Target>& allTargets() const { return image_repo_.getTargets()->targets; }
-  bool isTargetValid(const Uptane::Target& target) const;
+  bool isTargetValid(const Uptane::Target& target);
 
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
   std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
@@ -104,7 +103,7 @@ class LiteClient {
   void writeCurrentTarget(const Uptane::Target& t) const;
 
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
-  static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
+  static void update_request_headers(std::shared_ptr<HttpClient>& http_client_, const Uptane::Target& target,
                                      PackageConfig& config);
 
   void setInvalidTargets();
@@ -126,6 +125,8 @@ class LiteClient {
   bool is_reboot_required_{false};
   bool booted_sysroot{true};
 
+  std::shared_ptr<INvStorage> storage_;
+  std::shared_ptr<HttpClient> http_client_;
   std::vector<Uptane::Target> invalid_targets_;
   Uptane::Target current_target_{Uptane::Target::Unknown()};
 };

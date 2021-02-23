@@ -563,7 +563,7 @@ TEST(ComposeApp, installApp) {
     ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
     ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
-    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    ASSERT_EQ(data::ResultCode::Numeric::kAlreadyProcessed, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     // make sure that docker-compose up wasn't called
     ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
   }
