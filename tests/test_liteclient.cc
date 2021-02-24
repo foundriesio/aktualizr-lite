@@ -19,7 +19,8 @@
 #include <iostream>
 
 #include "ostree/repo.h"
-#include "helpers.h"
+#include "liteclient.h"
+
 
 
 static std::string run_cmd(const std::string &executable_to_run,

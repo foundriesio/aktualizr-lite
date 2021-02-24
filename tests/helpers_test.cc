@@ -1,10 +1,11 @@
 #include <gtest/gtest.h>
 
-#include "helpers.h"
 #include "composeappmanager.h"
+#include "storage/sqlstorage.h"
+#include "liteclient.h"
+
 
 static boost::filesystem::path test_sysroot;
-
 
 // Ensure we finalize an install if completed
 TEST(helpers, lite_client_finalize) {

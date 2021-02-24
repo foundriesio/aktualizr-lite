@@ -56,7 +56,7 @@ class LiteClient {
   std::tuple<bool, Json::Value> getDeviceInfo();
   uint64_t updateInterval() const { return update_interval_; }
 
-  void logTarget(const std::string& prefix, const Uptane::Target& t) const;
+  void logTarget(const std::string& prefix, const Uptane::Target& target) const;
 
  private:
   FRIEND_TEST(helpers, locking);
@@ -145,6 +145,8 @@ class LiteClient {
   bool is_reboot_required_{false};
   bool booted_sysroot{true};
   mutable Uptane::Target current_target_{Uptane::Target::Unknown()};
+  // hack, consider something more cosher
+  boost::optional<std::vector<std::string>> app_shortlist_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

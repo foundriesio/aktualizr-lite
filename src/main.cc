@@ -6,11 +6,10 @@
 #include <boost/program_options.hpp>
 
 #include "crypto/keymanager.h"
-#include "helpers.h"
 #include "libaktualizr/config.h"
-
-#include "target.h"
 #include "utilities/aktualizr_version.h"
+
+#include "liteclient.h"
 
 namespace bpo = boost::program_options;
 
@@ -45,6 +44,7 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
     if (target.custom_version().length() > 0) {
       name = target.custom_version();
     }
+
     client.logTarget("Active image is: ", target);
   }
   return 0;

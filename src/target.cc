@@ -3,6 +3,8 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include "logging/logging.h"
+
 bool Target::hasTag(const Uptane::Target& target, const std::vector<std::string>& tags) {
   if (tags.empty()) {
     return true;
@@ -28,8 +30,11 @@ void Target::setCorrelationID(Uptane::Target& target) {
 }
 
 Target::Apps Target::targetApps(const Uptane::Target& target, boost::optional<std::vector<std::string>> shortlist) {
+  Apps apps;
+
   if (!target.IsValid()) {
-    throw std::runtime_error("Failed to get target apps: the specified Target is invalid");
+    // throw std::runtime_error("Failed to get target apps: the specified Target is invalid");
+    return apps;
   }
 
   const auto target_custom_data = target.custom_data();
@@ -37,8 +42,6 @@ Target::Apps Target::targetApps(const Uptane::Target& target, boost::optional<st
     throw std::runtime_error("Failed to get target apps: the specified Target doesn't include a custom data: " +
                              target.filename());
   }
-
-  Apps apps;
 
   if (!target_custom_data.isMember(ComposeAppField)) {
     // throw std::runtime_error("Failed to get target apps: the specified Target doesn't include the compose app field:
@@ -142,4 +145,25 @@ Uptane::Target Target::subtractCurrentApps(const Uptane::Target& target, const U
 
   result.updateCustom(result_custom);
   return result;
+}
+
+void Target::log(const std::string& prefix, const Uptane::Target& target,
+                 boost::optional<std::vector<std::string>> shortlist) {
+  auto name = target.filename();
+  if (target.custom_version().length() > 0) {
+    name = target.custom_version();
+  }
+  LOG_INFO << prefix + name << "\tsha256:" << target.sha256Hash();
+
+  auto apps = Target::targetApps(target, boost::none);
+  if (!apps.empty()) {
+    LOG_INFO << "\tDocker Compose Apps:";
+  }
+
+  for (const auto& app : apps) {
+    std::string app_status =
+        (!shortlist || (*shortlist).end() != std::find((*shortlist).begin(), (*shortlist).end(), app.first)) ? "on"
+                                                                                                             : "off";
+    LOG_INFO << "\t" << app_status << ": " << app.first << " -> " << app.second;
+  }
 }

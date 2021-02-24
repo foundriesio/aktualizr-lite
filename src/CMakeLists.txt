@@ -1,8 +1,7 @@
 set(TARGET_EXE aktualizr-lite)
 set(TARGET ${MAIN_TARGET_LIB})
 
-set(SRC helpers.cc
-        target.cc
+set(SRC target.cc
         docker.cc
         composeapp.cc
         ostree/sysroot.cc
@@ -11,8 +10,7 @@ set(SRC helpers.cc
         ostree/repo.cc
         composeapptree.cc)
 
-set(HEADERS helpers.h
-        target.h
+set(HEADERS target.h
         docker.h
         composeapp.h
         ostree/sysroot.h
