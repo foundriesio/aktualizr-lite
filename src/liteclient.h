@@ -84,12 +84,12 @@ class LiteClient {
   // update helpers
   static UpdateType determineUpdateType(const Uptane::Target& desired_target, const Uptane::Target& current_target,
                                         bool force_update);
-  static std::tuple<std::string, Uptane::Target> determineUpdateTarget(UpdateType update_type,
-                                                                       const Uptane::Target& desired_target,
-                                                                       const Uptane::Target& current_target);
+  std::tuple<std::string, Uptane::Target> determineUpdateTarget(UpdateType update_type,
+                                                                const Uptane::Target& desired_target,
+                                                                const Uptane::Target& current_target);
   void logUpdate(UpdateType update_type, const Uptane::Target& desired_target,
                  const Uptane::Target& current_target) const;
-  data::ResultCode::Numeric doUpdate(const Uptane::Target& desired_target, const Uptane::Target& udpate_target,
+  data::ResultCode::Numeric doUpdate(const Uptane::Target& desired_target, const Uptane::Target& update_target,
                                      const std::string& update_reason);
 
   // download Target
@@ -99,7 +99,7 @@ class LiteClient {
   std::unique_ptr<Lock> getDownloadLock() const;
 
   // install Target
-  data::ResultCode::Numeric install(const Uptane::Target& target);
+  data::ResultCode::Numeric install(const Uptane::Target& desired_target, const Uptane::Target& update_target);
   data::InstallationResult installPackage(const Uptane::Target& target);
   void prune(const Uptane::Target& target);
   void writeCurrentTarget() const;

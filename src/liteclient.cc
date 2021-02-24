@@ -203,7 +203,7 @@ boost::container::flat_map<int, Uptane::Target> LiteClient::getTargets() {
   return sorted_targets;
 }
 
-// Update a device to the given Target
+// Update a device to the given Target version
 data::ResultCode::Numeric LiteClient::update(const std::string& version, bool force_update) {
   checkForUpdates();
 
@@ -447,12 +447,12 @@ std::tuple<std::string, Uptane::Target> LiteClient::determineUpdateTarget(Update
   switch (update_type) {
     case UpdateType::kNewTargetUpdate: {
       update_reason = "Auto update from " + current_target.filename() + " to " + desired_target.filename();
-      update_target = Target::subtractCurrentApps(desired_target, current_target);
+      update_target = Target::subtractCurrentApps(desired_target, current_target, app_shortlist_);
       break;
     }
     case UpdateType::kCurrentTargetSync: {
       update_reason = "Sync current Target " + current_target.filename();
-      update_target = Target::subtractCurrentApps(desired_target, current_target);
+      update_target = Target::subtractCurrentApps(desired_target, current_target, app_shortlist_);
       break;
     }
     case UpdateType::kTargetForcedUpdate: {
@@ -480,7 +480,7 @@ void LiteClient::logUpdate(UpdateType update_type, const Uptane::Target& desired
       break;
     }
     case UpdateType::kCurrentTargetSync: {
-      logTarget("Syncing current Target: ", current_target);
+      logTarget("Syncing current Target: ", desired_target);
       break;
     }
     case UpdateType::kTargetForcedUpdate: {
@@ -495,14 +495,14 @@ void LiteClient::logUpdate(UpdateType update_type, const Uptane::Target& desired
 }
 
 data::ResultCode::Numeric LiteClient::doUpdate(const Uptane::Target& desired_target,
-                                               const Uptane::Target& udpate_target, const std::string& update_reason) {
+                                               const Uptane::Target& update_target, const std::string& update_reason) {
   data::ResultCode::Numeric update_result = data::ResultCode::Numeric::kUnknown;
-  update_result = download(udpate_target, update_reason);
+  update_result = download(update_target, update_reason);
 
   if (update_result != data::ResultCode::Numeric::kOk) {
     return update_result;
   }
-  update_result = install(udpate_target);
+  update_result = install(desired_target, update_target);
   prune(desired_target);
   return update_result;
 }
@@ -576,29 +576,30 @@ static std::unique_ptr<Lock> create_lock(boost::filesystem::path lockfile) {
 
 std::unique_ptr<Lock> LiteClient::getDownloadLock() const { return create_lock(download_lockfile_); }
 
-data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
+data::ResultCode::Numeric LiteClient::install(const Uptane::Target& desired_target,
+                                              const Uptane::Target& update_target) {
   std::unique_ptr<Lock> lock = getUpdateLock();
   if (lock == nullptr) {
     return data::ResultCode::Numeric::kInternalError;
   }
 
-  notifyInstallStarted(target);
-  auto iresult = installPackage(target);
+  notifyInstallStarted(desired_target);
+  auto iresult = installPackage(update_target);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
-    storage_->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
+    storage_->savePrimaryInstalledVersion(desired_target, InstalledVersionUpdateMode::kPending);
     is_reboot_required_ = booted_sysroot;
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
-    storage_->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+    storage_->savePrimaryInstalledVersion(desired_target, InstalledVersionUpdateMode::kCurrent);
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kAlreadyProcessed) {
-    LOG_INFO << "Device is already in sync with the given Target: " << target.filename();
-    storage_->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+    LOG_INFO << "Device is already in sync with the given Target: " << desired_target.filename();
+    storage_->savePrimaryInstalledVersion(desired_target, InstalledVersionUpdateMode::kCurrent);
   } else {
     LOG_ERROR << "Unable to install update: " << iresult.description;
     // let go of the lock since we couldn't update
   }
-  notifyInstallFinished(target, iresult);
+  notifyInstallFinished(desired_target, iresult);
   return iresult.result_code.num_code;
 }
 

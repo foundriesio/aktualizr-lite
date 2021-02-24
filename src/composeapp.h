@@ -23,6 +23,7 @@ class ComposeApp {
   bool up(bool no_start = false);
   bool start();
   void remove();
+  bool isInstalled();
   bool isRunning();
 
  private:

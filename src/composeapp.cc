@@ -45,6 +45,11 @@ void ComposeApp::remove() {
   }
 }
 
+bool ComposeApp::isInstalled() {
+  // TODO: map Target to what is installed
+  return boost::filesystem::exists(root_ / ComposeFile);
+}
+
 bool ComposeApp::isRunning() {
   bool cmd_res{false};
   std::string cmd_output;

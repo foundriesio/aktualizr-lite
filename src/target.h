@@ -27,7 +27,8 @@ class Target {
 
   static Apps targetApps(const Uptane::Target& target, boost::optional<std::vector<std::string>> shortlist);
   static void shortlistTargetApps(Uptane::Target& target, std::vector<std::string> shortlist);
-  static Uptane::Target subtractCurrentApps(const Uptane::Target& target, const Uptane::Target& current);
+  static Uptane::Target subtractCurrentApps(const Uptane::Target& target, const Uptane::Target& current,
+                                            boost::optional<std::vector<std::string>> shortlist);
   static void log(const std::string& prefix, const Uptane::Target& target,
                   boost::optional<std::vector<std::string>> shortlist);
 };

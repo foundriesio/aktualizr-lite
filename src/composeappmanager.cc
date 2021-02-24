@@ -99,7 +99,8 @@ Uptane::Target ComposeAppManager::getCurrent() const {
   std::vector<std::string> installed_and_running_apps;
 
   for (const auto& app : Target::targetApps(current_from_ostree_manager, boost::none)) {
-    if (app_ctor_(app.first).isRunning()) {
+    auto app_inst{app_ctor_(app.first)};
+    if (app_inst.isInstalled() && app_inst.isRunning()) {
       installed_and_running_apps.push_back(app.first);
     }
   }
@@ -128,7 +129,7 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
     }
 
   } else {
-    const auto target_apps = Target::targetApps(target, cfg_.apps);
+    const auto target_apps = Target::targetApps(target, boost::none);
     for (const auto& pair : target_apps) {
       LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
       if (!app_ctor_(pair.first).fetch(pair.second)) {
@@ -188,7 +189,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   res.description += "\n# Apps installed:";
 
   int installed_apps_numb{0};
-  for (const auto& app : Target::targetApps(target, cfg_.apps)) {
+  for (const auto& app : Target::targetApps(target, boost::none)) {
     LOG_INFO << "Installing " << app.first << " -> " << app.second;
     if (!app_ctor_(app.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app: " + app.first);

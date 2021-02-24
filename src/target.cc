@@ -107,7 +107,8 @@ void Target::shortlistTargetApps(Uptane::Target& target, std::vector<std::string
   target.updateCustom(target_custom_data);
 }
 
-Uptane::Target Target::subtractCurrentApps(const Uptane::Target& target, const Uptane::Target& current) {
+Uptane::Target Target::subtractCurrentApps(const Uptane::Target& target, const Uptane::Target& current,
+                                           boost::optional<std::vector<std::string>> shortlist) {
   Uptane::Target result = target;
 
   if (!target.IsValid()) {
@@ -128,7 +129,6 @@ Uptane::Target Target::subtractCurrentApps(const Uptane::Target& target, const U
 
   const auto target_apps = target_custom_data[ComposeAppField];
   auto result_custom = result.custom_data();
-  auto current_custom = current.custom_data();
   auto current_apps = current.custom_data()[ComposeAppField];
 
   for (Json::ValueConstIterator ii = target_apps.begin(); ii != target_apps.end(); ++ii) {
@@ -138,7 +138,9 @@ Uptane::Target Target::subtractCurrentApps(const Uptane::Target& target, const U
     }
 
     const auto& app_name = ii.key().asString();
-    if (current_apps.isMember(app_name)) {
+    if (current_apps.isMember(app_name) ||
+        (!!shortlist && (*shortlist).end() == std::find((*shortlist).begin(), (*shortlist).end(), app_name))) {
+      // if app is in the current Target or app is not in the app shortlist then remove app from the update target
       result_custom[ComposeAppField].removeMember(app_name);
     }
   }
