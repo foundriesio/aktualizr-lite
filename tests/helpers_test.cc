@@ -19,6 +19,7 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.extra["booted"] = "0";
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
+  config.uptane.repo_server = "http://";
   std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
@@ -40,6 +41,7 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.extra["booted"] = "0";
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
+  config.uptane.repo_server = "http://";
 
   target_json["hashes"]["sha256"] = "abcd";
   Uptane::Target new_target("test-finalize", target_json);
@@ -56,9 +58,10 @@ TEST(helpers, locking) {
   config.pacman.extra["booted"] = "0";
   config.pacman.os = "dummy-os";
   config.pacman.type = ComposeAppManager::Name;
+  config.uptane.repo_server = "http://";
 
   LiteClient client(config);
-  client.update_lockfile = cfg_dir / "update_lock";
+  client.update_lockfile_ = cfg_dir / "update_lock";
 
   // 1. Create a lock and hold in inside a thread for a small amount of time
   std::unique_ptr<Lock> lock = client.getUpdateLock();
@@ -90,9 +93,10 @@ TEST(helpers, callback) {
   bad_config.pacman.type = ComposeAppManager::Name;
   bad_config.storage.path = cfg_dir.Path();
   bad_config.pacman.extra["callback_program"] = "This does not exist";
+  bad_config.uptane.repo_server = "http://";
 
   LiteClient bad_client(bad_config);
-  ASSERT_EQ(0, bad_client.callback_program.size());
+  ASSERT_EQ(0, bad_client.callback_program_.size());
   bad_client.callback("Just call to make sure it doesnt crash", Uptane::Target::Unknown());
 
   // Second - good callback. Make sure it works as expected
@@ -103,6 +107,7 @@ TEST(helpers, callback) {
   config.pacman.os = "dummy-os";
   config.pacman.type = ComposeAppManager::Name;
   config.storage.path = cfg_dir.Path();
+  config.uptane.repo_server = "http://";
 
   std::string cb = (cfg_dir / "callback.sh").native();
   std::string env = (cfg_dir / "callback.log").native();
@@ -147,6 +152,7 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
+  config.uptane.repo_server = "http://";
 
   std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
 

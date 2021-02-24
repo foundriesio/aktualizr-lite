@@ -27,7 +27,7 @@ class Target {
 
   static Apps targetApps(const Uptane::Target& target, boost::optional<std::vector<std::string>> shortlist);
   static void shortlistTargetApps(Uptane::Target& target, std::vector<std::string> shortlist);
-  static Uptane::Target subtractCurrentApps(Uptane::Target& target, Uptane::Target& current);
+  static Uptane::Target subtractCurrentApps(const Uptane::Target& target, const Uptane::Target& current);
 };
 
 #endif  // AKTUALIZR_LITE_TARGET_H_

@@ -96,19 +96,9 @@ Uptane::Target ComposeAppManager::getCurrent() const {
     return current_from_ostree_manager;
   }
 
-  // shortlisted Target apps
-  const auto target_apps = Target::targetApps(current_from_ostree_manager, cfg_.apps);
   std::vector<std::string> installed_and_running_apps;
 
-  for (const auto& app : target_apps) {
-    //    auto compose_app = Docker::ComposeApp(app.first, app.second,
-    //                                          cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string()
-    //                                          + " ", boost::filesystem::canonical(cfg_.docker_bin).string() + " ",
-    //                                          registry_client_);
-
-    //    if (compose_app.isInstalled(app.second) and compose_app.isRunning(app.second)) {
-    //      installed_and_running_apps.push_back(app.first);
-    //    }
+  for (const auto& app : Target::targetApps(current_from_ostree_manager, boost::none)) {
     if (app_ctor_(app.first).isRunning()) {
       installed_and_running_apps.push_back(app.first);
     }

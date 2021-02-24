@@ -45,7 +45,7 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
     if (target.custom_version().length() > 0) {
       name = target.custom_version();
     }
-    log_info_target("Active image is: ", client.config, target);
+    client.logTarget("Active image is: ", target);
   }
   return 0;
 }
@@ -54,15 +54,7 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
 
   LOG_INFO << "Refreshing Targets metadata";
-  // don't we need to send report event as in the case of the daemon update
-  if (!client.updateImageMeta()) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy";
-    if (!client.checkImageMetaOffline()) {
-      LOG_ERROR << "Unable to use local copy of TUF data";
-      return 1;
-    }
-  }
-
+  client.refreshMetadata();
   boost::container::flat_map<int, Uptane::Target> sorted_targets = client.getTargets();
 
   LOG_INFO << "Available updates: ";
@@ -79,48 +71,19 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
     version = variables_map["update-name"].as<std::string>();
   }
 
-  // This is only available if -DALLOW_MANUAL_ROLLBACK is set in the CLI args below.
-  if (variables_map.count("clear-installed-versions") > 0) {
-    LOG_WARNING << "Clearing installed version history!!!";
-    client.clearInstalledVersions();
-  }
-
   data::ResultCode::Numeric rc = client.update(version, true);
-
   return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
                                                                                                     : EXIT_FAILURE;
 }
 
-static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
-  if (client.config.uptane.repo_server.empty()) {
-    LOG_ERROR << "[uptane]/repo_server is not configured";
-    return EXIT_FAILURE;
-  }
-  if (access(client.config.bootloader.reboot_command.c_str(), X_OK) != 0) {
-    LOG_ERROR << "reboot command: " << client.config.bootloader.reboot_command << " is not executable";
-    return EXIT_FAILURE;
-  }
+static int daemon_main(LiteClient& client, const bpo::variables_map& unused) {
+  (void)unused;
+  client.reportStatus();
 
-  if (variables_map.count("update-lockfile") > 0) {
-    client.update_lockfile = variables_map["update-lockfile"].as<boost::filesystem::path>();
-  }
-  if (variables_map.count("download-lockfile") > 0) {
-    client.download_lockfile = variables_map["download-lockfile"].as<boost::filesystem::path>();
-  }
-
-  uint64_t interval = client.config.uptane.polling_sec;
-  if (variables_map.count("interval") > 0) {
-    interval = variables_map["interval"].as<uint64_t>();
-  }
-
-  client.reportAktualizrConfiguration();
-  client.reportNetworkInfo();
-  client.reportHwInfo();
-
+  auto interval = client.updateInterval();
   while (true) {
     const auto& current = client.getCurrent(true);
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
-    LOG_INFO << "Checking for a new Target...";
 
     try {
       data::ResultCode::Numeric rc = client.update();
@@ -139,8 +102,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       LOG_ERROR << "Failed to find or update Target: " << exc.what();
     }
 
+    LOG_INFO << "Wait " << interval << " seconds for the next update cycle...";
     std::this_thread::sleep_for(std::chrono::seconds(interval));
-
   }  // while true
 
   return EXIT_SUCCESS;
@@ -264,7 +227,7 @@ int main(int argc, char* argv[]) {
     std::pair<bool, std::string> is_reboot_required{false, ""};
     {
       LOG_DEBUG << "Running " << (*cmd_to_run).first;
-      LiteClient client(config);
+      LiteClient client(config, &commandline_map);
       ret_val = (*cmd_to_run).second(client, commandline_map);
       if (cmd == "daemon") {
         is_reboot_required = client.isRebootRequired();

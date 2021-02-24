@@ -104,7 +104,7 @@ void Target::shortlistTargetApps(Uptane::Target& target, std::vector<std::string
   target.updateCustom(target_custom_data);
 }
 
-Uptane::Target Target::subtractCurrentApps(Uptane::Target& target, Uptane::Target& current) {
+Uptane::Target Target::subtractCurrentApps(const Uptane::Target& target, const Uptane::Target& current) {
   Uptane::Target result = target;
 
   if (!target.IsValid()) {
