@@ -67,9 +67,16 @@ class OSTreeMock {
                    "commit from " + src_dir + " to " + path_);
   }
 
+  std::string pull_local(const std::string& src_repo, const std::string& commit_hash) {
+    return run_cmd("ostree", { "pull-local", "--repo", path_, src_repo, commit_hash },
+                   "pulling " + commit_hash + " from " + src_repo);
+  }
+
   void set_mode(const std::string& mode) {
     run_cmd("ostree", {"config", "--repo",  path_, "set", "core.mode", mode}, "set mode for repo " + path_);
   }
+
+  const std::string& path() { return path_; }
 
  private:
   const std::string path_;
@@ -200,14 +207,8 @@ class LiteClientTest : public ::testing::Test {
     const std::string initial_version{"1"};
     const std::string target_name{hw_id + "-" + os + "-" + initial_version};
     auto update_commit_hash = treehub().repo().commit(sysrootfs().path, "lmp");
-    auto initial_sysroot_commit_hash = sysrepo_.repo().commit(sysrootfs_.path, sysrootfs_.branch);
-
-    if (initial_sysroot_commit_hash != update_commit_hash) {
-      throw std::runtime_error("Initial commit to the system rootfs and the initial Target hash must be the same."
-                               + initial_sysroot_commit_hash + " != " + update_commit_hash);
-    }
-
-    sysrepo_.deploy(initial_sysroot_commit_hash);
+    sysrepo_.repo().pull_local(treehub().repo().path(), update_commit_hash);
+    sysrepo_.deploy(update_commit_hash);
     initial_target_ = tufRepo().add_target(target_name, update_commit_hash, hw_id, initial_version);
   }
 
@@ -335,75 +336,82 @@ TEST_F(LiteClientTest, OstreeUpdateManual) {
   ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), initial_target()));
 }
 
-//TEST_F(LiteClientTest, OstreeUpdateRollback) {
-//  // boot device
-//  auto client = create_liteclient();
-//  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
+TEST_F(LiteClientTest, OstreeUpdateRollback) {
+  // boot device
+  auto client = create_liteclient();
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
 
-//  // Create a new Target: update rootfs and commit it into Treehub's repo
-//  auto new_target = createNewTarget("2");
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_bad_target = createNewTarget("2");
 
-//  // update
-//  update(*client, initial_target(), new_target);
+  // update to the latest version
+  ASSERT_EQ(client->update(), data::ResultCode::Numeric::kNeedCompletion);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), initial_target()));
 
-//  // deploy the initial version/commit to emulate rollback
-//  sysrepo().deploy(initial_target().sha256Hash());
-//  // reboot
-//  reboot(client);
-//  // make sure that a rollback has happened and a client is still running the initial Target
-//  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
+  // deploy the initial version/commit to emulate rollback
+  sysrepo().deploy(initial_target().sha256Hash());
+  // reboot
+  reboot(client);
+  // make sure that a rollback has happened and a client is still running the initial Target
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), initial_target()));
 
-//  // make sure we cannot install the bad version
-//  std::vector<Uptane::Target> known_but_not_installed_versions;
-//  get_known_but_not_installed_versions(*client, known_but_not_installed_versions);
-//  ASSERT_TRUE(known_local_target(*client, new_target, known_but_not_installed_versions));
+  // make sure we cannot install the latest bad version and just the current is synced
+  ASSERT_EQ(client->update(), data::ResultCode::Numeric::kAlreadyProcessed);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), initial_target()));
+  // make sure we can update a device with a new valid Target
+  auto new_target_03 = createNewTarget("3");
 
-//  // make sure we can update a device with a new valid Target
-//  auto new_target_03 = createNewTarget("3");
+  // update
+  ASSERT_EQ(client->update(), data::ResultCode::Numeric::kNeedCompletion);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), initial_target()));
 
-//  // update
-//  update(*client, initial_target(), new_target_03);
+  // reboot
+  reboot(client);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), new_target_03));
 
-//  // reboot
-//  reboot(client);
-//  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target_03));
-//}
+  // make sure we cannot do manuall update to the latest bad version and just the current is synced
+  ASSERT_EQ(client->update(new_bad_target.filename()), data::ResultCode::Numeric::kAlreadyProcessed);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), new_target_03));
 
-//TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
-//  // boot device
-//  auto client = create_liteclient();
-//  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
+  // sync the current Target after tryin to install the bad Target manually
+  ASSERT_EQ(client->update(), data::ResultCode::Numeric::kAlreadyProcessed);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), new_target_03));
+}
 
-//  // Create a new Target: update rootfs and commit it into Treehub's repo
-//  auto new_target = createNewTarget("2");
+TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
+  // boot device
+  auto client = create_liteclient();
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), initial_target()));
 
-//  // update
-//  update(*client, initial_target(), new_target);
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createNewTarget("2");
 
-//  // reboot device
-//  reboot(client);
-//  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+  // update
+  ASSERT_EQ(client->update(), data::ResultCode::Numeric::kNeedCompletion);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), initial_target()));
 
-//  // emulate manuall update to the previous version
-//  update(*client, new_target, initial_target());
+  // reboot device
+  reboot(client);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
 
-//  // reboot device and make sure that the previous version is installed
-//  reboot(client);
-//  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
+  // emulate manuall update to the previous version
+  ASSERT_EQ(client->update(initial_target().filename()), data::ResultCode::Numeric::kNeedCompletion);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), new_target));
 
-//  // make sure we can install the latest version that has been installed before
-//  // the succesfully installed Target should be "not known"
-//  std::vector<Uptane::Target> known_but_not_installed_versions;
-//  get_known_but_not_installed_versions(*client, known_but_not_installed_versions);
-//  ASSERT_FALSE(known_local_target(*client, new_target, known_but_not_installed_versions));
+  // reboot device and make sure that the previous version is installed
+  reboot(client);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
 
-//  // emulate auto update to the latest
-//  update(*client, initial_target(), new_target);
+  // make sure we can install the latest version that has been installed before.
+  // the succesfully installed Target should be "not known"
+  // emulate auto update to the latest
+  ASSERT_EQ(client->update(), data::ResultCode::Numeric::kNeedCompletion);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(true), initial_target()));
 
-//  // reboot device
-//  reboot(client);
-//  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
-//}
+  // reboot device
+  reboot(client);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+}
 
 
 int main(int argc, char** argv) {

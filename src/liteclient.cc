@@ -125,10 +125,10 @@ LiteClient::LiteClient(Config& config_in, const boost::program_options::variable
   }
 
   data::InstallationResult update_finalization_result{data::ResultCode::Numeric::kNeedCompletion, ""};
+
   // check if there is a pending update/installation/Target
   boost::optional<Uptane::Target> pending_target;
   storage_->loadInstalledVersions("", nullptr, &pending_target);
-
   // finalize a pending update/installation if any
   if (!!pending_target) {
     // if there is a pending update/installation/Target then try to apply/finalize it
@@ -142,9 +142,8 @@ LiteClient::LiteClient(Config& config_in, const boost::program_options::variable
     }
   }
 
-  const auto current_target = getCurrent();
-  updateRequestHeaders(http_client_, current_target, config_.pacman);
-  writeCurrentTarget(current_target);
+  updateRequestHeaders();
+  writeCurrentTarget();
 
   if (data::ResultCode::Numeric::kNeedCompletion != update_finalization_result.result_code.num_code) {
     // if finalization has happened, either succefully (kOk) or not (kInstallFailed)
@@ -169,7 +168,7 @@ bool LiteClient::refreshMetadata() {
   return rc;
 }
 
-Uptane::Target LiteClient::getCurrent(bool refresh) {
+Uptane::Target LiteClient::getCurrent(bool refresh) const {
   if (refresh || !current_target_.IsValid()) {
     current_target_ = package_manager_->getCurrent();
   }
@@ -205,20 +204,31 @@ data::ResultCode::Numeric LiteClient::update(const std::string& version, bool fo
   checkForUpdates();
 
   std::unique_ptr<Uptane::Target> desired_target{getTarget(version)};
-
   auto current_target = getCurrent(true);
+
+  if (!isTargetValid(*desired_target)) {
+    LOG_WARNING << "Target " << (*desired_target).filename() << ", hash " << (*desired_target).sha256Hash()
+                << " known locally (rollback?), skipping";
+    // if the desired Target is invalid then just sync the current Target
+    // maybe return an error/throw exception and don't sync currently installed Target???
+    // but in this case the current Target is never synced until a new valid Target becomes available
+    // return UpdateType::kCurrentTargetSync;
+    desired_target = getTarget(current_target.filename());
+  }
 
   UpdateType update_type = determineUpdateType(*desired_target, current_target, force_update);
 
-  Uptane::Target update_target = determineUpdateTarget(update_type, *desired_target, current_target);
+  std::string update_reason;
+  Uptane::Target update_target{Uptane::Target::Unknown()};
+  std::tie(update_reason, update_target) = determineUpdateTarget(update_type, *desired_target, current_target);
 
   logUpdate(update_type, *desired_target, current_target);
 
-  data::ResultCode::Numeric update_result = doUpdate(*desired_target, update_target);
+  data::ResultCode::Numeric update_result = doUpdate(*desired_target, update_target, update_reason);
 
   if (update_result == data::ResultCode::Numeric::kOk) {
-    const auto& current = getCurrent(true);
-    http_client_->updateHeader("x-ats-target", current.filename());
+    const auto& new_current = getCurrent(true);
+    http_client_->updateHeader("x-ats-target", new_current.filename());
   }
 
   return update_result;
@@ -438,14 +448,6 @@ bool LiteClient::isTargetValid(const Uptane::Target& target) {
 
 LiteClient::UpdateType LiteClient::determineUpdateType(const Uptane::Target& desired_target,
                                                        const Uptane::Target& current_target, bool force_update) {
-  if (!isTargetValid(desired_target)) {
-    LOG_WARNING << "Target " << desired_target.filename() << ", hash " << desired_target.sha256Hash()
-                << " known locally (rollback?), skipping";
-    // if the desired Target is invalid then just sync the current Target regardless if it's forced update
-    // or not since "force" reffers to the desired Target which is invalid
-    return UpdateType::kCurrentTargetSync;
-  }
-
   UpdateType update_type = UpdateType::kCurrentTargetSync;
   if (force_update) {
     // If the desired Target is valid and it's forced update then just do the forced update
@@ -458,17 +460,25 @@ LiteClient::UpdateType LiteClient::determineUpdateType(const Uptane::Target& des
   return update_type;
 }
 
-Uptane::Target LiteClient::determineUpdateTarget(UpdateType update_type, const Uptane::Target& desired_target,
-                                                 const Uptane::Target& current_target) {
+std::tuple<std::string, Uptane::Target> LiteClient::determineUpdateTarget(UpdateType update_type,
+                                                                          const Uptane::Target& desired_target,
+                                                                          const Uptane::Target& current_target) {
   Uptane::Target update_target{Uptane::Target::Unknown()};
+  std::string update_reason{"unknown"};
 
   switch (update_type) {
-    case UpdateType::kNewTargetUpdate:
+    case UpdateType::kNewTargetUpdate: {
+      update_reason = "Auto update from " + current_target.filename() + " to " + desired_target.filename();
+      update_target = Target::subtractCurrentApps(desired_target, current_target);
+      break;
+    }
     case UpdateType::kCurrentTargetSync: {
+      update_reason = "Sync current Target " + current_target.filename();
       update_target = Target::subtractCurrentApps(desired_target, current_target);
       break;
     }
     case UpdateType::kTargetForcedUpdate: {
+      update_reason = "Manual/Forced update to Target " + desired_target.filename();
       update_target = desired_target;
       break;
     }
@@ -480,7 +490,7 @@ Uptane::Target LiteClient::determineUpdateTarget(UpdateType update_type, const U
   // set an update correlation ID to "bind" all report events generated during a single update together
   // so the backend can know to which of the updates specific events are related to
   Target::setCorrelationID(update_target);
-  return update_target;
+  return {update_reason, update_target};
 }
 
 void LiteClient::logUpdate(UpdateType update_type, const Uptane::Target& desired_target,
@@ -507,10 +517,9 @@ void LiteClient::logUpdate(UpdateType update_type, const Uptane::Target& desired
 }
 
 data::ResultCode::Numeric LiteClient::doUpdate(const Uptane::Target& desired_target,
-                                               const Uptane::Target& udpate_target) {
+                                               const Uptane::Target& udpate_target, const std::string& update_reason) {
   data::ResultCode::Numeric update_result = data::ResultCode::Numeric::kUnknown;
-  std::string download_reason = "unknown";  // TODO
-  update_result = download(udpate_target, download_reason);
+  update_result = download(udpate_target, update_reason);
 
   if (update_result != data::ResultCode::Numeric::kOk) {
     return update_result;
@@ -636,7 +645,8 @@ void LiteClient::prune(const Uptane::Target& target) {
   compose_app_manager->handleRemovedApps(target);
 }
 
-void LiteClient::writeCurrentTarget(const Uptane::Target& t) const {
+void LiteClient::writeCurrentTarget() const {
+  const Uptane::Target& t = getCurrent();
   std::stringstream ss;
   ss << "TARGET_NAME=\"" << t.filename() << "\"\n";
   ss << "CUSTOM_VERSION=\"" << t.custom_version() << "\"\n";
@@ -707,7 +717,7 @@ void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::Installati
 
   if (ir.result_code == data::ResultCode::Numeric::kOk) {
     callback("install-post", t, "OK");
-    writeCurrentTarget(t);
+    writeCurrentTarget();
     notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu_.first, t.correlation_id(), true,
                                                                 ir.description));
   } else {
@@ -759,12 +769,12 @@ void LiteClient::addAppsHeader(std::vector<std::string>& headers, PackageConfig&
   }
 }
 
-void LiteClient::updateRequestHeaders(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
-                                      PackageConfig& config) {
-  http_client->updateHeader("x-ats-target", target.filename());
+void LiteClient::updateRequestHeaders() {
+  const auto target = getCurrent();
+  http_client_->updateHeader("x-ats-target", target.filename());
 
-  if (config.type == ComposeAppManager::Name) {
-    ComposeAppManager::Config cfg(config);
+  if (config_.pacman.type == ComposeAppManager::Name) {
+    ComposeAppManager::Config cfg(config_.pacman);
 
     // If App list was not specified in the config then we need to update the request header with a list of
     // Apps specified in the currently installed Target
@@ -777,7 +787,7 @@ void LiteClient::updateRequestHeaders(std::shared_ptr<HttpClient>& http_client, 
           apps.push_back(target_app_name);
         }
       }
-      http_client->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
+      http_client_->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
     }
   }
 }

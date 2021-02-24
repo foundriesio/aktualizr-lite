@@ -35,8 +35,7 @@ class LiteClient {
 
   bool refreshMetadata();
 
-  // Get currently installed (TODO: and running (active) Target)
-  Uptane::Target getCurrent(bool refresh = false);
+  Uptane::Target getCurrent(bool refresh = false) const;
 
   /**
    * @brief Return a sorted map of applicable Targets
@@ -83,13 +82,15 @@ class LiteClient {
   bool isTargetValid(const Uptane::Target& target);
 
   // update helpers
-  UpdateType determineUpdateType(const Uptane::Target& desired_target, const Uptane::Target& current_target,
-                                 bool force_update);
-  static Uptane::Target determineUpdateTarget(UpdateType update_type, const Uptane::Target& desired_target,
-                                              const Uptane::Target& current_target);
+  static UpdateType determineUpdateType(const Uptane::Target& desired_target, const Uptane::Target& current_target,
+                                        bool force_update);
+  static std::tuple<std::string, Uptane::Target> determineUpdateTarget(UpdateType update_type,
+                                                                       const Uptane::Target& desired_target,
+                                                                       const Uptane::Target& current_target);
   void logUpdate(UpdateType update_type, const Uptane::Target& desired_target,
                  const Uptane::Target& current_target) const;
-  data::ResultCode::Numeric doUpdate(const Uptane::Target& desired_target, const Uptane::Target& udpate_target);
+  data::ResultCode::Numeric doUpdate(const Uptane::Target& desired_target, const Uptane::Target& udpate_target,
+                                     const std::string& update_reason);
 
   // download Target
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
@@ -101,7 +102,7 @@ class LiteClient {
   data::ResultCode::Numeric install(const Uptane::Target& target);
   data::InstallationResult installPackage(const Uptane::Target& target);
   void prune(const Uptane::Target& target);
-  void writeCurrentTarget(const Uptane::Target& t) const;
+  void writeCurrentTarget() const;
   std::unique_ptr<Lock> getUpdateLock() const;
 
   // notify about update status via a callback (is subject for dedicated class)
@@ -116,8 +117,7 @@ class LiteClient {
 
   // helpers ???
   static void addAppsHeader(std::vector<std::string>& headers, PackageConfig& config_);
-  static void updateRequestHeaders(std::shared_ptr<HttpClient>& http_client_, const Uptane::Target& target,
-                                   PackageConfig& config_);
+  void updateRequestHeaders();
   void setInvalidTargets();
 
  private:
@@ -144,7 +144,7 @@ class LiteClient {
   Uptane::ImageRepository image_repo_;
   bool is_reboot_required_{false};
   bool booted_sysroot{true};
-  Uptane::Target current_target_{Uptane::Target::Unknown()};
+  mutable Uptane::Target current_target_{Uptane::Target::Unknown()};
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_
