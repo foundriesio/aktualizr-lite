@@ -32,7 +32,6 @@ class ComposeAppManager : public OstreeManager {
   };
 
   using ComposeAppCtor = std::function<Docker::ComposeApp(const std::string& app)>;
-  using AppsContainer = std::unordered_map<std::string, std::string>;
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
@@ -41,17 +40,23 @@ class ComposeAppManager : public OstreeManager {
                         Docker::RegistryClient::DefaultHttpClientFactory);
 
   std::string name() const override { return Name; }
+
   Uptane::Target getCurrent() const override;
+
+  // download Target artifacts
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
+  // install Target artifacts
   data::InstallationResult install(const Uptane::Target& target) const override;
   data::InstallationResult finalizeInstall(const Uptane::Target& target) override;
   void handleRemovedApps(const Uptane::Target& target) const;
 
-  boost::optional<std::vector<std::string>>& getAppShortlist() { return cfg_.apps; }
-
  private:
+  bool isOstreeTarget(const Uptane::Target& target) const;
+  bool fetchOstree(const std::string& uri, const KeyManager& keys);
+  data::InstallationResult installOstree(const std::string& uri) const;
+
   std::string getCurrentHash() const override;
   // Return a description of what `docker ps` sees
   std::string containerDetails() const;
@@ -60,8 +65,6 @@ class ComposeAppManager : public OstreeManager {
   Config cfg_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   Docker::RegistryClient registry_client_;
-  // mutable AppsContainer cur_apps_to_fetch_and_update_;
-  bool are_apps_checked_{false};
   ComposeAppCtor app_ctor_;
   std::unique_ptr<ComposeAppTree> app_tree_;
 };

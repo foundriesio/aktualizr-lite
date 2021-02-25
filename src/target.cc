@@ -46,6 +46,15 @@ Uptane::Target Target::subtractCurrentApps(const Uptane::Target& target, const U
   return result;
 }
 
+std::string Target::ostreeURI(const Uptane::Target& target) {
+  std::string uri;
+  auto uri_json = target.custom_data().get("compose-apps-uri", Json::nullValue);
+  if (!uri_json.empty()) {
+    uri = uri_json.asString();
+  }
+  return uri;
+}
+
 void Target::log(const std::string& prefix, const Uptane::Target& target,
                  boost::optional<std::set<std::string>> shortlist) {
   auto name = target.filename();

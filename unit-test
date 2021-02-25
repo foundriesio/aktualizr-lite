@@ -25,7 +25,7 @@ ninja $clang_tests
 clang_tests=$(ninja help | grep aktualizr_ci_clang_format-src- | cut -d: -f1)
 ninja $clang_tests
 
-ctest -L aklite
+ctest -V -L aklite
 
 # test building the sota tools
 rm -rf ./*

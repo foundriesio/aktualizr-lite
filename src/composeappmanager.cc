@@ -93,28 +93,19 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
     return false;
   }
 
-  bool passed = true;
-  const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
-  if (app_tree_ && !apps_uri.empty()) {
-    LOG_INFO << "Fetching Apps Tree -> " << apps_uri;
+  if (isOstreeTarget(target)) {
+    return fetchOstree(Target::ostreeURI(target), keys);
+  }
 
-    try {
-      app_tree_->pull(config.ostree_server, keys, apps_uri);
-    } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to pull Apps Tree; uri: " << apps_uri << ", err: " << exc.what();
-      passed = false;
-    }
-
-  } else {
-    for (const auto& app : aklite::Target::Apps(target)) {
-      LOG_INFO << "Fetching " << app.name << " -> " << app.uri;
-      if (!app_ctor_(app.name).fetch(app.uri)) {
-        passed = false;
-      }
+  bool result = true;
+  for (const auto& app : aklite::Target::Apps(target)) {
+    LOG_INFO << "Fetching " << app.name << " -> " << app.uri;
+    if (!app_ctor_(app.name).fetch(app.uri)) {
+      result = false;
+      break;
     }
   }
-  are_apps_checked_ = false;
-  return passed;
+  return result;
 }
 
 data::InstallationResult ComposeAppManager::install(const Uptane::Target& target) const {
@@ -136,30 +127,11 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
                                    "OSTree hash already installed, same as current");
   }
 
-  const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
-  if (app_tree_ && !apps_uri.empty()) {
-    LOG_INFO << "Checking out updated Apps: " << apps_uri;
-    try {
-      const_cast<ComposeAppManager*>(this)->app_tree_->checkout(apps_uri);
-    } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to checkout Apps from the ostree repo; uri: " << apps_uri << ", err: " << exc.what();
-      return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed,
-                                      "Could not checkout Apps from the ostree repo");
+  if (isOstreeTarget(target)) {
+    res = installOstree(Target::ostreeURI(target));
+    if (!res.isSuccess()) {
+      return res;
     }
-
-    LOG_INFO << "Reloading the docker image and layer store to enable the update... ";
-    {
-      const auto& cmd = cfg_.docker_images_reload_cmd;
-      std::string out_str;
-      int exit_code = Utils::shell(cmd, &out_str, true);
-      LOG_TRACE << "Command: " << cmd << "\n" << out_str;
-
-      if (exit_code != EXIT_SUCCESS) {
-        LOG_ERROR << "Failed to reload the docker image and layer store, command failed: " << out_str;
-        return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not reload docker store");
-      }
-    }
-    LOG_INFO << "Updated docker images has been successfully enabled";
   }
 
   res.description += "\n# Apps installed:";
@@ -234,6 +206,48 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
       LOG_WARNING << "Unable to prune unused docker images";
     }
   }
+}
+
+bool ComposeAppManager::isOstreeTarget(const Uptane::Target& target) const {
+  return app_tree_ && !Target::ostreeURI(target).empty();
+}
+
+bool ComposeAppManager::fetchOstree(const std::string& uri, const KeyManager& keys) {
+  bool result{false};
+  LOG_INFO << "Fetching Apps Tree -> " << uri;
+  try {
+    app_tree_->pull(config.ostree_server, keys, uri);
+    result = true;
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to pull Apps Tree; uri: " << uri << ", err: " << exc.what();
+  }
+  return result;
+}
+
+data::InstallationResult ComposeAppManager::installOstree(const std::string& uri) const {
+  LOG_INFO << "Checking out updated Apps: " << uri;
+  try {
+    const_cast<ComposeAppManager*>(this)->app_tree_->checkout(uri);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to checkout Apps from the ostree repo; uri: " << uri << ", err: " << exc.what();
+    return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed,
+                                    "Could not checkout Apps from the ostree repo");
+  }
+
+  LOG_INFO << "Reloading the docker image and layer store to enable the update... ";
+  {
+    const auto& cmd = cfg_.docker_images_reload_cmd;
+    std::string out_str;
+    int exit_code = Utils::shell(cmd, &out_str, true);
+    LOG_TRACE << "Command: " << cmd << "\n" << out_str;
+
+    if (exit_code != EXIT_SUCCESS) {
+      LOG_ERROR << "Failed to reload the docker image and layer store, command failed: " << out_str;
+      return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not reload docker store");
+    }
+  }
+  LOG_INFO << "Updated docker images has been successfully enabled";
+  return data::InstallationResult(data::ResultCode::Numeric::kOk, "ostree-based apps are updated");
 }
 
 std::string ComposeAppManager::getCurrentHash() const { return sysroot_->getCurDeploymentHash(); }

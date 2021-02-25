@@ -11,6 +11,7 @@ class Target {
  public:
   static constexpr const char* const TagField{"tags"};
   static constexpr const char* const ComposeAppField{"docker_compose_apps"};
+  static constexpr const char* const ComposeAppOstreeUri{"compose-apps-uri"};
 
   struct Version {
     std::string raw_ver;
@@ -22,6 +23,7 @@ class Target {
  public:
   static bool hasTag(const Uptane::Target& target, const std::vector<std::string>& tags);
   static void setCorrelationID(Uptane::Target& target);
+  static std::string ostreeURI(const Uptane::Target& target);
 
   static void log(const std::string& prefix, const Uptane::Target& target,
                   boost::optional<std::set<std::string>> shortlist);
