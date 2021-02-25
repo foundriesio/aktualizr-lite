@@ -144,7 +144,7 @@ class LiteClient {
   Json::Value last_hw_info_reported_;
   Uptane::ImageRepository image_repo_;
   bool is_reboot_required_{false};
-  bool booted_sysroot{true};
+  bool booted_sysroot_{true};
   mutable Uptane::Target current_target_{Uptane::Target::Unknown()};
   // hack, consider something more cosher
   boost::optional<std::set<std::string>> app_shortlist_;
