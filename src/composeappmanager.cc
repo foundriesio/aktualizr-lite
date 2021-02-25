@@ -5,16 +5,6 @@
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
 
-  if (raw.count("compose_apps") == 1) {
-    std::string val = raw.at("compose_apps");
-    // if compose_apps is specified then `apps` optional configuration variable is initialized with an empty vector
-    apps = boost::make_optional(std::vector<std::string>());
-    if (val.length() > 0) {
-      // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
-      boost::split(*apps, val, boost::is_any_of(", "), boost::token_compress_on);
-    }
-  }
-
   if (raw.count("compose_apps_root") == 1) {
     apps_root = raw.at("compose_apps_root");
   }
@@ -69,22 +59,10 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     LOG_DEBUG << "Failed to initialize Compose App Tree (ostree) at " << cfg_.apps_tree << ". Error: " << exc.what();
   }
 
-  Target::Apps current_apps;
-  try {
-    // Get all Target Apps
-    Uptane::Target current_target = OstreeManager::getCurrent();
-    if (current_target.IsValid()) {
-      current_apps = Target::targetApps(current_target, boost::none);
-    }
-  } catch (const std::exception& exp) {
-    LOG_WARNING << "Failed to get Target Apps: " << exp.what();
-  }
-
-  for (const auto& app_pair : current_apps) {
-    const auto& app_name = app_pair.first;
-    auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeApp::NeedStartFile;
+  for (const auto& app : aklite::Target::Apps(OstreeManager::getCurrent())) {
+    auto need_start_flag = cfg_.apps_root / app.name / Docker::ComposeApp::NeedStartFile;
     if (boost::filesystem::exists(need_start_flag)) {
-      app_ctor_(app_name).start();
+      app_ctor_(app.name).start();
       boost::filesystem::remove(need_start_flag);
     }
   }
@@ -96,18 +74,17 @@ Uptane::Target ComposeAppManager::getCurrent() const {
     return current_from_ostree_manager;
   }
 
-  std::vector<std::string> installed_and_running_apps;
-
-  for (const auto& app : Target::targetApps(current_from_ostree_manager, boost::none)) {
-    auto app_inst{app_ctor_(app.first)};
-    if (app_inst.isInstalled() && app_inst.isRunning()) {
-      installed_and_running_apps.push_back(app.first);
+  Uptane::Target result = current_from_ostree_manager;
+  auto result_custom = result.custom_data();
+  for (const auto& app : aklite::Target::Apps(current_from_ostree_manager)) {
+    auto app_inst{app_ctor_(app.name)};
+    if (!app_inst.isInstalled() || !app_inst.isRunning()) {
+      result_custom[Target::ComposeAppField].removeMember(app.name);
     }
   }
 
-  Target::shortlistTargetApps(current_from_ostree_manager, installed_and_running_apps);
-
-  return current_from_ostree_manager;
+  result.updateCustom(result_custom);
+  return result;
 }
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
@@ -129,10 +106,9 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
     }
 
   } else {
-    const auto target_apps = Target::targetApps(target, boost::none);
-    for (const auto& pair : target_apps) {
-      LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
-      if (!app_ctor_(pair.first).fetch(pair.second)) {
+    for (const auto& app : aklite::Target::Apps(target)) {
+      LOG_INFO << "Fetching " << app.name << " -> " << app.uri;
+      if (!app_ctor_(app.name).fetch(app.uri)) {
         passed = false;
       }
     }
@@ -189,13 +165,13 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   res.description += "\n# Apps installed:";
 
   int installed_apps_numb{0};
-  for (const auto& app : Target::targetApps(target, boost::none)) {
-    LOG_INFO << "Installing " << app.first << " -> " << app.second;
-    if (!app_ctor_(app.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
-      res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app: " + app.first);
+  for (const auto& app : aklite::Target::Apps(target)) {
+    LOG_INFO << "Installing " << app.name << " -> " << app.uri;
+    if (!app_ctor_(app.name).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
+      res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app: " + app.name);
       break;
     }
-    res.description += "\n" + app.first + "->" + app.second;
+    res.description += "\n" + app.name + "->" + app.uri;
     ++installed_apps_numb;
   };
 
@@ -225,14 +201,18 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
     return;
   }
 
-  const Target::Apps target_apps = Target::targetApps(target, cfg_.apps);
-
   for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(cfg_.apps_root), {})) {
     if (boost::filesystem::is_directory(entry)) {
       std::string name = entry.path().filename().native();
 
-      if (target_apps.end() != std::find_if(target_apps.begin(), target_apps.end(),
-                                            [&name](const Target::App& app) { return name == app.first; })) {
+      bool found = false;
+      for (const auto& app : aklite::Target::Apps(target)) {
+        if (app.name == name) {
+          found = true;
+          break;
+        }
+      }
+      if (found) {
         // The App that was found on the disk is in the current Target App list
         continue;
       }

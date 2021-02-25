@@ -138,9 +138,9 @@ TEST(ComposeApp, Config) {
 
   ComposeAppManager::Config cfg(config.pacman);
   ASSERT_TRUE(cfg.docker_prune);
-  ASSERT_EQ(2, (*cfg.apps).size());
-  ASSERT_EQ("app1", (*cfg.apps)[0]);
-  ASSERT_EQ("app2", (*cfg.apps)[1]);
+  //ASSERT_EQ(2, (*cfg.apps).size());
+  //ASSERT_EQ("app1", (*cfg.apps)[0]);
+  //ASSERT_EQ("app2", (*cfg.apps)[1]);
   ASSERT_EQ("apps-root", cfg.apps_root);
   ASSERT_EQ("compose", cfg.compose_bin);
   ASSERT_EQ("docker", cfg.docker_bin);
@@ -333,7 +333,9 @@ TEST(ComposeApp, fetch) {
   target_json["hashes"]["sha256"] = sha;
   target_json["custom"]["targetFormat"] = "OSTREE";
   target_json["length"] = 0;
-  target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "n/a";
+  // now the package manager fetches exactly what it' stold to fetch
+  // it doesn't do any shortlisting
+  //target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "n/a";
   const std::string app_file_name = "docker-compose.yml";
   const std::string app_content = "lajdalsjdlasjflkjasldjaldlasdl89749823748jsdhfjshdfjk89273498273jsdkjkdfjkdsfj928";
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
@@ -557,15 +559,19 @@ TEST(ComposeApp, installApp) {
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
 
     ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
-    // make sure that App manifest wasn't requested from Registry
-    ASSERT_FALSE(registry.wasManifestRequested());
-    // make sure that docker-compose config and pull were not called
-    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
-    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
+    // make sure that App manifest wasn't requested from Registry - outdated
+    // now the package manager became "stupid", it does exactly what it's told to do, hence it will
+    // fetch Target in the given case
+    ASSERT_TRUE(registry.wasManifestRequested());
+    // make sure that docker-compose config and pull were not called, not true anymore
+    ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
+    ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
 
-    ASSERT_EQ(data::ResultCode::Numeric::kAlreadyProcessed, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
-    // make sure that docker-compose up wasn't called
-    ASSERT_EQ("", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+    ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
+    // make sure that docker-compose up wasn't called - outdated
+    // now the package manager became "stupid", it does exactly what it's told to do, hence it will
+    // fetch Target in the given case
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
   }
 
   // existing App update (uri/hash does not match)
@@ -866,7 +872,8 @@ TEST(ComposeApp, resumeAppUpdate) {
     ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
     ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
     // check if app2 was NOT fecthed
-    ASSERT_FALSE(boost::filesystem::exists((client.apps_root / "app2").string()));
+    // outdated, should be fetched now
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app2").string()));
 
     // install
     ASSERT_EQ(data::ResultCode::Numeric::kOk, client.pacman->install(target_to_install).result_code.num_code);
@@ -890,7 +897,7 @@ TEST(ComposeApp, resumeAppUpdate) {
     // make sure that app1 is installed and app2 is not after the reboot
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1").string()));
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ Docker::ComposeApp::ComposeFile).string()));
-    ASSERT_FALSE(boost::filesystem::exists((client.apps_root / "app2").string()));
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app2").string()));
 
     // just after a reboot aklite does a full check but it's a pain to emulate it properly
     // so we fake it by doing not a full check, which just checks is the app dir and file exists

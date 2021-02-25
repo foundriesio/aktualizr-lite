@@ -116,12 +116,9 @@ LiteClient::LiteClient(Config& config_in, const boost::program_options::variable
   key_manager_->copyCertsToCurl(*http_client_);
 
   if (config_.pacman.type == ComposeAppManager::Name) {
-    auto compose_package_manager =
+    package_manager_ =
         std::make_shared<ComposeAppManager>(config_.pacman, config_.bootloader, storage_, http_client_, ostree_sysroot);
-
-    app_shortlist_ = compose_package_manager->getAppShortlist();
-    package_manager_ = compose_package_manager;
-
+    setTargetAppShortlist(config_.pacman);
   } else if (config_.pacman.type == PACKAGE_MANAGER_OSTREE) {
     package_manager_ = std::make_shared<OstreeManager>(config_.pacman, config_.bootloader, storage_, http_client_);
   } else {
@@ -503,7 +500,9 @@ data::ResultCode::Numeric LiteClient::doUpdate(const Uptane::Target& desired_tar
     return update_result;
   }
   update_result = install(desired_target, update_target);
-  prune(desired_target);
+  const auto desired_and_shortlisted_target =
+      Target::subtractCurrentApps(desired_target, Uptane::Target::Unknown(), app_shortlist_);
+  prune(desired_and_shortlisted_target);
   return update_result;
 }
 
@@ -752,23 +751,11 @@ void LiteClient::updateRequestHeaders() {
   const auto target = getCurrent();
   http_client_->updateHeader("x-ats-target", target.filename());
 
-  if (config_.pacman.type == ComposeAppManager::Name) {
-    ComposeAppManager::Config cfg(config_.pacman);
-
-    // If App list was not specified in the config then we need to update the request header with a list of
-    // Apps specified in the currently installed Target
-    if (!cfg.apps) {
-      std::list<std::string> apps;
-      auto target_apps = target.custom_data()["docker_compose_apps"];
-      for (Json::ValueIterator ii = target_apps.begin(); ii != target_apps.end(); ++ii) {
-        if ((*ii).isObject() && (*ii).isMember("uri")) {
-          const auto& target_app_name = ii.key().asString();
-          apps.push_back(target_app_name);
-        }
-      }
-      http_client_->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
-    }
+  std::list<std::string> apps;
+  for (const auto& app : aklite::Target::Apps(target)) {
+    apps.push_back(app.name);
   }
+  http_client_->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
 }
 
 void LiteClient::setInvalidTargets() {
@@ -786,6 +773,19 @@ void LiteClient::setInvalidTargets() {
                      [&t](const Uptane::Target& t1) { return t.filename() == t1.filename(); })) {
       // known but never successfully installed version
       invalid_targets_.push_back(t);
+    }
+  }
+}
+
+void LiteClient::setTargetAppShortlist(const PackageConfig& pacman_cfg) {
+  const std::map<std::string, std::string> raw = pacman_cfg.extra;
+  if (raw.count("compose_apps") == 1) {
+    std::string val = raw.at("compose_apps");
+    // if compose_apps is specified then `apps` optional configuration variable is initialized with an empty vector
+    app_shortlist_ = boost::make_optional(std::set<std::string>());
+    if (val.length() > 0) {
+      // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
+      boost::split(*app_shortlist_, val, boost::is_any_of(", "), boost::token_compress_on);
     }
   }
 }

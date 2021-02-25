@@ -119,6 +119,7 @@ class LiteClient {
   static void addAppsHeader(std::vector<std::string>& headers, PackageConfig& config_);
   void updateRequestHeaders();
   void setInvalidTargets();
+  void setTargetAppShortlist(const PackageConfig& pacman_cfg);
 
  private:
   Config config_;
@@ -146,7 +147,7 @@ class LiteClient {
   bool booted_sysroot{true};
   mutable Uptane::Target current_target_{Uptane::Target::Unknown()};
   // hack, consider something more cosher
-  boost::optional<std::vector<std::string>> app_shortlist_;
+  boost::optional<std::set<std::string>> app_shortlist_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_
