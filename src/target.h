@@ -6,7 +6,6 @@
 
 #include "uptane/tuf.h"
 
-// This is the prototype of Target class of the future aklite's UpdateAgent that wraps the libaktualizr pack manager
 class Target {
  public:
   static constexpr const char* const TagField{"tags"};
@@ -28,14 +27,6 @@ class Target {
   static void log(const std::string& prefix, const Uptane::Target& target,
                   boost::optional<std::set<std::string>> shortlist);
 
-  static Uptane::Target subtractCurrentApps(const Uptane::Target& target, const Uptane::Target& current,
-                                            boost::optional<std::set<std::string>> shortlist);
-};
-
-namespace aklite {
-
-class Target {
- public:
   class Apps {
    public:
     struct AppDesc {
@@ -69,7 +60,7 @@ class Target {
       }
 
      private:
-      friend class aklite::Target::Apps;
+      friend class Target::Apps;
       Iterator() = delete;
       Iterator& operator=(const Iterator&) = delete;
       Iterator(Json::ValueConstIterator&& json_iter) : json_iter_{json_iter} {}
@@ -84,9 +75,6 @@ class Target {
    private:
     Json::Value target_apps_json_;
   };  // Apps
-
-};  // Target
-
-}  // namespace aklite
+};    // Target
 
 #endif  // AKTUALIZR_LITE_TARGET_H_

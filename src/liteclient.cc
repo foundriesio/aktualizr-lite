@@ -9,14 +9,15 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "composeappmanager.h"
 #include "crypto/keymanager.h"
 
+#include "composeappmanager.h"
 #include "target.h"
 
 LiteClient::LiteClient(Config& config_in, const boost::program_options::variables_map* const variables_map)
     : config_{std::move(config_in)},
-      primary_ecu_{Uptane::EcuSerial::Unknown(), config_.provision.primary_ecu_hardware_id} {
+      primary_ecu_{Uptane::EcuSerial::Unknown(), config_.provision.primary_ecu_hardware_id},
+      update_manager_{createUpdateManager(config_.pacman)} {
   storage_ = INvStorage::newStorage(config_.storage);
   storage_->importData(config_.import);
 
@@ -118,7 +119,6 @@ LiteClient::LiteClient(Config& config_in, const boost::program_options::variable
   if (config_.pacman.type == ComposeAppManager::Name) {
     package_manager_ =
         std::make_shared<ComposeAppManager>(config_.pacman, config_.bootloader, storage_, http_client_, ostree_sysroot);
-    setTargetAppShortlist(config_.pacman);
   } else if (config_.pacman.type == PACKAGE_MANAGER_OSTREE) {
     package_manager_ = std::make_shared<OstreeManager>(config_.pacman, config_.bootloader, storage_, http_client_);
   } else {
@@ -204,28 +204,36 @@ boost::container::flat_map<int, Uptane::Target> LiteClient::getTargets() {
 data::ResultCode::Numeric LiteClient::update(const std::string& version, bool force_update) {
   checkForUpdates();
 
-  std::unique_ptr<Uptane::Target> desired_target{getTarget(version)};
-  auto current_target = getCurrent(true);
+  Uptane::Target current{Uptane::Target::Unknown()};
+  // if it's forced update then we don't need to know what's currently is installed and running
+  if (!force_update) {
+    current = getCurrent(true);
+  }
 
-  if (!isTargetValid(*desired_target)) {
-    LOG_WARNING << "Target " << (*desired_target).filename() << ", hash " << (*desired_target).sha256Hash()
+  Uptane::Target to_target{getTarget(version)};
+  Uptane::Target from_target{Uptane::Target::Unknown()};
+
+  if (current.IsValid()) {
+    from_target = getTarget(current.filename());
+  }
+
+  if (!isTargetValid(to_target)) {
+    LOG_WARNING << "Target " << to_target.filename() << ", hash " << to_target.sha256Hash()
                 << " known locally (rollback?), skipping";
     // if the desired Target is invalid then just sync the current Target
     // maybe return an error/throw exception and don't sync currently installed Target???
     // but in this case the current Target is never synced until a new valid Target becomes available
     // return UpdateType::kCurrentTargetSync;
-    desired_target = getTarget(current_target.filename());
+    if (current.IsValid()) {
+      to_target = from_target;
+    } else {
+      LOG_WARNING << "Both the specified and current Targets are invalid, skip the update cycle";
+      return data::ResultCode::Numeric::kGeneralError;
+    }
   }
 
-  UpdateType update_type = determineUpdateType(*desired_target, current_target, force_update);
-
-  std::string update_reason;
-  Uptane::Target update_target{Uptane::Target::Unknown()};
-  std::tie(update_reason, update_target) = determineUpdateTarget(update_type, *desired_target, current_target);
-
-  logUpdate(update_type, *desired_target, current_target);
-
-  data::ResultCode::Numeric update_result = doUpdate(*desired_target, update_target, update_reason);
+  const UpdateMeta update_meta{update_manager_.initUpdate(current, from_target, to_target)};
+  data::ResultCode::Numeric update_result = doUpdate(update_meta);
 
   if (update_result == data::ResultCode::Numeric::kOk) {
     const auto& new_current = getCurrent(true);
@@ -255,10 +263,6 @@ std::tuple<bool, Json::Value> LiteClient::getDeviceInfo() {
   }
 
   return {res, device_info};
-}
-
-void LiteClient::logTarget(const std::string& prefix, const Uptane::Target& target) const {
-  Target::log(prefix, target, app_shortlist_);
 }
 
 /****** protected and private methods *****/
@@ -359,7 +363,7 @@ bool LiteClient::checkImageMetaOffline() {
   return true;
 }
 
-std::unique_ptr<Uptane::Target> LiteClient::getTarget(const std::string& version) {
+Uptane::Target LiteClient::getTarget(const std::string& version) {
   std::unique_ptr<Uptane::Target> rv;
   // if a new version of targets.json hasn't been downloaded why do we do the following search
   // for the latest ??? It's really needed just for the forced update to a specific version
@@ -384,13 +388,13 @@ std::unique_ptr<Uptane::Target> LiteClient::getTarget(const std::string& version
             latest = std_::make_unique<Uptane::Target>(t);
           }
         } else if (version == t.filename() || version == t.custom_version()) {
-          return std_::make_unique<Uptane::Target>(t);
+          return t;
         }
       }
     }
   }
   if (find_latest && latest != nullptr) {
-    return latest;
+    return *latest;
   }
   throw std::runtime_error("Unable to find update");
 }
@@ -421,102 +425,30 @@ bool LiteClient::isTargetValid(const Uptane::Target& target) {
   return true;
 }
 
-LiteClient::UpdateType LiteClient::determineUpdateType(const Uptane::Target& desired_target,
-                                                       const Uptane::Target& current_target, bool force_update) {
-  UpdateType update_type = UpdateType::kCurrentTargetSync;
-  if (force_update) {
-    // If the desired Target is valid and it's forced update then just do the forced update
-    // of the specified desired Target regardless of the currently running Target
-    update_type = UpdateType::kTargetForcedUpdate;
-  } else if (desired_target.filename() != current_target.filename()) {
-    // if it's a new Target and not forced update
-    update_type = UpdateType::kNewTargetUpdate;
-  }
-  return update_type;
-}
-
-std::tuple<std::string, Uptane::Target> LiteClient::determineUpdateTarget(UpdateType update_type,
-                                                                          const Uptane::Target& desired_target,
-                                                                          const Uptane::Target& current_target) {
-  Uptane::Target update_target{Uptane::Target::Unknown()};
-  std::string update_reason{"unknown"};
-
-  switch (update_type) {
-    case UpdateType::kNewTargetUpdate: {
-      update_reason = "Auto update from " + current_target.filename() + " to " + desired_target.filename();
-      update_target = Target::subtractCurrentApps(desired_target, current_target, app_shortlist_);
-      break;
-    }
-    case UpdateType::kCurrentTargetSync: {
-      update_reason = "Sync current Target " + current_target.filename();
-      update_target = Target::subtractCurrentApps(desired_target, current_target, app_shortlist_);
-      break;
-    }
-    case UpdateType::kTargetForcedUpdate: {
-      update_reason = "Manual/Forced update to Target " + desired_target.filename();
-      update_target = desired_target;
-      break;
-    }
-    default: {
-      // this shouldn't really happen at the runtime
-      throw std::runtime_error("Unsupported update type:  " + std::to_string(update_type));
-    }
-  }
-  // set an update correlation ID to "bind" all report events generated during a single update together
-  // so the backend can know to which of the updates specific events are related to
-  Target::setCorrelationID(update_target);
-  return {update_reason, update_target};
-}
-
-void LiteClient::logUpdate(UpdateType update_type, const Uptane::Target& desired_target,
-                           const Uptane::Target& current_target) const {
-  switch (update_type) {
-    case UpdateType::kNewTargetUpdate: {
-      logTarget("Updating Active Target: ", current_target);
-      logTarget("To New Target: ", desired_target);
-      break;
-    }
-    case UpdateType::kCurrentTargetSync: {
-      logTarget("Syncing current Target: ", desired_target);
-      break;
-    }
-    case UpdateType::kTargetForcedUpdate: {
-      logTarget("Updating to Target: ", desired_target);
-      break;
-    }
-    default: {
-      // this shouldn't really happen at the runtime
-      throw std::runtime_error("Unsupported update type:  " + std::to_string(update_type));
-    }
-  }
-}
-
-data::ResultCode::Numeric LiteClient::doUpdate(const Uptane::Target& desired_target,
-                                               const Uptane::Target& update_target, const std::string& update_reason) {
+data::ResultCode::Numeric LiteClient::doUpdate(const UpdateMeta& update_meta) {
   data::ResultCode::Numeric update_result = data::ResultCode::Numeric::kUnknown;
-  update_result = download(update_target, update_reason);
+  update_result = download(update_meta);
 
   if (update_result != data::ResultCode::Numeric::kOk) {
     return update_result;
   }
-  update_result = install(desired_target, update_target);
-  const auto desired_and_shortlisted_target =
-      Target::subtractCurrentApps(desired_target, Uptane::Target::Unknown(), app_shortlist_);
-  prune(desired_and_shortlisted_target);
+  update_result = install(update_meta);
+
+  prune(update_meta.shortlisted_to_target);
   return update_result;
 }
 
-data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target, const std::string& reason) {
+data::ResultCode::Numeric LiteClient::download(const UpdateMeta& update_meta) {
   std::unique_ptr<Lock> lock = getDownloadLock();
   if (lock == nullptr) {
     return data::ResultCode::Numeric::kInternalError;
   }
-  notifyDownloadStarted(target, reason);
-  if (!downloadImage(target).first) {
-    notifyDownloadFinished(target, false);
+  notifyDownloadStarted(update_meta.shortlisted_to_target, update_meta.update_reason);
+  if (!downloadImage(update_meta.target_to_apply).first) {
+    notifyDownloadFinished(update_meta.shortlisted_to_target, false);
     return data::ResultCode::Numeric::kDownloadFailed;
   }
-  notifyDownloadFinished(target, true);
+  notifyDownloadFinished(update_meta.shortlisted_to_target, true);
   return data::ResultCode::Numeric::kOk;
 }
 
@@ -575,30 +507,29 @@ static std::unique_ptr<Lock> create_lock(boost::filesystem::path lockfile) {
 
 std::unique_ptr<Lock> LiteClient::getDownloadLock() const { return create_lock(download_lockfile_); }
 
-data::ResultCode::Numeric LiteClient::install(const Uptane::Target& desired_target,
-                                              const Uptane::Target& update_target) {
+data::ResultCode::Numeric LiteClient::install(const UpdateMeta& update_meta) {
   std::unique_ptr<Lock> lock = getUpdateLock();
   if (lock == nullptr) {
     return data::ResultCode::Numeric::kInternalError;
   }
 
-  notifyInstallStarted(desired_target);
-  auto iresult = installPackage(update_target);
+  notifyInstallStarted(update_meta.shortlisted_to_target);
+  auto iresult = installPackage(update_meta.target_to_apply);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
-    storage_->savePrimaryInstalledVersion(desired_target, InstalledVersionUpdateMode::kPending);
+    storage_->savePrimaryInstalledVersion(update_meta.to_target, InstalledVersionUpdateMode::kPending);
     is_reboot_required_ = booted_sysroot_;
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
-    storage_->savePrimaryInstalledVersion(desired_target, InstalledVersionUpdateMode::kCurrent);
+    storage_->savePrimaryInstalledVersion(update_meta.to_target, InstalledVersionUpdateMode::kCurrent);
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kAlreadyProcessed) {
-    LOG_INFO << "Device is already in sync with the given Target: " << desired_target.filename();
-    storage_->savePrimaryInstalledVersion(desired_target, InstalledVersionUpdateMode::kCurrent);
+    LOG_INFO << "Device is already in sync with the given Target: " << update_meta.to_target.filename();
+    storage_->savePrimaryInstalledVersion(update_meta.to_target, InstalledVersionUpdateMode::kCurrent);
   } else {
     LOG_ERROR << "Unable to install update: " << iresult.description;
     // let go of the lock since we couldn't update
   }
-  notifyInstallFinished(desired_target, iresult);
+  notifyInstallFinished(update_meta.shortlisted_to_target, iresult);
   return iresult.result_code.num_code;
 }
 
@@ -752,7 +683,7 @@ void LiteClient::updateRequestHeaders() {
   http_client_->updateHeader("x-ats-target", target.filename());
 
   std::list<std::string> apps;
-  for (const auto& app : aklite::Target::Apps(target)) {
+  for (const auto& app : Target::Apps(target)) {
     apps.push_back(app.name);
   }
   http_client_->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
@@ -777,15 +708,17 @@ void LiteClient::setInvalidTargets() {
   }
 }
 
-void LiteClient::setTargetAppShortlist(const PackageConfig& pacman_cfg) {
+UpdateManager LiteClient::createUpdateManager(const PackageConfig& pacman_cfg) {
   const std::map<std::string, std::string> raw = pacman_cfg.extra;
   if (raw.count("compose_apps") == 1) {
     std::string val = raw.at("compose_apps");
-    // if compose_apps is specified then `apps` optional configuration variable is initialized with an empty vector
-    app_shortlist_ = boost::make_optional(std::set<std::string>());
+    // if compose_apps is specified then `apps` optional configuration variable is initialized with an empty set
+    auto app_shortlist = boost::make_optional(std::set<std::string>());
     if (val.length() > 0) {
       // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
-      boost::split(*app_shortlist_, val, boost::is_any_of(", "), boost::token_compress_on);
+      boost::split(*app_shortlist, val, boost::is_any_of(", "), boost::token_compress_on);
     }
+    return {app_shortlist};
   }
+  return {boost::none};
 }

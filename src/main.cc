@@ -10,12 +10,13 @@
 #include "utilities/aktualizr_version.h"
 
 #include "liteclient.h"
+#include "target.h"
 
 namespace bpo = boost::program_options;
 
 static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
-  auto target = client.getCurrent(true);
+  const auto target = client.getCurrent(true);
 
   try {
     LOG_INFO << "Device UUID: " << client.getDeviceID();
@@ -45,7 +46,9 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
       name = target.custom_version();
     }
 
-    client.logTarget("Active image is: ", target);
+    // client.logTarget("Active image is: ", target);
+    // TODO shortlist
+    Target::log("Active image is: ", target, boost::none);
   }
   return 0;
 }
@@ -59,7 +62,8 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
 
   LOG_INFO << "Available updates: ";
   for (auto& pair : sorted_targets) {
-    client.logTarget("", pair.second);
+    // client.logTarget("", pair.second);
+    // Target::log("", pair.second);
   }
   return 0;
 }

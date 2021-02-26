@@ -9,6 +9,7 @@
 #include "package_manager/packagemanagerfake.h"
 #include "primary/reportqueue.h"
 #include "storage/invstorage.h"
+#include "updatemanager.h"
 #include "uptane/imagerepository.h"
 
 class Lock {
@@ -25,9 +26,6 @@ class Lock {
 };
 
 class LiteClient {
- public:
-  enum UpdateType { kNewTargetUpdate = 0, kCurrentTargetSync, kTargetForcedUpdate };
-
  public:
   LiteClient(Config& config_in, const boost::program_options::variables_map* const variables_map = nullptr);
 
@@ -56,8 +54,6 @@ class LiteClient {
   std::tuple<bool, Json::Value> getDeviceInfo();
   uint64_t updateInterval() const { return update_interval_; }
 
-  void logTarget(const std::string& prefix, const Uptane::Target& target) const;
-
  private:
   FRIEND_TEST(helpers, locking);
   FRIEND_TEST(helpers, callback);
@@ -76,30 +72,21 @@ class LiteClient {
   bool updateImageMeta();
   bool checkImageMetaOffline();
 
-  // getting TUF target(s) from a local storage
-  std::unique_ptr<Uptane::Target> getTarget(const std::string& version = "latest");
+  Uptane::Target getTarget(const std::string& version = "latest");
   const std::vector<Uptane::Target>& allTargets() const { return image_repo_.getTargets()->targets; }
   bool isTargetValid(const Uptane::Target& target);
 
-  // update helpers
-  static UpdateType determineUpdateType(const Uptane::Target& desired_target, const Uptane::Target& current_target,
-                                        bool force_update);
-  std::tuple<std::string, Uptane::Target> determineUpdateTarget(UpdateType update_type,
-                                                                const Uptane::Target& desired_target,
-                                                                const Uptane::Target& current_target);
-  void logUpdate(UpdateType update_type, const Uptane::Target& desired_target,
-                 const Uptane::Target& current_target) const;
-  data::ResultCode::Numeric doUpdate(const Uptane::Target& desired_target, const Uptane::Target& update_target,
-                                     const std::string& update_reason);
+  // update
+  data::ResultCode::Numeric doUpdate(const UpdateMeta& update_meta);
 
   // download Target
-  data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
+  data::ResultCode::Numeric download(const UpdateMeta& update_meta);
   std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
                                                 const api::FlowControlToken* token = nullptr);
   std::unique_ptr<Lock> getDownloadLock() const;
 
   // install Target
-  data::ResultCode::Numeric install(const Uptane::Target& desired_target, const Uptane::Target& update_target);
+  data::ResultCode::Numeric install(const UpdateMeta& update_meta);
   data::InstallationResult installPackage(const Uptane::Target& target);
   void prune(const Uptane::Target& target);
   void writeCurrentTarget() const;
@@ -119,7 +106,8 @@ class LiteClient {
   static void addAppsHeader(std::vector<std::string>& headers, PackageConfig& config_);
   void updateRequestHeaders();
   void setInvalidTargets();
-  void setTargetAppShortlist(const PackageConfig& pacman_cfg);
+
+  static UpdateManager createUpdateManager(const PackageConfig& pacman_cfg);
 
  private:
   Config config_;
@@ -146,8 +134,7 @@ class LiteClient {
   bool is_reboot_required_{false};
   bool booted_sysroot_{true};
   mutable Uptane::Target current_target_{Uptane::Target::Unknown()};
-  // hack, consider something more cosher
-  boost::optional<std::set<std::string>> app_shortlist_;
+  UpdateManager update_manager_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

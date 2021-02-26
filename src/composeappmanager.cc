@@ -59,7 +59,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     LOG_DEBUG << "Failed to initialize Compose App Tree (ostree) at " << cfg_.apps_tree << ". Error: " << exc.what();
   }
 
-  for (const auto& app : aklite::Target::Apps(OstreeManager::getCurrent())) {
+  for (const auto& app : Target::Apps(OstreeManager::getCurrent())) {
     auto need_start_flag = cfg_.apps_root / app.name / Docker::ComposeApp::NeedStartFile;
     if (boost::filesystem::exists(need_start_flag)) {
       app_ctor_(app.name).start();
@@ -76,7 +76,7 @@ Uptane::Target ComposeAppManager::getCurrent() const {
 
   Uptane::Target result = current_from_ostree_manager;
   auto result_custom = result.custom_data();
-  for (const auto& app : aklite::Target::Apps(current_from_ostree_manager)) {
+  for (const auto& app : Target::Apps(current_from_ostree_manager)) {
     auto app_inst{app_ctor_(app.name)};
     if (!app_inst.isInstalled() || !app_inst.isRunning()) {
       result_custom[Target::ComposeAppField].removeMember(app.name);
@@ -98,7 +98,7 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   }
 
   bool result = true;
-  for (const auto& app : aklite::Target::Apps(target)) {
+  for (const auto& app : Target::Apps(target)) {
     LOG_INFO << "Fetching " << app.name << " -> " << app.uri;
     if (!app_ctor_(app.name).fetch(app.uri)) {
       result = false;
@@ -137,7 +137,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   res.description += "\n# Apps installed:";
 
   int installed_apps_numb{0};
-  for (const auto& app : aklite::Target::Apps(target)) {
+  for (const auto& app : Target::Apps(target)) {
     LOG_INFO << "Installing " << app.name << " -> " << app.uri;
     if (!app_ctor_(app.name).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app: " + app.name);
@@ -178,7 +178,7 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
       std::string name = entry.path().filename().native();
 
       bool found = false;
-      for (const auto& app : aklite::Target::Apps(target)) {
+      for (const auto& app : Target::Apps(target)) {
         if (app.name == name) {
           found = true;
           break;
