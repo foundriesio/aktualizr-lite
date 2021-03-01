@@ -233,12 +233,22 @@ data::ResultCode::Numeric LiteClient::update(const std::string& version, bool fo
   }
 
   const UpdateMeta update_meta{update_manager_.initUpdate(current, from_target, to_target)};
-  data::ResultCode::Numeric update_result = doUpdate(update_meta);
+  update_manager_.logUpdate(update_meta);
 
-  if (update_result == data::ResultCode::Numeric::kOk) {
-    const auto& new_current = getCurrent(true);
-    http_client_->updateHeader("x-ats-target", new_current.filename());
+  if (update_meta.update_type == UpdateMeta::UpdateType::kNone) {
+    return data::ResultCode::Numeric::kAlreadyProcessed;
   }
+
+  data::ResultCode::Numeric update_result{data::ResultCode::Numeric::kAlreadyProcessed};
+  if (update_meta.update_type != UpdateMeta::UpdateType::kSyncRemove) {
+    update_result = doUpdate(update_meta);
+    if (update_result == data::ResultCode::Numeric::kOk) {
+      const auto& new_current = getCurrent(true);
+      http_client_->updateHeader("x-ats-target", new_current.filename());
+    }
+  }
+
+  prune(update_meta.shortlisted_to_target);
 
   return update_result;
 }
@@ -426,16 +436,11 @@ bool LiteClient::isTargetValid(const Uptane::Target& target) {
 }
 
 data::ResultCode::Numeric LiteClient::doUpdate(const UpdateMeta& update_meta) {
-  data::ResultCode::Numeric update_result = data::ResultCode::Numeric::kUnknown;
-  update_result = download(update_meta);
-
+  data::ResultCode::Numeric update_result = download(update_meta);
   if (update_result != data::ResultCode::Numeric::kOk) {
     return update_result;
   }
-  update_result = install(update_meta);
-
-  prune(update_meta.shortlisted_to_target);
-  return update_result;
+  return install(update_meta);
 }
 
 data::ResultCode::Numeric LiteClient::download(const UpdateMeta& update_meta) {

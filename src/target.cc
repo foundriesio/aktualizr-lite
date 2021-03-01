@@ -31,11 +31,23 @@ void Target::setCorrelationID(Uptane::Target& target) {
 
 std::string Target::ostreeURI(const Uptane::Target& target) {
   std::string uri;
-  auto uri_json = target.custom_data().get("compose-apps-uri", Json::nullValue);
+  auto uri_json = target.custom_data().get("compose-apps-uri", Json::Value(Json::nullValue));
   if (!uri_json.empty()) {
     uri = uri_json.asString();
   }
   return uri;
+}
+
+Json::Value Target::appsJson(const Uptane::Target& target) {
+  return target.custom_data().get(Target::ComposeAppField, Json::Value(Json::nullValue));
+}
+
+void Target::setAppsJson(Uptane::Target& target, const Json::Value& apps_json) {
+  Json::Value custom_data = target.custom_data();
+  if (!custom_data.isNull()) {
+    custom_data[Target::ComposeAppField] = apps_json;
+    target.updateCustom(custom_data);
+  }
 }
 
 void Target::log(const std::string& prefix, const Uptane::Target& target,

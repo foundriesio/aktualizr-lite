@@ -23,6 +23,8 @@ class Target {
   static bool hasTag(const Uptane::Target& target, const std::vector<std::string>& tags);
   static void setCorrelationID(Uptane::Target& target);
   static std::string ostreeURI(const Uptane::Target& target);
+  static Json::Value appsJson(const Uptane::Target& target);
+  static void setAppsJson(Uptane::Target& target, const Json::Value& apps_json);
 
   static void log(const std::string& prefix, const Uptane::Target& target,
                   boost::optional<std::set<std::string>> shortlist);
@@ -37,18 +39,14 @@ class Target {
         uri = app_json["uri"].asString();
       }
       AppDesc() = delete;
+      bool operator==(const AppDesc& app_desc) const { return name == app_desc.name && uri == app_desc.uri; }
 
       std::string name;
       std::string uri;
     };
 
    public:
-    Apps(const Uptane::Target& target) {
-      target_apps_json_ = Json::nullValue;
-      if (!target.custom_data().isNull()) {
-        target_apps_json_ = target.custom_data().get(::Target::ComposeAppField, Json::Value(Json::nullValue));
-      }
-    }
+    Apps(const Uptane::Target& target) : target_apps_json_{Target::appsJson(target)} {}
 
     class Iterator {
      public:
@@ -71,6 +69,24 @@ class Target {
 
     Iterator begin() const { return target_apps_json_.begin(); }
     Iterator end() const { return target_apps_json_.end(); }
+
+    bool exists(const AppDesc& app) const {
+      if (!target_apps_json_.isMember(app.name)) {
+        return false;
+      }
+
+      return app == AppDesc{app.name, target_apps_json_[app.name]};
+    }
+
+    void remove(const AppDesc& app) { target_apps_json_.removeMember(app.name); }
+
+    Uptane::Target createTarget(const Uptane::Target& target) {
+      auto result{target};
+      Target::setAppsJson(result, target_apps_json_);
+      return result;
+    }
+
+    bool empty() const { return target_apps_json_.empty(); }
 
    private:
     Json::Value target_apps_json_;

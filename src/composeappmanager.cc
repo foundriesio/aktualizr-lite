@@ -53,6 +53,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
                                   boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
       }} {
   try {
+    // TODO
     app_tree_ = std::make_unique<ComposeAppTree>(cfg_.apps_tree.string(), cfg_.apps_root.string(),
                                                  cfg_.images_data_root.string(), cfg_.create_apps_tree);
   } catch (const std::exception& exc) {
@@ -69,22 +70,20 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
 }
 
 Uptane::Target ComposeAppManager::getCurrent() const {
-  Uptane::Target current_from_ostree_manager = OstreeManager::getCurrent();
-  if (!current_from_ostree_manager.IsValid()) {
-    return current_from_ostree_manager;
+  Uptane::Target current = OstreeManager::getCurrent();
+  if (!current.IsValid()) {
+    return current;
   }
 
-  Uptane::Target result = current_from_ostree_manager;
-  auto result_custom = result.custom_data();
-  for (const auto& app : Target::Apps(current_from_ostree_manager)) {
+  auto currently_running_apps = Target::Apps(current);
+  for (const auto& app : Target::Apps(current)) {
     auto app_inst{app_ctor_(app.name)};
     if (!app_inst.isInstalled() || !app_inst.isRunning()) {
-      result_custom[Target::ComposeAppField].removeMember(app.name);
+      currently_running_apps.remove(app);
     }
   }
 
-  result.updateCustom(result_custom);
-  return result;
+  return currently_running_apps.createTarget(current);
 }
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
