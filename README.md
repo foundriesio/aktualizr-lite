@@ -48,21 +48,13 @@ cmake --build build --target aklite-tests
 ### Test
 ```
 cd build
-ctest -V -R test_aktualizr-lite
-ctest -V -R test_lite-helpers
+ctest -L aklite
 ```
 
-==== Build and test in a docker container
+#### Build and test in a docker container
 ```
 ./unit-test
 ```
 
 ### Usage
-
-#### Configure
-TODO
-
-#### Run
-```
-./build/src/aktualizr-lite -h
-```
+[Run aktualizr-lite locally against your Foundries Factory](./how-to-run-locally.md)
