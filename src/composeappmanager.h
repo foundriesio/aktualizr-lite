@@ -55,6 +55,8 @@ class ComposeAppManager : public OstreeManager {
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
 
+  Uptane::Target getCurrent() const override;
+
  private:
   std::string getCurrentHash() const override;
   // Return a description of what `docker ps` sees

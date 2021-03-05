@@ -78,6 +78,24 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
   }
 }
 
+Uptane::Target ComposeAppManager::getCurrent() const {
+  auto cur = OstreeManager::getCurrent();
+  auto custom = cur.custom_data();
+
+  for (const auto& it : boost::filesystem::directory_iterator(cfg_.apps_root)) {
+    if (boost::filesystem::is_directory(it.path())) {
+      auto app = it.path().filename().native();
+      if (app_ctor_(app).isRunning()) {
+        custom["docker_compose_apps"][app]["uri"] = Utils::readFile(it / ".app_uri", true);
+      } else {
+        LOG_DEBUG << "ComposeApp(" << app << ") on filesytem, but not running";
+      }
+    }
+  }
+  cur.updateCustom(custom);
+  return cur;
+}
+
 // Returns an intersection of apps specified in Target and the configuration
 ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target& t) const {
   AppsContainer apps;

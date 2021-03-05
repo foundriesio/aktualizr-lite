@@ -169,6 +169,7 @@ bool ComposeApp::download(const std::string& app_uri) {
 
     registry_client_.downloadBlob(archive_uri, root_ / archive_file_name, manifest.archiveSize());
     extractAppArchive(archive_file_name);
+    Utils::writeFile(root_ / ".app_uri", app_uri);
 
     result = true;
     LOG_DEBUG << name_ << ": App has been downloaded";
