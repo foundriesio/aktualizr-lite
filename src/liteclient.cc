@@ -156,12 +156,42 @@ std::unique_ptr<Uptane::Target> LiteClient::findTarget(const std::string& versio
             latest = std_::make_unique<Uptane::Target>(t);
           }
         } else if (version == t.filename() || version == t.custom_version()) {
-          return std_::make_unique<Uptane::Target>(t);
+          latest = std_::make_unique<Uptane::Target>(t);
+          break;
         }
       }
     }
   }
   if (find_latest && latest != nullptr) {
+    if (package_manager_->name() == ComposeAppManager::Name) {
+      // determine apps that should be run
+      ComposeAppManager::Config pconfig(config.pacman);
+      if (!!pconfig.apps) {
+        // device is configured for a list of apps
+        auto custom = latest->custom_data();
+        auto target_apps = custom["docker_compose_apps"];
+        for (Json::ValueIterator i = target_apps.begin(); i != target_apps.end(); ++i) {
+          if ((*i).isObject() && (*i).isMember("uri")) {
+            const auto& target_app_name = i.key().asString();
+
+            bool found = false;
+            for (const auto& app : *(pconfig.apps)) {
+              if (target_app_name == app) {
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              LOG_DEBUG << "App(" << target_app_name << ") not configured to run on device";
+              target_apps.removeMember(target_app_name);
+            }
+          } else {
+            LOG_ERROR << "Invalid custom data for docker_compose_app: " << i.key().asString() << " -> " << *i;
+          }
+        }
+        latest->updateCustom(custom);
+      }
+    }
     return latest;
   }
   throw std::runtime_error("Unable to find update");
