@@ -87,51 +87,6 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
-static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::HardwareIdentifier& hwid,
-                                                   const std::vector<std::string>& tags, const std::string& version) {
-  std::unique_ptr<Uptane::Target> rv;
-  if (!client.updateImageMeta()) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy";
-    if (!client.checkImageMetaOffline()) {
-      LOG_ERROR << "Unable to use local copy of TUF data";
-      throw std::runtime_error("Unable to find update");
-    }
-  }
-
-  // if a new version of targets.json hasn't been downloaded why do we do the following search
-  // for the latest ??? It's really needed just for the forced update to a specific version
-  bool find_latest = (version == "latest");
-  std::unique_ptr<Uptane::Target> latest = nullptr;
-  for (const auto& t : client.allTargets()) {
-    if (!t.IsValid()) {
-      continue;
-    }
-
-    if (!t.IsOstree()) {
-      continue;
-    }
-
-    if (!target_has_tags(t, tags)) {
-      continue;
-    }
-    for (auto const& it : t.hardwareIds()) {
-      if (it == hwid) {
-        if (find_latest) {
-          if (latest == nullptr || Version(latest->custom_version()) < Version(t.custom_version())) {
-            latest = std_::make_unique<Uptane::Target>(t);
-          }
-        } else if (version == t.filename() || version == t.custom_version()) {
-          return std_::make_unique<Uptane::Target>(t);
-        }
-      }
-    }
-  }
-  if (find_latest && latest != nullptr) {
-    return latest;
-  }
-  throw std::runtime_error("Unable to find update");
-}
-
 static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target, const std::string& reason) {
   log_info_target("Updating Active Target: ", client.config, client.getCurrent());
   log_info_target("To New Target: ", client.config, target);
@@ -175,10 +130,7 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
 }
 
 static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
-  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
-
   std::string version("latest");
-
   if (variables_map.count("update-name") > 0) {
     version = variables_map["update-name"].as<std::string>();
   }
@@ -190,7 +142,7 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   }
 
   LOG_INFO << "Finding " << version << " to update to...";
-  auto target_to_install = find_target(client, hwid, client.tags, version);
+  auto target_to_install = client.findTarget(version);
 
   std::string reason = "Manual update to " + version;
   data::ResultCode::Numeric rc = do_update(client, *target_to_install, reason);
@@ -209,7 +161,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     return EXIT_FAILURE;
   }
 
-  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
   if (variables_map.count("update-lockfile") > 0) {
     client.update_lockfile = variables_map["update-lockfile"].as<boost::filesystem::path>();
   }
@@ -245,7 +196,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
     try {
       // target cannot be nullptr, an exception will be yielded if no target
-      auto found_latest_target = find_target(client, hwid, client.tags, "latest");
+      auto found_latest_target = client.findTarget("latest");
 
       // This is a workaround for finding and avoiding bad updates after a rollback.
       // Rollback sets the installed version state to none instead of broken, so there is no

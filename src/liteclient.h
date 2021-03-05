@@ -22,6 +22,14 @@ class Lock {
   int fd_;
 };
 
+struct Version {
+  std::string raw_ver;
+  Version(std::string version) : raw_ver(std::move(version)) {}
+
+  bool operator<(const Version& other) { return strverscmp(raw_ver.c_str(), other.raw_ver.c_str()) < 0; }
+};
+bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& config_tags);
+
 class LiteClient {
  public:
   LiteClient(Config& config_in);
@@ -34,6 +42,8 @@ class LiteClient {
   std::shared_ptr<HttpClient> http_client;
   boost::filesystem::path download_lockfile;
   boost::filesystem::path update_lockfile;
+
+  std::unique_ptr<Uptane::Target> findTarget(const std::string& version);
 
   bool checkForUpdates();
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);

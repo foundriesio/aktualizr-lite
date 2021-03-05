@@ -122,6 +122,51 @@ LiteClient::LiteClient(Config& config_in)
   }
 }
 
+std::unique_ptr<Uptane::Target> LiteClient::findTarget(const std::string& version) {
+  Uptane::HardwareIdentifier hwid(config.provision.primary_ecu_hardware_id);
+  std::unique_ptr<Uptane::Target> rv;
+  if (!updateImageMeta()) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy";
+    if (!checkImageMetaOffline()) {
+      LOG_ERROR << "Unable to use local copy of TUF data";
+      throw std::runtime_error("Unable to find update");
+    }
+  }
+
+  // if a new version of targets.json hasn't been downloaded why do we do the following search
+  // for the latest ??? It's really needed just for the forced update to a specific version
+  bool find_latest = (version == "latest");
+  std::unique_ptr<Uptane::Target> latest = nullptr;
+  for (const auto& t : allTargets()) {
+    if (!t.IsValid()) {
+      continue;
+    }
+
+    if (!t.IsOstree()) {
+      continue;
+    }
+
+    if (!target_has_tags(t, tags)) {
+      continue;
+    }
+    for (auto const& it : t.hardwareIds()) {
+      if (it == hwid) {
+        if (find_latest) {
+          if (latest == nullptr || Version(latest->custom_version()) < Version(t.custom_version())) {
+            latest = std_::make_unique<Uptane::Target>(t);
+          }
+        } else if (version == t.filename() || version == t.custom_version()) {
+          return std_::make_unique<Uptane::Target>(t);
+        }
+      }
+    }
+  }
+  if (find_latest && latest != nullptr) {
+    return latest;
+  }
+  throw std::runtime_error("Unable to find update");
+}
+
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {
   if (callback_program.empty()) {
     return;
