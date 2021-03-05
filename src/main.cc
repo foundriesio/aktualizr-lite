@@ -151,6 +151,47 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
                                                                                                     : EXIT_FAILURE;
 }
 
+static bool targets_eq(const Uptane::Target& cur, const Uptane::Target& desired) {
+  if (cur.filename() != desired.filename()) {
+    LOG_DEBUG << "Target file name differs";
+    return false;
+  }
+
+  if (package_manager_->name() == ComposeAppManager::Name) {
+    auto desired_apps = desired.custom_data()["docker_compose_apps"];
+    auto cur_apps = cur.custom_data()["docker_compose_apps"];
+
+    // Is an app missing or out of date
+    for (Json::ValueIterator i = desired_apps.begin(); i != desired_apps.end(); ++i) {
+      if ((*i).isObject() && (*i).isMember("uri")) {
+        const auto& desired_app_name = i.key().asString();
+        if (!cur_apps.isMember(desired_app_name)) {
+          LOG_DEBUG << "Current target not running " << desired_app_name;
+          return false;
+        }
+
+        const auto& desired_uri = (*i)["uri"].asString();
+        const auto& cur_uri = cur_apps[desired_app_name]["uri"].asString();
+        if (desired_uri != cur_uri) {
+          LOG_DEBUG << "App Uri has changed for " << desired_app_name;
+          return false;
+        }
+      }
+    }
+
+    // Does an app need to be removed
+    for (Json::ValueIterator i = cur_apps.begin(); i != cur_apps.end(); ++i) {
+      const auto& cur_app_name = i.key().asString();
+      if (!desired_apps.isMember(cur_app_name)) {
+        LOG_DEBUG << "Current target running removed app " << cur_app_name;
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
   if (client.config.uptane.repo_server.empty()) {
     LOG_ERROR << "[uptane]/repo_server is not configured";
@@ -168,8 +209,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     client.download_lockfile = variables_map["download-lockfile"].as<boost::filesystem::path>();
   }
 
-  auto current = client.getCurrent();
-
   uint64_t interval = client.config.uptane.polling_sec;
   if (variables_map.count("interval") > 0) {
     interval = variables_map["interval"].as<uint64_t>();
@@ -181,6 +220,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   client.reportAktualizrConfiguration();
 
   while (true) {
+    auto current = client.getCurrent();
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
     LOG_INFO << "Checking for a new Target...";
 
@@ -206,7 +246,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       bool known_target_sha = known_local_target(client, *found_latest_target, known_but_not_installed_versions);
 
       LOG_INFO << "Latest Target: " << found_latest_target->filename();
-      if (!known_target_sha && !client.isTargetActive(*found_latest_target)) {
+      if (!known_target_sha && !targets_eq(current, *found_latest_target)) {
         // New Target is available, try to update a device with it
         std::string reason = "Updating from " + current.filename() + " to " + found_latest_target->filename();
         data::ResultCode::Numeric rc = do_update(client, *found_latest_target, reason);
@@ -223,9 +263,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         }
 
       } else {
-        if (!client.appsInSync()) {
-          do_app_sync(client);
-        }
         LOG_INFO << "Device is up-to-date";
       }
 
