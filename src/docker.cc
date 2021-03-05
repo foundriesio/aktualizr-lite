@@ -70,11 +70,12 @@ RegistryClient::RegistryClient(const std::string& treehub_endpoint, std::shared_
     : ota_lite_client_{std::move(ota_lite_client)}, http_client_factory_{std::move(http_client_factory)} {
   // There is an assumption that the treehub and the registry auth endpoints share the same base URL,
   // so let's try to deduce the registry auth endpoint from the received URL to the treehub
+  // TODO: introduce dedicated configuration parameter to specify registry auth endpoint
   if (!treehub_endpoint.empty()) {
-    auto endpoint_pos = treehub_endpoint.find("treehub");
+    auto endpoint_pos = treehub_endpoint.rfind('/');
     if (endpoint_pos != std::string::npos) {
       auth_creds_endpoint_ = treehub_endpoint.substr(0, endpoint_pos);
-      auth_creds_endpoint_.append("hub-creds/");
+      auth_creds_endpoint_.append("/hub-creds/");
     }
   }
   // if treehub URL is not specified/empty or we cannot extract its base URL just use the default Auth endpoint
