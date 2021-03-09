@@ -11,7 +11,7 @@
 #include "http/httpinterface.h"
 
 #include "composeappmanager.h"
-#include "composeapp.h"
+#include "composeappengine.h"
 
 
 class FakeRegistry {
@@ -23,7 +23,7 @@ class FakeRegistry {
 
     std::string addApp(const std::string& app_repo, const std::string& app_name,
                        ManifestPostProcessor manifest_post_processor = nullptr,
-                       const std::string file_name = Docker::ComposeApp::ComposeFile,
+                       const std::string file_name = Docker::ComposeAppEngine::ComposeFile,
                        std::string app_content = "some fake content qwertyuiop 1231313123123123") {
       // TODO compose a proper docker compose app here (bunch of files)
       auto docker_file = root_dir_ / app_name / file_name;
@@ -33,7 +33,7 @@ class FakeRegistry {
       boost::process::system("tar -czf " + tgz_path_.string() + " " + file_name, boost::process::start_dir = (root_dir_ / app_name));
       std::string tgz_content = Utils::readFile(tgz_path_);
       auto hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(tgz_content)));
-      // TODO: it should be in ComposeApp::Manifest::Manifest()
+      // TODO: it should be in ComposeAppEngine::Manifest::Manifest()
       manifest_.clear();
       manifest_["annotations"]["compose-app"] = "v1";
       manifest_["layers"][0]["digest"] = "sha256:" + hash;
@@ -549,7 +549,7 @@ TEST(ComposeApp, installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("", &installed_target, &registry, "https://my-ota/treehub");
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
-    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo\n"));
     Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
 
@@ -605,7 +605,7 @@ TEST(ComposeApp, installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
-    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo\n"));
     Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
 
@@ -637,7 +637,7 @@ TEST(ComposeApp, installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
-    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo\n #image: foo1\nimage: foo1\n"));
     Utils::writeFile(client.tempdir->Path() / "ps.in",
                      std::string("foo-container-id\nfoo1-container-id\n"));
@@ -697,7 +697,7 @@ TEST(ComposeApp, installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
-//    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+//    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
 //                     std::string(""));
 
     Json::Value target_to_install_json{installed_target_json};
@@ -725,7 +725,7 @@ TEST(ComposeApp, installApp) {
     installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
-    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo\n"));
     Utils::writeFile(client.tempdir->Path() / "ps.in", std::string(""));
 
@@ -754,7 +754,7 @@ TEST(ComposeApp, installApp) {
     installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub");
-    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo   # image: foo image: foo\n      image:foo1\n"));
     Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("container-00\n"));
 
@@ -783,7 +783,7 @@ TEST(ComposeApp, installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub", true);
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
-    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo\n"));
     Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
 
@@ -824,15 +824,15 @@ TEST(ComposeApp, installApp) {
 
     ASSERT_EQ(data::ResultCode::Numeric::kNeedCompletion, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     ASSERT_TRUE(boost::filesystem::exists(client.getRebootSentinel()));
-    ASSERT_TRUE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::NeedStartFile));
+    ASSERT_TRUE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::NeedStartFile));
 
     ASSERT_EQ("up --remove-orphans --no-start", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
 
     currently_installed_hash = sha;
     client.fakeReboot();
     // make sure App has been restarted after reboot
-    ASSERT_EQ("start", Utils::readFile(client.tempdir->Path() / "apps/app1/start.log", true));
-    ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::NeedStartFile));
+    ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
+    ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::NeedStartFile));
   }
 }
 
@@ -850,8 +850,8 @@ TEST(ComposeApp, resumeAppUpdate) {
   // target to install, it includes two apps
   Json::Value target_to_install_json{installed_target_json};
   target_to_install_json["hashes"]["sha256"] = sha;
-  target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, Docker::ComposeApp::ComposeFile, "myapp");
-  target_to_install_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2", nullptr, Docker::ComposeApp::ComposeFile, "myapp");
+  target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, Docker::ComposeAppEngine::ComposeFile, "myapp");
+  target_to_install_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2", nullptr, Docker::ComposeAppEngine::ComposeFile, "myapp");
   Uptane::Target target_to_install("pull", target_to_install_json);
 
   {
@@ -862,7 +862,7 @@ TEST(ComposeApp, resumeAppUpdate) {
 
     // check if app1 was fetched
     ASSERT_TRUE(registry.wasManifestRequested());
-    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ Docker::ComposeApp::ComposeFile).string()));
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ Docker::ComposeAppEngine::ComposeFile).string()));
     ASSERT_EQ("config", Utils::readFile(client.tempdir->Path() / "apps/app1/config.log", true));
     ASSERT_EQ("pull --no-parallel", Utils::readFile(client.tempdir->Path() / "apps/app1/pull.log", true));
     // check if app2 was NOT fecthed
@@ -889,7 +889,7 @@ TEST(ComposeApp, resumeAppUpdate) {
 
     // make sure that app1 is installed and app2 is not after the reboot
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1").string()));
-    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ Docker::ComposeApp::ComposeFile).string()));
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app1"/ Docker::ComposeAppEngine::ComposeFile).string()));
     ASSERT_FALSE(boost::filesystem::exists((client.apps_root / "app2").string()));
 
     // just after a reboot aklite does a full check but it's a pain to emulate it properly
@@ -902,7 +902,7 @@ TEST(ComposeApp, resumeAppUpdate) {
     // The app2 dir should be created regardless of docker-compose pull failure
     // since the compose app itself was fetched successfully
     ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app2").string()));
-    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app2"/ Docker::ComposeApp::ComposeFile).string()));
+    ASSERT_TRUE(boost::filesystem::exists((client.apps_root / "app2"/ Docker::ComposeAppEngine::ComposeFile).string()));
 
     // emulate the next update cycle in a daemon mode
     boost::filesystem::remove(client.tempdir->Path() / "apps/app1/pull.log");
@@ -912,9 +912,9 @@ TEST(ComposeApp, resumeAppUpdate) {
 
     // emulate app1 running and app2 is not fully running, just one container is running while
     // app2 consists of two
-    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeApp::ComposeFile,
+    Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo\n"));
-    Utils::writeFile(client.tempdir->Path() / "apps/app2" / Docker::ComposeApp::ComposeFile,
+    Utils::writeFile(client.tempdir->Path() / "apps/app2" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo\nimage: foo\n"));
     Utils::writeFile(client.tempdir->Path() / "ps.in", std::string("foo-container-id\n"));
 

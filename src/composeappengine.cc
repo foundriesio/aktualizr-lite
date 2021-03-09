@@ -1,56 +1,52 @@
-#include "composeapp.h"
+#include "composeappengine.h"
 
 #include <sys/statvfs.h>
 #include <boost/process.hpp>
 
 namespace Docker {
 
-ComposeApp::ComposeApp(std::string name, const boost::filesystem::path& root_dir, std::string compose_bin,
-                       std::string docker_bin, const Docker::RegistryClient& registry_client)
-    : name_{std::move(name)},
-      root_{root_dir / name_},
+ComposeAppEngine::ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin, std::string docker_bin,
+                                   const Docker::RegistryClient& registry_client)
+    : root_{std::move(root_dir)},
       compose_{std::move(compose_bin)},
       docker_{std::move(docker_bin)},
-      registry_client_{registry_client} {}
-
-bool ComposeApp::fetch(const std::string& app_uri) {
+      registry_client_{registry_client} {
   boost::filesystem::create_directories(root_);
-  if (download(app_uri)) {
+}
+
+bool ComposeAppEngine::fetch(const App& app) {
+  boost::filesystem::create_directories(appRoot(app));
+  if (download(app)) {
     LOG_INFO << "Validating compose file";
-    if (cmd_streaming(compose_ + "config")) {
+    if (cmd_streaming(compose_ + "config", app)) {
       LOG_INFO << "Pulling containers";
-      return cmd_streaming(compose_ + "pull --no-parallel");
+      return cmd_streaming(compose_ + "pull --no-parallel", app);
     }
   }
   return false;
-};
-
-bool ComposeApp::up(bool no_start) {
-  const auto* mode = no_start ? "--no-start" : "-d";
-
-  if (no_start) {
-    boost::filesystem::ofstream flag_file(root_ / NeedStartFile);
-  }
-
-  return cmd_streaming(compose_ + "up --remove-orphans " + mode);
 }
 
-bool ComposeApp::start() { return cmd_streaming(compose_ + "start"); }
+bool ComposeAppEngine::install(const App& app) {
+  boost::filesystem::ofstream flag_file(appRoot(app) / NeedStartFile);
+  return cmd_streaming(compose_ + "up --remove-orphans --no-start", app);
+}
 
-void ComposeApp::remove() {
-  if (cmd_streaming(compose_ + "down")) {
-    boost::filesystem::remove_all(root_);
+bool ComposeAppEngine::run(const App& app) { return cmd_streaming(compose_ + "up --remove-orphans -d", app); }
+
+void ComposeAppEngine::remove(const App& app) {
+  if (cmd_streaming(compose_ + "down", app)) {
+    boost::filesystem::remove_all(appRoot(app));
   } else {
-    LOG_ERROR << "docker-compose was unable to bring down: " << root_;
+    LOG_ERROR << "docker-compose was unable to bring down: " << appRoot(app);
   }
 }
 
-bool ComposeApp::isRunning() {
+bool ComposeAppEngine::isRunning(const App& app) const {
   bool cmd_res{false};
   std::string cmd_output;
-  std::tie(cmd_res, cmd_output) = cmd("cat " + (root_ / ComposeFile).string());
+  std::tie(cmd_res, cmd_output) = cmd("cat " + (appRoot(app) / ComposeFile).string());
   if (!cmd_res) {
-    LOG_WARNING << "Failed to parse App config: " << name_;
+    LOG_WARNING << "Failed to parse App config: " << app.name;
     return false;
   }
 
@@ -69,9 +65,9 @@ bool ComposeApp::isRunning() {
 
   // Get a number of running container images
   std::tie(cmd_res, cmd_output) =
-      cmd(docker_ + "ps -q --filter=status=running --filter=label=com.docker.compose.project=" + name_);
+      cmd(docker_ + "ps -q --filter=status=running --filter=label=com.docker.compose.project=" + app.name);
   if (!cmd_res) {
-    LOG_WARNING << "Failed to get a list of App's containers: " << name_;
+    LOG_WARNING << "Failed to get a list of App's containers: " << app.name;
     return false;
   }
 
@@ -80,7 +76,7 @@ bool ComposeApp::isRunning() {
 
   if (running_container_number < expected_container_number) {
     LOG_DEBUG << "Number of running containers is less than a number of images specified in the compose file"
-              << "; App: " << name_ << "; expected container number: " << expected_container_number
+              << "; App: " << app.name << "; expected container number: " << expected_container_number
               << "; number of running containers: " << running_container_number;
     return false;
   }
@@ -127,13 +123,13 @@ struct Manifest : Json::Value {
 
 // Utils::shell isn't interactive. The compose commands can take a few
 // seconds to run, so we use boost::process:system to stream it to stdout/sterr
-bool ComposeApp::cmd_streaming(const std::string& cmd) {
+bool ComposeAppEngine::cmd_streaming(const std::string& cmd, const App& app) {
   LOG_DEBUG << "Running: " << cmd;
-  int exit_code = boost::process::system(cmd, boost::process::start_dir = root_);
+  int exit_code = boost::process::system(cmd, boost::process::start_dir = appRoot(app));
   return exit_code == 0;
 }
 
-std::pair<bool, std::string> ComposeApp::cmd(const std::string& cmd) {
+std::pair<bool, std::string> ComposeAppEngine::cmd(const std::string& cmd) {
   std::string out_str;
   int exit_code = Utils::shell(cmd, &out_str, true);
   LOG_TRACE << "Command: " << cmd << "\n" << out_str;
@@ -141,20 +137,20 @@ std::pair<bool, std::string> ComposeApp::cmd(const std::string& cmd) {
   return {(exit_code == EXIT_SUCCESS), out_str};
 }
 
-bool ComposeApp::download(const std::string& app_uri) {
+bool ComposeAppEngine::download(const App& app) {
   bool result = false;
 
   try {
-    LOG_DEBUG << name_ << ": downloading App from Registry: " << app_uri;
+    LOG_DEBUG << app.name << ": downloading App from Registry: " << app.uri;
 
-    Docker::Uri uri{Docker::Uri::parseUri(app_uri)};
+    Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
     Manifest manifest{registry_client_.getAppManifest(uri, Manifest::Format)};
 
-    const std::string archive_file_name{uri.digest.shortHash() + '.' + name_ + ArchiveExt};
+    const std::string archive_file_name{uri.digest.shortHash() + '.' + app.name + ArchiveExt};
     Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
 
     uint64_t available_storage;
-    if (checkAvailableStorageSpace(root_, available_storage)) {
+    if (checkAvailableStorageSpace(appRoot(app), available_storage)) {
       // assume that an extracted files total size is up to 10x larger than the archive size
       // 80% is a storage space watermark, we don't want to fill a storage volume above it
       auto need_storage = manifest.archiveSize() * 10;
@@ -167,19 +163,20 @@ bool ComposeApp::download(const std::string& app_uri) {
       LOG_WARNING << "Failed to get an available storage space, continuing with App archive download";
     }
 
-    registry_client_.downloadBlob(archive_uri, root_ / archive_file_name, manifest.archiveSize());
-    extractAppArchive(archive_file_name);
+    registry_client_.downloadBlob(archive_uri, appRoot(app) / archive_file_name, manifest.archiveSize());
+    extractAppArchive(app, archive_file_name);
 
     result = true;
-    LOG_DEBUG << name_ << ": App has been downloaded";
+    LOG_DEBUG << app.name << ": App has been downloaded";
   } catch (const std::exception& exc) {
-    LOG_ERROR << name_ << ": failed to download App from Registry: " << exc.what();
+    LOG_ERROR << app.name << ": failed to download App from Registry: " << exc.what();
   }
 
   return result;
 }
 
-bool ComposeApp::checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size) {
+bool ComposeAppEngine::checkAvailableStorageSpace(const boost::filesystem::path& app_root,
+                                                  uint64_t& out_available_size) {
   struct statvfs stat_buf {};
   const int stat_res = statvfs(app_root.c_str(), &stat_buf);
   if (stat_res < 0) {
@@ -195,12 +192,13 @@ bool ComposeApp::checkAvailableStorageSpace(const boost::filesystem::path& app_r
   return true;
 }
 
-void ComposeApp::extractAppArchive(const std::string& archive_file_name, bool delete_after_extraction) {
-  if (!cmd_streaming("tar -xzf " + archive_file_name)) {
+void ComposeAppEngine::extractAppArchive(const App& app, const std::string& archive_file_name,
+                                         bool delete_after_extraction) {
+  if (!cmd_streaming("tar -xzf " + archive_file_name, app)) {
     throw std::runtime_error("Failed to extract the compose app archive: " + archive_file_name);
   }
   if (delete_after_extraction) {
-    if (!cmd_streaming("rm -f " + archive_file_name)) {
+    if (!cmd_streaming("rm -f " + archive_file_name, app)) {
       throw std::runtime_error("Failed to remove the compose app archive: " + archive_file_name);
     }
   }

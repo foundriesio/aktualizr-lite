@@ -208,6 +208,7 @@ class LiteClientTest : public ::testing::Test {
     conf.pacman.sysroot = sysrepo_.path();
     conf.pacman.os = os;
     conf.pacman.extra["booted"] = "0";
+    conf.pacman.extra["compose_apps_root"] = (test_dir_.Path() / "compose-apps").string();
     conf.pacman.ostree_server = treehub_.url();
 
     conf.bootloader.reboot_command = "/bin/true";
