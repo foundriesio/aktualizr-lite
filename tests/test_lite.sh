@@ -86,8 +86,10 @@ type = "ostree+compose_apps"
 sysroot = "$OSTREE_SYSROOT"
 os = "dummy-os"
 docker_compose_bin = "${compose_bin}"
+docker_bin = "/bin/true"
 booted = "0"
 docker_images_reload_cmd = "/bin/true"
+compose_apps_root = "$sota_dir/compose-apps"
 compose_apps_tree = "$sota_dir/apps-tree"
 EOF
 

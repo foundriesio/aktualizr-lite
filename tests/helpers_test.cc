@@ -31,8 +31,10 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.type = ComposeAppManager::Name;
   config.pacman.sysroot = test_sysroot;
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+  config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   config.pacman.os = "dummy-os";
   config.pacman.extra["booted"] = "0";
+  config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
   std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
@@ -52,8 +54,10 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.type = ComposeAppManager::Name;
   config.pacman.sysroot = test_sysroot;
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+  config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   config.pacman.os = "dummy-os";
   config.pacman.extra["booted"] = "0";
+  config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
 
@@ -101,6 +105,9 @@ TEST(helpers, locking) {
   config.pacman.sysroot = test_sysroot;
   config.pacman.extra["booted"] = "0";
   config.pacman.os = "dummy-os";
+  config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
+  config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+  config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   config.pacman.type = ComposeAppManager::Name;
 
   LiteClient client(config);
@@ -133,6 +140,9 @@ TEST(helpers, callback) {
   bad_config.pacman.sysroot = test_sysroot;
   bad_config.pacman.extra["booted"] = "0";
   bad_config.pacman.os = "dummy-os";
+  bad_config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
+  bad_config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+  bad_config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   bad_config.pacman.type = ComposeAppManager::Name;
   bad_config.storage.path = cfg_dir.Path();
   bad_config.pacman.extra["callback_program"] = "This does not exist";
@@ -146,6 +156,9 @@ TEST(helpers, callback) {
   config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   config.pacman.sysroot = test_sysroot;
   config.pacman.extra["booted"] = "0";
+  config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
+  config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+  config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   config.pacman.os = "dummy-os";
   config.pacman.type = ComposeAppManager::Name;
   config.storage.path = cfg_dir.Path();
@@ -191,6 +204,8 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   config.pacman.extra["booted"] = "0";
   config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
+  config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
+  config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
 

@@ -5,7 +5,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "composeapp.h"
+#include "composeappengine.h"
 #include "composeapptree.h"
 #include "docker.h"
 #include "ostree/sysroot.h"
@@ -31,7 +31,6 @@ class ComposeAppManager : public OstreeManager {
     std::string docker_images_reload_cmd{"systemctl reload docker"};
   };
 
-  using ComposeAppCtor = std::function<Docker::ComposeApp(const std::string& app)>;
   using AppsContainer = std::unordered_map<std::string, std::string>;
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -63,10 +62,9 @@ class ComposeAppManager : public OstreeManager {
  private:
   Config cfg_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;
-  Docker::RegistryClient registry_client_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;
   bool are_apps_checked_{false};
-  ComposeAppCtor app_ctor_;
+  std::unique_ptr<AppEngine> app_engine_;
   std::unique_ptr<ComposeAppTree> app_tree_;
 };
 

@@ -56,10 +56,9 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       cfg_{pconfig},
       sysroot_{std::move(sysroot)},
       registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)},
-      app_ctor_{[this](const std::string& app) {
-        return Docker::ComposeApp(app, cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
-                                  boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_);
-      }} {
+      app_engine_{std::make_unique<Docker::ComposeAppEngine>(
+          cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
+          boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_)} {
   try {
     app_tree_ = std::make_unique<ComposeAppTree>(cfg_.apps_tree.string(), cfg_.apps_root.string(),
                                                  cfg_.images_data_root.string(), cfg_.create_apps_tree);
@@ -68,11 +67,12 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
   }
 
   const auto& current_apps = getApps(getCurrent());
+  // TODO: refactor it to fix "app rollback when ostree rollback" issue
   for (const auto& app_pair : current_apps) {
     const auto& app_name = app_pair.first;
-    auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeApp::NeedStartFile;
+    auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeAppEngine::NeedStartFile;
     if (boost::filesystem::exists(need_start_flag)) {
-      app_ctor_(app_name).start();
+      app_engine_->run({app_pair.first, app_pair.second});
       boost::filesystem::remove(need_start_flag);
     }
   }
@@ -135,7 +135,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
     }
 
     if (!boost::filesystem::exists(cfg_.apps_root / app_name) ||
-        !boost::filesystem::exists(cfg_.apps_root / app_name / Docker::ComposeApp::ComposeFile)) {
+        !boost::filesystem::exists(cfg_.apps_root / app_name / Docker::ComposeAppEngine::ComposeFile)) {
       // an App that is supposed to be installed has been removed somehow, let's install it again
       apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " will be re-installed";
@@ -143,7 +143,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
     }
 
     LOG_DEBUG << app_name << " performing full status check";
-    if (!app_ctor_(app_name).isRunning()) {
+    if (!app_engine_->isRunning({app_name, app_pair.second})) {
       // an App that is supposed to be installed and running is not fully installed or running
       apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " update will be re-installed or completed";
@@ -193,7 +193,7 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   } else {
     for (const auto& pair : cur_apps_to_fetch_and_update_) {
       LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
-      if (!app_ctor_(pair.first).fetch(pair.second)) {
+      if (!app_engine_->fetch({pair.first, pair.second})) {
         passed = false;
       }
     }
@@ -253,7 +253,13 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   }
   for (const auto& pair : cur_apps_to_fetch_and_update_) {
     LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
-    if (!app_ctor_(pair.first).up(res.result_code == data::ResultCode::Numeric::kNeedCompletion)) {
+    const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;
+    // I have no idea via the package manager interface method install() is const which is not a const
+    // method by its definition/nature
+    auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
+    auto run_res = just_install ? non_const_app_engine->install({pair.first, pair.second})
+                                : non_const_app_engine->run({pair.first, pair.second});
+    if (!run_res) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
     } else {
       res.description += "\n" + pair.second;
@@ -310,7 +316,10 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
                        "but is either removed from configuration or not defined in current Target. "
                        "Removing from system";
 
-        app_ctor_(name).remove();
+        // I have no idea via the package manager interface method install() is const which is not a const
+        // method by its definition/nature
+        auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
+        non_const_app_engine->remove({name, ""});
       }
     }
   }
