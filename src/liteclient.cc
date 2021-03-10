@@ -13,7 +13,7 @@
 LiteClient::LiteClient(Config& config_in)
     : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
   std::string pkey;
-  storage = INvStorage::newStorage(config.storage);
+  storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
   storage->importData(config.import);
 
   const std::map<std::string, std::string> raw = config.pacman.extra;
