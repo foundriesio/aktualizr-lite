@@ -10,7 +10,7 @@
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
 
-LiteClient::LiteClient(Config& config_in)
+LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine)
     : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
   std::string pkey;
   storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
@@ -84,8 +84,8 @@ LiteClient::LiteClient(Config& config_in)
   key_manager_->copyCertsToCurl(*http_client);
 
   if (config.pacman.type == ComposeAppManager::Name) {
-    package_manager_ =
-        std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, ostree_sysroot);
+    package_manager_ = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
+                                                           ostree_sysroot, app_engine);
   } else if (config.pacman.type == PACKAGE_MANAGER_OSTREE) {
     package_manager_ = std::make_shared<OstreeManager>(config.pacman, config.bootloader, storage, http_client);
   } else {

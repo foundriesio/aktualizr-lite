@@ -35,11 +35,9 @@ class ComposeAppManager : public OstreeManager {
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
-                    std::shared_ptr<OSTree::Sysroot> sysroot,
-                    Docker::RegistryClient::HttpClientFactory registry_http_client_factory =
-                        Docker::RegistryClient::DefaultHttpClientFactory);
+                    std::shared_ptr<OSTree::Sysroot> sysroot, AppEngine::Ptr app_engine = nullptr);
 
-  std::string name() const override { return Name; };
+  std::string name() const override { return Name; }
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
@@ -64,7 +62,7 @@ class ComposeAppManager : public OstreeManager {
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;
   bool are_apps_checked_{false};
-  std::unique_ptr<AppEngine> app_engine_;
+  AppEngine::Ptr app_engine_;
   std::unique_ptr<ComposeAppTree> app_tree_;
 };
 

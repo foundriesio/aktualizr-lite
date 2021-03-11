@@ -6,11 +6,11 @@
 namespace Docker {
 
 ComposeAppEngine::ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin, std::string docker_bin,
-                                   const Docker::RegistryClient& registry_client)
+                                   Docker::RegistryClient::Ptr registry_client)
     : root_{std::move(root_dir)},
       compose_{std::move(compose_bin)},
       docker_{std::move(docker_bin)},
-      registry_client_{registry_client} {
+      registry_client_{std::move(registry_client)} {
   boost::filesystem::create_directories(root_);
 }
 
@@ -144,7 +144,7 @@ bool ComposeAppEngine::download(const App& app) {
     LOG_DEBUG << app.name << ": downloading App from Registry: " << app.uri;
 
     Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
-    Manifest manifest{registry_client_.getAppManifest(uri, Manifest::Format)};
+    Manifest manifest{registry_client_->getAppManifest(uri, Manifest::Format)};
 
     const std::string archive_file_name{uri.digest.shortHash() + '.' + app.name + ArchiveExt};
     Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
@@ -163,7 +163,7 @@ bool ComposeAppEngine::download(const App& app) {
       LOG_WARNING << "Failed to get an available storage space, continuing with App archive download";
     }
 
-    registry_client_.downloadBlob(archive_uri, appRoot(app) / archive_file_name, manifest.archiveSize());
+    registry_client_->downloadBlob(archive_uri, appRoot(app) / archive_file_name, manifest.archiveSize());
     extractAppArchive(app, archive_file_name);
 
     result = true;

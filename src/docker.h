@@ -47,10 +47,11 @@ class RegistryClient {
 
   using HttpClientFactory = std::function<std::shared_ptr<HttpInterface>(const std::vector<std::string>*)>;
   static HttpClientFactory DefaultHttpClientFactory;
+  using Ptr = std::shared_ptr<RegistryClient>;
 
  public:
   RegistryClient(const std::string& treehub_endpoint, std::shared_ptr<HttpInterface> ota_lite_client,
-                 HttpClientFactory http_client_factory);
+                 HttpClientFactory http_client_factory = RegistryClient::DefaultHttpClientFactory);
 
   Json::Value getAppManifest(const Uri& uri, const std::string& format) const;
   void downloadBlob(const Uri& uri, const boost::filesystem::path& filepath, size_t expected_size) const;

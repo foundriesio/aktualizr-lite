@@ -27,6 +27,7 @@ set(TEST_LIBS
   aktualizr_lib
   ${Boost_LIBRARIES}
   gtest
+	gmock
 )
 
 add_aktualizr_test(NAME compose-apps
@@ -63,7 +64,7 @@ set_tests_properties(test_ostree PROPERTIES LABELS "aklite:ostree")
 add_aktualizr_test(NAME liteclient
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_liteclient.cc
   PROJECT_WORKING_DIRECTORY ARGS ${AKTUALIZR_DIR}/tests/fake_http_server/fake_test_server.py
-	${AKTUALIZR_DIR}/tests/sota_tools/treehub_server.py
+	${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
 	${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
 )
 
