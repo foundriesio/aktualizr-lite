@@ -18,7 +18,7 @@ class ComposeAppEngine : public AppEngine {
 
  public:
   ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin, std::string docker_bin,
-                   const Docker::RegistryClient& registry_client);
+                   Docker::RegistryClient::Ptr registry_client);
 
   bool fetch(const App& app) override;
   bool install(const App& app) override;
@@ -38,7 +38,7 @@ class ComposeAppEngine : public AppEngine {
   const boost::filesystem::path root_;
   const std::string compose_;
   const std::string docker_;
-  const Docker::RegistryClient& registry_client_;
+  Docker::RegistryClient::Ptr registry_client_;
 };
 
 }  // namespace Docker

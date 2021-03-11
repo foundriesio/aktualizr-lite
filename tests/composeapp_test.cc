@@ -171,7 +171,6 @@ class TestSysroot: public OSTree::Sysroot {
   Hasher hasher_;
 };
 
-
 struct TestClient {
   TestClient(const char* apps = nullptr, const Uptane::Target* installedTarget = nullptr,
              FakeRegistry* registry = nullptr, std::string ostree_server_url = "",
@@ -209,18 +208,27 @@ struct TestClient {
       storage->savePrimaryInstalledVersion(*installedTarget, InstalledVersionUpdateMode::kCurrent);
     }
 
+    sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), false) :
+                                            std::make_shared<TestSysroot>(sysroot_hasher, config.pacman.sysroot.string());
+
+    fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());
+    keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
+
+    Docker::RegistryClient::HttpClientFactory registry_http_client_factory{Docker::RegistryClient::DefaultHttpClientFactory};
+    http_client = std::make_shared<HttpClient>();
     if (registry) {
       http_client = std::make_shared<FakeOtaClient>(registry);
-      registry_fake_http_client_factory = [registry](const std::vector<std::string>* headers) {
+      registry_http_client_factory = [registry](const std::vector<std::string>* headers) {
         return std::make_shared<FakeOtaClient>(registry, headers);
       };
     }
-    sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), false) :
-                                                 std::make_shared<TestSysroot>(sysroot_hasher, config.pacman.sysroot.string());
-    keys = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
-    pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
-                                                  sysroot, registry_fake_http_client_factory);
-    fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());
+
+    ComposeAppManager::Config pacman_cfg{config.pacman};
+    app_engine_ = std::make_shared<Docker::ComposeAppEngine>(pacman_cfg.apps_root,
+                                                           boost::filesystem::canonical(pacman_cfg.compose_bin).string() + " ",
+                                                           boost::filesystem::canonical(pacman_cfg.docker_bin).string() + " ",
+                                                           std::make_shared<Docker::RegistryClient>(config.pacman.ostree_server, http_client, registry_http_client_factory));
+    pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, sysroot, app_engine_);
   }
 
   const boost::filesystem::path getRebootSentinel() const {
@@ -229,7 +237,7 @@ struct TestClient {
 
   void fakeReboot() {
     boost::filesystem::remove(getRebootSentinel());
-    pacman.reset(new ComposeAppManager(config.pacman, config.bootloader, storage, http_client, sysroot, registry_fake_http_client_factory));
+    pacman.reset(new ComposeAppManager(config.pacman, config.bootloader, storage, http_client, sysroot, app_engine_));
   }
 
   Config config;
@@ -239,10 +247,9 @@ struct TestClient {
   std::unique_ptr<KeyManager> keys;
   std::unique_ptr<Uptane::Fetcher> fetcher;
   boost::filesystem::path apps_root;
-
   std::shared_ptr<HttpInterface> http_client;
   std::shared_ptr<OSTree::Sysroot> sysroot;
-  Docker::RegistryClient::HttpClientFactory registry_fake_http_client_factory;
+  AppEngine::Ptr app_engine_;
 };
 
 TEST(ComposeApp, getApps) {

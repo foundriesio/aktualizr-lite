@@ -50,15 +50,18 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
-                                     std::shared_ptr<OSTree::Sysroot> sysroot,
-                                     Docker::RegistryClient::HttpClientFactory registry_http_client_factory)
+                                     std::shared_ptr<OSTree::Sysroot> sysroot, AppEngine::Ptr app_engine)
     : OstreeManager(pconfig, bconfig, storage, http),
       cfg_{pconfig},
       sysroot_{std::move(sysroot)},
-      registry_client_{pconfig.ostree_server, http, std::move(registry_http_client_factory)},
-      app_engine_{std::make_unique<Docker::ComposeAppEngine>(
-          cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
-          boost::filesystem::canonical(cfg_.docker_bin).string() + " ", registry_client_)} {
+      app_engine_{std::move(app_engine)} {
+  if (!app_engine_) {
+    app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
+        cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
+        boost::filesystem::canonical(cfg_.docker_bin).string() + " ",
+        std::make_shared<Docker::RegistryClient>(pconfig.ostree_server, http));
+  }
+
   try {
     app_tree_ = std::make_unique<ComposeAppTree>(cfg_.apps_tree.string(), cfg_.apps_root.string(),
                                                  cfg_.images_data_root.string(), cfg_.create_apps_tree);

@@ -1,6 +1,7 @@
 #ifndef AKTUALIZR_LITE_APP_ENGINE_H_
 #define AKTUALIZR_LITE_APP_ENGINE_H_
 
+#include <memory>
 #include <string>
 
 class AppEngine {
@@ -9,6 +10,8 @@ class AppEngine {
     std::string name;
     std::string uri;
   };
+
+  using Ptr = std::shared_ptr<AppEngine>;
 
  public:
   virtual bool fetch(const App& app) = 0;

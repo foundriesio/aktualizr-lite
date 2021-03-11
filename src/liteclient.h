@@ -9,6 +9,8 @@
 #include "storage/invstorage.h"
 #include "uptane/imagerepository.h"
 
+class AppEngine;
+
 class Lock {
  public:
   Lock(int fd) : fd_(fd) {}
@@ -24,7 +26,7 @@ class Lock {
 
 class LiteClient {
  public:
-  LiteClient(Config& config_in);
+  LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr);
 
   Config config;
   std::vector<std::string> tags;
