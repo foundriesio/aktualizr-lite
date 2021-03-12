@@ -65,6 +65,7 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine)
     header += "?";
   }
   headers.push_back(header);
+  headers.emplace_back("x-ats-target: unknown");
   add_apps_header(headers, config.pacman);
 
   if (!config.telemetry.report_network) {
