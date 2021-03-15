@@ -52,7 +52,7 @@ add_dependencies(t_lite-helpers make_ostree_sysroot)
 set_tests_properties(test_lite-helpers PROPERTIES LABELS "aklite:helpers")
 
 add_aktualizr_test(NAME ostree
-  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_ostree.cc
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> ostree_test.cc
   PROJECT_WORKING_DIRECTORY
 )
 
@@ -62,7 +62,7 @@ target_link_libraries(t_ostree ${TEST_LIBS})
 set_tests_properties(test_ostree PROPERTIES LABELS "aklite:ostree")
 
 add_aktualizr_test(NAME liteclient
-  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> test_liteclient.cc
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> liteclient_test.cc
   PROJECT_WORKING_DIRECTORY ARGS ${AKTUALIZR_DIR}/tests/fake_http_server/fake_test_server.py
 	${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
 	${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
