@@ -91,6 +91,8 @@ class OSTreeMock {
     run_cmd("ostree", {"config", "--repo",  path_, "set", "core.mode", mode}, "set mode for repo " + path_);
   }
 
+  const std::string& path() const { return path_; }
+
  private:
   const std::string path_;
 };
@@ -128,54 +130,34 @@ class SysOSTreeMock {
 };
 
 
-class TreehubMock {
- public:
-  static std::string ServerPath;
- public:
-  TreehubMock(const std::string& repo_path):
-    repo_{repo_path, true},
-    port_{TestUtils::getFreePort()},
-    process_{ServerPath, port_, repo_path} {
-    LOG_INFO << "Treehub is running on port " << port_;
-  }
-  ~TreehubMock() {
-    process_.terminate();
-    process_.wait_for(std::chrono::seconds(10));
-  }
+//class TreehubMock {
+// public:
+//  static std::string ServerPath;
+// public:
+//  TreehubMock(const std::string& repo_path): repo_{repo_path, true} {}
 
-  OSTreeMock& repo() { return repo_; }
-  std::string url() { return "http://localhost:" + port_ + "/treehub"; }
-  const std::string port() const { return port_; }
+//  OSTreeMock& repo() { return repo_; }
+//  std::string url() { return "http://localhost:" + port_ + "/treehub"; }
+//  const std::string port() const { return port_; }
 
- private:
-  OSTreeMock repo_;
-  std::string port_;
-  boost::process::child process_;
-};
+// private:
+//  OSTreeMock repo_;
+//};
 
-std::string TreehubMock::ServerPath;
+//std::string TreehubMock::ServerPath;
 
 class TufRepoMock {
  public:
-  static std::string ServerPath;
- public:
   TufRepoMock(const boost::filesystem::path& root_dir, std::string expires = "",
               std::string correlation_id = "corellatio-id")
-      : repo_{root_dir, expires, correlation_id},
-        port_{TestUtils::getFreePort()},
-        url_{"http://localhost:" + port_},
-        process_{ServerPath, port_, "-m", root_dir},
+      : root_{root_dir.string()}, repo_{root_dir, expires, correlation_id},
         latest_{Uptane::Target::Unknown()} {
     repo_.generateRepo(KeyType::kED25519);
-    TestUtils::waitForServer(url_ + "/");
-  }
-  ~TufRepoMock() {
-    process_.terminate();
-    process_.wait_for(std::chrono::seconds(10));
   }
 
+
  public:
-  const std::string& url() { return url_; }
+  const std::string& path() const { return root_; }
   const Uptane::Target& latest() const { return latest_; }
 
   Uptane::Target add_target(const std::string& target_name, const std::string& hash,
@@ -200,15 +182,45 @@ class TufRepoMock {
   }
 
  private:
+  const std::string root_;
   ImageRepo repo_;
-  std::string port_;
-  std::string url_;
-  boost::process::child process_;
   Uptane::Target latest_;
 };
 
-std::string TufRepoMock::ServerPath;
+class DeviceGatewayMock {
+ public:
+  static std::string RootPath;
+ public:
+  DeviceGatewayMock(const OSTreeMock& ostree_mock,
+                    const TufRepoMock& tuf_repo_mock):
+                    ostree_mock_{ostree_mock},
+                    tuf_repo_mock_{tuf_repo_mock},
+                    port_{TestUtils::getFreePort()},
+                    url_{"http://localhost:" + port_},
+                    process_{RootPath, "--port", port_, "--ostree", ostree_mock_.path(), "--tuf-repo", tuf_repo_mock_.path()} {
+    TestUtils::waitForServer(url_ + "/");
+    LOG_INFO << "Device Gateway is running on port " << port_;
+  }
+  ~DeviceGatewayMock() {
+    process_.terminate();
+    process_.wait_for(std::chrono::seconds(10));
+  }
 
+ public:
+  const std::string& port() const { return port_; }
+  std::string tufRepoUri() const { return url_ + "/repo"; }
+  std::string ostreeUri() const { return url_ + "/treehub"; }
+
+ private:
+  const OSTreeMock& ostree_mock_;
+  const TufRepoMock& tuf_repo_mock_;
+
+  const std::string port_;
+  const std::string url_;
+  boost::process::child process_;
+};
+
+std::string DeviceGatewayMock::RootPath;
 
 class LiteClientTest : public ::testing::Test {
  public:
@@ -218,7 +230,8 @@ class LiteClientTest : public ::testing::Test {
   LiteClientTest(): sysrootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
                     sysrepo_{(test_dir_.Path() / "sysrepo").string(), os},
                     tuf_repo_{test_dir_.Path() / "repo"},
-                    treehub_{(test_dir_.Path() / "treehub").string()},
+                    ostree_{(test_dir_.Path() / "treehub").string(), true},
+                    device_gateway_{ostree_, tuf_repo_},
                     initial_target_{Uptane::Target::Unknown()} {
 
     auto initial_sysroot_commit_hash = sysrepo_.repo().commit(sysrootfs_.path, sysrootfs_.branch);
@@ -233,7 +246,7 @@ class LiteClientTest : public ::testing::Test {
 
   std::shared_ptr<LiteClient> create_liteclient(bool initial_version = true) {
     Config conf;
-    conf.uptane.repo_server = tufRepo().url() + "/repo";
+    conf.uptane.repo_server = deviceGateway().tufRepoUri();
     conf.provision.primary_ecu_hardware_id = hw_id;
     conf.storage.path = test_dir_.Path();
 
@@ -242,7 +255,7 @@ class LiteClientTest : public ::testing::Test {
     conf.pacman.os = os;
     conf.pacman.extra["booted"] = "0";
     conf.pacman.extra["compose_apps_root"] = (test_dir_.Path() / "compose-apps").string();
-    conf.pacman.ostree_server = treehub_.url();
+    conf.pacman.ostree_server = deviceGateway().ostreeUri();
 
     conf.bootloader.reboot_command = "/bin/true";
     conf.bootloader.reboot_sentinel_dir = conf.storage.path;
@@ -267,7 +280,7 @@ class LiteClientTest : public ::testing::Test {
     const std::string unique_file = Utils::randomUuid();
     const std::string unique_content = Utils::randomUuid();
     Utils::writeFile(sysrootfs().path + "/" + unique_file, unique_content, true);
-    auto update_commit_hash = treehub().repo().commit(sysrootfs().path, "lmp");
+    auto update_commit_hash = ostree().commit(sysrootfs().path, "lmp");
 
     Json::Value apps_json;
     if (apps) {
@@ -296,7 +309,7 @@ class LiteClientTest : public ::testing::Test {
   }
 
   AppEngine::App createNewApp(const std::string& app_name, const std::string& factory = "test-factory") {
-    const std::string app_uri = "localhost:" + treehub().port() + "/" + factory + "/" + app_name +
+    const std::string app_uri = "localhost:" + deviceGateway().port() + "/" + factory + "/" + app_name +
                                 "@sha256:7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243";
     return {app_name, app_uri};
   }
@@ -377,8 +390,9 @@ class LiteClientTest : public ::testing::Test {
   }
 
   TufRepoMock& tufRepo() { return tuf_repo_; }
+  DeviceGatewayMock& deviceGateway() { return device_gateway_; }
   const Uptane::Target& initial_target() const { return initial_target_; }
-  TreehubMock& treehub() { return treehub_; }
+  OSTreeMock& ostree() { return ostree_; }
   SysRootFS& sysrootfs() { return sysrootfs_; }
   SysOSTreeMock& sysrepo() { return sysrepo_; }
   std::shared_ptr<NiceMock<MockAppEngine>>& appEngine() { return app_engine_; }
@@ -393,7 +407,8 @@ class LiteClientTest : public ::testing::Test {
   SysRootFS sysrootfs_;
   SysOSTreeMock sysrepo_;
   TufRepoMock tuf_repo_;
-  TreehubMock treehub_;
+  OSTreeMock ostree_;
+  DeviceGatewayMock device_gateway_;
   Uptane::Target initial_target_;
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_;
 };
@@ -574,14 +589,13 @@ int main(int argc, char** argv) {
 
   logger_init();
 
-  if (argc != 4) {
+  if (argc != 3) {
     std::cerr << "Error: " << argv[0] << " requires the path to the fake TUF repo server\n";
     return EXIT_FAILURE;
   }
 
-  TufRepoMock::ServerPath = argv[1];
-  TreehubMock::ServerPath = argv[2];
-  SysRootFS::GeneratorPath = argv[3];
+  DeviceGatewayMock::RootPath = argv[1];
+  SysRootFS::GeneratorPath = argv[2];
 
   return RUN_ALL_TESTS();
 }

@@ -63,9 +63,10 @@ set_tests_properties(test_ostree PROPERTIES LABELS "aklite:ostree")
 
 add_aktualizr_test(NAME liteclient
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> liteclient_test.cc
-  PROJECT_WORKING_DIRECTORY ARGS ${AKTUALIZR_DIR}/tests/fake_http_server/fake_test_server.py
-	${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
-	${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+  PROJECT_WORKING_DIRECTORY
+  ARGS
+  ${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
+  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
 )
 
 target_compile_definitions(t_liteclient PRIVATE ${TEST_DEFS})
