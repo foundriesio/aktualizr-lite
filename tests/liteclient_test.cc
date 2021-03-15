@@ -57,11 +57,11 @@ class MockAppEngine : public AppEngine {
 
 class SysRootFS {
  public:
-  static std::string GeneratorPath;
+  static std::string CreateCmd;
  public:
   SysRootFS(std::string path_in, std::string branch_in, std::string hw_id_in, std::string os_in):
       path{std::move(path_in)}, branch{std::move(branch_in)}, hw_id{std::move(hw_id_in)}, os{std::move(os_in)} {
-    run_cmd(GeneratorPath, { path, branch, hw_id, os }, "generate a system rootfs template");
+    run_cmd(CreateCmd, { path, branch, hw_id, os }, "generate a system rootfs template");
   }
 
   const std::string path;
@@ -70,7 +70,7 @@ class SysRootFS {
   const std::string os;
 };
 
-std::string SysRootFS::GeneratorPath;
+std::string SysRootFS::CreateCmd;
 
 class OSTreeMock {
  public:
@@ -129,23 +129,6 @@ class SysOSTreeMock {
   OSTreeMock repo_;
 };
 
-
-//class TreehubMock {
-// public:
-//  static std::string ServerPath;
-// public:
-//  TreehubMock(const std::string& repo_path): repo_{repo_path, true} {}
-
-//  OSTreeMock& repo() { return repo_; }
-//  std::string url() { return "http://localhost:" + port_ + "/treehub"; }
-//  const std::string port() const { return port_; }
-
-// private:
-//  OSTreeMock repo_;
-//};
-
-//std::string TreehubMock::ServerPath;
-
 class TufRepoMock {
  public:
   TufRepoMock(const boost::filesystem::path& root_dir, std::string expires = "",
@@ -189,7 +172,7 @@ class TufRepoMock {
 
 class DeviceGatewayMock {
  public:
-  static std::string RootPath;
+  static std::string RunCmd;
  public:
   DeviceGatewayMock(const OSTreeMock& ostree_mock,
                     const TufRepoMock& tuf_repo_mock):
@@ -197,7 +180,8 @@ class DeviceGatewayMock {
                     tuf_repo_mock_{tuf_repo_mock},
                     port_{TestUtils::getFreePort()},
                     url_{"http://localhost:" + port_},
-                    process_{RootPath, "--port", port_, "--ostree", ostree_mock_.path(), "--tuf-repo", tuf_repo_mock_.path()} {
+                    req_headers_file_{tuf_repo_mock_.path() + "/headers.json"},
+                    process_{RunCmd, "--port", port_, "--ostree", ostree_mock_.path(), "--tuf-repo", tuf_repo_mock_.path(), "--headers-file", req_headers_file_} {
     TestUtils::waitForServer(url_ + "/");
     LOG_INFO << "Device Gateway is running on port " << port_;
   }
@@ -210,6 +194,9 @@ class DeviceGatewayMock {
   const std::string& port() const { return port_; }
   std::string tufRepoUri() const { return url_ + "/repo"; }
   std::string ostreeUri() const { return url_ + "/treehub"; }
+  Json::Value getReqHeaders() const {
+    return Utils::parseJSONFile(req_headers_file_);
+  }
 
  private:
   const OSTreeMock& ostree_mock_;
@@ -217,10 +204,11 @@ class DeviceGatewayMock {
 
   const std::string port_;
   const std::string url_;
+  const std::string req_headers_file_;
   boost::process::child process_;
 };
 
-std::string DeviceGatewayMock::RootPath;
+std::string DeviceGatewayMock::RunCmd;
 
 class LiteClientTest : public ::testing::Test {
  public:
@@ -323,6 +311,7 @@ class LiteClientTest : public ::testing::Test {
     // make sure that the new Target hasn't been applied/finalized before reboot
     ASSERT_EQ(client.getCurrent().sha256Hash(), from_target.sha256Hash());
     ASSERT_EQ(client.getCurrent().filename(), from_target.filename());
+    checkHeaders(client, from_target);
   }
 
   void update_apps(LiteClient& client, const Uptane::Target& from_target, const Uptane::Target& to_target,
@@ -340,14 +329,21 @@ class LiteClientTest : public ::testing::Test {
         // make sure that the new Target has been applied
         ASSERT_EQ(client.getCurrent().sha256Hash(), to_target.sha256Hash());
         ASSERT_EQ(client.getCurrent().filename(), to_target.filename());
+        // TODO: the daemon_main is emulated,
+        // see https://github.com/foundriesio/aktualizr-lite/blob/7ab6998920d57605601eda16f9bebedf00cc1f7f/src/main.cc#L264
+        // once the daemon_main is "cleaned" the updateHeader can be removed from the test.
+        client.http_client->updateHeader("x-ats-target", to_target.filename());
+        checkHeaders(client, to_target);
       } else {
         ASSERT_EQ(client.getCurrent().sha256Hash(), from_target.sha256Hash());
         ASSERT_EQ(client.getCurrent().filename(), from_target.filename());
+        checkHeaders(client, from_target);
       }
 
     } else {
       ASSERT_EQ(client.getCurrent().sha256Hash(), from_target.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from_target.filename());
+      checkHeaders(client, from_target);
     }
   }
 
@@ -387,6 +383,14 @@ class LiteClientTest : public ::testing::Test {
 
   void restart(std::shared_ptr<LiteClient>& client) {
     client = create_liteclient(false);
+  }
+
+  void checkHeaders(LiteClient& client, const Uptane::Target& target) {
+    // check for a new Target in order to send requests with headers we are interested in
+    ASSERT_TRUE(client.checkForUpdates());
+    auto req_headers = deviceGateway().getReqHeaders();
+    ASSERT_EQ(req_headers["x-ats-target"], target.filename());
+    ASSERT_EQ(req_headers["x-ats-ostreehash"], target.sha256Hash());
   }
 
   TufRepoMock& tufRepo() { return tuf_repo_; }
@@ -430,6 +434,7 @@ TEST_F(LiteClientTest, OstreeUpdate) {
   // reboot device
   reboot(client);
   ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
 }
 
 TEST_F(LiteClientTest, OstreeUpdateRollback) {
@@ -449,6 +454,7 @@ TEST_F(LiteClientTest, OstreeUpdateRollback) {
   reboot(client);
   // make sure that a rollback has happened and a client is still running the initial Target
   ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
+  checkHeaders(*client, initial_target());
 
   // make sure we cannot install the bad version
   std::vector<Uptane::Target> known_but_not_installed_versions;
@@ -464,6 +470,7 @@ TEST_F(LiteClientTest, OstreeUpdateRollback) {
   // reboot
   reboot(client);
   ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target_03));
+  checkHeaders(*client, new_target_03);
 }
 
 TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
@@ -480,6 +487,7 @@ TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
   // reboot device
   reboot(client);
   ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
 
   // emulate manuall update to the previous version
   update(*client, new_target, initial_target());
@@ -487,6 +495,7 @@ TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
   // reboot device and make sure that the previous version is installed
   reboot(client);
   ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
+  checkHeaders(*client, initial_target());
 
   // make sure we can install the latest version that has been installed before
   // the succesfully installed Target should be "not known"
@@ -500,6 +509,7 @@ TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
   // reboot device
   reboot(client);
   ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
 }
 
 TEST_F(LiteClientTest, AppUpdate) {
@@ -542,6 +552,7 @@ TEST_F(LiteClientTest, OstreeAndAppUpdate) {
     // reboot device
     reboot(client);
     ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+    checkHeaders(*client, new_target);
   }
 }
 
@@ -590,12 +601,12 @@ int main(int argc, char** argv) {
   logger_init();
 
   if (argc != 3) {
-    std::cerr << "Error: " << argv[0] << " requires the path to the fake TUF repo server\n";
+    std::cerr << "Error: " << argv[0] << " requires the path to the fake Device Gateway and the sysroot generator\n";
     return EXIT_FAILURE;
   }
 
-  DeviceGatewayMock::RootPath = argv[1];
-  SysRootFS::GeneratorPath = argv[2];
+  DeviceGatewayMock::RunCmd = argv[1];
+  SysRootFS::CreateCmd = argv[2];
 
   return RUN_ALL_TESTS();
 }
