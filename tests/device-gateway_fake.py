@@ -71,17 +71,26 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
         else:
+            self._tuf_dump_headers()
             self.send_response(200)
             self.end_headers()
-            self._serve_simple(path)
+            self._tuf_serve_metadata_file(path)
 
-    def _serve_simple(self, uri):
+    def _tuf_serve_metadata_file(self, uri):
         with open(uri, 'rb') as source:
             while True:
                 data = source.read(1024)
                 if not data:
                     break
                 self.wfile.write(data)
+
+    def _tuf_dump_headers(self):
+        headers = {}
+        for header_name, header_value in self.headers.items():
+            headers[header_name] = header_value
+
+        with open(self.server.headers_file, "w") as f:
+            json.dump(headers, f)
 
     def _ostree_repo(self):
         return self.server.ostree_repo
@@ -91,9 +100,10 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 class FakeDeviceGateway(HTTPServer):
-    def __init__(self, addr, ostree_repo, tuf_repo):
+    def __init__(self, addr, ostree_repo, tuf_repo, headers_file):
         self.ostree_repo = ostree_repo
         self.tuf_repo = tuf_repo
+        self.headers_file = headers_file
         super(HTTPServer, self).__init__(server_address=addr, RequestHandlerClass=Handler)
 
 
@@ -102,11 +112,12 @@ def main():
     parser.add_argument('-p', '--port', type=int, help='server port')
     parser.add_argument('-o', '--ostree', help='OSTree repo directory')
     parser.add_argument('-t', '--tuf-repo', help='TUF repo directory')
+    parser.add_argument('-j', '--headers-file', help='File to dump request headers to')
 
     args = parser.parse_args()
 
     try:
-        httpd = FakeDeviceGateway(('', args.port), args.ostree, args.tuf_repo)
+        httpd = FakeDeviceGateway(('', args.port), args.ostree, args.tuf_repo, args.headers_file)
         httpd.serve_forever()
     except KeyboardInterrupt:
         httpd.server_close()
