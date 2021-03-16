@@ -74,3 +74,5 @@ target_include_directories(t_liteclient PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/te
 target_link_libraries(t_liteclient ${TEST_LIBS} uptane_generator_lib testutilities)
 add_dependencies(t_liteclient make_ostree_sysroot)
 set_tests_properties(test_liteclient PROPERTIES LABELS "aklite:liteclient")
+
+aktualizr_source_file_checks(liteclient_test.cc)
