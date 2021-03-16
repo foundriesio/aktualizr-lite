@@ -20,7 +20,6 @@
 #include "ostree/repo.h"
 #include "helpers.h"
 
-
 using ::testing::NiceMock;
 using ::testing::Return;
 
@@ -37,6 +36,11 @@ static std::string run_cmd(const std::string &executable_to_run,
   return std_out;
 }
 
+/**
+ * Class MockAppEngine
+ *
+ *
+ */
 class MockAppEngine : public AppEngine {
  public:
   MockAppEngine(bool default_behaviour = true) {
@@ -55,6 +59,11 @@ class MockAppEngine : public AppEngine {
   MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
 };
 
+/**
+ * Class SysRootFS
+ *
+ *
+ */
 class SysRootFS {
  public:
   static std::string CreateCmd;
@@ -72,6 +81,11 @@ class SysRootFS {
 
 std::string SysRootFS::CreateCmd;
 
+/**
+ * Class OSTreeMock
+ *
+ *
+ */
 class OSTreeMock {
  public:
   OSTreeMock(std::string repo_path, bool create = false, std::string mode = "archive"): path_{std::move(repo_path)} {
@@ -97,6 +111,11 @@ class OSTreeMock {
   const std::string path_;
 };
 
+/**
+ * Class SysOSTreeMock
+ *
+ *
+ */
 class SysOSTreeMock {
  public:
   SysOSTreeMock(std::string sysroot_path,
@@ -118,7 +137,6 @@ class SysOSTreeMock {
   const std::string& path() const { return path_; }
   OSTreeMock& repo() { return repo_; }
 
-
   void deploy(const std::string& commit_hash) {
     run_cmd("ostree", {"admin", "--sysroot=" + path_, "deploy", "--os=" + os_, commit_hash}, "deploy " + commit_hash);
   }
@@ -129,6 +147,11 @@ class SysOSTreeMock {
   OSTreeMock repo_;
 };
 
+/**
+ * Class TufRepoMock
+ *
+ *
+ */
 class TufRepoMock {
  public:
   TufRepoMock(const boost::filesystem::path& root_dir, std::string expires = "",
@@ -137,7 +160,6 @@ class TufRepoMock {
         latest_{Uptane::Target::Unknown()} {
     repo_.generateRepo(KeyType::kED25519);
   }
-
 
  public:
   const std::string& path() const { return root_; }
@@ -152,14 +174,12 @@ class TufRepoMock {
     custom_json["targetFormat"] = "OSTREE";
     custom_json["version"] = target_version;
     custom_json["docker_compose_apps"] = apps_json;
-
     repo_.addCustomImage(target_name, hash_obj, 0, hardware_id, "", empty_delegetion, custom_json);
 
     Json::Value target;
     target["length"] = 0;
     target["hashes"]["sha256"] = hash;
     target["custom"] = custom_json;
-
     latest_ = Uptane::Target(target_name, target);
     return latest_;
   }
@@ -170,9 +190,15 @@ class TufRepoMock {
   Uptane::Target latest_;
 };
 
+/**
+ * Class DeviceGatewayMock
+ *
+ *
+ */
 class DeviceGatewayMock {
  public:
   static std::string RunCmd;
+  
  public:
   DeviceGatewayMock(const OSTreeMock& ostree_mock,
                     const TufRepoMock& tuf_repo_mock):
@@ -201,7 +227,6 @@ class DeviceGatewayMock {
  private:
   const OSTreeMock& ostree_mock_;
   const TufRepoMock& tuf_repo_mock_;
-
   const std::string port_;
   const std::string url_;
   const std::string req_headers_file_;
@@ -210,6 +235,11 @@ class DeviceGatewayMock {
 
 std::string DeviceGatewayMock::RunCmd;
 
+/**
+ * Class LiteClientTest
+ *
+ *
+ */
 class LiteClientTest : public ::testing::Test {
  public:
   static std::string SysRootSrc;
@@ -220,19 +250,17 @@ class LiteClientTest : public ::testing::Test {
                     tuf_repo_{test_dir_.Path() / "repo"},
                     ostree_{(test_dir_.Path() / "treehub").string(), true},
                     device_gateway_{ostree_, tuf_repo_},
-                    initial_target_{Uptane::Target::Unknown()} {
-
-    auto initial_sysroot_commit_hash = sysrepo_.repo().commit(sysrootfs_.path, sysrootfs_.branch);
-    sysrepo_.deploy(initial_sysroot_commit_hash);
-
-    Json::Value target_json;
-    target_json["hashes"]["sha256"] = initial_sysroot_commit_hash;
-    target_json["custom"]["targetFormat"] = "OSTREE";
-    target_json["length"] = 0;
-    initial_target_ = Uptane::Target{hw_id + "-" + os + "-1", target_json};
+                    initial_target_{Uptane::Target::Unknown()},
+                    sysroot_hash_{sysrepo_.repo().commit(sysrootfs_.path, sysrootfs_.branch)} {
+    sysrepo_.deploy(sysroot_hash_);
   }
 
-  std::shared_ptr<LiteClient> create_liteclient(bool initial_version = true) {
+  enum initial_version { off = 0, on = 1, corrupted1 = 2, corrupted2 = 3 };
+
+  /**
+   * method create_liteclient
+   */
+  std::shared_ptr<LiteClient> create_liteclient(enum initial_version initial_version = initial_version::on) {
     Config conf;
     conf.uptane.repo_server = deviceGateway().tufRepoUri();
     conf.provision.primary_ecu_hardware_id = hw_id;
@@ -249,20 +277,87 @@ class LiteClientTest : public ::testing::Test {
     conf.bootloader.reboot_sentinel_dir = conf.storage.path;
     conf.import.base_path = test_dir_ / "import";
 
-    if (initial_version) {
+    if (initial_version == initial_version::on || initial_version == initial_version::corrupted1 ||
+        initial_version == initial_version::corrupted2) {
+      /*
+         * Sample LMP/OE generated installed_version file
+         *
+         * {
+         *   "raspberrypi4-64-lmp" {
+         *      "hashes": {
+         *        "sha256": "cbf23f479964f512ff1d0b01a688d096a670d1d099c1ee3d46baea203e7ef4ab"
+         *      },
+         *      "is_current": true,
+         *      "custom": {
+         *        "targetFormat": "OSTREE",
+         *        "name": "raspberrypi4-64-lmp",
+         *        "version": "1",
+         *        "hardwareIds": [
+         *                       "raspberrypi4-64"
+         *                       ],
+         *        "lmp-manifest-sha": "0db09a7e9bac87ef2127e5be8d11f23b3e18513c",
+         *        "arch": "aarch64",
+         *        "image-file": "lmp-factory-image-raspberrypi4-64.wic.gz",
+         *        "meta-subscriber-overrides-sha": "43093be20fa232ef5fe17135115bac4327b501bd",
+         *        "tags": [
+         *                "master"
+         *                ],
+         *        "docker_compose_apps": {
+         *          "app-01": {
+         *            "uri": "hub.foundries.io/msul-dev01/app-06@sha256:2e7b8bc87c67f6042fb88e575a1c73bf70d114f3f2fd1a7aeb3d1bf3b6a0737f"
+         *          },
+         *          "app-02": {
+         *            "uri": "hub.foundries.io/msul-dev01/app-05@sha256:267b14e2e0e98d7e966dbd49bddaa792e5d07169eb3cf2462bbbfecac00f46ef"
+         *          }
+         *        },
+         *        "containers-sha": "a041e7a0aa1a8e73a875b4c3fdf9a418d3927894"
+         *     }
+         *  }
+         */
+
+      Json::Value installed_version;
+      // corrupted1 will invalidate the sysroot_hash_ sha256
+      installed_version["hashes"]["sha256"] = sysroot_hash_ + (initial_version == initial_version::corrupted1 ? "DEADBEEF" : "");
+      installed_version["is_current"] = true;
+      installed_version["custom"]["name"] = hw_id + "-" + os;
+      installed_version["custom"]["version"] = "1";
+      installed_version["custom"]["hardwareIds"] = hw_id;
+      installed_version["custom"]["targetFormat"] = "OSTREE";
+      installed_version["custom"]["arch"] = "aarch64";
+      installed_version["custom"]["image-file"] = "lmp-factory-image-raspberrypi4-64.wic.gz";
+      installed_version["custom"]["tags"] = "master";
+
+      /* create the initial_target from the above json file: pass the root node
+       * name as a parameter
+       */
+      initial_target_ = Uptane::Target{hw_id + "-" + os + "-" + "1", installed_version};
+
       Json::Value ins_ver;
-      ins_ver[initial_target_.sha256Hash()] = initial_target_.filename();
-      std::string installed_version = Utils::jsonToCanonicalStr(ins_ver);
-      Utils::writeFile(conf.import.base_path / "installed_versions", installed_version, true);
+      // set the root node name
+      ins_ver[initial_target_.filename()] = installed_version;
+      // write the json information to a file (corrupted2 will write a corrupted  file)
+      Utils::writeFile(conf.import.base_path / "installed_versions",
+                       (initial_version == initial_version::corrupted2)? "deadbeef\t\ncorrupted file\n\n" : Utils::jsonToCanonicalStr(ins_ver), true);
+      // create the target
       tufRepo().add_target(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, "1");
     }
-    app_engine_ = std::make_shared<NiceMock<MockAppEngine>>();
-    return std::make_shared<LiteClient>(conf, app_engine_);
-  }
+      app_engine_ = std::make_shared<NiceMock<MockAppEngine>>();
+      return std::make_shared<LiteClient>(conf, app_engine_);
+    }
 
+  /**
+   * method createNewTarget
+   */
   Uptane::Target createNewTarget(const std::vector<AppEngine::App>* apps = nullptr) {
     const auto& latest_target{tufRepo().latest()};
-    const std::string version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
+    std::string version;
+    try {
+      version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
+    }
+    catch (...) {
+      LOG_INFO << "No target available, preparing the first version";
+      version = "1";
+    }
 
     // update rootfs and commit it into Treehub's repo
     const std::string unique_file = Utils::randomUuid();
@@ -282,6 +377,9 @@ class LiteClientTest : public ::testing::Test {
     return tufRepo().add_target(target_name, update_commit_hash, hw_id, version, apps_json);
   }
 
+  /**
+   * method createNewAppTarget
+   */
   Uptane::Target createNewAppTarget(const std::vector<AppEngine::App>& apps) {
     const auto& latest_target{tufRepo().latest()};
 
@@ -296,12 +394,18 @@ class LiteClientTest : public ::testing::Test {
     return tufRepo().add_target(target_name, latest_target.sha256Hash(), hw_id, version, apps_json);
   }
 
+  /**
+   * method createNewApp
+   */
   AppEngine::App createNewApp(const std::string& app_name, const std::string& factory = "test-factory") {
     const std::string app_uri = "localhost:" + deviceGateway().port() + "/" + factory + "/" + app_name +
                                 "@sha256:7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243";
     return {app_name, app_uri};
   }
 
+  /**
+   * mehod update
+   */
   void update(LiteClient& client, const Uptane::Target& from_target, const Uptane::Target& to_target) {
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdates());
@@ -314,6 +418,9 @@ class LiteClientTest : public ::testing::Test {
     checkHeaders(client, from_target);
   }
 
+  /**
+   * method update_apps
+   */
   void update_apps(LiteClient& client, const Uptane::Target& from_target, const Uptane::Target& to_target,
                    data::ResultCode::Numeric expected_download_code = data::ResultCode::Numeric::kOk,
                    data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kOk) {
@@ -347,6 +454,9 @@ class LiteClientTest : public ::testing::Test {
     }
   }
 
+  /**
+   * method areTargetsEqual
+   */
   bool areTargetsEqual(const Uptane::Target& lhs, const Uptane::Target& rhs) {
     if ((lhs.sha256Hash() != rhs.sha256Hash()) || (lhs.filename() != rhs.filename())) {
       return false;
@@ -376,26 +486,41 @@ class LiteClientTest : public ::testing::Test {
     return true;
   }
 
+  /**
+   * method reboot
+   */
   void reboot(std::shared_ptr<LiteClient>& client) {
     boost::filesystem::remove(test_dir_.Path() / "need_reboot");
-    client = create_liteclient(false);
+    client = create_liteclient(initial_version::off);
   }
 
+  /**
+   * method restart
+   */
   void restart(std::shared_ptr<LiteClient>& client) {
-    client = create_liteclient(false);
+    client = create_liteclient(initial_version::off);
   }
 
+  /**
+   * method checkHeaders
+   */
   void checkHeaders(LiteClient& client, const Uptane::Target& target) {
     // check for a new Target in order to send requests with headers we are interested in
     ASSERT_TRUE(client.checkForUpdates());
     auto req_headers = deviceGateway().getReqHeaders();
-    ASSERT_EQ(req_headers["x-ats-target"], target.filename());
-    ASSERT_EQ(req_headers["x-ats-ostreehash"], target.sha256Hash());
+    if (!target.MatchTarget(Uptane::Target::Unknown())) {
+      ASSERT_EQ(req_headers["x-ats-target"], target.filename());
+      ASSERT_EQ(req_headers["x-ats-ostreehash"], target.sha256Hash());
+    }
   }
 
+  /**
+   * methods: miscellaneous
+   */
   TufRepoMock& tufRepo() { return tuf_repo_; }
   DeviceGatewayMock& deviceGateway() { return device_gateway_; }
   const Uptane::Target& initial_target() const { return initial_target_; }
+  void update_initial_target(const Uptane::Target& target) { initial_target_ = target; }
   OSTreeMock& ostree() { return ostree_; }
   SysRootFS& sysrootfs() { return sysrootfs_; }
   SysOSTreeMock& sysrepo() { return sysrepo_; }
@@ -414,7 +539,9 @@ class LiteClientTest : public ::testing::Test {
   OSTreeMock ostree_;
   DeviceGatewayMock device_gateway_;
   Uptane::Target initial_target_;
+
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_;
+  const std::string sysroot_hash_;
 };
 
 std::string LiteClientTest::SysRootSrc;
@@ -422,6 +549,92 @@ const std::string LiteClientTest::branch{"lmp"};
 const std::string LiteClientTest::hw_id{"raspberrypi4-64"};
 const std::string LiteClientTest::os{"lmp"};
 
+/*----------------------------------------------------------------------------*/
+/*  TESTS                                                                     */
+/*                                                                            */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+TEST_F(LiteClientTest, OstreeUpdateWhenNoInstalledVersions) {
+  // boot device with no installed versions
+  auto client = create_liteclient(initial_version::off);
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), initial_target()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createNewTarget();
+
+  // update
+  update(*client, initial_target(), new_target);
+
+  // check there is still no target
+  auto req_headers = deviceGateway().getReqHeaders();
+  ASSERT_EQ(req_headers["x-ats-target"], Uptane::Target::Unknown().filename());
+  ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
+
+  //verify the install
+  ASSERT_TRUE(client->getCurrent().MatchTarget(Uptane::Target::Unknown()));
+  reboot(client);
+  ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
+}
+
+TEST_F(LiteClientTest, OstreeUpdateInstalledVersionsCorrupted1) {
+  // boot device with an invalid initial_version json file (ostree sha)
+  auto client = create_liteclient(initial_version::corrupted1);
+
+  // verify that the initial version was corrupted
+  ASSERT_FALSE(areTargetsEqual(client->getCurrent(), initial_target()));
+
+  // mark it as unkown
+  update_initial_target(Uptane::Target::Unknown());
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createNewTarget();
+
+  // update
+  update(*client, initial_target(), new_target);
+
+  // check there is still no target
+  auto req_headers = deviceGateway().getReqHeaders();
+  ASSERT_EQ(req_headers["x-ats-target"], Uptane::Target::Unknown().filename());
+  ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
+
+  //verify the install
+  ASSERT_TRUE(client->getCurrent().MatchTarget(Uptane::Target::Unknown()));
+  reboot(client);
+  ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
+}
+
+TEST_F(LiteClientTest, OstreeUpdateInstalledVersionsCorrupted2) {
+  // boot device with a corrupted json file in the filesystem
+  auto client = create_liteclient(initial_version::corrupted2);
+
+  // verify that the initial version was corrupted
+  ASSERT_FALSE(areTargetsEqual(client->getCurrent(), initial_target()));
+
+  // mark it as unkown
+  update_initial_target(Uptane::Target::Unknown());
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createNewTarget();
+
+  // update
+  update(*client, initial_target(), new_target);
+
+  // check there is still no target
+  auto req_headers = deviceGateway().getReqHeaders();
+  ASSERT_EQ(req_headers["x-ats-target"], Uptane::Target::Unknown().filename());
+  ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
+
+  //verify the install
+  ASSERT_TRUE(client->getCurrent().MatchTarget(Uptane::Target::Unknown()));
+  reboot(client);
+  ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
+  ASSERT_TRUE(areTargetsEqual(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
+}
 
 TEST_F(LiteClientTest, OstreeUpdate) {
   // boot device
@@ -595,16 +808,20 @@ TEST_F(LiteClientTest, AppUpdateInstallFailure) {
               data::ResultCode::Numeric::kInstallFailed);
 }
 
+/*
+ * main
+ */
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
   logger_init();
 
   if (argc != 3) {
-    std::cerr << "Error: " << argv[0] << " requires the path to the fake Device Gateway and the sysroot generator\n";
+    std::cerr << "Error: " << argv[0] << " requires the path to the fake Device Gateway and the sysroot generators scripts\n";
     return EXIT_FAILURE;
   }
 
+  /* options passed as args in CMakeLists.txt */  
   DeviceGatewayMock::RunCmd = argv[1];
   SysRootFS::CreateCmd = argv[2];
 
