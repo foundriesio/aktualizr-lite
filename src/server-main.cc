@@ -1,3 +1,4 @@
+#include <boost/container/flat_map.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
@@ -36,6 +37,55 @@ static void send_telemetry(LiteClient& client, const httplib::Request& req, http
   client.reportHwInfo();
   Json::Value resp;
   json_resp(res, 200, resp);
+}
+
+static void get_targets(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  Json::Value data;
+
+  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
+
+  LOG_INFO << "Refreshing Targets metadata";
+  const auto rc = client.updateImageMeta();
+  if (!std::get<0>(rc)) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
+    if (!client.checkImageMetaOffline()) {
+      LOG_ERROR << "Unable to use local copy of TUF data";
+      data["warning"] = "Unable to update latest metadata and local copy is out-of-date";
+      throw ApiException(500, data);
+    }
+  }
+
+  boost::container::flat_map<int, Uptane::Target> sorted_targets;
+  for (const auto& t : client.allTargets()) {
+    int ver = 0;
+    try {
+      ver = std::stoi(t.custom_version(), nullptr, 0);
+    } catch (const std::invalid_argument& exc) {
+      LOG_ERROR << "Invalid version number format: " << t.custom_version();
+      ver = -1;
+    }
+    if (!target_has_tags(t, client.tags)) {
+      continue;
+    }
+    for (const auto& it : t.hardwareIds()) {
+      if (it == hwid) {
+        sorted_targets.emplace(ver, t);
+        break;
+      }
+    }
+  }
+
+  Json::Value targets;
+  for (auto& pair : sorted_targets) {
+    Json::Value target;
+    target["name"] = pair.second.filename();
+    target["version"] = pair.first;
+    target["ostree-sha256"] = pair.second.sha256Hash();
+    target["docker_compose_apps"] = pair.second.custom_data()["docker_compose_apps"];
+    targets.append(target);
+  }
+  data["targets"] = targets;
+  json_resp(res, 200, data);
 }
 
 bpo::variables_map parse_options(int argc, char** argv) {
@@ -110,6 +160,8 @@ int main(int argc, char** argv) {
 
     svr.Put("/telemetry",
             [&client](const httplib::Request& req, httplib::Response& res) { send_telemetry(client, req, res); });
+    svr.Get("/targets",
+            [&client](const httplib::Request& req, httplib::Response& res) { get_targets(client, req, res); });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
     if (cli_map.count("socket-path") == 1) {
