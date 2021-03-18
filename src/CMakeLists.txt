@@ -2,6 +2,13 @@ set(TARGET_EXE aktualizr-lite)
 set(TARGET_LIB aktualizr_lite)
 set(TARGET ${MAIN_TARGET_LIB})
 
+if(BUILD_SERVER)
+ set(MAIN_CC server-main.cc)
+else(BUILD_SERVER)
+ set(MAIN_CC main.cc)
+endif(BUILD_SERVER)
+
+
 set(SRC helpers.cc
         composeappmanager.cc
         rootfstreemanager.cc
@@ -42,7 +49,7 @@ set(HEADERS helpers.h
         yaml2json.h
         target.h)
 
-add_executable(${TARGET_EXE} main.cc)
+add_executable(${TARGET_EXE} ${MAIN_CC} api.cc)
 add_library(${TARGET} OBJECT ${SRC})
 add_library(${TARGET_LIB} SHARED ${SRC} api.cc)
 
@@ -56,12 +63,14 @@ target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 set(INCS
   ${AKLITE_DIR}/src/compose
   ${AKLITE_DIR}/src/
+  ${AKLITE_DIR}/include/
   ${AKTUALIZR_DIR}/include
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include
   ${AKTUALIZR_DIR}/third_party/googletest/googletest/include
   ${GLIB_INCLUDE_DIRS}
   ${LIBOSTREE_INCLUDE_DIRS}
+  ${CMAKE_SOURCE_DIR}/third_party
 )
 
 target_include_directories(${TARGET} PRIVATE ${INCS})
@@ -79,4 +88,4 @@ install(TARGETS ${TARGET_LIB} LIBRARY DESTINATION lib COMPONENT ${TARGET_LIB})
 install(DIRECTORY ../include/aktualizr-lite DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
-aktualizr_source_file_checks(main.cc api.cc ../include/aktualizr-lite/api.h ${SRC} ${HEADERS})
+aktualizr_source_file_checks(main.cc api.cc server-main.cc ../include/aktualizr-lite/api.h ${SRC} ${HEADERS})

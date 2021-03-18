@@ -160,3 +160,20 @@ target_link_libraries(t_apiclient aktualizr_lite ${TEST_LIBS} uptane_generator_l
 add_dependencies(t_apiclient make_ostree_sysroot)
 set_tests_properties(test_apiclient PROPERTIES LABELS "aklite:apiclient")
 
+add_aktualizr_test(NAME apiserver
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> apiserver_test.cc
+  PROJECT_WORKING_DIRECTORY
+  ARGS
+  ${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
+  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+  ${PROJECT_BINARY_DIR}/src/aktualizr-lite
+)
+aktualizr_source_file_checks(apiserver_test.cc)
+target_compile_definitions(t_apiserver PRIVATE ${TEST_DEFS})
+target_include_directories(t_apiserver PRIVATE ${TEST_INCS} ${AKLITE_DIR}/include ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_apiserver aktualizr_lite ${TEST_LIBS} uptane_generator_lib testutilities)
+add_dependencies(t_apiserver make_ostree_sysroot)
+add_dependencies(t_apiserver aktualizr-lite)
+if(BUILD_SERVER)
+  set_tests_properties(test_apiserver PROPERTIES LABELS "aklite:apiserver")
+endif(BUILD_AKLITE)

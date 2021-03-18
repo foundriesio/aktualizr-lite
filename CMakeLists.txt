@@ -18,6 +18,9 @@ option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
 
 option(ALLOW_MANUAL_ROLLBACK "Set to ON to build with support of manual rollbacks" OFF)
 
+# Build experimental aklite server daemon
+option(BUILD_SERVER "Set to ON to compile with experimental aklite server" OFF)
+
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
 # TODO: consider using the aktualizr repo/project for building the sota-tools
@@ -51,6 +54,11 @@ if(BUILD_AKLITE)
   add_subdirectory(tests EXCLUDE_FROM_ALL)
 
   add_subdirectory(examples)
+
+  if(BUILD_SERVER)
+    set(BUILD_SERVER ON)
+    add_dependencies(aklite-tests t_apiserver)
+  endif(BUILD_SERVER)
 
 endif(BUILD_AKLITE)
 
