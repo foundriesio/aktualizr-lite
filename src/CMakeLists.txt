@@ -1,6 +1,13 @@
 set(TARGET_EXE aktualizr-lite)
 set(TARGET ${MAIN_TARGET_LIB})
 
+if(BUILD_SERVER)
+ set(MAIN_CC server-main.cc)
+else(BUILD_SERVER)
+ set(MAIN_CC main.cc)
+endif(BUILD_SERVER)
+
+
 set(SRC helpers.cc
         composeappmanager.cc
         docker/composeappengine.cc
@@ -37,7 +44,7 @@ set(HEADERS helpers.h
         yaml2json.h
         target.h)
 
-add_executable(${TARGET_EXE} main.cc)
+add_executable(${TARGET_EXE} ${MAIN_CC})
 add_library(${TARGET} OBJECT ${SRC})
 
 if(ALLOW_MANUAL_ROLLBACK)
@@ -56,6 +63,7 @@ set(INCS
   ${AKTUALIZR_DIR}/third_party/googletest/googletest/include
   ${GLIB_INCLUDE_DIRS}
   ${LIBOSTREE_INCLUDE_DIRS}
+  ${CMAKE_SOURCE_DIR}/third_party
 )
 
 target_include_directories(${TARGET} PRIVATE ${INCS})
@@ -64,10 +72,9 @@ target_include_directories(${TARGET_EXE} PRIVATE ${INCS})
 target_link_libraries(${TARGET} aktualizr_lib)
 target_link_libraries(${TARGET_EXE} ${TARGET})
 
-
 # TODO: consider cleaning up the overall "install" elements as it includes
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
 install(TARGETS ${TARGET_EXE} RUNTIME DESTINATION bin COMPONENT ${TARGET_EXE})
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
-aktualizr_source_file_checks(main.cc ${SRC} ${HEADERS})
+aktualizr_source_file_checks(main.cc server-main.cc ${SRC} ${HEADERS})
