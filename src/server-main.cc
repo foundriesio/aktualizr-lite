@@ -88,6 +88,94 @@ static void get_targets(LiteClient& client, const httplib::Request& req, httplib
   json_resp(res, 200, data);
 }
 
+static void validate_target(LiteClient& client, const Uptane::Target& t) {
+  Json::Value data;
+  if (!t.IsValid()) {
+    data["error"] = "Target isn't valid";
+    throw ApiException(400, data);
+  }
+
+  if (!t.IsOstree()) {
+    data["error"] = "Target isn't Ostree";
+    throw ApiException(400, data);
+  }
+
+  if (!target_has_tags(t, client.tags)) {
+    data["error"] = "Target does not have corect tag";
+    throw ApiException(400, data);
+  }
+
+  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
+  for (auto const& it : t.hardwareIds()) {
+    if (it == hwid) {
+      return;
+    }
+  }
+  data["error"] = "Target not a match for this hwid";
+  throw ApiException(400, data);
+}
+
+static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, const std::string name) {
+  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
+  for (const auto& t : client.allTargets()) {
+    if (t.filename() == name) {
+      validate_target(client, t);
+      return std_::make_unique<Uptane::Target>(t);
+    }
+  }
+  throw ApiException(404, Json::Value{});
+}
+
+static void download_target(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  Json::Value data;
+  Json::Value input = Utils::parseJSON(req.body);
+
+  auto target_name = input["target-name"];
+  if (!target_name.isString()) {
+    data["error"] = "Missing required item: target-name";
+    throw ApiException(400, data);
+  }
+  auto correlation_id = input["correlation-id"];
+  if (!correlation_id.isString()) {
+    data["error"] = "Missing required item: correlation-id";
+    throw ApiException(400, data);
+  }
+
+  std::string reason = "Update to " + target_name.asString();
+  auto reason_val = input["reason"];
+  if (reason_val.isString()) {
+    reason = reason_val.asString();
+  }
+
+  auto target = find_target(client, target_name.asString());
+  client.logTarget("Downloading: ", *target);
+  target->setCorrelationId(correlation_id.asString());
+
+  // TODO - there's almost no chance this is going to work for huge
+  // downloads. Do we make this a non-blocking call and have the client
+  // poll on the correlation id? Or maybe do a thread with some stupid
+  // server side events type thing?
+  data::ResultCode::Numeric rc = client.download(*target, reason);
+  if (rc != data::ResultCode::Numeric::kOk) {
+    data["error"] = "Unable to download target";
+    data["rc"] = (int)rc;
+    json_resp(res, 500, data);
+    return;
+  }
+
+  if (client.VerifyTarget(*target) != TargetStatus::kGood) {
+    data::InstallationResult ires{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+    client.notifyInstallFinished(*target, ires);
+    LOG_ERROR << "Downloaded target is invalid";
+    data["error"] = "Downloaded target is invalid";
+    data["rc"] = (int)ires.result_code.num_code;
+    json_resp(res, 500, data);
+    return;
+  }
+
+  json_resp(res, 201, data);
+}
+
 bpo::variables_map parse_options(int argc, char** argv) {
   bpo::options_description description("aktualizr-lited command line options");
 
@@ -143,6 +231,11 @@ int main(int argc, char** argv) {
     client.finalizeInstall();
     client.reportAktualizrConfiguration();
 
+    // There's an old bug in libaktualizr that causes a core-dump if this
+    // isn't run before you try to download/install a Target. Being defensive
+    // here so that a client doesn't mistakenly try the API this way.
+    client.updateImageMeta();
+
     httplib::Server svr;
 
     svr.set_logger([](const httplib::Request& req, const httplib::Response& resp) {
@@ -162,6 +255,8 @@ int main(int argc, char** argv) {
             [&client](const httplib::Request& req, httplib::Response& res) { send_telemetry(client, req, res); });
     svr.Get("/targets",
             [&client](const httplib::Request& req, httplib::Response& res) { get_targets(client, req, res); });
+    svr.Post("/targets/download",
+             [&client](const httplib::Request& req, httplib::Response& res) { download_target(client, req, res); });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
     if (cli_map.count("socket-path") == 1) {
