@@ -176,6 +176,7 @@ using socket_t = SOCKET;
 #include <pthread.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 using socket_t = int;
@@ -680,6 +681,7 @@ public:
   bool listen_after_bind();
 
   bool listen(const char *host, int port, int socket_flags = 0);
+  bool listen_unix_domain(const char *path, int socket_flags = 0);
 
   bool is_running() const;
   void stop();
@@ -4414,6 +4416,43 @@ inline bool Server::listen_after_bind() { return listen_internal(); }
 
 inline bool Server::listen(const char *host, int port, int socket_flags) {
   return bind_to_port(host, port, socket_flags) && listen_internal();
+}
+
+inline bool Server::listen_unix_domain(const char *path, int socket_flags) {
+  struct sockaddr_un addr;
+
+  svr_sock_ = ::socket(AF_UNIX, SOCK_STREAM, 0);
+  if (svr_sock_ == -1) {
+    perror("Unable to create socket");
+    return false;
+  }
+  if (strlen(path) > sizeof(addr.sun_path) - 1) {
+    return false;
+  }
+  if (remove(path) == -1 && errno != ENOENT) {
+    perror("Unable to remove old socket");
+    return false;
+  }
+  memset(&addr, 0, sizeof(addr));
+  addr.sun_family = AF_UNIX;
+  strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+
+  if (tcp_nodelay_) {
+    int yes = 1;
+    setsockopt(svr_sock_, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<char *>(&yes),
+                 sizeof(yes));
+  }
+
+  if (::bind(svr_sock_, (const struct sockaddr *)&addr, sizeof(addr)) == -1) {
+    perror("Unable to bind");
+    return false;
+  }
+
+  if (::listen(svr_sock_, 5) == -1) {
+    perror("Unable to listen");
+    return false;
+  }
+  return listen_internal();
 }
 
 inline bool Server::is_running() const { return is_running_; }
