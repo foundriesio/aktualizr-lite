@@ -176,6 +176,47 @@ static void download_target(LiteClient& client, const httplib::Request& req, htt
   json_resp(res, 201, data);
 }
 
+static void install_target(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  Json::Value data;
+  Json::Value input = Utils::parseJSON(req.body);
+
+  auto target_name = input["target-name"];
+  if (!target_name.isString()) {
+    data["error"] = "Missing required item: target-name";
+    throw ApiException(400, data);
+  }
+  auto correlation_id = input["correlation-id"];
+  if (!correlation_id.isString()) {
+    data["error"] = "Missing required item: correlation-id";
+    throw ApiException(400, data);
+  }
+
+  auto target = find_target(client, target_name.asString());
+  client.logTarget("Installing: ", *target);
+  target->setCorrelationId(correlation_id.asString());
+
+  // Check for rollback
+  std::vector<Uptane::Target> known_but_not_installed_versions;
+  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
+  if (known_local_target(client, *target, known_but_not_installed_versions)) {
+    data["error"] = "Target has caused a prior rollback. Aborting installing";
+    throw ApiException(400, data);
+  }
+
+  int status = 500;
+  data::ResultCode::Numeric rc = client.install(*target);
+  data["rc"] = (int)rc;
+  if (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) {
+    data["needs-reboot"] = true;
+    if (rc != data::ResultCode::Numeric::kNeedCompletion) {
+      data["needs-reboot"] = false;
+      client.http_client->updateHeader("x-ats-target", target->filename());
+    }
+    status = 201;
+  }
+  json_resp(res, status, data);
+}
+
 bpo::variables_map parse_options(int argc, char** argv) {
   bpo::options_description description("aktualizr-lited command line options");
 
@@ -257,6 +298,8 @@ int main(int argc, char** argv) {
             [&client](const httplib::Request& req, httplib::Response& res) { get_targets(client, req, res); });
     svr.Post("/targets/download",
              [&client](const httplib::Request& req, httplib::Response& res) { download_target(client, req, res); });
+    svr.Post("/targets/install",
+             [&client](const httplib::Request& req, httplib::Response& res) { install_target(client, req, res); });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
     if (cli_map.count("socket-path") == 1) {
