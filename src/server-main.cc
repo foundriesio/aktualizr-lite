@@ -39,6 +39,16 @@ static void send_telemetry(LiteClient& client, const httplib::Request& req, http
   json_resp(res, 200, resp);
 }
 
+static void get_current_target(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  auto current = client.getCurrent();
+  Json::Value target;
+  target["name"] = current.filename();
+  target["version"] = current.custom_version();
+  target["ostree-sha256"] = current.sha256Hash();
+  target["docker_compose_apps"] = current.custom_data()["docker_compose_apps"];
+  json_resp(res, 200, target);
+}
+
 static void get_targets(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
   Json::Value data;
 
@@ -296,6 +306,8 @@ int main(int argc, char** argv) {
             [&client](const httplib::Request& req, httplib::Response& res) { send_telemetry(client, req, res); });
     svr.Get("/targets",
             [&client](const httplib::Request& req, httplib::Response& res) { get_targets(client, req, res); });
+    svr.Get("/targets/current",
+            [&client](const httplib::Request& req, httplib::Response& res) { get_current_target(client, req, res); });
     svr.Post("/targets/download",
              [&client](const httplib::Request& req, httplib::Response& res) { download_target(client, req, res); });
     svr.Post("/targets/install",
