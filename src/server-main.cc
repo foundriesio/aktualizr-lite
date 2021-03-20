@@ -1,6 +1,8 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
+#include <boost/property_tree/ini_parser.hpp>
+#include <boost/property_tree/json_parser.hpp>
 
 #include "httplib.h"
 #include "libaktualizr/config.h"
@@ -31,6 +33,21 @@ class ApiException : public std::exception {
  private:
   std::string what_;
 };
+
+static void get_config(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  auto cmd = client.config.bootloader.reboot_command;
+
+  std::stringstream ss;
+  ss << client.config;
+
+  boost::property_tree::ptree pt;
+  boost::property_tree::ini_parser::read_ini(ss, pt);
+
+  std::stringstream jsonss;
+  boost::property_tree::json_parser::write_json(jsonss, pt);
+
+  res.set_content(jsonss.str(), "application/json");
+}
 
 static void send_telemetry(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
   client.reportNetworkInfo();
@@ -302,6 +319,8 @@ int main(int argc, char** argv) {
       }
     });
 
+    svr.Get("/config",
+            [&client](const httplib::Request& req, httplib::Response& res) { get_config(client, req, res); });
     svr.Put("/telemetry",
             [&client](const httplib::Request& req, httplib::Response& res) { send_telemetry(client, req, res); });
     svr.Get("/targets",
