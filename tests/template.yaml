@@ -1,0 +1,75 @@
+
+version: '3.2'
+
+networks:
+  default:
+  gateway-network:
+
+services:
+  iface-mon-ot:
+    image: hub.foundries.io/lmp/iface-monitor:latest
+    tmpfs:
+      - /run
+      - /var/lock
+      - /var/log
+    volumes:
+      - /var/run/dbus:/var/dbus
+    command: "--interface wpan0 --ip \"fd11:22::1/64\" --seconds-delay 10"
+    network_mode: "host"
+    restart: always
+    read_only: true
+    privileged: true
+    tty: true
+
+  ot-wpantund:
+    image: hub.foundries.io/lmp/ot-wpantund:latest
+    tmpfs:
+      - /run
+      - /var/lock
+      - /var/log
+    depends_on:
+      - iface-mon-ot
+    network_mode: "host"
+    restart: always
+    read_only: true
+    privileged: true
+
+  dns64:
+    image: hub.foundries.io/lmp/dns64:latest
+    tmpfs:
+      - /run
+      - /var/lock
+      - /var/log
+      - /var/bind
+    network_mode: "host"
+    restart: always
+    read_only: true
+
+  jool:
+    image: hub.foundries.io/lmp/nat64-jool:latest
+    volumes:
+      - /lib/modules:/lib/modules
+    network_mode: "host"
+    restart: always
+    read_only: true
+    privileged: true
+
+  californium-proxy:
+    image: hub.foundries.io/lmp/cf-proxy-coap-http:latest
+    read_only: true
+    labels:
+      io.compose-spec.config-hash: c675ec1bbcc2ac239611f5f6312538a5778d97cbdf6022581ab428425041cd69
+    ports:
+      - "5682:5682/udp"
+    networks:
+      - gateway-network
+    restart: always
+
+  no-image-service:
+    read_only: true
+    ports:
+      - "5682:5682/udp"
+    networks:
+      - gateway-network
+    restart: always
+

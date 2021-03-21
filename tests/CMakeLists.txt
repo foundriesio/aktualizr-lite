@@ -30,6 +30,18 @@ set(TEST_LIBS
 	gmock
 )
 
+add_aktualizr_test(NAME yaml2json
+	SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> yaml2json_test.cc
+	PROJECT_WORKING_DIRECTORY
+)
+
+target_compile_definitions(t_yaml2json PRIVATE ${TEST_DEFS})
+target_include_directories(t_yaml2json PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_INCS})
+target_link_libraries(t_yaml2json ${TEST_LIBS})
+set_tests_properties(test_yaml2json PROPERTIES LABELS "aklite:yaml2json")
+
+aktualizr_source_file_checks(yaml2json_test.cc)
+
 add_aktualizr_test(NAME compose-apps
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> composeapp_test.cc
   PROJECT_WORKING_DIRECTORY ARGS ${PROJECT_BINARY_DIR}/aktualizr/ostree_repo
