@@ -8,6 +8,8 @@ set(SRC helpers.cc
         composeappmanager.cc
         liteclient.cc
         ostree/repo.cc
+        yaml2json.cc
+        composeinfo.cc
         composeapptree.cc)
 
 set(HEADERS
@@ -19,6 +21,8 @@ set(HEADERS
         composeappmanager.h
         liteclient.h
         ostree/repo.h
+        yaml2json.h
+        composeinfo.h
         composeapptree.h )
 
 add_executable(${TARGET_EXE} main.cc)
