@@ -1,0 +1,86 @@
+FROM ubuntu:focal
+LABEL Description="Aktualizr testing dockerfile for Ubuntu Focal with static checks"
+
+ENV DEBIAN_FRONTEND noninteractive
+
+# It is important to run these in the same RUN command, because otherwise
+# Docker layer caching breaks us
+RUN apt-get update && apt-get -y install --no-install-suggests --no-install-recommends \
+  apt-transport-https \
+  apt-utils \
+  asn1c \
+  autoconf \
+  automake \
+  bison \
+  bash \
+  ccache \
+  clang-10 \
+  clang-format-10 \
+  clang-tidy-10 \
+  clang-tools-10 \
+  cmake \
+  curl \
+  doxygen \
+  e2fslibs-dev \
+  g++ \
+  gcc \
+  git \
+  graphviz \
+  jq \
+  lcov \
+  libarchive-dev \
+  libyaml-dev \
+  libboost-dev \
+  libboost-log-dev \
+  libboost-program-options-dev \
+  libboost-system-dev \
+  libboost-test-dev \
+  libboost-thread-dev \
+  libcurl4-openssl-dev \
+  libengine-pkcs11-openssl \
+  libexpat1-dev \
+  libfuse-dev \
+  libglib2.0-dev \
+  libgpgme11-dev \
+  libgtest-dev \
+  liblzma-dev \
+  libostree-dev \
+  libp11-dev \
+  libsodium-dev \
+  libsqlite3-dev \
+  libssl-dev \
+  libltdl-dev \
+  libtool \
+  lshw \
+  make \
+  net-tools \
+  ninja-build \
+  opensc \
+  ostree \
+  pkg-config \
+  psmisc \
+  python-is-python3 \
+  python3-dev \
+  python3-gi \
+  python3-openssl \
+  python3-pip \
+  python3-venv \
+  softhsm2 \
+  sqlite3 \
+  strace \
+  valgrind \
+  wget \
+  xsltproc \
+  zip
+
+RUN ln -s clang-10 /usr/bin/clang && \
+    ln -s clang++-10 /usr/bin/clang++
+
+WORKDIR /tmp
+RUN git clone https://github.com/pantoniou/libfyaml.git
+RUN cd libfyaml && ./bootstrap.sh && ./configure && make && make install
+RUN ldconfig
+
+RUN useradd testuser
+
+WORKDIR /
