@@ -1,4 +1,6 @@
 #include "composeappengine.h"
+#include "composeinfo.h"
+#include "dockerclient.h"
 
 #include <sys/statvfs.h>
 #include <boost/process.hpp>
@@ -42,46 +44,28 @@ void ComposeAppEngine::remove(const App& app) {
 }
 
 bool ComposeAppEngine::isRunning(const App& app) const {
-  bool cmd_res{false};
-  std::string cmd_output;
-  std::tie(cmd_res, cmd_output) = cmd("cat " + (appRoot(app) / ComposeFile).string());
-  if (!cmd_res) {
-    LOG_WARNING << "Failed to parse App config: " << app.name;
-    return false;
-  }
-
-  // calculate a number of container images that a given App consists of
-  std::string::size_type find_pos{0};
-  std::string::size_type line_pos{0};
-  int expected_container_number{0};
-
-  while ((find_pos = cmd_output.find("image:", line_pos)) != std::string::npos) {
-    if (cmd_output.substr(line_pos, (find_pos - line_pos)).find_first_of('#') == std::string::npos) {
-      ++expected_container_number;
+  try {
+    ComposeInfo info((appRoot(app) / ComposeFile).string());
+    std::vector<Json::Value> services = info.getServices();
+    if (services.empty()) {
+      LOG_WARNING << "App: " << app.name << ", no services in docker file!";
+      return false;
     }
-    line_pos = cmd_output.find('\n', find_pos);
-    ++find_pos;
+    DockerClient client(app.name);
+    for (std::size_t i = 0; i < services.size(); i++) {
+      std::string service = services[i].asString();
+      std::string hash = info.getHash(services[i]);
+      if (client.serviceRunning(service, hash)) {
+        continue;
+      }
+      LOG_WARNING << "App: " << app.name << ", service: " << service << ", not running!";
+      return false;
+    }
+    return true;
+  } catch (...) {
+    LOG_WARNING << "App: " << app.name << ", cant check if it is running!";
   }
-
-  // Get a number of running container images
-  std::tie(cmd_res, cmd_output) =
-      cmd(docker_ + "ps -q --filter=status=running --filter=label=com.docker.compose.project=" + app.name);
-  if (!cmd_res) {
-    LOG_WARNING << "Failed to get a list of App's containers: " << app.name;
-    return false;
-  }
-
-  int running_container_number =
-      std::count_if(cmd_output.begin(), cmd_output.end(), [](const char& symbol) { return symbol == '\n'; });
-
-  if (running_container_number < expected_container_number) {
-    LOG_DEBUG << "Number of running containers is less than a number of images specified in the compose file"
-              << "; App: " << app.name << "; expected container number: " << expected_container_number
-              << "; number of running containers: " << running_container_number;
-    return false;
-  }
-
-  return true;
+  return false;
 }
 
 // Private implementation
