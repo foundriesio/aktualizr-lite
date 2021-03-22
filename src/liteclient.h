@@ -58,6 +58,8 @@ class LiteClient {
   bool appsInSync() const;
   void setAppsNotChecked();
   std::string getDeviceID() const;
+  static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
+                                     PackageConfig& config);
 
  private:
   FRIEND_TEST(helpers, locking);
@@ -79,8 +81,6 @@ class LiteClient {
   std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
                                                 const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
-  static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
-                                     PackageConfig& config);
 
  private:
   boost::filesystem::path callback_program;

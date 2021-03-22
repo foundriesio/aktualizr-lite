@@ -261,7 +261,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         data::ResultCode::Numeric rc = do_update(client, *found_latest_target, reason);
         if (rc == data::ResultCode::Numeric::kOk) {
           current = *found_latest_target;
-          client.http_client->updateHeader("x-ats-target", current.filename());
+          LiteClient::update_request_headers(client.http_client, current, client.config.pacman);
           // Start the loop over to call updateImagesMeta which will update this
           // device's target name on the server.
           continue;
