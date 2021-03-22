@@ -240,7 +240,8 @@ class LiteClientTest : public ::testing::Test {
   /**
    * method createLiteClient
    */
-  std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn) {
+  std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
+                                               boost::optional<std::vector<std::string>> apps = boost::none) {
     Config conf;
     conf.uptane.repo_server = device_gateway_.getTufRepoUri();
     conf.provision.primary_ecu_hardware_id = hw_id;
@@ -251,6 +252,10 @@ class LiteClientTest : public ::testing::Test {
     conf.pacman.os = os;
     conf.pacman.extra["booted"] = "0";
     conf.pacman.extra["compose_apps_root"] = (test_dir_.Path() / "compose-apps").string();
+    if (!!apps) {
+      conf.pacman.extra["compose_apps"] = boost::algorithm::join(*apps, ",");
+    }
+    app_shortlist_ = apps;
     conf.pacman.ostree_server = device_gateway_.getOsTreeUri();
 
     conf.bootloader.reboot_command = "/bin/true";
@@ -431,7 +436,7 @@ class LiteClientTest : public ::testing::Test {
       // see
       // https://github.com/foundriesio/aktualizr-lite/blob/7ab6998920d57605601eda16f9bebedf00cc1f7f/src/main.cc#L264
       // once the daemon_main is "cleaned" the updateHeader can be removed from the test.
-      client.http_client->updateHeader("x-ats-target", to.filename());
+      LiteClient::update_request_headers(client.http_client, to, client.config.pacman);
       checkHeaders(client, to);
     } else {
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
@@ -479,7 +484,7 @@ class LiteClientTest : public ::testing::Test {
    */
   void reboot(std::shared_ptr<LiteClient>& client) {
     boost::filesystem::remove(test_dir_.Path() / "need_reboot");
-    client = createLiteClient(InitialVersion::kOff);
+    client = createLiteClient(InitialVersion::kOff, app_shortlist_);
   }
 
   /**
@@ -498,6 +503,21 @@ class LiteClientTest : public ::testing::Test {
     auto req_headers = getDeviceGateway().getReqHeaders();
     ASSERT_EQ(req_headers["x-ats-ostreehash"], target.sha256Hash());
     ASSERT_EQ(req_headers["x-ats-target"], target.filename());
+
+    auto target_apps = target.custom_data()["docker_compose_apps"];
+    std::vector<std::string> apps;
+    for (Json::ValueIterator ii = target_apps.begin(); ii != target_apps.end(); ++ii) {
+      if ((*ii).isObject() && (*ii).isMember("uri")) {
+        const auto& target_app_name = ii.key().asString();
+        if (!app_shortlist_ ||
+            (*app_shortlist_).end() != std::find((*app_shortlist_).begin(), (*app_shortlist_).end(), target_app_name)) {
+          apps.push_back(target_app_name);
+        }
+      }
+    }
+
+    std::string apps_list = boost::algorithm::join(apps, ",");
+    ASSERT_EQ(req_headers.get("x-ats-dockerapps", ""), apps_list);
   }
 
   /**
@@ -512,6 +532,7 @@ class LiteClientTest : public ::testing::Test {
   SysRootFS& getSysRootFs() { return sys_rootfs_; }
   TufRepoMock& getTufRepo() { return tuf_repo_; }
   OSTreeRepoMock& getOsTreeRepo() { return ostree_repo_; }
+  void setAppShortlist(const std::vector<std::string>& apps) { app_shortlist_ = boost::make_optional(apps); }
 
  protected:
   static const std::string branch;
@@ -528,6 +549,7 @@ class LiteClientTest : public ::testing::Test {
   Uptane::Target initial_target_;
   const std::string sysroot_hash_;
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_;
+  boost::optional<std::vector<std::string>> app_shortlist_;
 };
 
 std::string LiteClientTest::SysRootSrc;
@@ -708,6 +730,41 @@ TEST_F(LiteClientTest, AppUpdate) {
 
   // just call run which includes install if necessary (no ostree update case)
   EXPECT_CALL(*getAppEngine(), run).Times(1);
+
+  updateApps(*client, getInitialTarget(), new_target);
+}
+
+TEST_F(LiteClientTest, AppUpdateWithShortlist) {
+  // boot device
+  auto client = createLiteClient(InitialVersion::kOn, boost::make_optional(std::vector<std::string>{"app-02"}));
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target that adds two new apps
+  auto new_target = createAppTarget({createApp("app-01"), createApp("app-02")});
+
+  // update to the latest version
+  EXPECT_CALL(*getAppEngine(), fetch).Times(1);
+  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), install).Times(0);
+  // run should be called once since only one app is specified in the config
+  EXPECT_CALL(*getAppEngine(), run).Times(1);
+
+  updateApps(*client, getInitialTarget(), new_target);
+}
+
+TEST_F(LiteClientTest, AppUpdateWithEmptyShortlist) {
+  // boot device
+  auto client = createLiteClient(InitialVersion::kOn, boost::make_optional(std::vector<std::string>{""}));
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target that adds two new apps
+  auto new_target = createAppTarget({createApp("app-01"), createApp("app-02")});
+
+  // update to the latest version, nothing should be called since an empty app list is specified in the config
+  EXPECT_CALL(*getAppEngine(), fetch).Times(0);
+  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), install).Times(0);
+  EXPECT_CALL(*getAppEngine(), run).Times(0);
 
   updateApps(*client, getInitialTarget(), new_target);
 }

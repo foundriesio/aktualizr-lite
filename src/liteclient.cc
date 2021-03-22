@@ -478,18 +478,16 @@ void LiteClient::update_request_headers(std::shared_ptr<HttpClient>& http_client
   if (config.type == ComposeAppManager::Name) {
     ComposeAppManager::Config cfg(config);
 
-    // If App list was not specified in the config then we need to update the request header with a list of
-    // Apps specified in the currently installed Target
-    if (!cfg.apps) {
-      std::list<std::string> apps;
-      auto target_apps = target.custom_data()["docker_compose_apps"];
-      for (Json::ValueIterator ii = target_apps.begin(); ii != target_apps.end(); ++ii) {
-        if ((*ii).isObject() && (*ii).isMember("uri")) {
-          const auto& target_app_name = ii.key().asString();
+    std::list<std::string> apps;
+    auto target_apps = target.custom_data()["docker_compose_apps"];
+    for (Json::ValueIterator ii = target_apps.begin(); ii != target_apps.end(); ++ii) {
+      if ((*ii).isObject() && (*ii).isMember("uri")) {
+        const auto& target_app_name = ii.key().asString();
+        if (!cfg.apps || (*cfg.apps).end() != std::find((*cfg.apps).begin(), (*cfg.apps).end(), target_app_name)) {
           apps.push_back(target_app_name);
         }
       }
-      http_client->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
     }
+    http_client->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
   }
 }
