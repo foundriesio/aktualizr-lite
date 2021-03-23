@@ -78,7 +78,7 @@ RUN ln -s clang-10 /usr/bin/clang && \
 
 WORKDIR /tmp
 RUN git clone https://github.com/pantoniou/libfyaml.git
-RUN cd libfyaml && ./bootstrap.sh && ./configure && make && make install
+RUN cd libfyaml && ./bootstrap.sh && ./configure --prefix /usr && make && make install
 RUN ldconfig
 
 RUN useradd testuser
