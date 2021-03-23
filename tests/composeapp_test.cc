@@ -494,7 +494,7 @@ TEST(ComposeApp, handleRemovedApps) {
   ASSERT_TRUE(boost::filesystem::exists(apps / "app2"));
 }
 
-TEST(ComposeApp, installApp) {
+TEST(ComposeApp, DISABLED_installApp) {
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/1/1/0", true);
 
   Json::Value installed_target_json;
@@ -843,7 +843,7 @@ TEST(ComposeApp, installApp) {
   }
 }
 
-TEST(ComposeApp, resumeAppUpdate) {
+TEST(ComposeApp, DISABLED_resumeAppUpdate) {
   std::string sha = Utils::readFile(test_sysroot / "ostree/repo/refs/heads/ostree/0/1/0", true);
 
   TemporaryDirectory tmp_dir;
