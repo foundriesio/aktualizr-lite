@@ -74,6 +74,22 @@ ostree config --repo="${OSTREE_SYSROOT}/ostree/repo" set core.mode bare-user-onl
 ostree admin deploy --os=$OS $deploy_hash
 ```
 
+#### Install yaml to json tool
+Aktualizr-lite uses libfyaml to consume docker.yml files in json format.
+In order to resolve that binary dependency we need to install it in the same host where aktualizr-lite will be executing.
+The LmP targets install v0.6.3 so to replicate that install:
+
+```
+cd /tmp/
+wget https://github.com/pantoniou/libfyaml/releases/download/v0.6.3/libfyaml-0.6.3.tar.gz && tar xf libfyaml-0.6.3.tar.gz
+cd libfyaml-0.6.3
+./bootstrap.sh
+./configure --prefix /usr
+make
+sudo make install
+sudo ldconfig
+```
+
 ## Aktualizr-lite registration and configuration
 
 ### Registration
