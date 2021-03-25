@@ -9,6 +9,7 @@ set(SRC helpers.cc
         liteclient.cc
         ostree/repo.cc
         yaml2json.cc
+        dockerclient.cc
         composeinfo.cc
         composeapptree.cc)
 
@@ -22,6 +23,7 @@ set(HEADERS
         liteclient.h
         ostree/repo.h
         yaml2json.h
+        dockerclient.h
         composeinfo.h
         composeapptree.h )
 
