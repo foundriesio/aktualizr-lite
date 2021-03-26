@@ -2,30 +2,29 @@ set(TARGET_EXE aktualizr-lite)
 set(TARGET ${MAIN_TARGET_LIB})
 
 set(SRC helpers.cc
-        composeappengine.cc
-        docker.cc
+        compose/composeappmanager.cc
+        compose/composeappengine.cc
+        compose/composeapptree.cc
+        compose/composeinfo.cc
         ostree/sysroot.cc
-        composeappmanager.cc
-        liteclient.cc
         ostree/repo.cc
-        yaml2json.cc
         dockerclient.cc
-        composeinfo.cc
-        composeapptree.cc)
+        docker.cc
+        liteclient.cc
+        yaml2json.cc )
 
-set(HEADERS
-        helpers.h
-        composeappengine.h
-        appengine.h
-        docker.h
+set(HEADERS helpers.h
+        compose/composeappmanager.h
+        compose/composeappengine.h
+        compose/composeapptree.h
+        compose/composeinfo.h
+        compose/appengine.h
         ostree/sysroot.h
-        composeappmanager.h
-        liteclient.h
         ostree/repo.h
-        yaml2json.h
         dockerclient.h
-        composeinfo.h
-        composeapptree.h )
+        docker.h
+        liteclient.h
+        yaml2json.h)
 
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
@@ -38,6 +37,8 @@ target_compile_definitions(${TARGET} PRIVATE BOOST_LOG_DYN_LINK)
 target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 
 set(INCS
+  ${AKLITE_DIR}/src/compose
+  ${AKLITE_DIR}/src/
   ${AKTUALIZR_DIR}/include
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include

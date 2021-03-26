@@ -16,6 +16,8 @@ set_tests_properties(test_aktualizr-lite PROPERTIES LABELS "aklite:aktualizr-lit
 
 set(TEST_DEFS BOOST_LOG_DYN_LINK)
 set(TEST_INCS
+  ${AKLITE_DIR}/src/compose
+  ${AKLITE_DIR}/src/
   ${AKTUALIZR_DIR}/include
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include
