@@ -68,17 +68,6 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
   } catch (const std::exception& exc) {
     LOG_DEBUG << "Failed to initialize Compose App Tree (ostree) at " << cfg_.apps_tree << ". Error: " << exc.what();
   }
-
-  const auto& current_apps = getApps(getCurrent());
-  // TODO: refactor it to fix "app rollback when ostree rollback" issue
-  for (const auto& app_pair : current_apps) {
-    const auto& app_name = app_pair.first;
-    auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeAppEngine::NeedStartFile;
-    if (boost::filesystem::exists(need_start_flag)) {
-      app_engine_->run({app_pair.first, app_pair.second});
-      boost::filesystem::remove(need_start_flag);
-    }
-  }
 }
 
 // Returns an intersection of apps specified in Target and the configuration
@@ -287,8 +276,20 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
 
 data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target& target) {
   auto ir = OstreeManager::finalizeInstall(target);
-  if (ir.result_code != data::ResultCode::Numeric::kAlreadyProcessed ||
-      ir.result_code != data::ResultCode::Numeric::kNeedCompletion) {
+
+  const auto& current_apps = getApps(target);
+  for (const auto& app_pair : current_apps) {
+    const auto& app_name = app_pair.first;
+    auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeAppEngine::NeedStartFile;
+    if (boost::filesystem::exists(need_start_flag)) {
+      if (ir.result_code == data::ResultCode::Numeric::kOk) {
+        app_engine_->run({app_pair.first, app_pair.second});
+      }
+      boost::filesystem::remove(need_start_flag);
+    }
+  }
+
+  if (ir.result_code == data::ResultCode::Numeric::kOk) {
     ir.description += "\n# Apps running:\n" + containerDetails();
   }
   return ir;

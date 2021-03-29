@@ -385,9 +385,11 @@ class LiteClientTest : public ::testing::Test {
   /**
    * method createApp
    */
-  AppEngine::App createApp(const std::string& name, const std::string& factory = "test-factory") {
-    const std::string uri = "localhost:" + getDeviceGateway().getPort() + "/" + factory + "/" + name +
-                            "@sha256:7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243";
+  AppEngine::App createApp(const std::string& name,
+                           const std::string& hash = "7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243",
+                           const std::string& factory = "test-factory") {
+    const std::string uri =
+        "localhost:" + getDeviceGateway().getPort() + "/" + factory + "/" + name + "@sha256:" + hash;
     return {name, uri};
   }
 
@@ -838,6 +840,50 @@ TEST_F(LiteClientTest, AppUpdateInstallFailure) {
 
   updateApps(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kOk,
              data::ResultCode::Numeric::kInstallFailed);
+}
+
+TEST_F(LiteClientTest, OstreeAndAppUpdateIfRollback) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update both rootfs and add new app
+  std::vector<AppEngine::App> apps{createApp("app-01")};
+  auto target_01 = createTarget(&apps);
+
+  {
+    EXPECT_CALL(*getAppEngine(), fetch).Times(1);
+
+    // since the Target/app is not installed then no reason to check if the app is running
+    EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+
+    // Just install no need too call run
+    EXPECT_CALL(*getAppEngine(), install).Times(1);
+    EXPECT_CALL(*getAppEngine(), run).Times(0);
+
+    // update to the latest version
+    update(*client, getInitialTarget(), target_01);
+  }
+
+  {
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    checkHeaders(*client, target_01);
+  }
+
+  {
+    std::vector<AppEngine::App> apps{createApp("app-01", "new-hash")};
+    auto target_02 = createTarget(&apps);
+    // update to the latest version
+    update(*client, target_01, target_02);
+    // deploy the previous version/commit to emulate rollback
+    getSysRepo().deploy(target_01.sha256Hash());
+
+    reboot(client);
+    // make sure that a rollback has happened and a client is still running the previous Target
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    checkHeaders(*client, target_01);
+  }
 }
 
 /*
