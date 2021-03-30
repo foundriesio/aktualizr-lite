@@ -62,6 +62,8 @@ class LiteClient {
                                      PackageConfig& config);
   bool finalizeInstallation();
 
+  void logTarget(const std::string& prefix, const Uptane::Target& target) const;
+
  private:
   FRIEND_TEST(helpers, locking);
   FRIEND_TEST(helpers, callback);

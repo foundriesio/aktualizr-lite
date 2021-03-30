@@ -9,6 +9,7 @@
 
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
+#include "target.h"
 
 LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool finalize)
     : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
@@ -489,20 +490,13 @@ void LiteClient::add_apps_header(std::vector<std::string>& headers, PackageConfi
 void LiteClient::update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
                                         PackageConfig& config) {
   http_client->updateHeader("x-ats-target", target.filename());
-
   if (config.type == ComposeAppManager::Name) {
-    ComposeAppManager::Config cfg(config);
-
-    std::list<std::string> apps;
-    auto target_apps = target.custom_data()["docker_compose_apps"];
-    for (Json::ValueIterator ii = target_apps.begin(); ii != target_apps.end(); ++ii) {
-      if ((*ii).isObject() && (*ii).isMember("uri")) {
-        const auto& target_app_name = ii.key().asString();
-        if (!cfg.apps || (*cfg.apps).end() != std::find((*cfg.apps).begin(), (*cfg.apps).end(), target_app_name)) {
-          apps.push_back(target_app_name);
-        }
-      }
-    }
-    http_client->updateHeader("x-ats-dockerapps", boost::algorithm::join(apps, ","));
+    http_client->updateHeader("x-ats-dockerapps", Target::appsStr(target, ComposeAppManager::Config(config).apps));
   }
+}
+
+void LiteClient::logTarget(const std::string& prefix, const Uptane::Target& target) const {
+  Target::log(
+      prefix, target,
+      config.pacman.type == ComposeAppManager::Name ? ComposeAppManager::Config(config.pacman).apps : boost::none);
 }

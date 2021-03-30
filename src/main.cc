@@ -9,6 +9,7 @@
 #include "helpers.h"
 #include "libaktualizr/config.h"
 
+#include "target.h"
 #include "utilities/aktualizr_version.h"
 
 namespace bpo = boost::program_options;
@@ -47,7 +48,7 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
     if (target.custom_version().length() > 0) {
       name = target.custom_version();
     }
-    log_info_target("Active image is: ", client.config, target);
+    client.logTarget("Active image is: ", target);
   }
   return 0;
 }
@@ -87,7 +88,7 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
 
   LOG_INFO << "Updates available to " << hwid << ":";
   for (auto& pair : sorted_targets) {
-    log_info_target("", client.config, pair.second);
+    client.logTarget("", pair.second);
   }
   return 0;
 }
@@ -122,7 +123,7 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::H
     for (auto const& it : t.hardwareIds()) {
       if (it == hwid) {
         if (find_latest) {
-          if (latest == nullptr || Version(latest->custom_version()) < Version(t.custom_version())) {
+          if (latest == nullptr || Target::Version(latest->custom_version()) < Target::Version(t.custom_version())) {
             latest = std_::make_unique<Uptane::Target>(t);
           }
         } else if (version == t.filename() || version == t.custom_version()) {
@@ -138,8 +139,8 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::H
 }
 
 static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target, const std::string& reason) {
-  log_info_target("Updating Active Target: ", client.config, client.getCurrent());
-  log_info_target("To New Target: ", client.config, target);
+  client.logTarget("Updating Active Target: ", client.getCurrent());
+  client.logTarget("To New Target: ", target);
 
   generate_correlation_id(target);
 

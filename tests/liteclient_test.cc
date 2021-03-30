@@ -19,6 +19,7 @@
 
 #include "helpers.h"
 #include "ostree/repo.h"
+#include "target.h"
 
 using ::testing::NiceMock;
 using ::testing::Return;
@@ -155,7 +156,7 @@ class TufRepoMock {
     Json::Value custom_json;
     custom_json["targetFormat"] = "OSTREE";
     custom_json["version"] = version;
-    custom_json["docker_compose_apps"] = apps_json;
+    custom_json[Target::ComposeAppField] = apps_json;
     repo_.addCustomImage(name, hash_obj, 0, hardware_id, "", null_delegation, custom_json);
 
     Json::Value target_json;
@@ -385,9 +386,9 @@ class LiteClientTest : public ::testing::Test {
   /**
    * method createApp
    */
-  AppEngine::App createApp(const std::string& name,
-                           const std::string& hash = "7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243",
-                           const std::string& factory = "test-factory") {
+  AppEngine::App createApp(
+      const std::string& name, const std::string& factory = "test-factory",
+      const std::string& hash = "7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243") {
     const std::string uri =
         "localhost:" + getDeviceGateway().getPort() + "/" + factory + "/" + name + "@sha256:" + hash;
     return {name, uri};
@@ -455,8 +456,8 @@ class LiteClientTest : public ::testing::Test {
       return false;
     }
 
-    auto lhs_custom = lhs.custom_data().get("docker_compose_apps", Json::nullValue);
-    auto rhs_custom = rhs.custom_data().get("docker_compose_apps", Json::nullValue);
+    auto lhs_custom = Target::appsJson(lhs);
+    auto rhs_custom = Target::appsJson(rhs);
 
     if (lhs_custom == Json::nullValue && rhs_custom == Json::nullValue) {
       return true;
@@ -505,21 +506,7 @@ class LiteClientTest : public ::testing::Test {
     auto req_headers = getDeviceGateway().getReqHeaders();
     ASSERT_EQ(req_headers["x-ats-ostreehash"], target.sha256Hash());
     ASSERT_EQ(req_headers["x-ats-target"], target.filename());
-
-    auto target_apps = target.custom_data()["docker_compose_apps"];
-    std::vector<std::string> apps;
-    for (Json::ValueIterator ii = target_apps.begin(); ii != target_apps.end(); ++ii) {
-      if ((*ii).isObject() && (*ii).isMember("uri")) {
-        const auto& target_app_name = ii.key().asString();
-        if (!app_shortlist_ ||
-            (*app_shortlist_).end() != std::find((*app_shortlist_).begin(), (*app_shortlist_).end(), target_app_name)) {
-          apps.push_back(target_app_name);
-        }
-      }
-    }
-
-    std::string apps_list = boost::algorithm::join(apps, ",");
-    ASSERT_EQ(req_headers.get("x-ats-dockerapps", ""), apps_list);
+    ASSERT_EQ(req_headers.get("x-ats-dockerapps", ""), Target::appsStr(target, app_shortlist_));
   }
 
   /**
@@ -872,7 +859,7 @@ TEST_F(LiteClientTest, OstreeAndAppUpdateIfRollback) {
   }
 
   {
-    std::vector<AppEngine::App> apps{createApp("app-01", "new-hash")};
+    std::vector<AppEngine::App> apps{createApp("app-01", "test-factory", "new-hash")};
     auto target_02 = createTarget(&apps);
     // update to the latest version
     update(*client, target_01, target_02);
