@@ -13,6 +13,11 @@
 
 namespace bpo = boost::program_options;
 
+static int status_finalize(LiteClient& client, const bpo::variables_map& unused) {
+  (void)unused;
+  return client.finalizeInstallation() ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
 static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
   auto target = client.getCurrent();
@@ -295,7 +300,7 @@ static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::var
     {"update", update_main},
     {"list", list_main},
     {"status", status_main},
-};
+    {"finalize", status_finalize}};
 
 void check_info_options(const bpo::options_description& description, const bpo::variables_map& vm) {
   if (vm.count("help") != 0 || (vm.count("command") == 0 && vm.count("version") == 0)) {

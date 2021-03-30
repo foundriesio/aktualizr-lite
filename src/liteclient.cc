@@ -101,7 +101,7 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool
   }
 }
 
-void LiteClient::finalizeInstallation() {
+bool LiteClient::finalizeInstallation() {
   data::InstallationResult update_finalization_result{data::ResultCode::Numeric::kNeedCompletion, ""};
 
   // check if there is a pending update/installation/Target
@@ -110,15 +110,20 @@ void LiteClient::finalizeInstallation() {
 
   // finalize a pending update/installation if any
   if (!!pending_target) {
+    LOG_INFO << "Finalizing installation of the pending Target: " << pending_target->filename()
+             << ", hash: " << pending_target->sha256Hash();
     // if there is a pending update/installation/Target then try to apply/finalize it
     update_finalization_result = package_manager_->finalizeInstall(*pending_target);
     if (update_finalization_result.isSuccess()) {
-      LOG_INFO << "Marking target install complete for: " << *pending_target;
+      LOG_INFO << "Marking target install complete for: " << pending_target->filename();
       storage->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kCurrent);
     } else if (data::ResultCode::Numeric::kInstallFailed == update_finalization_result.result_code.num_code) {
+      LOG_ERROR << "Failed to finalize the installation, rollback has happened";
       // rollback has happenned, unset is_pending and was_installed flags of the given Target record in DB
       storage->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kNone);
     }
+  } else {
+    LOG_INFO << "There is no any pending Target installation";
   }
 
   const auto current_target = getCurrent();
@@ -130,6 +135,7 @@ void LiteClient::finalizeInstallation() {
     // we send the installation finished report event.
     notifyInstallFinished(*pending_target, update_finalization_result);
   }
+  return data::ResultCode::Numeric::kOk == update_finalization_result.result_code.num_code;
 }
 
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {

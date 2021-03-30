@@ -94,7 +94,12 @@ compose_apps_tree = "$sota_dir/apps-tree"
 EOF
 
 ## Check that we can do the info command
-$valgrind $aklite -h | grep "Command to execute: status, list, update"
+$valgrind $aklite -h | grep "finalize"
+$valgrind $aklite -h | grep "status"
+$valgrind $aklite -h | grep "list"
+$valgrind $aklite -h | grep "update"
+$valgrind $aklite -h | grep "daemon"
+
 
 ## Check that we can do the list command
 out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml list)
