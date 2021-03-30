@@ -1,4 +1,5 @@
 #include "composeappmanager.h"
+#include "target.h"
 
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
@@ -105,7 +106,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
 ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t) const {
   AppsContainer apps_to_update;
 
-  auto currently_installed_target_apps = OstreeManager::getCurrent().custom_data()["docker_compose_apps"];
+  auto currently_installed_target_apps = Target::appsJson(t);
   auto new_target_apps = getApps(t);  // intersection of apps specified in Target and the configuration
 
   for (const auto& app_pair : new_target_apps) {
@@ -171,7 +172,7 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
   bool passed = true;
-  const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
+  const auto& apps_uri = Target::ostreeURI(target);
   if (app_tree_ && !apps_uri.empty()) {
     LOG_INFO << "Fetching Apps Tree -> " << apps_uri;
 
@@ -214,7 +215,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
 
   handleRemovedApps(target);
 
-  const auto& apps_uri = target.custom_data()["compose-apps-uri"].asString();
+  const auto& apps_uri = Target::ostreeURI(target);
   if (app_tree_ && !apps_uri.empty()) {
     LOG_INFO << "Checking out updated Apps: " << apps_uri;
     try {
@@ -305,7 +306,6 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
     LOG_DEBUG << "cfg_.apps_root does not exist";
     return;
   }
-  std::vector<std::string> target_apps = target.custom_data()["docker_compose_apps"].getMemberNames();
 
   // an intersection of apps specified in Target and the configuration
   // i.e. the apps that are supposed to be installed and running

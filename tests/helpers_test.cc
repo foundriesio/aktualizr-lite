@@ -2,24 +2,25 @@
 
 #include "helpers.h"
 #include "composeappmanager.h"
+#include "target.h"
 
 static boost::filesystem::path test_sysroot;
 
 TEST(version, bad_versions) {
-  ASSERT_TRUE(Version("bar") < Version("foo"));
-  ASSERT_TRUE(Version("1.bar") < Version("2foo"));
-  ASSERT_TRUE(Version("1..0") < Version("1.1"));
-  ASSERT_TRUE(Version("1.-1") < Version("1.1"));
-  ASSERT_TRUE(Version("1.*bad #text") < Version("1.1"));  // ord('*') < ord('1')
+  ASSERT_TRUE(Target::Version("bar") < Target::Version("foo"));
+  ASSERT_TRUE(Target::Version("1.bar") < Target::Version("2foo"));
+  ASSERT_TRUE(Target::Version("1..0") < Target::Version("1.1"));
+  ASSERT_TRUE(Target::Version("1.-1") < Target::Version("1.1"));
+  ASSERT_TRUE(Target::Version("1.*bad #text") < Target::Version("1.1"));  // ord('*') < ord('1')
 }
 
 TEST(version, good_versions) {
-  ASSERT_TRUE(Version("1.0.1") < Version("1.0.1.1"));
-  ASSERT_TRUE(Version("1.0.1") < Version("1.0.2"));
-  ASSERT_TRUE(Version("0.9") < Version("1.0.1"));
-  ASSERT_TRUE(Version("1.0.0.0") < Version("1.0.0.1"));
-  ASSERT_TRUE(Version("1") < Version("1.0.0.1"));
-  ASSERT_TRUE(Version("1.9.0") < Version("1.10"));
+  ASSERT_TRUE(Target::Version("1.0.1") < Target::Version("1.0.1.1"));
+  ASSERT_TRUE(Target::Version("1.0.1") < Target::Version("1.0.2"));
+  ASSERT_TRUE(Target::Version("0.9") < Target::Version("1.0.1"));
+  ASSERT_TRUE(Target::Version("1.0.0.0") < Target::Version("1.0.0.1"));
+  ASSERT_TRUE(Target::Version("1") < Target::Version("1.0.0.1"));
+  ASSERT_TRUE(Target::Version("1.9.0") < Target::Version("1.10"));
 }
 
 // Ensure we finalize an install if completed

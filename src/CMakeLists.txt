@@ -11,7 +11,8 @@ set(SRC helpers.cc
         dockerclient.cc
         docker.cc
         liteclient.cc
-        yaml2json.cc )
+        yaml2json.cc
+        target.cc)
 
 set(HEADERS helpers.h
         compose/composeappmanager.h
@@ -24,7 +25,8 @@ set(HEADERS helpers.h
         dockerclient.h
         docker.h
         liteclient.h
-        yaml2json.h)
+        yaml2json.h
+        target.h)
 
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
