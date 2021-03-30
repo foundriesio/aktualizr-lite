@@ -282,14 +282,14 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
     const auto& app_name = app_pair.first;
     auto need_start_flag = cfg_.apps_root / app_name / Docker::ComposeAppEngine::NeedStartFile;
     if (boost::filesystem::exists(need_start_flag)) {
-      if (ir.result_code == data::ResultCode::Numeric::kOk) {
+      if (ir.result_code.num_code == data::ResultCode::Numeric::kOk) {
         app_engine_->run({app_pair.first, app_pair.second});
       }
       boost::filesystem::remove(need_start_flag);
     }
   }
 
-  if (ir.result_code == data::ResultCode::Numeric::kOk) {
+  if (data::ResultCode::Numeric::kNeedCompletion != ir.result_code.num_code) {
     ir.description += "\n# Apps running:\n" + containerDetails();
   }
   return ir;
