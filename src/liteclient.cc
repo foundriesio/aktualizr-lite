@@ -10,7 +10,7 @@
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
 
-LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine)
+LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool finalize)
     : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
   std::string pkey;
   storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
@@ -92,7 +92,16 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine)
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
+  if (finalize) {
+    finalizeInstallation();
+  } else {
+    const auto current_target = getCurrent();
+    update_request_headers(http_client, current_target, config.pacman);
+    writeCurrentTarget(current_target);
+  }
+}
 
+void LiteClient::finalizeInstallation() {
   data::InstallationResult update_finalization_result{data::ResultCode::Numeric::kNeedCompletion, ""};
 
   // check if there is a pending update/installation/Target

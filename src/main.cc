@@ -408,7 +408,8 @@ int main(int argc, char* argv[]) {
     std::pair<bool, std::string> is_reboot_required{false, ""};
     {
       LOG_DEBUG << "Running " << (*cmd_to_run).first;
-      LiteClient client(config);
+      bool finalize = true ? cmd == "daemon" || cmd == "update" : false;
+      LiteClient client(config, nullptr, finalize);
       ret_val = (*cmd_to_run).second(client, commandline_map);
       if (cmd == "daemon") {
         is_reboot_required = client.isRebootRequired();

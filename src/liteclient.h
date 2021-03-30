@@ -26,7 +26,7 @@ class Lock {
 
 class LiteClient {
  public:
-  LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr);
+  LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr, bool finalize = true);
 
   Config config;
   std::vector<std::string> tags;
@@ -81,6 +81,7 @@ class LiteClient {
   std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
                                                 const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
+  void finalizeInstallation();
 
  private:
   boost::filesystem::path callback_program;
