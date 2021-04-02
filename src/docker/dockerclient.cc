@@ -1,11 +1,16 @@
 #include "dockerclient.h"
-#include <logging/logging.h>
+
 #include "http/httpclient.h"
+#include "logging/logging.h"
 #include "utilities/utils.h"
 
 namespace Docker {
 
-DockerClient::DockerClient(const std::string& app, bool curl) {
+DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = []() {
+  return std::make_shared<HttpClient>("/var/run/docker.sock");
+};
+
+DockerClient::DockerClient(const std::string& app, bool curl, const HttpClientFactory& http_client_factory) {
   std::string cmd;
   if (curl) {
     cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/containers/json?" + app;
@@ -16,8 +21,8 @@ DockerClient::DockerClient(const std::string& app, bool curl) {
     }
   } else {
     cmd = "http://localhost/containers/json?" + app;
-    HttpClient client("/var/run/docker.sock");
-    auto resp = client.get(cmd, HttpInterface::kNoLimit);
+    std::shared_ptr<HttpInterface> client{http_client_factory()};
+    auto resp = client->get(cmd, HttpInterface::kNoLimit);
     if (resp.isOk()) {
       root_ = resp.getJson();
     }

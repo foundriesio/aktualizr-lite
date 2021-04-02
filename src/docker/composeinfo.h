@@ -6,7 +6,6 @@
 #include <vector>
 #include "yaml2json.h"
 
-
 namespace Docker {
 
 class ComposeInfo {
