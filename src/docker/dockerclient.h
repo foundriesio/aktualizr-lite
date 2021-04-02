@@ -1,8 +1,9 @@
-#ifndef AKTUALIZR_LITE_DOCKERCLIENT_H
-#define AKTUALIZR_LITE_DOCKERCLIENT_H
+#ifndef AKTUALIZR_LITE_DOCKER_CLIENT_H
+#define AKTUALIZR_LITE_DOCKER_CLIENT_H
 
 #include <json/json.h>
 #include <string>
+
 
 namespace Docker {
 
@@ -17,4 +18,4 @@ class DockerClient {
 
 }  // namespace Docker
 
-#endif  // AKTUALIZR_LITE_DOCKERCLIENT_H
+#endif  // AKTUALIZR_LITE_DOCKER_CLIENT_H
