@@ -5,9 +5,9 @@
 #include <memory>
 #include <unordered_map>
 
-#include "composeappengine.h"
-#include "composeapptree.h"
-#include "docker.h"
+#include "docker/composeappengine.h"
+#include "docker/composeapptree.h"
+#include "docker/docker.h"
 #include "ostree/sysroot.h"
 #include "package_manager/ostreemanager.h"
 

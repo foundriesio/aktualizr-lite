@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "composeinfo.h"
+#include "docker/composeinfo.h"
 #include "logging/logging.h"
 #include "yaml2json.h"
 
