@@ -27,7 +27,9 @@ DockerClient::DockerClient(const std::string& app, bool curl, const HttpClientFa
       root_ = resp.getJson();
     }
   }
-  if (root_.empty()) {
+  if (!root_) {
+    // check if the `root_` json is initialized, not `empty()` since dockerd can return 200/OK with
+    // empty json `[]`, which is not exceptional situation and means zero containers are running
     throw std::runtime_error(cmd.c_str());
   }
 }
