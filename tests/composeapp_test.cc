@@ -226,7 +226,7 @@ struct TestClient {
     ComposeAppManager::Config pacman_cfg{config.pacman};
     app_engine_ = std::make_shared<Docker::ComposeAppEngine>(pacman_cfg.apps_root,
                                                            boost::filesystem::canonical(pacman_cfg.compose_bin).string() + " ",
-                                                           boost::filesystem::canonical(pacman_cfg.docker_bin).string() + " ",
+                                                           std::make_shared<Docker::DockerClient>(),
                                                            std::make_shared<Docker::RegistryClient>(config.pacman.ostree_server, http_client, registry_http_client_factory));
     pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, sysroot, app_engine_);
   }

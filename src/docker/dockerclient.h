@@ -11,15 +11,19 @@ namespace Docker {
 
 class DockerClient {
  public:
+  using Ptr = std::shared_ptr<DockerClient>;
   using HttpClientFactory = std::function<std::shared_ptr<HttpInterface>()>;
   static HttpClientFactory DefaultHttpClientFactory;
 
  public:
-  DockerClient(const std::string& app, bool curl = false,
-               const HttpClientFactory& http_client_factory = DefaultHttpClientFactory);
-  bool serviceRunning(std::string& service, std::string& hash);
+  DockerClient(std::shared_ptr<HttpInterface> http_client = DefaultHttpClientFactory());
+  bool serviceRunning(const std::string& app, const std::string& service, const std::string& hash);
 
  private:
+  void updateContainerStatus(bool curl = false);
+
+ private:
+  std::shared_ptr<HttpInterface> http_client_;
   Json::Value root_;
 };
 
