@@ -59,7 +59,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
   if (!app_engine_) {
     app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
         cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
-        boost::filesystem::canonical(cfg_.docker_bin).string() + " ",
+        std::make_shared<Docker::DockerClient>(),
         std::make_shared<Docker::RegistryClient>(pconfig.ostree_server, http));
   }
 

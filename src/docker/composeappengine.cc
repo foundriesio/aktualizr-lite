@@ -7,11 +7,11 @@
 
 namespace Docker {
 
-ComposeAppEngine::ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin, std::string docker_bin,
-                                   Docker::RegistryClient::Ptr registry_client)
+ComposeAppEngine::ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin,
+                                   Docker::DockerClient::Ptr docker_client, Docker::RegistryClient::Ptr registry_client)
     : root_{std::move(root_dir)},
       compose_{std::move(compose_bin)},
-      docker_{std::move(docker_bin)},
+      docker_client_{std::move(docker_client)},
       registry_client_{std::move(registry_client)} {
   boost::filesystem::create_directories(root_);
 }
@@ -51,11 +51,11 @@ bool ComposeAppEngine::isRunning(const App& app) const {
       LOG_WARNING << "App: " << app.name << ", no services in docker file!";
       return false;
     }
-    DockerClient client(app.name);
+
     for (std::size_t i = 0; i < services.size(); i++) {
       std::string service = services[i].asString();
       std::string hash = info.getHash(services[i]);
-      if (client.serviceRunning(service, hash)) {
+      if (docker_client_->serviceRunning(app.name, service, hash)) {
         continue;
       }
       LOG_WARNING << "App: " << app.name << ", service: " << service << ", not running!";
