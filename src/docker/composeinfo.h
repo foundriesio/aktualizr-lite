@@ -1,10 +1,12 @@
-#ifndef AKTUALIZR_LITE_COMPOSEINFO_H
-#define AKTUALIZR_LITE_COMPOSEINFO_H
+#ifndef AKTUALIZR_LITE_COMPOSE_INFO_H
+#define AKTUALIZR_LITE_COMPOSE_INFO_H
 
 #include <json/json.h>
 #include <string>
 #include <vector>
 #include "yaml2json.h"
+
+
 namespace Docker {
 
 class ComposeInfo {
@@ -20,4 +22,4 @@ class ComposeInfo {
 
 }  // namespace Docker
 
-#endif  // AKTUALIZR_LITE_COMPOSEINFO_H
+#endif  // AKTUALIZR_LITE_COMPOSE_INFO_H
