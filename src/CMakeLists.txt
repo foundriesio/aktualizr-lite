@@ -2,28 +2,28 @@ set(TARGET_EXE aktualizr-lite)
 set(TARGET ${MAIN_TARGET_LIB})
 
 set(SRC helpers.cc
-        compose/composeappmanager.cc
-        compose/composeappengine.cc
-        compose/composeapptree.cc
-        compose/composeinfo.cc
+        composeappmanager.cc
+        docker/composeappengine.cc
+        docker/composeapptree.cc
+        docker/composeinfo.cc
         ostree/sysroot.cc
         ostree/repo.cc
-        dockerclient.cc
-        docker.cc
+        docker/dockerclient.cc
+        docker/docker.cc
         liteclient.cc
         yaml2json.cc
         target.cc)
 
 set(HEADERS helpers.h
-        compose/composeappmanager.h
-        compose/composeappengine.h
-        compose/composeapptree.h
-        compose/composeinfo.h
-        compose/appengine.h
+        composeappmanager.h
+        docker/composeappengine.h
+        docker/composeapptree.h
+        docker/composeinfo.h
+        appengine.h
         ostree/sysroot.h
         ostree/repo.h
-        dockerclient.h
-        docker.h
+        docker/dockerclient.h
+        docker/docker.h
         liteclient.h
         yaml2json.h
         target.h)

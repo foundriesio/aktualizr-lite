@@ -11,7 +11,7 @@
 #include "http/httpinterface.h"
 
 #include "composeappmanager.h"
-#include "composeappengine.h"
+#include "docker/composeappengine.h"
 
 
 class FakeRegistry {
