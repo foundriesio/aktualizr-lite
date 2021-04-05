@@ -90,3 +90,19 @@ add_dependencies(t_liteclient make_ostree_sysroot)
 set_tests_properties(test_liteclient PROPERTIES LABELS "aklite:liteclient")
 
 aktualizr_source_file_checks(liteclient_test.cc)
+
+add_aktualizr_test(NAME composeappengine
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> composeappengine_test.cc
+  PROJECT_WORKING_DIRECTORY
+#  ARGS
+#  ${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
+#  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+)
+
+target_compile_definitions(t_composeappengine PRIVATE ${TEST_DEFS})
+target_include_directories(t_composeappengine PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+#target_link_libraries(t_liteclient ${TEST_LIBS} uptane_generator_lib testutilities)
+#add_dependencies(t_liteclient make_ostree_sysroot)
+set_tests_properties(test_composeappengine PROPERTIES LABELS "aklite:appengine")
+
+aktualizr_source_file_checks(composeappengine_test.cc)

@@ -58,7 +58,7 @@ bool ComposeAppEngine::isRunning(const App& app) const {
       if (docker_client_->serviceRunning(app.name, service, hash)) {
         continue;
       }
-      LOG_WARNING << "App: " << app.name << ", service: " << service << ", not running!";
+      LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
       return false;
     }
     return true;
