@@ -5,6 +5,7 @@ import sys
 import argparse
 import json
 import logging
+import ssl
 
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 
@@ -100,11 +101,21 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 class FakeDeviceGateway(HTTPServer):
-    def __init__(self, addr, ostree_repo, tuf_repo, headers_file):
+    def __init__(self, addr, ostree_repo, tuf_repo, headers_file, mtls=None):
         self.ostree_repo = ostree_repo
         self.tuf_repo = tuf_repo
         self.headers_file = headers_file
         super(HTTPServer, self).__init__(server_address=addr, RequestHandlerClass=Handler)
+
+        if mtls:
+            server_key = os.path.join(mtls, "pkey.pem")
+            server_cert = os.path.join(mtls, "server.crt")
+            ca_cert = os.path.join(mtls, "ca.crt")
+            # make Device Gateway check a device/client certificate
+            tls_param = ssl.CERT_REQUIRED
+
+            self.socket = ssl.wrap_socket(self.socket, certfile=server_cert, keyfile=server_key, ca_certs=ca_cert,
+                                          server_side=True, cert_reqs=tls_param)
 
 
 def main():
@@ -113,11 +124,13 @@ def main():
     parser.add_argument('-o', '--ostree', help='OSTree repo directory')
     parser.add_argument('-t', '--tuf-repo', help='TUF repo directory')
     parser.add_argument('-j', '--headers-file', help='File to dump request headers to')
+    parser.add_argument('-s', '--mtls', default=None,
+                        help='Enables mTLS (HTTP over mTLS) and specifies directory with certs/key')
 
     args = parser.parse_args()
 
     try:
-        httpd = FakeDeviceGateway(('', args.port), args.ostree, args.tuf_repo, args.headers_file)
+        httpd = FakeDeviceGateway(('', args.port), args.ostree, args.tuf_repo, args.headers_file, args.mtls)
         httpd.serve_forever()
     except KeyboardInterrupt:
         httpd.server_close()
