@@ -17,7 +17,9 @@ def up(out_dir, app_name, compose, flags):
         return
 
     logger.info("Run services...")
-    containers = []
+    with open(os.path.join(out_dir, "containers.json"), "r") as f:
+        containers = json.load(f)
+
     for service in compose["services"]:
         container = {"Labels": {}}
         logger.info("Run service " + service)
@@ -40,6 +42,10 @@ def main():
         out_dir = sys.argv[1]
         cmd = sys.argv[2]
         logger.info("Command: " + cmd)
+        flags = sys.argv[3:]
+        if len(flags) > 2 and flags[1] == '--no-start':
+            logger.info(">>>>>>>>>>>> --no-start")
+            cmd = ""
         app_name = os.path.basename(os.getcwd())
         if cmd == "up":
             up(out_dir, app_name, compose, sys.argv[3:])
