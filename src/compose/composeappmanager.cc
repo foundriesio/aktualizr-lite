@@ -106,7 +106,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
 ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t) const {
   AppsContainer apps_to_update;
 
-  auto currently_installed_target_apps = Target::appsJson(t);
+  auto currently_installed_target_apps = Target::appsJson(OstreeManager::getCurrent());
   auto new_target_apps = getApps(t);  // intersection of apps specified in Target and the configuration
 
   for (const auto& app_pair : new_target_apps) {
