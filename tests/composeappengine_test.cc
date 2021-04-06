@@ -12,16 +12,16 @@
 
 #include "fixtures/composeappenginetest.cc"
 
-class ComposeAppEngineeTest : public fixtures::AppEngineTest {};
+class ComposeAppEngineTest : public fixtures::AppEngineTest {};
 
-TEST_F(ComposeAppEngineeTest, Fetch) {
+TEST_F(ComposeAppEngineTest, Fetch) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   // TODO: AppEngine API doesn't provide mean(s) to check if App is fetched
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
-TEST_F(ComposeAppEngineeTest, FetchAndInstall) {
+TEST_F(ComposeAppEngineTest, FetchAndInstall) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   // TODO: AppEngine API doesn't provide mean(s) to check if App is installed
@@ -29,14 +29,14 @@ TEST_F(ComposeAppEngineeTest, FetchAndInstall) {
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
-TEST_F(ComposeAppEngineeTest, FetchAndRun) {
+TEST_F(ComposeAppEngineTest, FetchAndRun) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->run(app));
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 
-TEST_F(ComposeAppEngineeTest, FetchInstallAndRun) {
+TEST_F(ComposeAppEngineTest, FetchInstallAndRun) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->install(app));
@@ -44,7 +44,7 @@ TEST_F(ComposeAppEngineeTest, FetchInstallAndRun) {
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 
-TEST_F(ComposeAppEngineeTest, FetchRunAndUpdate) {
+TEST_F(ComposeAppEngineTest, FetchRunAndUpdate) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->run(app));

@@ -17,6 +17,7 @@
 #include <iostream>
 #include <string>
 
+#include "docker/composeappengine.h"
 #include "helpers.h"
 #include "ostree/repo.h"
 #include "target.h"
