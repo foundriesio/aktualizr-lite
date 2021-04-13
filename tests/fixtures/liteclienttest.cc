@@ -1,192 +1,23 @@
 namespace fixtures {
 
+#include "liteclient/executecmd.cc"
+#include "liteclient/sysrootfs.cc"
+#include "liteclient/ostreerepomock.cc"
+#include "liteclient/sysostreerepomock.cc"
+#include "liteclient/tufrepomock.cc"
+#include "liteclient/devicegatewaymock.cc"
 
-static std::string executeCmd(const std::string& cmd, const std::vector<std::string>& args, const std::string& desc) {
-  auto res = Process::spawn(cmd, args);
-  if (std::get<0>(res) != 0) throw std::runtime_error("Failed to " + desc + ": " + std::get<2>(res));
-
-  auto std_out = std::get<1>(res);
-  boost::trim_right_if(std_out, boost::is_any_of(" \t\r\n"));
-  return std_out;
-}
-
-/**
- * Class SysRootFS
- *
- */
-class SysRootFS {
- public:
-  static std::string CreateCmd;
-
- public:
-  SysRootFS(std::string _path, std::string _branch, std::string _hw_id, std::string _os)
-      : branch{std::move(_branch)}, hw_id{std::move(_hw_id)}, path{std::move(_path)}, os{std::move(_os)} {
-    executeCmd(CreateCmd, {path, branch, hw_id, os}, "generate a system rootfs template");
-  }
-
-  const std::string branch;
-  const std::string hw_id;
-  const std::string path;
-  const std::string os;
-};
-
-std::string SysRootFS::CreateCmd;
-
-/**
- * Class OSTreeRepoMock
- *
- */
-class OSTreeRepoMock {
- public:
-  OSTreeRepoMock(std::string path, bool create = false, std::string mode = "archive") : path_{std::move(path)} {
-    if (!create) return;
-    executeCmd("ostree", {"init", "--repo", path_, "--mode=" + mode}, "init an ostree repo at " + path_);
-    LOG_INFO << "OSTree repo was created at " + path_;
-  }
-
-  std::string commit(const std::string& src_dir, const std::string& branch) {
-    return executeCmd("ostree", {"commit", "--repo", path_, "--branch", branch, "--tree=dir=" + src_dir},
-                      "commit from " + src_dir + " to " + path_);
-  }
-
-  void set_mode(const std::string& mode) {
-    executeCmd("ostree", {"config", "--repo", path_, "set", "core.mode", mode}, "set mode for repo " + path_);
-  }
-
-  const std::string& getPath() const { return path_; }
-
- private:
-  const std::string path_;
-};
-
-/**
- * Class SysOSTreeRepoMock
- *
- */
-class SysOSTreeRepoMock {
- public:
-  SysOSTreeRepoMock(std::string _path, std::string _os) : path_{_path}, os_{_os}, repo_{path_ + "/ostree/repo"} {
-    boost::filesystem::create_directories(path_);
-    executeCmd("ostree", {"admin", "init-fs", path_}, "init a system rootfs at " + path_);
-    executeCmd("ostree", {"admin", "--sysroot=" + path_, "os-init", os_}, "init OS in a system rootfs at " + path_);
-    repo_.set_mode("bare-user-only");
-    LOG_INFO << "System ostree-based repo has been initialized at " << path_;
-  }
-
-  const std::string& getPath() const { return path_; }
-  OSTreeRepoMock& getRepo() { return repo_; }
-
-  void deploy(const std::string& hash) {
-    executeCmd("ostree", {"admin", "--sysroot=" + path_, "deploy", "--os=" + os_, hash}, "deploy " + hash);
-  }
-
- private:
-  const std::string path_;
-  const std::string os_;
-  OSTreeRepoMock repo_;
-};
-
-/**
- * Class TufRepoMock
- *
- */
-class TufRepoMock {
- public:
-  TufRepoMock(const boost::filesystem::path& _root, std::string expires = "",
-              std::string correlation_id = "corellatio-id")
-      : root_{_root.string()}, repo_{_root, expires, correlation_id}, latest_{Uptane::Target::Unknown()} {
-    repo_.generateRepo(KeyType::kED25519);
-  }
-
- public:
-  const std::string& getPath() const { return root_; }
-  const Uptane::Target& getLatest() const { return latest_; }
-
-  Uptane::Target addTarget(const std::string& name, const std::string& hash, const std::string& hardware_id,
-                           const std::string& version, const Json::Value& apps_json = Json::Value()) {
-    Delegation null_delegation{};
-    Hash hash_obj{Hash::Type::kSha256, hash};
-
-    Json::Value custom_json;
-    custom_json["targetFormat"] = "OSTREE";
-    custom_json["version"] = version;
-    custom_json[Target::ComposeAppField] = apps_json;
-    repo_.addCustomImage(name, hash_obj, 0, hardware_id, "", null_delegation, custom_json);
-
-    Json::Value target_json;
-    target_json["length"] = 0;
-    target_json["hashes"]["sha256"] = hash;
-    target_json["custom"] = custom_json;
-    latest_ = Uptane::Target(name, target_json);
-    return latest_;
-  }
-
- private:
-  const std::string root_;
-  ImageRepo repo_;
-  Uptane::Target latest_;
-};
-
-/**
- * Class DeviceGatewayMock
- *
- */
-class DeviceGatewayMock {
- public:
-  static std::string RunCmd;
-
- public:
-  DeviceGatewayMock(const OSTreeRepoMock& ostree, const TufRepoMock& tuf)
-      : ostree_{ostree},
-        tuf_{tuf},
-        port_{TestUtils::getFreePort()},
-        url_{"http://localhost:" + port_},
-        req_headers_file_{tuf_.getPath() + "/headers.json"},
-        process_{RunCmd,           "--port",         port_, "--ostree", ostree_.getPath(), "--tuf-repo", tuf_.getPath(),
-                 "--headers-file", req_headers_file_} {
-    TestUtils::waitForServer(url_ + "/");
-    LOG_INFO << "Device Gateway is running on port " << port_;
-  }
-
-  ~DeviceGatewayMock() {
-    process_.terminate();
-    process_.wait_for(std::chrono::seconds(10));
-  }
-
- public:
-  std::string getOsTreeUri() const { return url_ + "/treehub"; }
-  std::string getTufRepoUri() const { return url_ + "/repo"; }
-  const std::string& getPort() const { return port_; }
-  Json::Value getReqHeaders() const { return Utils::parseJSONFile(req_headers_file_); }
-
- private:
-  const OSTreeRepoMock& ostree_;
-  const TufRepoMock& tuf_;
-  const std::string port_;
-  const std::string url_;
-  const std::string req_headers_file_;
-  boost::process::child process_;
-};
-
-std::string DeviceGatewayMock::RunCmd;
-
-
-
-/**
- * Class ClientTest
- *
- */
 class ClientTest :virtual public ::testing::Test {
  public:
   static std::string SysRootSrc;
 
  protected:
-  ClientTest()
+  ClientTest(std::string certs_dir = "")
       : sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
         sys_repo_{(test_dir_.Path() / "sysrepo").string(), os},
         tuf_repo_{test_dir_.Path() / "repo"},
         ostree_repo_{(test_dir_.Path() / "treehub").string(), true},
-        device_gateway_{ostree_repo_, tuf_repo_},
+        device_gateway_{ostree_repo_, tuf_repo_, certs_dir},
         initial_target_{Uptane::Target::Unknown()},
         sysroot_hash_{sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch)} {
     sys_repo_.deploy(sysroot_hash_);
@@ -489,7 +320,7 @@ class ClientTest :virtual public ::testing::Test {
   static const std::string hw_id;
   static const std::string os;
 
- private:
+ protected:
   TemporaryDirectory test_dir_;  // must be the first element in the class
   SysRootFS sys_rootfs_;
   SysOSTreeRepoMock sys_repo_;
