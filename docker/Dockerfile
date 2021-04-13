@@ -24,7 +24,9 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   e2fslibs-dev \
   g++ \
   gcc \
+  gdb \
   git \
+  vim \
   graphviz \
   jq \
   lcov \
@@ -44,8 +46,9 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   libgpgme11-dev \
   libgtest-dev \
   liblzma-dev \
-  libostree-dev \
   libp11-dev \
+  libsofthsm2 \
+  libsofthsm2-dev \
   libsodium-dev \
   libsqlite3-dev \
   libssl-dev \
@@ -56,7 +59,6 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   net-tools \
   ninja-build \
   opensc \
-  ostree \
   pkg-config \
   psmisc \
   python-is-python3 \
@@ -80,6 +82,18 @@ WORKDIR /tmp
 RUN git clone https://github.com/pantoniou/libfyaml.git
 RUN cd libfyaml && ./bootstrap.sh && ./configure --prefix /usr && make && make install
 RUN ldconfig
+
+# OSTREE with libcurl support for HSM
+#  This allows ostree calls to libcurl to be able to keys controlled by pkcs11
+WORKDIR /tmp
+RUN mkdir ostree && cd ostree && git init && git remote add origin https://github.com/ostreedev/ostree && \
+    git fetch origin v2020.7 && git checkout FETCH_HEAD && \
+    ./autogen.sh CFLAGS='-Wno-error=missing-prototypes' \
+    --with-libarchive \
+    --disable-man \
+    --with-builtin-grub2-mkconfig \
+    --with-curl --without-soup --prefix=/usr && \
+    make -j8  install
 
 RUN useradd testuser
 
