@@ -89,7 +89,22 @@ target_link_libraries(t_liteclient ${TEST_LIBS} uptane_generator_lib testutiliti
 add_dependencies(t_liteclient make_ostree_sysroot)
 set_tests_properties(test_liteclient PROPERTIES LABELS "aklite:liteclient")
 
+add_aktualizr_test(NAME liteclientHSM
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> liteclientHSM_test.cc
+  PROJECT_WORKING_DIRECTORY
+  ARGS
+  ${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
+  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+)
+
+target_compile_definitions(t_liteclientHSM PRIVATE ${TEST_DEFS})
+target_include_directories(t_liteclientHSM PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_liteclientHSM ${TEST_LIBS} uptane_generator_lib testutilities)
+add_dependencies(t_liteclientHSM make_ostree_sysroot)
+set_tests_properties(test_liteclientHSM PROPERTIES LABELS "aklite:liteclientHSM")
+
 aktualizr_source_file_checks(liteclient_test.cc)
+aktualizr_source_file_checks(liteclientHSM_test.cc)
 
 add_aktualizr_test(NAME composeappengine
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> composeappengine_test.cc
@@ -118,4 +133,3 @@ add_dependencies(t_aklite make_ostree_sysroot)
 set_tests_properties(test_aklite PROPERTIES LABELS "aklite:aklite")
 
 aktualizr_source_file_checks(aklite_test.cc)
-
