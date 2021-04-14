@@ -40,7 +40,7 @@ apt install -y libgpgme11-dev libarchive-dev libcurl4-openssl-dev e2fslibs-dev l
 ```
 mkdir ostree && cd ostree
 git init && git remote add origin https://github.com/ostreedev/ostree
-git fetch origin v2018.9 && git checkout FETCH_HEAD
+git fetch origin v2020.7 && git checkout FETCH_HEAD
 
 ./autogen.sh CFLAGS='-Wno-error=missing-prototypes' --with-libarchive --disable-man --with-builtin-grub2-mkconfig --with-curl --without-soup --prefix=/usr
 sudo make -j6 install
@@ -104,9 +104,19 @@ cd ..
 ```
 #### Get API token
 $FACTORY_API_TOKEN can be obtain from https://app.foundries.io/settings/tokens/,
-make sure you have chosen at least `devices:create` scope for your API token. 
+make sure you have chosen at least `devices:create` scope for your API token.
+#### Register
 ```
 DEVICE_FACTORY=<you-factory-name> lmp-device-register -d $PWD -n <device-name>  --start-daemon 0 -T $FACTORY_API_TOKEN
+```
+or if you like to enable PKCS#11 compatible HSM storage usage, for example SoftHSM.
+Make sure that you built aktualizr-lite with `-DBUILD_P11=ON` option in this case, as well as `softhsm2 and libsofthsm2-dev` is installed on your system.
+```
+DEVICE_FACTORY=<you-factory-name> lmp-device-register -d $PWD -n <device-name>  --start-daemon 0 -T $FACTORY_API_TOKEN -m /usr/lib/softhsm/libsofthsm2.so -S <supervisor-pin> -P <user-pin>
+```
+
+Make sure you set the following permission for your current work dir
+```
 chmod 700 .
 ```
 ### Configuration for local env
