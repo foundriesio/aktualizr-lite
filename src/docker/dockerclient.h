@@ -1,6 +1,5 @@
 #ifndef AKTUALIZR_LITE_DOCKER_CLIENT_H
 #define AKTUALIZR_LITE_DOCKER_CLIENT_H
-
 #include <json/json.h>
 #include <functional>
 #include <string>
@@ -17,14 +16,14 @@ class DockerClient {
 
  public:
   DockerClient(std::shared_ptr<HttpInterface> http_client = DefaultHttpClientFactory());
-  bool serviceRunning(const std::string& app, const std::string& service, const std::string& hash);
+  std::string runningApps();
+  bool isRunning(const std::string& app, const std::string& service, const std::string& hash);
 
  private:
-  void updateContainerStatus(bool curl = false);
+  void refresh(Json::Value& root);
 
  private:
   std::shared_ptr<HttpInterface> http_client_;
-  Json::Value root_;
 };
 
 }  // namespace Docker

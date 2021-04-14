@@ -143,7 +143,6 @@ TEST(ComposeApp, Config) {
   ASSERT_EQ("app2", (*cfg.apps)[1]);
   ASSERT_EQ("apps-root", cfg.apps_root);
   ASSERT_EQ("compose", cfg.compose_bin);
-  ASSERT_EQ("docker", cfg.docker_bin);
 
   config.pacman.extra["docker_prune"] = "0";
   cfg = ComposeAppManager::Config(config.pacman);
