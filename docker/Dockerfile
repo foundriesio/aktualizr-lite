@@ -79,9 +79,8 @@ RUN ln -s clang-10 /usr/bin/clang && \
     ln -s clang++-10 /usr/bin/clang++
 
 WORKDIR /tmp
-RUN git clone https://github.com/pantoniou/libfyaml.git
-RUN cd libfyaml && ./bootstrap.sh && ./configure --prefix /usr && make && make install
-RUN ldconfig
+RUN git clone https://github.com/pantoniou/libfyaml.git && \
+    cd libfyaml && ./bootstrap.sh && ./configure --prefix /usr && make && make install && ldconfig
 
 # OSTREE with libcurl support for HSM
 #  This allows ostree calls to libcurl to be able to keys controlled by pkcs11
