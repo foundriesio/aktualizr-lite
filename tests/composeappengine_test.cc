@@ -3,6 +3,7 @@
 #include <unordered_set>
 
 #include <boost/filesystem.hpp>
+#include <boost/format.hpp>
 #include <boost/process.hpp>
 
 #include "crypto/crypto.h"
@@ -58,6 +59,23 @@ TEST_F(ComposeAppEngineTest, FetchRunAndUpdate) {
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
   ASSERT_TRUE(app_engine->isRunning(updated_app));
+}
+
+TEST_F(ComposeAppEngineTest, FetchRunCompare) {
+  auto updated_app = registry.addApp(fixtures::ComposeApp::create("app-02", "service-02", "image-02"));
+
+  // the format is defined by DockerClient.cc
+  boost::format format("App(%s) Service(%s ");
+  std::string id = boost::str(format % "app-02" % "service-02");
+
+  ASSERT_TRUE(app_engine->fetch(updated_app));
+  ASSERT_FALSE(app_engine->isRunning(updated_app));
+  ASSERT_FALSE(boost::icontains(app_engine->runningApps(), id));
+
+  // run updated App
+  ASSERT_TRUE(app_engine->run(updated_app));
+  ASSERT_TRUE(app_engine->isRunning(updated_app));
+  ASSERT_TRUE(boost::icontains(app_engine->runningApps(), id));
 }
 
 int main(int argc, char** argv) {

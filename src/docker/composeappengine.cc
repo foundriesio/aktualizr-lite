@@ -55,7 +55,7 @@ bool ComposeAppEngine::isRunning(const App& app) const {
     for (std::size_t i = 0; i < services.size(); i++) {
       std::string service = services[i].asString();
       std::string hash = info.getHash(services[i]);
-      if (docker_client_->serviceRunning(app.name, service, hash)) {
+      if (docker_client_->isRunning(app.name, service, hash)) {
         continue;
       }
       LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
@@ -67,6 +67,8 @@ bool ComposeAppEngine::isRunning(const App& app) const {
   }
   return false;
 }
+
+std::string ComposeAppEngine::runningApps() const { return docker_client_->runningApps(); }
 
 // Private implementation
 
