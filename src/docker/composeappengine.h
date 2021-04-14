@@ -26,6 +26,7 @@ class ComposeAppEngine : public AppEngine {
   bool run(const App& app) override;
   void remove(const App& app) override;
   bool isRunning(const App& app) const override;
+  std::string runningApps() const override;
 
  private:
   bool cmd_streaming(const std::string& cmd, const App& app);

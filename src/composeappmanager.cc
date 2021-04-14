@@ -34,10 +34,6 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
     compose_bin = raw.at("docker_compose_bin");
   }
 
-  if (raw.count("docker_bin") == 1) {
-    docker_bin = raw.at("docker_bin");
-  }
-
   if (raw.count("docker_prune") == 1) {
     std::string val = raw.at("docker_prune");
     boost::algorithm::to_lower(val);
@@ -293,7 +289,7 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
   }
 
   if (data::ResultCode::Numeric::kNeedCompletion != ir.result_code.num_code) {
-    ir.description += "\n# Apps running:\n" + containerDetails();
+    ir.description += "\n# Apps running:\n" + runningApps();
   }
   return ir;
 }
@@ -333,16 +329,4 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
 
 std::string ComposeAppManager::getCurrentHash() const { return sysroot_->getCurDeploymentHash(); }
 
-std::string ComposeAppManager::containerDetails() const {
-  std::string cmd = cfg_.docker_bin.string();
-  cmd +=
-      " ps --format 'App({{.Label \"com.docker.compose.project\"}}) Service({{.Label "
-      "\"com.docker.compose.service\"}} {{.Label \"io.compose-spec.config-hash\"}})'";
-  std::string out_str;
-  int exit_code = Utils::shell(cmd, &out_str, true);
-  LOG_TRACE << "Command: " << cmd << "\n" << out_str;
-  if (exit_code != EXIT_SUCCESS) {
-    out_str = "Unable to run `docker ps`";
-  }
-  return out_str;
-}
+std::string ComposeAppManager::runningApps() const { return app_engine_->runningApps(); }

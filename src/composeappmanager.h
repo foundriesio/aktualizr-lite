@@ -22,7 +22,6 @@ class ComposeAppManager : public OstreeManager {
     boost::optional<std::vector<std::string>> apps;
     boost::filesystem::path apps_root{"/var/sota/compose-apps"};
     boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
-    boost::filesystem::path docker_bin{"/usr/bin/docker"};
     bool docker_prune{true};
     bool force_update{false};
     boost::filesystem::path apps_tree{"/var/sota/compose-apps-tree"};
@@ -54,8 +53,7 @@ class ComposeAppManager : public OstreeManager {
 
  private:
   std::string getCurrentHash() const override;
-  // Return a description of what `docker ps` sees
-  std::string containerDetails() const;
+  std::string runningApps() const;
 
  private:
   Config cfg_;
