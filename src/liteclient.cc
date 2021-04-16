@@ -93,50 +93,60 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
-  if (finalize) {
-    finalizeInstallation();
-  } else {
+
+  if (!finalize) {
     const auto current_target = getCurrent();
     update_request_headers(http_client, current_target, config.pacman);
     writeCurrentTarget(current_target);
+  } else if (!finalizeInstall()) {
+    LOG_ERROR << "Finalize Install failed";
   }
 }
 
-bool LiteClient::finalizeInstallation() {
-  data::InstallationResult update_finalization_result{data::ResultCode::Numeric::kNeedCompletion, ""};
+data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptane::Target>& target) {
+  data::InstallationResult ret{data::ResultCode::Numeric::kNeedCompletion, ""};
+  InstalledVersionUpdateMode mode = InstalledVersionUpdateMode::kPending;
+  bool rollback = false;
+  LOG_INFO << "Finalize Pending, Target: " << target->filename() << ", hash: " << target->sha256Hash();
 
-  // check if there is a pending update/installation/Target
-  boost::optional<Uptane::Target> pending_target;
-  storage->loadInstalledVersions("", nullptr, &pending_target);
-
-  // finalize a pending update/installation if any
-  if (!!pending_target) {
-    LOG_INFO << "Finalizing installation of the pending Target: " << pending_target->filename()
-             << ", hash: " << pending_target->sha256Hash();
-    // if there is a pending update/installation/Target then try to apply/finalize it
-    update_finalization_result = package_manager_->finalizeInstall(*pending_target);
-    if (update_finalization_result.isSuccess()) {
-      LOG_INFO << "Marking target install complete for: " << pending_target->filename();
-      storage->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kCurrent);
-    } else if (data::ResultCode::Numeric::kInstallFailed == update_finalization_result.result_code.num_code) {
-      LOG_ERROR << "Failed to finalize the installation, rollback has happened";
-      // rollback has happenned, unset is_pending and was_installed flags of the given Target record in DB
-      storage->saveInstalledVersion("", *pending_target, InstalledVersionUpdateMode::kNone);
-    }
+  ret = package_manager_->finalizeInstall(*target);
+  if (ret.isSuccess()) {
+    LOG_INFO << "Finalize Complete, Target: " << target->filename();
+    mode = InstalledVersionUpdateMode::kCurrent;
   } else {
-    LOG_INFO << "There is no any pending Target installation";
+    rollback = data::ResultCode::Numeric::kInstallFailed == ret.result_code.num_code;
+    // update dB Target record clearing flags (is_pending, was_installed)
+    if (rollback) {
+      LOG_ERROR << "Finalize Failed (rollback happened), Target" << target->filename();
+      mode = InstalledVersionUpdateMode::kNone;
+    }
+  }
+  if (ret.isSuccess() || rollback) {
+    storage->saveInstalledVersion("", *target, mode);
+  }
+  return ret;
+}
+
+bool LiteClient::finalizeInstall() {
+  data::InstallationResult ret{data::ResultCode::Numeric::kNeedCompletion, ""};
+  boost::optional<Uptane::Target> pending;
+
+  storage->loadInstalledVersions("", nullptr, &pending);
+  if (!!pending) {
+    ret = finalizePendingUpdate(pending);
+  } else {
+    LOG_INFO << "No Pending Installs";
   }
 
-  const auto current_target = getCurrent();
-  update_request_headers(http_client, current_target, config.pacman);
-  writeCurrentTarget(current_target);
+  const auto current = getCurrent();
+  update_request_headers(http_client, current, config.pacman);
+  writeCurrentTarget(current);
 
-  if (data::ResultCode::Numeric::kNeedCompletion != update_finalization_result.result_code.num_code) {
-    // if finalization has happened, either succefully (kOk) or not (kInstallFailed)
-    // we send the installation finished report event.
-    notifyInstallFinished(*pending_target, update_finalization_result);
+  // finalize done, notify the backend
+  if (!ret.needCompletion()) {
+    notifyInstallFinished(*pending, ret);
   }
-  return data::ResultCode::Numeric::kOk == update_finalization_result.result_code.num_code;
+  return ret.isSuccess();
 }
 
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {
