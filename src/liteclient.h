@@ -38,6 +38,7 @@ class LiteClient {
   boost::filesystem::path update_lockfile;
 
   bool checkForUpdates();
+  bool complete(bool finalize);
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
@@ -60,8 +61,6 @@ class LiteClient {
   std::string getDeviceID() const;
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
                                      PackageConfig& config);
-  bool finalizeInstallation();
-
   void logTarget(const std::string& prefix, const Uptane::Target& target) const;
 
  private:
@@ -84,6 +83,7 @@ class LiteClient {
   std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
                                                 const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
+  data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
 
  private:
   boost::filesystem::path callback_program;

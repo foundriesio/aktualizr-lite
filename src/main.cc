@@ -16,7 +16,7 @@ namespace bpo = boost::program_options;
 
 static int status_finalize(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
-  return client.finalizeInstallation() ? EXIT_SUCCESS : EXIT_FAILURE;
+  return client.complete(true) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static int status_main(LiteClient& client, const bpo::variables_map& unused) {
