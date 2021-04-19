@@ -10,6 +10,8 @@ set(SRC helpers.cc
         ostree/repo.cc
         docker/dockerclient.cc
         docker/docker.cc
+        bootloader/bootloaderlite.cc
+        bootloader/rollbackfactory.cc
         liteclient.cc
         yaml2json.cc
         target.cc)
@@ -24,6 +26,13 @@ set(HEADERS helpers.h
         ostree/repo.h
         docker/dockerclient.h
         docker/docker.h
+        bootloader/bootloaderlite.h
+	bootloader/rollbacks/exception.h
+	bootloader/rollbacks/factory.h
+	bootloader/rollbacks/generic.h
+	bootloader/rollbacks/masked.h
+	bootloader/rollbacks/fiovb.h
+	bootloader/rollbacks/rollback.h
         liteclient.h
         yaml2json.h
         target.h)

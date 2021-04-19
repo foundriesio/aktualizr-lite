@@ -1,4 +1,5 @@
 #include "composeappmanager.h"
+#include "bootloader/bootloaderlite.h"
 #include "target.h"
 
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
@@ -52,7 +53,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
                                      std::shared_ptr<OSTree::Sysroot> sysroot, AppEngine::Ptr app_engine)
-    : OstreeManager(pconfig, bconfig, storage, http),
+    : OstreeManager(pconfig, bconfig, storage, http, std::make_unique<BootloaderLite>(bconfig, *storage)),
       cfg_{pconfig},
       sysroot_{std::move(sysroot)},
       app_engine_{std::move(app_engine)} {
