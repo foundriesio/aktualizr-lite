@@ -32,9 +32,21 @@ class MaskedRollback : public Rollback {
   }
 
   void installNotify(const Uptane::Target& target) {
+    std::string version = getVersion(target);
+    if (version.empty()) {
+      return;
+    }
     std::string sink;
-    if (Utils::shell("fw_setenv bootupgrade_available 1", &sink) != 0) {
-      LOG_WARNING << "Failed setting bootupgrade_available for u-boot";
+    if (Utils::shell("fw_printenv bootfirmware_version", &sink) != 0) {
+      LOG_WARNING << "Failed to read bootfirmware_version";
+      return;
+    }
+    LOG_INFO << "Current boot firmware version: " << sink;
+    if (sink.compare(version) != 0) {
+      LOG_INFO << "Update firmware to version: " << version;
+      if (Utils::shell("fw_setenv bootupgrade_available 1", &sink) != 0) {
+        LOG_WARNING << "Failed to set bootupgrade_available";
+      }
     }
   }
 };
