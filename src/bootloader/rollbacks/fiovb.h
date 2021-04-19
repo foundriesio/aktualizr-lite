@@ -33,6 +33,13 @@ class FiovbRollback : public Rollback {
       LOG_WARNING << "Failed to set bootupgrade_available";
     }
   }
+
+  void installNotify(const Uptane::Target& target) {
+    std::string sink;
+    if (Utils::shell("fiovb_setenv bootupgrade_available 1", &sink) != 0) {
+      LOG_WARNING << "Failed to set bootupgrade_available";
+    }
+  }
 };
 
 #endif

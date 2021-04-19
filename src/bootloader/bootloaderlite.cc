@@ -9,3 +9,5 @@ BootloaderLite::BootloaderLite(BootloaderConfig config, INvStorage& storage)
 void BootloaderLite::setBootOK() const { rollback_->setBootOK(); }
 
 void BootloaderLite::updateNotify() const { rollback_->updateNotify(); }
+
+void BootloaderLite::installNotify(const Uptane::Target& target) const { rollback_->installNotify(target); }

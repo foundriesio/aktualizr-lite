@@ -13,6 +13,7 @@ class BootloaderLite : public Bootloader {
   virtual ~BootloaderLite() {}
   void setBootOK() const;
   void updateNotify() const;
+  void installNotify(const Uptane::Target& target) const;
 
  private:
   std::unique_ptr<Rollback> rollback_;

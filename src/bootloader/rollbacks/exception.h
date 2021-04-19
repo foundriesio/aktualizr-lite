@@ -9,6 +9,7 @@ class ExceptionRollback : public Rollback {
   ExceptionRollback() : Rollback() {}
   void setBootOK() { throw NotImplementedException(); }
   void updateNotify() { throw NotImplementedException(); }
+  void installNotify(const Uptane::Target& target) { throw NotImplementedException(); }
 };
 
 #endif
