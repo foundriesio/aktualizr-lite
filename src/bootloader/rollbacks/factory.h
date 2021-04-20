@@ -1,5 +1,5 @@
-#ifndef ROLLBACK_FACTORY_H_
-#define ROLLBACK_FACTORY_H_
+#ifndef AKTUALIZR_LITE_ROLLBACK_FACTORY_H_
+#define AKTUALIZR_LITE_ROLLBACK_FACTORY_H_
 
 #include "libaktualizr/config.h"
 #include "rollback.h"
@@ -10,4 +10,4 @@ class RollbackFactory {
   static std::unique_ptr<Rollback> makeRollback(RollbackMode mode);
 };
 
-#endif
+#endif  // AKTUALIZR_LITE_ROLLBACK_FACTORY_H_

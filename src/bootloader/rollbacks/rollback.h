@@ -1,5 +1,5 @@
-#ifndef ROLLBACK_H_
-#define ROLLBACK_H_
+#ifndef AKTUALIZR_LITE_ROLLBACK_H_
+#define AKTUALIZR_LITE_ROLLBACK_H_
 
 #include <boost/algorithm/algorithm.hpp>
 #include <boost/algorithm/string.hpp>
@@ -43,9 +43,9 @@ class Rollback {
       return version;
     } else {
       LOG_WARNING << "Target firmware version not found";
-      return "";
+      return std::string();
     }
   }
 };
 
-#endif
+#endif  // AKTUALIZR_LITE_ROLLBACK_H_

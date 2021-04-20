@@ -1,5 +1,5 @@
-#ifndef MASKED_ROLLBACK_H_
-#define MASKED_ROLLBACK_H_
+#ifndef AKTUALIZR_LITE_MASKED_ROLLBACK_H_
+#define AKTUALIZR_LITE_MASKED_ROLLBACK_H_
 
 #include "rollback.h"
 #include "utilities/utils.h"
@@ -51,4 +51,4 @@ class MaskedRollback : public Rollback {
   }
 };
 
-#endif
+#endif  // AKTUALIZR_LITE_MASKED_ROLLBACK_H_

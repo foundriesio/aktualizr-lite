@@ -1,5 +1,5 @@
-#ifndef FIOVB_ROLLBACK_H_
-#define FIOVB_ROLLBACK_H_
+#ifndef AKTUALIZR_LITE_FIOVB_ROLLBACK_H_
+#define AKTUALIZR_LITE_FIOVB_ROLLBACK_H_
 
 #include "rollback.h"
 #include "utilities/utils.h"
@@ -54,4 +54,4 @@ class FiovbRollback : public Rollback {
   }
 };
 
-#endif
+#endif  // AKTUALIZR_LITE_FIOVB_ROLLBACK_H_

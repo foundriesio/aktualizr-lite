@@ -1,5 +1,5 @@
-#ifndef GENERIC_ROLLBACK_H_
-#define GENERIC_ROLLBACK_H_
+#ifndef AKTUALIZR_LITE_GENERIC_ROLLBACK_H_
+#define AKTUALIZR_LITE_GENERIC_ROLLBACK_H_
 
 #include "rollback.h"
 #include "utilities/utils.h"
@@ -26,4 +26,4 @@ class GenericRollback : public Rollback {
   }
 };
 
-#endif
+#endif  // AKTUALIZR_LITE_GENERIC_ROLLBACK_H_
