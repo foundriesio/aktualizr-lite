@@ -209,6 +209,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
       LOG_ERROR << "Failed to install OSTree target, skipping Docker Compose Apps";
       return res;
     }
+    const_cast<ComposeAppManager*>(this)->installNotify(target);
   } else {
     LOG_INFO << "Target " << target.sha256Hash() << " is same as current";
     res = data::InstallationResult(data::ResultCode::Numeric::kOk, "OSTree hash already installed, same as current");
