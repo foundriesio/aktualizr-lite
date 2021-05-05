@@ -203,6 +203,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     res = OstreeManager::install(target);
     if (res.result_code.num_code == data::ResultCode::Numeric::kInstallFailed) {
       LOG_ERROR << "Failed to install OSTree target, skipping Docker Compose Apps";
+      res.description += "\n# Apps running:\n" + runningApps();
       return res;
     }
     const_cast<ComposeAppManager*>(this)->installNotify(target);
@@ -270,6 +271,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
   }
 
+  res.description += "\n# Apps running:\n" + runningApps();
   return res;
 }
 
