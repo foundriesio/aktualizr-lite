@@ -36,7 +36,7 @@ std::string DockerClient::runningApps() {
     Json::Value val = *ii;
     std::string app = val["Labels"]["com.docker.compose.project"].asString();
     std::string service = val["Labels"]["com.docker.compose.service"].asString();
-    std::string hash = val["Labels"]["com.docker.compose.config-hash"].asString();
+    std::string hash = val["Labels"]["io.compose-spec.config-hash"].asString();
 
     boost::format format("App(%s) Service(%s %s)\n");
     std::string line = boost::str(format % app % service % hash);
