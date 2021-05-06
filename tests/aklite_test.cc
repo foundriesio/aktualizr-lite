@@ -44,6 +44,7 @@ TEST_F(AkliteTest, OstreeUpdate) {
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
+  checkEvents(*client, new_target, UpdateType::kOstree);
   ASSERT_FALSE(app_engine->isRunning(app01));
 }
 
@@ -88,6 +89,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdate) {
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
   ASSERT_TRUE(app_engine->isRunning(app01));
+  checkEvents(*client, new_target, UpdateType::kOstree);
 }
 
 TEST_F(AkliteTest, OstreeAndAppUpdateWithShortlist) {
@@ -111,6 +113,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdateWithShortlist) {
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
+  checkEvents(*client, new_target, UpdateType::kOstree);
   ASSERT_FALSE(app_engine->isRunning(app01));
   ASSERT_TRUE(app_engine->isRunning(app02));
 }
@@ -136,6 +139,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdateWithEmptyShortlist) {
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
+  checkEvents(*client, new_target, UpdateType::kOstree);
   ASSERT_FALSE(app_engine->isRunning(app01));
   ASSERT_FALSE(app_engine->isRunning(app02));
 }
@@ -159,6 +163,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
     reboot(client);
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
     checkHeaders(*client, target_01);
+    checkEvents(*client, target_01, UpdateType::kOstree);
     ASSERT_TRUE(app_engine->isRunning(app01));
   }
 
@@ -179,6 +184,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
     ASSERT_FALSE(app_engine->isRunning(app01));
     ASSERT_FALSE(app_engine->isRunning(app01_updated));
     checkHeaders(*client, target_01);
+    checkEvents(*client, target_01, UpdateType::kOstree);
 
     // emulate do_app_sync
     updateApps(*client, target_01, client->getCurrent());

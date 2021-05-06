@@ -18,9 +18,14 @@ class Handler(SimpleHTTPRequestHandler):
     AuthPrefix = "/hub-creds/"
     RegistryAuthPrefix = "/token-auth/"
     RegistryPrefix = "/v2/"
+    EventPrefix = "/events"
+
     def do_POST(self):
-        self.send_response(200)
-        self.end_headers()
+        if self.path.startswith(self.EventPrefix):
+            self.event_handler()
+        else:
+            self.send_response(200)
+            self.end_headers()
 
     def do_GET(self):
         if self.path.startswith(self.TufRepoPrefix):
@@ -80,6 +85,12 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self._tuf_serve_metadata_file(path)
 
+    def event_handler(self):
+        logger.info("Device Gateway: POST /events request %s" % self.path)
+        self._dump_event()
+        self.send_response(200)
+        self.end_headers()
+
     def _tuf_serve_metadata_file(self, uri):
         with open(uri, 'rb') as source:
             while True:
@@ -102,12 +113,28 @@ class Handler(SimpleHTTPRequestHandler):
     def _tuf_repo(self):
         return os.path.join(self.server.tuf_repo, 'repo')
 
+    def _dump_event(self):
+        if os.path.exists(self.server.events_file):
+            with open(self.server.events_file) as f:
+                cur_events = json.load(f)
+        else:
+            cur_events = []
+
+        data_len = int(self.headers.get('content-length', 0))
+        body = self.rfile.read(data_len)
+        with open(self.server.events_file, "w+") as f:
+            events = json.loads(body.decode('utf-8'))
+            for e in events:
+                cur_events.append(e)
+            json.dump(cur_events, f)
+
 
 class FakeDeviceGateway(HTTPServer):
-    def __init__(self, addr, ostree_repo, tuf_repo, headers_file, mtls=None):
+    def __init__(self, addr, ostree_repo, tuf_repo, headers_file, events_file, mtls=None):
         self.ostree_repo = ostree_repo
         self.tuf_repo = tuf_repo
         self.headers_file = headers_file
+        self.events_file = events_file
         super(HTTPServer, self).__init__(server_address=addr, RequestHandlerClass=Handler)
 
         if mtls:
@@ -127,13 +154,15 @@ def main():
     parser.add_argument('-o', '--ostree', help='OSTree repo directory')
     parser.add_argument('-t', '--tuf-repo', help='TUF repo directory')
     parser.add_argument('-j', '--headers-file', help='File to dump request headers to')
+    parser.add_argument('-e', '--events-file', help='File to dump events to')
     parser.add_argument('-s', '--mtls', default=None,
                         help='Enables mTLS (HTTP over mTLS) and specifies directory with certs/key')
 
     args = parser.parse_args()
 
     try:
-        httpd = FakeDeviceGateway(('', args.port), args.ostree, args.tuf_repo, args.headers_file, args.mtls)
+        httpd = FakeDeviceGateway(('', args.port), args.ostree, args.tuf_repo, args.headers_file,
+                                  args.events_file, args.mtls)
         httpd.serve_forever()
     except KeyboardInterrupt:
         httpd.server_close()
