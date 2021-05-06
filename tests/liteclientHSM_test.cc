@@ -102,6 +102,42 @@ TEST_F(LiteClientHSMTest, OstreeAndAppUpdate) {
   }
 }
 
+TEST_F(LiteClientHSMTest, AppUpdate) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target that just adds a new an app
+  auto new_target = createAppTarget({createApp("app-01")});
+
+  // update to the latest version
+  EXPECT_CALL(*getAppEngine(), fetch).Times(1);
+
+  // since the Target/app is not installed then no reason to check if the app is running
+  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), install).Times(0);
+
+  // just call run which includes install if necessary (no ostree update case)
+  EXPECT_CALL(*getAppEngine(), run).Times(1);
+
+  updateApps(*client, getInitialTarget(), new_target);
+}
+
+TEST_F(LiteClientHSMTest, OstreeUpdate) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createTarget();
+  update(*client, getInitialTarget(), new_target);
+
+  // reboot device
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
+}
+
 /*
  * main
  */

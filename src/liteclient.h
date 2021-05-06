@@ -26,7 +26,8 @@ class Lock {
 
 class LiteClient {
  public:
-  LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr, bool finalize = true);
+  LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr, bool finalize = true,
+             const std::shared_ptr<P11EngineGuard>& p11 = nullptr);
 
   Config config;
   std::vector<std::string> tags;
