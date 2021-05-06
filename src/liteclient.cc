@@ -11,7 +11,8 @@
 #include "crypto/keymanager.h"
 #include "target.h"
 
-LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool finalize)
+LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool finalize,
+                       const std::shared_ptr<P11EngineGuard>& p11)
     : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
   storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
   storage->importData(config.import);
@@ -78,7 +79,7 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool
 
   http_client = std::make_shared<HttpClient>(&headers);
 
-  key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
+  key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig(), p11);
   key_manager_->loadKeys();
   key_manager_->copyCertsToCurl(*http_client);
 

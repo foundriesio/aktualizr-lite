@@ -18,11 +18,6 @@ class ClientHSMTest : public ClientTest {
     conf.tls.ca_source = CryptoSource::kFile;
     conf.tls.server = device_gateway_.getTreeUri();
 
-    conf.p11.tls_clientcert_id = subscriber_->certId_;
-    conf.p11.tls_pkey_id = subscriber_->keyId_;
-    conf.p11.module = { hsm_->module_.c_str() };
-    conf.p11.pass = hsm_->pin_;
-
     conf.import.base_path = hsm_->path_;
     conf.import.tls_cacert_path = { "ca.crt" };
     conf.import.tls_clientcert_path = { "" };
@@ -144,6 +139,10 @@ class ClientHSMTest : public ClientTest {
     LOG_INFO << "PKI created, certificates directory: " << path.string();
   }
 
+  static void TearDownTestSuite() {
+    p11_.reset();
+  }
+
   ClientHSMTest() : ClientTest(hsm_->path_) {
   }
 
@@ -156,20 +155,31 @@ class ClientHSMTest : public ClientTest {
 
     Config conf = liteClientHsmConfig(apps, compose_apps_root);
 
+    conf.p11.tls_clientcert_id = subscriber_->certId_;
+    conf.p11.tls_pkey_id = subscriber_->keyId_;
+    conf.p11.module = { hsm_->module_.c_str() };
+    conf.p11.pass = hsm_->pin_;
+
+    if (!p11_) {
+      p11_ = std::make_shared<P11EngineGuard>(conf.p11);
+    }
+
     if (version == InitialVersion::kOn ||
         version == InitialVersion::kCorrupted1 ||
         version == InitialVersion::kCorrupted2) {
       addTarget(conf, version);
     }
 
-    return std::make_shared<LiteClient>(conf, app_engine);
+    return std::make_shared<LiteClient>(conf, app_engine, true, p11_);
   }
 
  protected:
   static SubscriberPKI* subscriber_;
   static SoftHsm* hsm_;
+  static std::shared_ptr<P11EngineGuard> p11_;
 };
 
 SubscriberPKI* ClientHSMTest::subscriber_;
 SoftHsm* ClientHSMTest::hsm_;
+std::shared_ptr<P11EngineGuard> ClientHSMTest::p11_;
 } // namespace fixtures
