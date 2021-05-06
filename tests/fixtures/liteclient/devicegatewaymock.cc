@@ -9,8 +9,9 @@ class DeviceGatewayMock {
         port_{TestUtils::getFreePort()},
         url_{certDir.empty() ? "http://localhost:" + port_ : "https://localhost:" + port_},
         req_headers_file_{tuf_.getPath() + "/headers.json"},
+        events_file_{tuf_.getPath() + "/events.json"},
         process_{RunCmd,           "--port",         port_, "--ostree", ostree_.getPath(), "--tuf-repo", tuf_.getPath(),
-    "--headers-file", req_headers_file_, "--mtls", certDir}
+    "--headers-file", req_headers_file_, "--events-file", events_file_,"--mtls", certDir}
   {
     if (certDir.empty()) {
       TestUtils::waitForServer(url_ + "/");
@@ -29,8 +30,11 @@ class DeviceGatewayMock {
   std::string getTreeUri() const { return url_ + "/"; }
   std::string getOsTreeUri() const { return url_ + "/treehub"; }
   std::string getTufRepoUri() const { return url_ + "/repo"; }
+  std::string getTlsUri() const { return url_; }
   const std::string& getPort() const { return port_; }
   Json::Value getReqHeaders() const { return Utils::parseJSONFile(req_headers_file_); }
+  Json::Value getEvents() const { return Utils::parseJSONFile(events_file_); }
+  Json::Value resetEvents() const { return boost::filesystem::remove(events_file_); }
 
  private:
   const OSTreeRepoMock& ostree_;
@@ -38,6 +42,7 @@ class DeviceGatewayMock {
   const std::string port_;
   const std::string url_;
   const std::string req_headers_file_;
+  const std::string events_file_;
   boost::process::child process_;
 };
 

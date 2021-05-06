@@ -24,6 +24,7 @@ class ClientTest :virtual public ::testing::Test {
   }
 
   enum class InitialVersion { kOff, kOn, kCorrupted1, kCorrupted2 };
+  enum class UpdateType { kOstree, kApp,  kOstreeApply };
 
 
   virtual std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
@@ -37,6 +38,7 @@ class ClientTest :virtual public ::testing::Test {
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                const std::string& compose_apps_root = "") {
     Config conf;
+    conf.tls.server = device_gateway_.getTlsUri();
     conf.uptane.repo_server = device_gateway_.getTufRepoUri();
     conf.provision.primary_ecu_hardware_id = hw_id;
     conf.storage.path = test_dir_.Path();
@@ -191,6 +193,7 @@ class ClientTest :virtual public ::testing::Test {
    * mehod update
    */
   void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to) {
+    device_gateway_.resetEvents();
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
@@ -202,6 +205,7 @@ class ClientTest :virtual public ::testing::Test {
     ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
     ASSERT_EQ(client.getCurrent().filename(), from.filename());
     checkHeaders(client, from);
+    checkEvents(client, from, UpdateType::kOstreeApply);
   }
 
   /**
@@ -210,6 +214,7 @@ class ClientTest :virtual public ::testing::Test {
   void updateApps(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
                   data::ResultCode::Numeric expected_download_code = data::ResultCode::Numeric::kOk,
                   data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kOk) {
+    device_gateway_.resetEvents();
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
@@ -220,6 +225,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
       checkHeaders(client, from);
+      checkEvents(client, from, UpdateType::kApp);
       return;
     }
 
@@ -234,10 +240,12 @@ class ClientTest :virtual public ::testing::Test {
       // once the daemon_main is "cleaned" the updateHeader can be removed from the test.
       LiteClient::update_request_headers(client.http_client, to, client.config.pacman);
       checkHeaders(client, to);
+      checkEvents(client, to, UpdateType::kApp);
     } else {
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
       checkHeaders(client, from);
+      checkEvents(client, from, UpdateType::kApp);
     }
   }
 
@@ -280,6 +288,9 @@ class ClientTest :virtual public ::testing::Test {
    */
   void reboot(std::shared_ptr<LiteClient>& client) {
     boost::filesystem::remove(test_dir_.Path() / "need_reboot");
+    // make sure we tear down an existing instance of a client before a new one is created
+    // otherwise we hit race condition with sending events by the report queue thread, the same event is sent twice
+    client.reset();
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
   }
 
@@ -300,6 +311,30 @@ class ClientTest :virtual public ::testing::Test {
     ASSERT_EQ(req_headers["x-ats-ostreehash"], target.sha256Hash());
     ASSERT_EQ(req_headers["x-ats-target"], target.filename());
     ASSERT_EQ(req_headers.get("x-ats-dockerapps", ""), Target::appsStr(target, app_shortlist_));
+  }
+
+  void checkEvents(LiteClient& client, const Uptane::Target& target, UpdateType update_type) {
+    const std::unordered_map<UpdateType, std::vector<std::string>> updateToevents = {
+        { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},
+        { UpdateType::kApp, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},
+        { UpdateType::kOstreeApply, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied" }},
+    };
+    const std::vector<std::string>& expected_events{updateToevents.at(update_type)};
+    auto expected_event_it = expected_events.begin();
+    auto events = getDeviceGateway().getEvents();
+    for (auto rec_event_it = events.begin(); rec_event_it != events.end(); ++rec_event_it) {
+      const auto& rec_event_json = *rec_event_it;
+      const auto event_type = rec_event_json["eventType"]["id"].asString();
+      ASSERT_TRUE(expected_event_it != expected_events.end());
+      ASSERT_EQ(*expected_event_it, event_type);
+      ++expected_event_it;
+      if (event_type == "EcuInstallationCompleted") {
+        // TODO: check whether a value of ["event"]["details"] macthes the current Target
+        // makes sense to represent it as a json string
+        const auto event_details = rec_event_json["event"]["details"].asString();
+        ASSERT_TRUE(event_details.find("Apps running:") != std::string::npos);
+      }
+    }
   }
 
   /**
