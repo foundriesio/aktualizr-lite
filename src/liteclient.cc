@@ -13,7 +13,6 @@
 
 LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool finalize)
     : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
-  std::string pkey;
   storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
   storage->importData(config.import);
 
@@ -78,12 +77,13 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool
   headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
 
   http_client = std::make_shared<HttpClient>(&headers);
-  uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
-  report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
 
   key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig());
   key_manager_->loadKeys();
   key_manager_->copyCertsToCurl(*http_client);
+
+  uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
+  report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
 
   if (config.pacman.type == ComposeAppManager::Name) {
     package_manager_ = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
