@@ -10,32 +10,36 @@ fi
 
 set -x
 
-build=$(mktemp -d -p $here)
-cd $build
+build=$(mktemp -d)
 
-# do clang-tidy during compilation
-../cmake-init.sh
-ninja aklite-tests
+cmake -S . -B $build -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON
+cmake --build $build --target aklite-tests
 
 # do additional clang-tidying in the aktualizr way
-clang_tests=$(ninja help | grep aktualizr_clang_tidy-src- | cut -d: -f1)
-ninja $clang_tests
+clang_tests=$(ninja -C $build help | grep aktualizr_clang_tidy-src- | cut -d: -f1)
+cmake --build $build --target $clang_tests
+
 
 # do clang-formating in the aktualizr way
-clang_tests=$(ninja help | grep aktualizr_ci_clang_format-src- | cut -d: -f1)
-ninja $clang_tests
+clang_tests=$(ninja -C $build help | grep aktualizr_ci_clang_format-src- | cut -d: -f1)
+cmake --build $build --target $clang_tests
 
+cd $build
 ctest -j6 -V -L aklite
+cd $here
+rm -rf $build
 
-# test building the sota tools
-#rm -rf ./* TODO: fix this, we really don't need to have a build directory on a host system
-../cmake-init.sh -DBUILD_SOTA_TOOLS=ON
-ninja all
-if [[ ! -f ./aktualizr/src/sota_tools/garage-sign/bin/garage-sign ]]; then
+build=$(mktemp -d)
+cmake -S . -B $build -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON -DBUILD_SOTA_TOOLS=ON
+cmake --build $build --target all
+
+if [[ ! -f $build/aktualizr/src/sota_tools/garage-sign/bin/garage-sign ]]; then
   echo "Failed to build garage-sign!"
   exit 1
 fi
-if [[ ! -f ./aktualizr/src/sota_tools/garage-push ]]; then
+if [[ ! -f $build/aktualizr/src/sota_tools/garage-push ]]; then
   echo "Failed to build garage-push!"
   exit 1
 fi
+
+rm -rf $build
