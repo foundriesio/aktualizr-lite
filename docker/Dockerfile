@@ -95,6 +95,13 @@ RUN mkdir ostree && cd ostree && git init && git remote add origin https://githu
     --with-curl --without-soup --prefix=/usr && \
     make -j8  install
 
+# Docker in docker
+RUN curl -sSL https://get.docker.com/ | sh
+
+# Install the magic wrapper.
+ADD ./docker/wrapdocker /usr/local/bin/wrapdocker
+RUN chmod +x /usr/local/bin/wrapdocker
+
 RUN useradd testuser
 
 WORKDIR /
