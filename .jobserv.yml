@@ -4,6 +4,7 @@ triggers:
     type: github_pr
     runs:
       - name: unit-test
+        privileged: true
         container: foundries/aklite-dev
         host-tag: amd64
         script: unit-test
@@ -13,4 +14,5 @@ scripts:
   unit-test: |
     #!/bin/sh -ex
     export CCACHE_DIR=/tmp/ccache
+    wrapdocker
     ./unit-test no-docker
