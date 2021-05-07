@@ -192,7 +192,7 @@ class ClientTest :virtual public ::testing::Test {
    */
   void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to) {
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
-    ASSERT_TRUE(client.checkForUpdates());
+    ASSERT_TRUE(client.checkForUpdatesBegin());
 
     // TODO: call client->getTarget() once the method is moved to LiteClient
     ASSERT_EQ(client.download(to, ""), data::ResultCode::Numeric::kOk);
@@ -211,7 +211,7 @@ class ClientTest :virtual public ::testing::Test {
                   data::ResultCode::Numeric expected_download_code = data::ResultCode::Numeric::kOk,
                   data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kOk) {
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
-    ASSERT_TRUE(client.checkForUpdates());
+    ASSERT_TRUE(client.checkForUpdatesBegin());
 
     // TODO: call client->getTarget() once the method is moved to LiteClient
     ASSERT_EQ(client.download(to, ""), expected_download_code);
@@ -293,7 +293,7 @@ class ClientTest :virtual public ::testing::Test {
    */
   void checkHeaders(LiteClient& client, const Uptane::Target& target) {
     // check for a new Target in order to send requests with headers we are interested in
-    ASSERT_TRUE(client.checkForUpdates());
+    ASSERT_TRUE(client.checkForUpdatesBegin());
     if (target.MatchTarget(Uptane::Target::Unknown())) return;
 
     auto req_headers = getDeviceGateway().getReqHeaders();

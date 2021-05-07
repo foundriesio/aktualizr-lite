@@ -58,8 +58,9 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
   LOG_INFO << "Refreshing Targets metadata";
-  if (!client.updateImageMeta()) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy";
+  const auto rc = client.updateImageMeta();
+  if (!std::get<0>(rc)) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
     if (!client.checkImageMetaOffline()) {
       LOG_ERROR << "Unable to use local copy of TUF data";
       return 1;
@@ -96,8 +97,9 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
 static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::HardwareIdentifier& hwid,
                                                    const std::vector<std::string>& tags, const std::string& version) {
   std::unique_ptr<Uptane::Target> rv;
-  if (!client.updateImageMeta()) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy";
+  const auto rc = client.updateImageMeta();
+  if (!std::get<0>(rc)) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
     if (!client.checkImageMetaOffline()) {
       LOG_ERROR << "Unable to use local copy of TUF data";
       throw std::runtime_error("Unable to find update");
@@ -239,7 +241,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
     LOG_INFO << "Checking for a new Target...";
 
-    if (!client.checkForUpdates()) {
+    if (!client.checkForUpdatesBegin()) {
       LOG_WARNING << "Unable to update latest metadata, going to sleep for " << interval
                   << " seconds before starting a new update cycle";
       std::this_thread::sleep_for(std::chrono::seconds(interval));
@@ -262,6 +264,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
       LOG_INFO << "Latest Target: " << found_latest_target->filename();
       if (!known_target_sha && !client.isTargetActive(*found_latest_target)) {
+        client.checkForUpdatesEnd(*found_latest_target);
         // New Target is available, try to update a device with it
         std::string reason = "Updating from " + current.filename() + " to " + found_latest_target->filename();
         data::ResultCode::Numeric rc = do_update(client, *found_latest_target, reason);
@@ -279,7 +282,10 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
       } else {
         if (!client.appsInSync()) {
+          client.checkForUpdatesEnd(client.getCurrent());
           do_app_sync(client);
+        } else {
+          client.checkForUpdatesEnd(Uptane::Target::Unknown());
         }
         LOG_INFO << "Device is up-to-date";
       }

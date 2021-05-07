@@ -170,13 +170,17 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
   }
 }
 
-bool LiteClient::checkForUpdates() {
+bool LiteClient::checkForUpdatesBegin() {
   Uptane::Target t = Uptane::Target::Unknown();
   callback("check-for-update-pre", t);
-  bool rc = updateImageMeta();
-  callback("check-for-update-post", t);
-  return rc;
+  const auto rc = updateImageMeta();
+  if (!std::get<0>(rc)) {
+    callback("check-for-update-post", t, "FAILED: " + std::get<1>(rc));
+  }
+  return std::get<0>(rc);
 }
+
+void LiteClient::checkForUpdatesEnd(const Uptane::Target& target) { callback("check-for-update-post", target, "OK"); }
 
 void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) {
   if (!config.tls.server.empty()) {
@@ -274,15 +278,15 @@ data::InstallationResult LiteClient::installPackage(const Uptane::Target& target
   }
 }
 
-bool LiteClient::updateImageMeta() {
+std::tuple<bool, std::string> LiteClient::updateImageMeta() {
   try {
     image_repo_.updateMeta(*storage, *uptane_fetcher_);
   } catch (const std::exception& e) {
     LOG_ERROR << "Failed to update Image repo metadata: " << e.what();
-    return false;
+    return {false, e.what()};
   }
 
-  return true;
+  return {true, ""};
 }
 
 bool LiteClient::checkImageMetaOffline() {

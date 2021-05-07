@@ -37,7 +37,8 @@ class LiteClient {
   boost::filesystem::path download_lockfile;
   boost::filesystem::path update_lockfile;
 
-  bool checkForUpdates();
+  bool checkForUpdatesBegin();
+  void checkForUpdatesEnd(const Uptane::Target& target);
   bool complete(bool finalize);
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
@@ -48,7 +49,7 @@ class LiteClient {
 
   bool composeAppsChanged() const;
   Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
-  bool updateImageMeta();
+  std::tuple<bool, std::string> updateImageMeta();
   bool checkImageMetaOffline();
   const std::vector<Uptane::Target>& allTargets() const { return image_repo_.getTargets()->targets; }
   TargetStatus VerifyTarget(const Uptane::Target& target) const { return package_manager_->verifyTarget(target); }
