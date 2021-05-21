@@ -50,7 +50,7 @@ class RegistryClient {
   using Ptr = std::shared_ptr<RegistryClient>;
 
  public:
-  RegistryClient(const std::string& treehub_endpoint, std::shared_ptr<HttpInterface> ota_lite_client,
+  RegistryClient(std::shared_ptr<HttpInterface> ota_lite_client, std::string auth_creds_endpoint = DefAuthCredsEndpoint,
                  HttpClientFactory http_client_factory = RegistryClient::DefaultHttpClientFactory);
 
   Json::Value getAppManifest(const Uri& uri, const std::string& format) const;
@@ -69,7 +69,7 @@ class RegistryClient {
   }
 
  private:
-  std::string auth_creds_endpoint_;
+  const std::string auth_creds_endpoint_;
   std::shared_ptr<HttpInterface> ota_lite_client_;
   HttpClientFactory http_client_factory_;
 };

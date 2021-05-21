@@ -172,8 +172,7 @@ class TestSysroot: public OSTree::Sysroot {
 
 struct TestClient {
   TestClient(const char* apps = nullptr, const Uptane::Target* installedTarget = nullptr,
-             FakeRegistry* registry = nullptr, std::string ostree_server_url = "",
-             bool force_update = false, TestSysroot::Hasher sysroot_hasher = nullptr) {
+             FakeRegistry* registry = nullptr, bool force_update = false, TestSysroot::Hasher sysroot_hasher = nullptr) {
     tempdir = std_::make_unique<TemporaryDirectory>();
 
     config.logger.loglevel = 1;
@@ -197,9 +196,8 @@ struct TestClient {
     config.pacman.extra["docker_prune"] = "0";
     config.pacman.extra["force_update"] = force_update?"1":"0";
     config.storage.path = tempdir->Path();
-
-    if (!ostree_server_url.empty()) {
-      config.pacman.ostree_server = ostree_server_url;
+    if (registry) {
+      config.pacman.extra["hub_auth_creds_endpoint"] = registry->authURL();
     }
 
     storage = INvStorage::newStorage(config.storage);
@@ -226,7 +224,7 @@ struct TestClient {
     app_engine_ = std::make_shared<Docker::ComposeAppEngine>(pacman_cfg.apps_root,
                                                            boost::filesystem::canonical(pacman_cfg.compose_bin).string() + " ",
                                                            std::make_shared<Docker::DockerClient>(),
-                                                           std::make_shared<Docker::RegistryClient>(config.pacman.ostree_server, http_client, registry_http_client_factory));
+                                                           std::make_shared<Docker::RegistryClient>(http_client, pacman_cfg.hub_auth_creds_endpoint, registry_http_client_factory));
     pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, sysroot, app_engine_);
   }
 
@@ -330,7 +328,6 @@ TEST(ComposeApp, getAppsIfAppsSpecifiedAndNotEmpty) {
 }
 
 TEST(ComposeApp, fetch) {
-  const std::string ostree_server_url{"https://my-ota/treehub"};
   TemporaryDirectory tmp_dir;
   FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
 
@@ -346,7 +343,7 @@ TEST(ComposeApp, fetch) {
                                                                                 nullptr, app_file_name, app_content);
   Uptane::Target target("pull", target_json);
 
-  TestClient client("app2 doesnotexist", nullptr, &registry, ostree_server_url);  // only app2 can be fetched
+  TestClient client("app2 doesnotexist", nullptr, &registry);  // only app2 can be fetched
   bool result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
   ASSERT_TRUE(result);
   const std::string expected_file = (client.apps_root / "app2"/ app_file_name).string();
@@ -787,7 +784,7 @@ TEST(ComposeApp, DISABLED_installApp) {
     // emulate situation when App is already installed on a system but is not present on a file system
     installed_target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = app_uri;
     Uptane::Target installed_target("pull", installed_target_json);
-    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub", true);
+    TestClient client("app1", &installed_target, &registry, true);
     boost::filesystem::create_directories(client.tempdir->Path() / "apps/app1");
     Utils::writeFile(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::ComposeFile,
                      std::string("image: foo\n"));
@@ -817,7 +814,7 @@ TEST(ComposeApp, DISABLED_installApp) {
     FakeRegistry registry{"https://my-ota/hub-creds/", "hub.io", tmp_dir.Path()};
 
     Uptane::Target installed_target("pull", installed_target_json);
-    TestClient client("app1", &installed_target, &registry, "https://my-ota/treehub", false, hash_provider);
+    TestClient client("app1", &installed_target, &registry, false, hash_provider);
 
     Json::Value target_to_install_json{installed_target_json};
     target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, "myapp");

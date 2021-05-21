@@ -38,6 +38,8 @@ class DockerRegistry {
     return blob2app_.at(digest)->archive();
   }
 
+  const std::string& authURL() const { return auth_url_; }
+
  private:
   class HttpClient: public BaseHttpClient {
    public:
