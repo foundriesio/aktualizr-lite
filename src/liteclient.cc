@@ -157,9 +157,13 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
   boost::process::environment env_copy = env;
   env_copy["MESSAGE"] = msg;
   env_copy["CURRENT_TARGET"] = (config.storage.path / "current-target").string();
+  auto current = getCurrent();
+  if (!current.MatchTarget(Uptane::Target::Unknown())) {
+    env_copy["CURRENT_TARGET_NAME"] = current.filename();
+  }
 
   if (!install_target.MatchTarget(Uptane::Target::Unknown())) {
-    env_copy["INSTALL_TARGET"] = install_target.filename();
+    env_copy["INSTALL_TARGET_NAME"] = install_target.filename();
   }
   if (!result.empty()) {
     env_copy["RESULT"] = result;
