@@ -16,8 +16,7 @@ class AppEngineTest : virtual public ::testing::Test {
 
     apps_root_dir = test_dir_.Path() / "compose-apps";
     app_engine = std::make_shared<Docker::ComposeAppEngine>(apps_root_dir, compose_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()),
-        std::make_shared<Docker::RegistryClient>("https://ota-lite.foundries.io:8443/", registry.getClient(),
-                                                 registry.getClientFactory()));
+                                                            std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory()));
   }
 
  protected:

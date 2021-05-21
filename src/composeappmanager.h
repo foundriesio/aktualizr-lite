@@ -28,6 +28,7 @@ class ComposeAppManager : public OstreeManager {
     bool create_apps_tree{false};
     boost::filesystem::path images_data_root{"/var/lib/docker"};
     std::string docker_images_reload_cmd{"systemctl reload docker"};
+    std::string hub_auth_creds_endpoint{Docker::RegistryClient::DefAuthCredsEndpoint};
   };
 
   using AppsContainer = std::unordered_map<std::string, std::string>;

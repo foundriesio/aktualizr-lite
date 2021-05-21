@@ -43,6 +43,10 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("force_update") > 0) {
     force_update = boost::lexical_cast<bool>(raw.at("force_update"));
   }
+
+  if (raw.count("hub_auth_creds_endpoint") == 1) {
+    hub_auth_creds_endpoint = raw.at("hub_auth_creds_endpoint");
+  }
 }
 
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -57,7 +61,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
         cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
         std::make_shared<Docker::DockerClient>(),
-        std::make_shared<Docker::RegistryClient>(pconfig.ostree_server, http));
+        std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint));
   }
 
   try {

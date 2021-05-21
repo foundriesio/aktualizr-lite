@@ -17,7 +17,7 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool
   storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
   storage->importData(config.import);
 
-  const std::map<std::string, std::string> raw = config.pacman.extra;
+  std::map<std::string, std::string>& raw = config.pacman.extra;
   if (raw.count("tags") == 1) {
     std::string val = raw.at("tags");
     if (val.length() > 0) {
@@ -33,6 +33,18 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool
       callback_program = "";
     }
   }
+
+  // figure out the Docker Registry Auth creds endpoint
+  const auto& repo_endpoint = config.uptane.repo_server;
+  std::string auth_creds_endpoint = Docker::RegistryClient::DefAuthCredsEndpoint;
+  if (!repo_endpoint.empty()) {
+    auto endpoint_pos = repo_endpoint.rfind('/');
+    if (endpoint_pos != std::string::npos) {
+      auth_creds_endpoint = repo_endpoint.substr(0, endpoint_pos);
+      auth_creds_endpoint.append("/hub-creds/");
+    }
+  }
+  raw["hub_auth_creds_endpoint"] = auth_creds_endpoint;
 
   EcuSerials ecu_serials;
   if (!storage->loadEcuSerials(&ecu_serials)) {
