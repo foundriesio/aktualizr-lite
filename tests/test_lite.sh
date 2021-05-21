@@ -144,11 +144,22 @@ env >> ${sota_dir}/\$MESSAGE.log
 EOF
 chmod +x $sota_dir/callback.sh
 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: promoted-zlast"
-for callback in download-pre download-post install-pre install-post ; do
+for callback in download-pre download-post install-pre ; do
   if [ -f ${sota_dir}/${callback}.log ] ; then
-    grep "INSTALL_TARGET=promoted-zlast" ${sota_dir}/${callback}.log
+    grep "INSTALL_TARGET_NAME=promoted-zlast" ${sota_dir}/${callback}.log
+    grep "CURRENT_TARGET_NAME=zlast" ${sota_dir}/${callback}.log
   else
     echo "ERROR: Callback not performed for $callback"
     exit 1
   fi
 done
+callback=install-post
+if [ -f ${sota_dir}/${callback}.log ] ; then
+    grep "INSTALL_TARGET_NAME=promoted-zlast" ${sota_dir}/${callback}.log
+    grep "CURRENT_TARGET_NAME=promoted-zlast" ${sota_dir}/${callback}.log
+    grep "RESULT=OK" ${sota_dir}/${callback}.log
+  else
+    echo "ERROR: Callback not performed for $callback"
+    exit 1
+fi
+
