@@ -37,7 +37,7 @@ class MaskedRollback : public Rollback {
       return;
     }
     std::string sink;
-    if (Utils::shell("fw_printenv bootfirmware_version", &sink) != 0) {
+    if (Utils::shell("fw_printenv -n bootfirmware_version", &sink) != 0) {
       LOG_WARNING << "Failed to read bootfirmware_version";
       return;
     }
