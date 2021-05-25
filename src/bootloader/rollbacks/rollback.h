@@ -22,6 +22,9 @@ class Rollback {
     std::string file;
     for (auto& p : boost::filesystem::directory_iterator("/ostree/deploy/lmp/deploy/")) {
       std::string dir = p.path().string();
+      if (!boost::filesystem::is_directory(dir)) {
+        continue;
+      }
       if (boost::algorithm::contains(dir, target.sha256Hash())) {
         file = dir + "/usr/lib/firmware/version.txt";
         break;
