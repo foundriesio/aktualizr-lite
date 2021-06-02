@@ -37,6 +37,10 @@ class ComposeAppEngine : public AppEngine {
   void extractAppArchive(const App& app, const std::string& archive_file_name, bool delete_after_extraction = true);
   boost::filesystem::path appRoot(const App& app) const { return root_ / app.name; }
 
+  bool checkVersion(const App& app) const;
+  void setVersion(const App& app) const;
+  boost::filesystem::path appVersionFile(const App& app) const { return appRoot(app) / ".meta" / "version"; }
+
  private:
   const boost::filesystem::path root_;
   const std::string compose_;

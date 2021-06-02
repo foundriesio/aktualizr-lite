@@ -196,13 +196,17 @@ TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
     // we stopped the original app before update
     ASSERT_FALSE(app_engine->isRunning(app01));
     ASSERT_FALSE(app_engine->isRunning(app01_updated));
+    // just after reboot the updated app is still installed
+    ASSERT_TRUE(app_engine->isInstalled(app01_updated));
     checkHeaders(*client, target_01);
     checkEvents(*client, target_01, UpdateType::kOstree);
 
     // emulate do_app_sync
     updateApps(*client, target_01, client->getCurrent());
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    // app rollback
     ASSERT_TRUE(app_engine->isRunning(app01));
+    ASSERT_TRUE(app_engine->isInstalled(app01));
   }
 }
 

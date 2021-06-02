@@ -69,9 +69,12 @@ bool ComposeAppEngine::isRunning(const App& app) const {
 }
 
 bool ComposeAppEngine::isInstalled(const App& app) const {
-  // make sure the App root dir and compose file exists
+  // make sure the App root dir and compose file exists and a version of downloaded App macthes a given one
   bool result = boost::filesystem::exists(appRoot(app)) &&
-                boost::filesystem::exists(appRoot(app) / Docker::ComposeAppEngine::ComposeFile);
+                boost::filesystem::exists(appRoot(app) / Docker::ComposeAppEngine::ComposeFile) && checkVersion(app);
+  // TODO: check if a given app was really "installed", i.e. "up -d" or "up -d --no-start" was excuted for it
+  // and corresponding container images are present on a system
+  // and corresponding containers are created (no need to check if running)
   return result;
 }
 
@@ -159,6 +162,7 @@ bool ComposeAppEngine::download(const App& app) {
     registry_client_->downloadBlob(archive_uri, appRoot(app) / archive_file_name, manifest.archiveSize());
     extractAppArchive(app, archive_file_name);
 
+    setVersion(app);
     result = true;
     LOG_DEBUG << app.name << ": App has been downloaded";
   } catch (const std::exception& exc) {
@@ -195,6 +199,17 @@ void ComposeAppEngine::extractAppArchive(const App& app, const std::string& arch
       throw std::runtime_error("Failed to remove the compose app archive: " + archive_file_name);
     }
   }
+}
+
+bool ComposeAppEngine::checkVersion(const App& app) const {
+  Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
+  auto cur_version = Utils::readFile(appVersionFile(app), true);
+  return cur_version == uri.digest.hash();
+}
+
+void ComposeAppEngine::setVersion(const App& app) const {
+  Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
+  Utils::writeFile(appVersionFile(app), uri.digest.hash());
 }
 
 }  // namespace Docker
