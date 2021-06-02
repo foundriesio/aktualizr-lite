@@ -128,21 +128,12 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
       continue;
     }
 
-    if (!boost::filesystem::exists(cfg_.apps_root / app_name) ||
-        !boost::filesystem::exists(cfg_.apps_root / app_name / Docker::ComposeAppEngine::ComposeFile)) {
+    if (!app_engine_->isInstalled({app_name, app_pair.second})) {
       // an App is supposed to be installed, has been removed somehow, or a new app was added to the app shortlist
       apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " will be re-installed";
       continue;
     }
-
-//    LOG_DEBUG << app_name << " performing full status check";
-//    if (!app_engine_->isRunning({app_name, app_pair.second})) {
-//      // an App that is supposed to be installed and running is not fully installed or running
-//      apps_to_update.insert(app_pair);
-//      LOG_INFO << app_name << " update will be re-installed or completed";
-//      continue;
-//    }
   }
 
   return apps_to_update;

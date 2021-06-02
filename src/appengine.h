@@ -19,6 +19,7 @@ class AppEngine {
   virtual bool run(const App& app) = 0;
   virtual void remove(const App& app) = 0;
   virtual bool isRunning(const App& app) const = 0;
+  virtual bool isInstalled(const App& app) const = 0;
   virtual std::string runningApps() const = 0;
 
  public:

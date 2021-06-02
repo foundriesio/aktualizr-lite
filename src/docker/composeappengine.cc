@@ -68,6 +68,13 @@ bool ComposeAppEngine::isRunning(const App& app) const {
   return false;
 }
 
+bool ComposeAppEngine::isInstalled(const App& app) const {
+  // make sure the App root dir and compose file exists
+  bool result = boost::filesystem::exists(appRoot(app)) &&
+                boost::filesystem::exists(appRoot(app) / Docker::ComposeAppEngine::ComposeFile);
+  return result;
+}
+
 std::string ComposeAppEngine::runningApps() const { return docker_client_->runningApps(); }
 
 // Private implementation
