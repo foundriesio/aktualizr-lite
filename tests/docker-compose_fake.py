@@ -32,6 +32,22 @@ def up(out_dir, app_name, compose, flags):
         json.dump(containers, f)
 
 
+def pull(out_dir, app_name, compose):
+    logger.info("Pull images...")
+    with open(os.path.join(out_dir, "images.json"), "r") as f:
+        images = json.load(f)
+
+    for service in compose["services"]:
+        image = {"RepoDigests": []}
+        image_url = compose["services"][service]["image"]
+        logger.info("Pull image: " + image_url)
+        image["RepoDigests"].append(image_url)
+        images.append(image)
+
+    with open(os.path.join(out_dir, "images.json"), "w") as f:
+        json.dump(images, f)
+
+
 def main():
     exit_code = 0
     try:
@@ -49,6 +65,8 @@ def main():
         app_name = os.path.basename(os.getcwd())
         if cmd == "up":
             up(out_dir, app_name, compose, sys.argv[3:])
+        elif cmd == "pull":
+            pull(out_dir, app_name, compose)
     except Exception as exc:
         logger.error("Failed to process compose file: {}\n{}".format(exc, traceback.format_exc()))
         exit_code = 1

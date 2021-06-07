@@ -71,9 +71,9 @@ bool ComposeAppEngine::isRunning(const App& app) const {
 bool ComposeAppEngine::isInstalled(const App& app) const {
   // make sure the App root dir and compose file exists and a version of downloaded App macthes a given one
   bool result = boost::filesystem::exists(appRoot(app)) &&
-                boost::filesystem::exists(appRoot(app) / Docker::ComposeAppEngine::ComposeFile) && checkVersion(app);
+                boost::filesystem::exists(appRoot(app) / Docker::ComposeAppEngine::ComposeFile) && checkVersion(app) &&
+                areAppImagesPulled(app);
   // TODO: check if a given app was really "installed", i.e. "up -d" or "up -d --no-start" was excuted for it
-  // and corresponding container images are present on a system
   // and corresponding containers are created (no need to check if running)
   return result;
 }
@@ -210,6 +210,33 @@ bool ComposeAppEngine::checkVersion(const App& app) const {
 void ComposeAppEngine::setVersion(const App& app) const {
   Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
   Utils::writeFile(appVersionFile(app), uri.digest.hash());
+}
+
+bool ComposeAppEngine::areAppImagesPulled(const App& app) const {
+  ComposeInfo info((appRoot(app) / ComposeFile).string());
+  std::vector<Json::Value> services = info.getServices();
+  if (services.empty()) {
+    LOG_WARNING << "App: " << app.name << ", no services in docker file!";
+    return false;
+  }
+
+  Json::Value images;
+  if (!docker_client_->getImages(images)) {
+    LOG_WARNING << "App: " << app.name << ", failed to get App images!";
+    return false;
+  }
+
+  for (std::size_t i = 0; i < services.size(); i++) {
+    std::string service = services[i].asString();
+    std::string image_url = info.getImage(services[i]);
+    if (docker_client_->isImagePresent(images, image_url)) {
+      continue;
+    }
+    LOG_WARNING << "App: " << app.name << ", service: " << service << ", image: " << image_url << " is not pulled!";
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace Docker

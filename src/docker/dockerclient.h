@@ -18,6 +18,8 @@ class DockerClient {
   DockerClient(std::shared_ptr<HttpInterface> http_client = DefaultHttpClientFactory());
   std::string runningApps();
   bool isRunning(const std::string& app, const std::string& service, const std::string& hash);
+  bool getImages(Json::Value& images);
+  static bool isImagePresent(const Json::Value& images, const std::string& image_url);
 
  private:
   void refresh(Json::Value& root);

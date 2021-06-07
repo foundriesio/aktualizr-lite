@@ -28,6 +28,30 @@ bool DockerClient::isRunning(const std::string& app, const std::string& service,
   return false;
 }
 
+bool DockerClient::getImages(Json::Value& images) {
+  const auto* const cmd = "http://localhost/images/json";
+  auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
+  if (!resp.isOk()) {
+    return false;
+  }
+
+  bool result{false};
+  try {
+    Json::Value images_all = resp.getJson();
+    for (Json::ValueConstIterator ii = images_all.begin(); ii != images_all.end(); ++ii) {
+      images[(*ii)["RepoDigests"][0].asString()] = "";
+    }
+    result = true;
+  } catch (const std::exception& e) {
+    LOG_ERROR << "Failed to parse received response: " << e.what();
+  }
+  return result;
+}
+
+bool DockerClient::isImagePresent(const Json::Value& images, const std::string& image_url) {
+  return images.isMember(image_url);
+}
+
 std::string DockerClient::runningApps() {
   std::string runningApps;
   Json::Value root;

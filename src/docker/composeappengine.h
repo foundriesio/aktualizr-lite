@@ -40,6 +40,7 @@ class ComposeAppEngine : public AppEngine {
   bool checkVersion(const App& app) const;
   void setVersion(const App& app) const;
   boost::filesystem::path appVersionFile(const App& app) const { return appRoot(app) / ".meta" / "version"; }
+  bool areAppImagesPulled(const App& app) const;
 
  private:
   const boost::filesystem::path root_;
