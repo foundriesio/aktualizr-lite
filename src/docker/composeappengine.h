@@ -25,8 +25,8 @@ class ComposeAppEngine : public AppEngine {
   bool install(const App& app) override;
   bool run(const App& app) override;
   void remove(const App& app) override;
-  bool isRunning(const App& app) const override;
   bool isInstalled(const App& app) const override;
+  bool isStarted(const App& app) const override;
   std::string runningApps() const override;
 
  private:
@@ -41,6 +41,7 @@ class ComposeAppEngine : public AppEngine {
   void setVersion(const App& app) const;
   boost::filesystem::path appVersionFile(const App& app) const { return appRoot(app) / ".meta" / "version"; }
   bool areAppImagesPulled(const App& app) const;
+  bool areAppServicesStarted(const App& app) const;
 
  private:
   const boost::filesystem::path root_;

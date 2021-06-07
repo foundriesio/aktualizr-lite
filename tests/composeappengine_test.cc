@@ -18,23 +18,23 @@ class ComposeAppEngineTest : public fixtures::AppEngineTest {};
 TEST_F(ComposeAppEngineTest, Fetch) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
-  // TODO: AppEngine API doesn't provide mean(s) to check if App is fetched
-  ASSERT_FALSE(app_engine->isRunning(app));
+  ASSERT_TRUE(app_engine->isInstalled(app));
+  ASSERT_FALSE(app_engine->isStarted(app));
 }
 
 TEST_F(ComposeAppEngineTest, FetchAndInstall) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
-  // TODO: AppEngine API doesn't provide mean(s) to check if App is installed
-  ASSERT_TRUE(app_engine->install(app));
-  ASSERT_FALSE(app_engine->isRunning(app));
+  ASSERT_TRUE(app_engine->isInstalled(app));
+  ASSERT_FALSE(app_engine->isStarted(app));
 }
 
 TEST_F(ComposeAppEngineTest, FetchAndRun) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->run(app));
-  ASSERT_TRUE(app_engine->isRunning(app));
+  ASSERT_TRUE(app_engine->isInstalled(app));
+  ASSERT_TRUE(app_engine->isStarted(app));
 }
 
 TEST_F(ComposeAppEngineTest, FetchInstallAndRun) {
@@ -42,23 +42,27 @@ TEST_F(ComposeAppEngineTest, FetchInstallAndRun) {
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->install(app));
   ASSERT_TRUE(app_engine->run(app));
-  ASSERT_TRUE(app_engine->isRunning(app));
+  ASSERT_TRUE(app_engine->isInstalled(app));
+  ASSERT_TRUE(app_engine->isStarted(app));
 }
 
 TEST_F(ComposeAppEngineTest, FetchRunAndUpdate) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->run(app));
-  ASSERT_TRUE(app_engine->isRunning(app));
+  ASSERT_TRUE(app_engine->isInstalled(app));
+  ASSERT_TRUE(app_engine->isStarted(app));
 
   // update App, image URL has changed
   auto updated_app = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02"));
   ASSERT_TRUE(app_engine->fetch(updated_app));
-  ASSERT_FALSE(app_engine->isRunning(updated_app));
+  ASSERT_TRUE(app_engine->isInstalled(updated_app));
+  ASSERT_FALSE(app_engine->isStarted(updated_app));
 
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
-  ASSERT_TRUE(app_engine->isRunning(updated_app));
+  ASSERT_TRUE(app_engine->isInstalled(updated_app));
+  ASSERT_TRUE(app_engine->isStarted(updated_app));
 }
 
 TEST_F(ComposeAppEngineTest, FetchRunCompare) {
@@ -69,12 +73,14 @@ TEST_F(ComposeAppEngineTest, FetchRunCompare) {
   std::string id = boost::str(format % "app-02" % "service-02");
 
   ASSERT_TRUE(app_engine->fetch(updated_app));
-  ASSERT_FALSE(app_engine->isRunning(updated_app));
+  ASSERT_TRUE(app_engine->isInstalled(updated_app));
+  ASSERT_FALSE(app_engine->isStarted(updated_app));
   ASSERT_FALSE(boost::icontains(app_engine->runningApps(), id));
 
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
-  ASSERT_TRUE(app_engine->isRunning(updated_app));
+  ASSERT_TRUE(app_engine->isInstalled(updated_app));
+  ASSERT_TRUE(app_engine->isStarted(updated_app));
   ASSERT_TRUE(boost::icontains(app_engine->runningApps(), id));
 }
 

@@ -43,38 +43,13 @@ void ComposeAppEngine::remove(const App& app) {
   }
 }
 
-bool ComposeAppEngine::isRunning(const App& app) const {
-  try {
-    ComposeInfo info((appRoot(app) / ComposeFile).string());
-    std::vector<Json::Value> services = info.getServices();
-    if (services.empty()) {
-      LOG_WARNING << "App: " << app.name << ", no services in docker file!";
-      return false;
-    }
-
-    for (std::size_t i = 0; i < services.size(); i++) {
-      std::string service = services[i].asString();
-      std::string hash = info.getHash(services[i]);
-      if (docker_client_->isRunning(app.name, service, hash)) {
-        continue;
-      }
-      LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
-      return false;
-    }
-    return true;
-  } catch (...) {
-    LOG_WARNING << "App: " << app.name << ", cant check if it is running!";
-  }
-  return false;
-}
+bool ComposeAppEngine::isStarted(const App& app) const { return isInstalled(app) && areAppServicesStarted(app); }
 
 bool ComposeAppEngine::isInstalled(const App& app) const {
   // make sure the App root dir and compose file exists and a version of downloaded App macthes a given one
   bool result = boost::filesystem::exists(appRoot(app)) &&
                 boost::filesystem::exists(appRoot(app) / Docker::ComposeAppEngine::ComposeFile) && checkVersion(app) &&
                 areAppImagesPulled(app);
-  // TODO: check if a given app was really "installed", i.e. "up -d" or "up -d --no-start" was excuted for it
-  // and corresponding containers are created (no need to check if running)
   return result;
 }
 
@@ -233,6 +208,35 @@ bool ComposeAppEngine::areAppImagesPulled(const App& app) const {
       continue;
     }
     LOG_WARNING << "App: " << app.name << ", service: " << service << ", image: " << image_url << " is not pulled!";
+    return false;
+  }
+
+  return true;
+}
+
+bool ComposeAppEngine::areAppServicesStarted(const App& app) const {
+  ComposeInfo info((appRoot(app) / ComposeFile).string());
+  std::vector<Json::Value> services = info.getServices();
+  if (services.empty()) {
+    LOG_WARNING << "App: " << app.name << ", no services in docker file!";
+    return false;
+  }
+
+  Json::Value containers;
+  if (!docker_client_->getContainers(containers)) {
+    LOG_WARNING << "App: " << app.name << ", failed to get App containers!";
+    return false;
+  }
+
+  for (std::size_t i = 0; i < services.size(); i++) {
+    std::string service = services[i].asString();
+    std::string image_url = info.getImage(services[i]);
+    std::string service_hash = info.getHash(services[i]);
+    if (docker_client_->isContainerStarted(containers, image_url, service, service_hash)) {
+      continue;
+    }
+    LOG_WARNING << "App: " << app.name << ", service: " << service << ", service hash: " << service_hash
+                << ", image: " << image_url << " is not started!";
     return false;
   }
 

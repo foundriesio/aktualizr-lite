@@ -31,7 +31,7 @@ TEST_F(AkliteTest, OstreeUpdate) {
 
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_FALSE(app_engine->isStarted(app01));
 
   auto new_target = createTarget();
 
@@ -39,13 +39,13 @@ TEST_F(AkliteTest, OstreeUpdate) {
   update(*client, getInitialTarget(), new_target);
   // make sure that the installed Target is not "finalized"/applied and Apps are not running
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_FALSE(app_engine->isStarted(app01));
 
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
   checkEvents(*client, new_target, UpdateType::kOstree);
-  ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_FALSE(app_engine->isStarted(app01));
 }
 
 TEST_F(AkliteTest, AppUpdate) {
@@ -53,14 +53,14 @@ TEST_F(AkliteTest, AppUpdate) {
 
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_FALSE(app_engine->isStarted(app01));
 
   auto target01 = createAppTarget({app01});
 
   updateApps(*client, getInitialTarget(), target01);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
   ASSERT_TRUE(app_engine->isInstalled(app01));
-  ASSERT_TRUE(app_engine->isRunning(app01));
+  ASSERT_TRUE(app_engine->isStarted(app01));
 
   // update app
   auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02"));
@@ -68,7 +68,7 @@ TEST_F(AkliteTest, AppUpdate) {
   updateApps(*client, target01, target02);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target02));
   ASSERT_TRUE(app_engine->isInstalled(app01_updated));
-  ASSERT_TRUE(app_engine->isRunning(app01_updated));
+  ASSERT_TRUE(app_engine->isStarted(app01_updated));
 }
 
 TEST_F(AkliteTest, OstreeAndAppUpdate) {
@@ -76,7 +76,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdate) {
 
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_FALSE(app_engine->isStarted(app01));
 
   std::vector<AppEngine::App> apps{app01};
   auto new_target = createTarget(&apps);
@@ -86,13 +86,13 @@ TEST_F(AkliteTest, OstreeAndAppUpdate) {
   // make sure that the installed Target is not "finalized"/applied and Apps are not running
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   ASSERT_TRUE(app_engine->isInstalled(app01));
-  ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_FALSE(app_engine->isStarted(app01));
 
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
   ASSERT_TRUE(app_engine->isInstalled(app01));
-  ASSERT_TRUE(app_engine->isRunning(app01));
+  ASSERT_TRUE(app_engine->isStarted(app01));
   checkEvents(*client, new_target, UpdateType::kOstree);
 }
 
@@ -113,8 +113,8 @@ TEST_F(AkliteTest, OstreeAndAppUpdateWithShortlist) {
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   ASSERT_FALSE(app_engine->isInstalled(app01));
   ASSERT_TRUE(app_engine->isInstalled(app02));
-  ASSERT_FALSE(app_engine->isRunning(app01));
-  ASSERT_FALSE(app_engine->isRunning(app02));
+  ASSERT_FALSE(app_engine->isStarted(app01));
+  ASSERT_FALSE(app_engine->isStarted(app02));
 
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
@@ -122,8 +122,8 @@ TEST_F(AkliteTest, OstreeAndAppUpdateWithShortlist) {
   checkEvents(*client, new_target, UpdateType::kOstree);
   ASSERT_FALSE(app_engine->isInstalled(app01));
   ASSERT_TRUE(app_engine->isInstalled(app02));
-  ASSERT_FALSE(app_engine->isRunning(app01));
-  ASSERT_TRUE(app_engine->isRunning(app02));
+  ASSERT_FALSE(app_engine->isStarted(app01));
+  ASSERT_TRUE(app_engine->isStarted(app02));
 }
 
 TEST_F(AkliteTest, OstreeAndAppUpdateWithEmptyShortlist) {
@@ -143,8 +143,8 @@ TEST_F(AkliteTest, OstreeAndAppUpdateWithEmptyShortlist) {
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   ASSERT_FALSE(app_engine->isInstalled(app01));
   ASSERT_FALSE(app_engine->isInstalled(app02));
-  ASSERT_FALSE(app_engine->isRunning(app01));
-  ASSERT_FALSE(app_engine->isRunning(app02));
+  ASSERT_FALSE(app_engine->isStarted(app01));
+  ASSERT_FALSE(app_engine->isStarted(app02));
 
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
@@ -152,8 +152,8 @@ TEST_F(AkliteTest, OstreeAndAppUpdateWithEmptyShortlist) {
   checkEvents(*client, new_target, UpdateType::kOstree);
   ASSERT_FALSE(app_engine->isInstalled(app01));
   ASSERT_FALSE(app_engine->isInstalled(app02));
-  ASSERT_FALSE(app_engine->isRunning(app01));
-  ASSERT_FALSE(app_engine->isRunning(app02));
+  ASSERT_FALSE(app_engine->isStarted(app01));
+  ASSERT_FALSE(app_engine->isStarted(app02));
 }
 
 TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
@@ -176,7 +176,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
     checkHeaders(*client, target_01);
     checkEvents(*client, target_01, UpdateType::kOstree);
-    ASSERT_TRUE(app_engine->isRunning(app01));
+    ASSERT_TRUE(app_engine->isStarted(app01));
   }
 
   {
@@ -194,8 +194,8 @@ TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
     // make sure that a rollback has happened and a client is still running the previous Target
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
     // we stopped the original app before update
-    ASSERT_FALSE(app_engine->isRunning(app01));
-    ASSERT_FALSE(app_engine->isRunning(app01_updated));
+    ASSERT_FALSE(app_engine->isStarted(app01));
+    ASSERT_FALSE(app_engine->isStarted(app01_updated));
     // just after reboot the updated app is still installed
     ASSERT_TRUE(app_engine->isInstalled(app01_updated));
     checkHeaders(*client, target_01);
@@ -205,7 +205,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
     updateApps(*client, target_01, client->getCurrent());
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
     // app rollback
-    ASSERT_TRUE(app_engine->isRunning(app01));
+    ASSERT_TRUE(app_engine->isStarted(app01));
     ASSERT_TRUE(app_engine->isInstalled(app01));
   }
 }

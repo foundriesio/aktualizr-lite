@@ -26,6 +26,8 @@ def up(out_dir, app_name, compose, flags):
         container["Labels"]["com.docker.compose.project"] = app_name
         container["Labels"]["com.docker.compose.service"] = service
         container["Labels"]["io.compose-spec.config-hash"] = compose["services"][service]["labels"]["io.compose-spec.config-hash"]
+        container["State"] = "running"
+        container["Image"] = compose["services"][service]["image"]
         containers.append(container)
 
     with open(os.path.join(out_dir, "containers.json"), "w") as f:

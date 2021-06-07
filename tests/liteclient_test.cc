@@ -39,7 +39,7 @@ class MockAppEngine : public AppEngine {
     ON_CALL(*this, fetch).WillByDefault(Return(true));
     ON_CALL(*this, install).WillByDefault(Return(true));
     ON_CALL(*this, run).WillByDefault(Return(true));
-    ON_CALL(*this, isRunning).WillByDefault(Return(true));
+    ON_CALL(*this, isStarted).WillByDefault(Return(true));
     ON_CALL(*this, isInstalled).WillByDefault(Return(true));
     ON_CALL(*this, runningApps)
         .WillByDefault(
@@ -51,8 +51,8 @@ class MockAppEngine : public AppEngine {
   MOCK_METHOD(bool, install, (const App& app), (override));
   MOCK_METHOD(bool, run, (const App& app), (override));
   MOCK_METHOD(void, remove, (const App& app), (override));
-  MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
   MOCK_METHOD(bool, isInstalled, (const App& app), (const, override));
+  MOCK_METHOD(bool, isStarted, (const App& app), (const, override));
   MOCK_METHOD(std::string, runningApps, (), (const, override));
 };
 
@@ -238,7 +238,7 @@ TEST_F(LiteClientTest, AppUpdate) {
   EXPECT_CALL(*getAppEngine(), fetch).Times(1);
 
   // since the Target/app is not installed then no reason to check if the app is running
-  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
   EXPECT_CALL(*getAppEngine(), install).Times(0);
 
   // just call run which includes install if necessary (no ostree update case)
@@ -257,7 +257,7 @@ TEST_F(LiteClientTest, AppUpdateWithShortlist) {
 
   // update to the latest version
   EXPECT_CALL(*getAppEngine(), fetch).Times(1);
-  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
   EXPECT_CALL(*getAppEngine(), install).Times(0);
   // run should be called once since only one app is specified in the config
   EXPECT_CALL(*getAppEngine(), run).Times(1);
@@ -275,7 +275,7 @@ TEST_F(LiteClientTest, AppUpdateWithEmptyShortlist) {
 
   // update to the latest version, nothing should be called since an empty app list is specified in the config
   EXPECT_CALL(*getAppEngine(), fetch).Times(0);
-  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
   EXPECT_CALL(*getAppEngine(), install).Times(0);
   EXPECT_CALL(*getAppEngine(), run).Times(0);
 
@@ -295,7 +295,7 @@ TEST_F(LiteClientTest, OstreeAndAppUpdate) {
     EXPECT_CALL(*getAppEngine(), fetch).Times(1);
 
     // since the Target/app is not installed then no reason to check if the app is running
-    EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+    EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
 
     // Just install no need too call run
     EXPECT_CALL(*getAppEngine(), install).Times(1);
@@ -325,7 +325,7 @@ TEST_F(LiteClientTest, AppUpdateDownloadFailure) {
   // update to the latest version
   // fetch retry for three times
   EXPECT_CALL(*getAppEngine(), fetch).Times(3);
-  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
   EXPECT_CALL(*getAppEngine(), install).Times(0);
   EXPECT_CALL(*getAppEngine(), run).Times(0);
 
@@ -345,7 +345,7 @@ TEST_F(LiteClientTest, AppUpdateInstallFailure) {
   // update to the latest version
   // fetch retry for three times
   EXPECT_CALL(*getAppEngine(), fetch).Times(1);
-  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
   EXPECT_CALL(*getAppEngine(), install).Times(0);
   EXPECT_CALL(*getAppEngine(), run).Times(1);
 
@@ -366,7 +366,7 @@ TEST_F(LiteClientTest, OstreeAndAppUpdateIfRollback) {
     EXPECT_CALL(*getAppEngine(), fetch).Times(1);
 
     // since the Target/app is not installed then no reason to check if the app is running
-    EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+    EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
 
     // Just install no need too call run
     EXPECT_CALL(*getAppEngine(), install).Times(1);

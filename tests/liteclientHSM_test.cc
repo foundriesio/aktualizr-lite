@@ -39,8 +39,8 @@ class MockAppEngine : public AppEngine {
     ON_CALL(*this, fetch).WillByDefault(Return(true));
     ON_CALL(*this, install).WillByDefault(Return(true));
     ON_CALL(*this, run).WillByDefault(Return(true));
-    ON_CALL(*this, isRunning).WillByDefault(Return(true));
     ON_CALL(*this, isInstalled).WillByDefault(Return(true));
+    ON_CALL(*this, isStarted).WillByDefault(Return(true));
     ON_CALL(*this, runningApps)
         .WillByDefault(Return(
             "Apps(app-01) Service(test-factory 7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243"));
@@ -51,8 +51,8 @@ class MockAppEngine : public AppEngine {
   MOCK_METHOD(bool, install, (const App& app), (override));
   MOCK_METHOD(bool, run, (const App& app), (override));
   MOCK_METHOD(void, remove, (const App& app), (override));
-  MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
   MOCK_METHOD(bool, isInstalled, (const App& app), (const, override));
+  MOCK_METHOD(bool, isStarted, (const App& app), (const, override));
   MOCK_METHOD(std::string, runningApps, (), (const, override));
 };
 
@@ -87,7 +87,7 @@ TEST_F(LiteClientHSMTest, OstreeAndAppUpdate) {
     EXPECT_CALL(*getAppEngine(), fetch).Times(1);
 
     // since the Target/app is not installed then no reason to check if the app is running
-    EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+    EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
 
     // Just install no need too call run
     EXPECT_CALL(*getAppEngine(), install).Times(1);
@@ -116,7 +116,7 @@ TEST_F(LiteClientHSMTest, AppUpdate) {
   EXPECT_CALL(*getAppEngine(), fetch).Times(1);
 
   // since the Target/app is not installed then no reason to check if the app is running
-  EXPECT_CALL(*getAppEngine(), isRunning).Times(0);
+  EXPECT_CALL(*getAppEngine(), isStarted).Times(0);
   EXPECT_CALL(*getAppEngine(), install).Times(0);
 
   // just call run which includes install if necessary (no ostree update case)

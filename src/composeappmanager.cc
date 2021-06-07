@@ -134,6 +134,12 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
       LOG_INFO << app_name << " will be re-installed";
       continue;
     }
+
+    if (!app_engine_->isStarted({app_name, app_pair.second})) {
+      apps_to_update.insert(app_pair);
+      LOG_INFO << app_name << " will be started";
+      continue;
+    }
   }
 
   return apps_to_update;
