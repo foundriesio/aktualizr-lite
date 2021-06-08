@@ -50,7 +50,7 @@ bool DockerClient::getContainers(Json::Value& containers) {
       const auto image_url = (*ii)["Image"].asString();
       containers[image_url]["service"] = (*ii)["Labels"]["com.docker.compose.service"];
       containers[(*ii)["Image"].asString()]["service_hash"] = (*ii)["Labels"].get("io.compose-spec.config-hash", "");
-      containers[(*ii)["Image"].asString()]["state"] = (*ii)["State"];
+      containers[(*ii)["Image"].asString()]["state"] = (*ii)["State"].asString();
     }
     result = true;
   } catch (const std::exception& e) {
@@ -77,11 +77,13 @@ std::string DockerClient::runningApps() {
   for (Json::ValueIterator ii = root.begin(); ii != root.end(); ++ii) {
     Json::Value val = *ii;
     std::string app = val["Labels"]["com.docker.compose.project"].asString();
+    std::string image_url = val["Image"].asString();
+    std::string cont_state = val["State"].asString();
     std::string service = val["Labels"]["com.docker.compose.service"].asString();
     std::string hash = val["Labels"]["io.compose-spec.config-hash"].asString();
 
-    boost::format format("App(%s) Service(%s %s)\n");
-    std::string line = boost::str(format % app % service % hash);
+    boost::format format("App(%s) Service(%s %s) Image(%s) Container(%s)\n");
+    std::string line = boost::str(format % app % service % hash % image_url % cont_state);
     runningApps += line;
   }
   return runningApps;
@@ -90,7 +92,7 @@ std::string DockerClient::runningApps() {
 void DockerClient::refresh(Json::Value& root) {
   std::string cmd;
   if (!http_client_) {
-    cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/containers/json";
+    cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/containers/json?all=1";
     std::string data;
     if (Utils::shell(cmd, &data, false) == EXIT_SUCCESS) {
       std::istringstream sin(data);

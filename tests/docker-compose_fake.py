@@ -26,7 +26,8 @@ def up(out_dir, app_name, compose, flags):
         container["Labels"]["com.docker.compose.project"] = app_name
         container["Labels"]["com.docker.compose.service"] = service
         container["Labels"]["io.compose-spec.config-hash"] = compose["services"][service]["labels"]["io.compose-spec.config-hash"]
-        container["State"] = "running"
+        logger.info(compose["services"][service]["restart"])
+        container["State"] = "exited" if compose["services"][service]["restart"] == "no" else "running"
         container["Image"] = compose["services"][service]["image"]
         containers.append(container)
 

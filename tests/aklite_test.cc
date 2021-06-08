@@ -210,6 +210,28 @@ TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
   }
 }
 
+TEST_F(AkliteTest, OneShotAppUpdate) {
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-01", "\"no\""));
+  auto app02 = registry.addApp(fixtures::ComposeApp::create("app-02", "service-02", "image-02"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isStarted(app01));
+  ASSERT_FALSE(app_engine->isStarted(app02));
+
+  auto target01 = createAppTarget({app01, app02});
+
+  updateApps(*client, getInitialTarget(), target01);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
+  ASSERT_TRUE(app_engine->isInstalled(app01));
+  ASSERT_TRUE(app_engine->isStarted(app01));
+  ASSERT_TRUE(app_engine->isInstalled(app02));
+  ASSERT_TRUE(app_engine->isStarted(app02));
+  const auto run_apps = app_engine->runningApps();
+  ASSERT_TRUE(run_apps.find("Image(image-01) Container(exited)") != std::string::npos);
+  ASSERT_TRUE(run_apps.find("Image(image-02) Container(running)") != std::string::npos);
+}
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";

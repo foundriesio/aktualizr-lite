@@ -7,6 +7,7 @@ class ComposeApp {
     services:
       %s:
         image: %s
+        restart: %s
         labels:
           io.compose-spec.config-hash: %s
     version: "3.2"
@@ -15,21 +16,23 @@ class ComposeApp {
   const std::string ServiceTemplate = R"(
     %s:
       image: %s
+      restart: %s
     )";
 
  public:
   static Ptr create(const std::string& name,
-                    const std::string& service = "service-01", const std::string& image = "image-01") {
+                    const std::string& service = "service-01", const std::string& image = "image-01",
+                    const std::string& restart = "always") {
     Ptr app{new ComposeApp(name)};
-    app->updateService(service, image);
+    app->updateService(service, image, restart);
     return app;
   }
 
-  const std::string& updateService(const std::string& service, const std::string& image) {
+  const std::string& updateService(const std::string& service, const std::string& image, const std::string& restart) {
     char service_content[1024];
-    sprintf(service_content, ServiceTemplate.c_str(), service.c_str(), image.c_str());
+    sprintf(service_content, ServiceTemplate.c_str(), service.c_str(), image.c_str(), restart.c_str());
     auto service_hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(service_content)));
-    sprintf(content_, DefaultTemplate.c_str(), service.c_str(), image.c_str(), service_hash.c_str());
+    sprintf(content_, DefaultTemplate.c_str(), service.c_str(), image.c_str(), restart.c_str(), service_hash.c_str());
     return update();
   }
 
