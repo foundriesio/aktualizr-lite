@@ -48,14 +48,14 @@ std::string DockerClient::runningApps() {
 void DockerClient::refresh(Json::Value& root) {
   std::string cmd;
   if (!http_client_) {
-    cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/containers/json";
+    cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/containers/json?all=1";
     std::string data;
     if (Utils::shell(cmd, &data, false) == EXIT_SUCCESS) {
       std::istringstream sin(data);
       sin >> root;
     }
   } else {
-    cmd = "http://localhost/containers/json";
+    cmd = "http://localhost/containers/json?all=1";
     auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
     if (resp.isOk()) {
       root = resp.getJson();
