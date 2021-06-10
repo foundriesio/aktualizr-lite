@@ -12,40 +12,7 @@ DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = []() {
 
 DockerClient::DockerClient(std::shared_ptr<HttpInterface> http_client) : http_client_{std::move(http_client)} {}
 
-bool DockerClient::isRunning(const std::string& app, const std::string& service, const std::string& hash) {
-  Json::Value root;
-  refresh(root);
-  for (Json::ValueIterator ii = root.begin(); ii != root.end(); ++ii) {
-    Json::Value val = *ii;
-    if (val["Labels"]["com.docker.compose.project"].asString() == app) {
-      if (val["Labels"]["com.docker.compose.service"].asString() == service) {
-        if (val["Labels"]["io.compose-spec.config-hash"].asString() == hash) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
-
-std::string DockerClient::runningApps() {
-  std::string runningApps;
-  Json::Value root;
-  refresh(root);
-  for (Json::ValueIterator ii = root.begin(); ii != root.end(); ++ii) {
-    Json::Value val = *ii;
-    std::string app = val["Labels"]["com.docker.compose.project"].asString();
-    std::string service = val["Labels"]["com.docker.compose.service"].asString();
-    std::string hash = val["Labels"]["io.compose-spec.config-hash"].asString();
-
-    boost::format format("App(%s) Service(%s %s)\n");
-    std::string line = boost::str(format % app % service % hash);
-    runningApps += line;
-  }
-  return runningApps;
-}
-
-void DockerClient::refresh(Json::Value& root) {
+void DockerClient::getContainers(Json::Value& root) {
   std::string cmd;
   if (!http_client_) {
     cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/containers/json?all=1";
@@ -67,5 +34,38 @@ void DockerClient::refresh(Json::Value& root) {
     throw std::runtime_error("Request to dockerd has failed: " + cmd);
   }
 }
+
+bool DockerClient::isRunning(const Json::Value& root, const std::string& app, const std::string& service, const std::string& hash) {
+  for (Json::ValueConstIterator ii = root.begin(); ii != root.end(); ++ii) {
+    Json::Value val = *ii;
+    if (val["Labels"]["com.docker.compose.project"].asString() == app) {
+      if (val["Labels"]["com.docker.compose.service"].asString() == service) {
+        if (val["Labels"]["io.compose-spec.config-hash"].asString() == hash) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+std::string DockerClient::runningApps() {
+  std::string runningApps;
+  Json::Value root;
+  getContainers(root);
+  for (Json::ValueIterator ii = root.begin(); ii != root.end(); ++ii) {
+    Json::Value val = *ii;
+    std::string app = val["Labels"]["com.docker.compose.project"].asString();
+    std::string service = val["Labels"]["com.docker.compose.service"].asString();
+    std::string hash = val["Labels"]["io.compose-spec.config-hash"].asString();
+
+    boost::format format("App(%s) Service(%s %s)\n");
+    std::string line = boost::str(format % app % service % hash);
+    runningApps += line;
+  }
+  return runningApps;
+}
+
+
 
 }  // namespace Docker
