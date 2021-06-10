@@ -19,8 +19,8 @@ class DockerClient {
   void getContainers(Json::Value& root);
 
   std::string runningApps();
-  static bool isRunning(const Json::Value& root, const std::string& app, const std::string& service, const std::string& hash);
-
+  static bool isRunning(const Json::Value& root, const std::string& app, const std::string& service,
+                        const std::string& hash);
 
  private:
   std::shared_ptr<HttpInterface> http_client_;
