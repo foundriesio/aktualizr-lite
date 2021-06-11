@@ -12,28 +12,120 @@ ComposeAppEngine::ComposeAppEngine(boost::filesystem::path root_dir, std::string
     : root_{std::move(root_dir)},
       compose_{std::move(compose_bin)},
       docker_client_{std::move(docker_client)},
-      registry_client_{std::move(registry_client)} {
-  boost::filesystem::create_directories(root_);
-}
+      registry_client_{std::move(registry_client)} {}
 
 bool ComposeAppEngine::fetch(const App& app) {
-  boost::filesystem::create_directories(appRoot(app));
-  if (download(app)) {
-    LOG_INFO << "Validating compose file";
-    if (cmd_streaming(compose_ + "config", app)) {
-      LOG_INFO << "Pulling containers";
-      return cmd_streaming(compose_ + "pull --no-parallel", app);
+  boost::filesystem::create_directories(appRoot(app) / MetaDir);
+
+  bool result = false;
+
+  try {
+    AppState state(app, appRoot(app), true);
+
+    if (!download(app)) {
+      state.setState(AppState::State::kDownloadFailed);
+      return result;
+    }
+    state.setState(AppState::State::kDownloaded);
+
+    if (!verify(app)) {
+      state.setState(AppState::State::kVerifyFailed);
+      return result;
+    }
+    state.setState(AppState::State::kVerified);
+
+    if (!pullImages(app)) {
+      state.setState(AppState::State::kPullFailed);
+      return result;
+    }
+    state.setState(AppState::State::kPulled);
+
+    result = true;
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to get/set App state, fallback to forced fetch: " << exc.what();
+
+    if (download(app) && verify(app) && pullImages(app)) {
+      result = true;
     }
   }
-  return false;
+
+  return result;
 }
 
 bool ComposeAppEngine::install(const App& app) {
-  boost::filesystem::ofstream flag_file(appRoot(app) / NeedStartFile);
-  return cmd_streaming(compose_ + "up --remove-orphans --no-start", app);
+  bool result = false;
+
+  if (!boost::filesystem::exists(appRoot(app))) {
+    LOG_ERROR << "App dir doesn't exist, cannot install App that hasn't been fetched";
+    return result;
+  }
+
+  try {
+    AppState state(app, appRoot(app));
+
+    switch (state()) {
+      case AppState::State::kPulled:
+      case AppState::State::kInstallFail: {
+        if (!installApp(app)) {
+          state.setState(AppState::State::kInstallFail);
+          break;
+        }
+        state.setState(AppState::State::kInstalled);
+      }
+      case AppState::State::kInstalled:
+      case AppState::State::kStarted:
+        result = true;
+        break;
+      default:
+        LOG_ERROR << "Cannot install App that hasn't been fetched";
+    }
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to get/set App state, fallback to forced install: " << exc.what();
+
+    if (installApp(app)) {
+      result = true;
+    }
+  }
+  return result;
 }
 
-bool ComposeAppEngine::run(const App& app) { return cmd_streaming(compose_ + "up --remove-orphans -d", app); }
+bool ComposeAppEngine::run(const App& app) {
+  bool result = false;
+
+  if (!boost::filesystem::exists(appRoot(app))) {
+    LOG_ERROR << "App dir doesn't exist, cannot start App that hasn't been fetched";
+    return result;
+  }
+
+  try {
+    AppState state(app, appRoot(app));
+
+    switch (state()) {
+      case AppState::State::kPulled:
+      case AppState::State::kInstalled:
+      case AppState::State::kInstallFail:
+      case AppState::State::kStartFailed: {
+        if (!start(app)) {
+          state.setState(AppState::State::kStartFailed);
+          break;
+        }
+        state.setState(AppState::State::kStarted);
+      }
+      case AppState::State::kStarted:
+        result = true;
+        break;
+      default:
+        LOG_ERROR << "Cannot start App that hasn't been fetched";
+    }
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to get/set App state, fallback to forced run: " << exc.what();
+
+    if (start(app)) {
+      result = true;
+    }
+  }
+  return result;
+}
 
 void ComposeAppEngine::remove(const App& app) {
   if (cmd_streaming(compose_ + "down", app)) {
@@ -44,6 +136,19 @@ void ComposeAppEngine::remove(const App& app) {
 }
 
 bool ComposeAppEngine::isRunning(const App& app) const {
+  if (!boost::filesystem::exists(appRoot(app))) {
+    return false;
+  }
+
+  bool started_state = false;
+  try {
+    AppState state(app, appRoot(app));
+    started_state = state() == AppState::State::kStarted;
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to get/set App state, fallback to checking the dockerd state: " << exc.what();
+  }
+
+  // let's fallback or do double check
   try {
     ComposeInfo info((appRoot(app) / ComposeFile).string());
     std::vector<Json::Value> services = info.getServices();
@@ -64,10 +169,11 @@ bool ComposeAppEngine::isRunning(const App& app) const {
       LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
       return false;
     }
-    return true;
+    return started_state;
   } catch (...) {
     LOG_WARNING << "App: " << app.name << ", cant check if it is running!";
   }
+
   return false;
 }
 
@@ -164,6 +270,31 @@ bool ComposeAppEngine::download(const App& app) {
   return result;
 }
 
+bool ComposeAppEngine::verify(const App& app) {
+  LOG_INFO << "Validating compose file";
+  const auto result = cmd_streaming(compose_ + "config", app);
+  return result;
+}
+
+bool ComposeAppEngine::pullImages(const App& app) {
+  LOG_INFO << "Pulling containers";
+  const auto result = cmd_streaming(compose_ + "pull --no-parallel", app);
+  return result;
+}
+
+bool ComposeAppEngine::installApp(const App& app) {
+  LOG_INFO << "Installing App";
+  boost::filesystem::ofstream flag_file(appRoot(app) / NeedStartFile);
+  const auto result = cmd_streaming(compose_ + "up --remove-orphans --no-start", app);
+  return result;
+}
+
+bool ComposeAppEngine::start(const App& app) {
+  LOG_INFO << "Starting App";
+  const auto result = cmd_streaming(compose_ + "up --remove-orphans -d", app);
+  return result;
+}
+
 bool ComposeAppEngine::checkAvailableStorageSpace(const boost::filesystem::path& app_root,
                                                   uint64_t& out_available_size) {
   struct statvfs stat_buf {};
@@ -190,6 +321,83 @@ void ComposeAppEngine::extractAppArchive(const App& app, const std::string& arch
     if (!cmd_streaming("rm -f " + archive_file_name, app)) {
       throw std::runtime_error("Failed to remove the compose app archive: " + archive_file_name);
     }
+  }
+}
+
+ComposeAppEngine::AppState::AppState(const App& app, const boost::filesystem::path& root, bool set_version) try
+    : version_file_ {
+  (root / MetaDir / VersionFile).string()
+}
+, state_file_{(root / MetaDir / StateFile).string()} {
+  version_ = version_file_.readStr();
+  if (version_ == app.uri) {
+    state_ = static_cast<State>(state_file_.read());
+    return;
+  }
+
+  state_ = AppState::State::kUnknown;
+  if (set_version) {
+    version_ = app.uri;
+    version_file_.write(version_);
+  }
+}
+catch (const std::exception& exc) {
+  LOG_ERROR << "Failed to read version or state file: " << exc.what();
+}
+
+void ComposeAppEngine::AppState::setState(const State& state) {
+  state_file_.write(static_cast<int>(state));
+  state_ = state;
+}
+
+void ComposeAppEngine::AppState::File::write(int val) { write(&val, sizeof(val)); }
+
+void ComposeAppEngine::AppState::File::write(const std::string& val) { write(val.data(), val.size()); }
+
+int ComposeAppEngine::AppState::File::read() const {
+  int val{0};
+  read(&val, sizeof(val));
+  return val;
+}
+
+std::string ComposeAppEngine::AppState::File::readStr() const {
+  std::array<char, 4096> buf{0};
+  read(&buf, buf.size());
+  return buf.data();
+}
+
+int ComposeAppEngine::AppState::File::open(const char* file) {
+  int fd = ::open(file, O_CREAT | O_RDWR | O_SYNC, S_IRUSR | S_IWUSR);
+  if (-1 == fd) {
+    throw std::system_error(errno, std::system_category(), std::string("Failed to open/create a file: ") + file);
+  }
+  return fd;
+}
+
+void ComposeAppEngine::AppState::File::write(const void* data, ssize_t size) {
+  const std::string tmp_file{path_ + ".tmp"};
+  int fd = open(tmp_file.c_str());
+  int wr = ::write(fd, data, size);
+  if (-1 == wr) {
+    close(fd);
+    throw std::system_error(errno, std::system_category(), std::string("Failed to write to a file: ") + path_);
+  }
+  fsync(fd);
+  close(fd);
+
+  int rr = ::rename(tmp_file.c_str(), path_.c_str());
+  if (-1 == rr) {
+    ::remove(tmp_file.c_str());
+    throw std::system_error(errno, std::system_category(), std::string("Failed to rename the tmp file to: ") + path_);
+  }
+}
+
+void ComposeAppEngine::AppState::File::read(void* data, ssize_t size) const {
+  int fd = open(path_.c_str());
+  int rr = ::read(fd, data, size);
+  close(fd);
+  if (-1 == rr) {
+    throw std::system_error(errno, std::system_category(), std::string("Failed to read from a file: ") + path_);
   }
 }
 
