@@ -405,34 +405,7 @@ void LiteClient::reportHwInfo() {
   }
 }
 
-static std::unique_ptr<Lock> create_lock(boost::filesystem::path lockfile) {
-  if (lockfile.empty()) {
-    // Just return a dummy one that will safely "close"
-    return std_::make_unique<Lock>(-1);
-  }
-
-  int fd = open(lockfile.c_str(), O_RDWR | O_CREAT | O_APPEND, 0666);
-  if (fd < 0) {
-    LOG_ERROR << "Unable to open lock file " << lockfile;
-    return nullptr;
-  }
-  LOG_INFO << "Acquiring lock";
-  if (flock(fd, LOCK_EX) < 0) {
-    LOG_ERROR << "Unable to acquire lock on " << lockfile;
-    close(fd);
-    return nullptr;
-  }
-  return std_::make_unique<Lock>(fd);
-}
-
-std::unique_ptr<Lock> LiteClient::getDownloadLock() const { return create_lock(download_lockfile); }
-std::unique_ptr<Lock> LiteClient::getUpdateLock() const { return create_lock(update_lockfile); }
-
 data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target, const std::string& reason) {
-  std::unique_ptr<Lock> lock = getDownloadLock();
-  if (lock == nullptr) {
-    return data::ResultCode::Numeric::kInternalError;
-  }
   notifyDownloadStarted(target, reason);
   if (!downloadImage(target).first) {
     notifyDownloadFinished(target, false);
@@ -443,11 +416,6 @@ data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target, con
 }
 
 data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
-  std::unique_ptr<Lock> lock = getUpdateLock();
-  if (lock == nullptr) {
-    return data::ResultCode::Numeric::kInternalError;
-  }
-
   notifyInstallStarted(target);
   auto iresult = installPackage(target);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {

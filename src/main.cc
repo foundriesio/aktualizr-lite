@@ -253,13 +253,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   client.finalizeInstall();
 
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
-  if (variables_map.count("update-lockfile") > 0) {
-    client.update_lockfile = variables_map["update-lockfile"].as<boost::filesystem::path>();
-  }
-  if (variables_map.count("download-lockfile") > 0) {
-    client.download_lockfile = variables_map["download-lockfile"].as<boost::filesystem::path>();
-  }
-
   auto current = client.getCurrent();
 
   uint64_t interval = client.config.uptane.polling_sec;
@@ -383,8 +376,6 @@ bpo::variables_map parse_options(int argc, char** argv) {
       ("clear-installed-versions", "DANGER - clear the history of installed updates before applying the given update. This is handy when doing test/debug and you need to rollback to an old version manually.")
 #endif
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for update when in daemon mode.")
-      ("update-lockfile", bpo::value<boost::filesystem::path>(), "If provided, an flock(2) is applied to this file before performing an update in daemon mode")
-      ("download-lockfile", bpo::value<boost::filesystem::path>(), "If provided, an flock(2) is applied to this file before downloading an update in daemon mode")
       ("command", bpo::value<std::string>(), subs.c_str());
   // clang-format on
 
