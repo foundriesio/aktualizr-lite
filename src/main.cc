@@ -3,6 +3,7 @@
 
 #include <boost/container/flat_map.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/program_options.hpp>
 
 #include "crypto/keymanager.h"
@@ -13,6 +14,35 @@
 #include "utilities/aktualizr_version.h"
 
 namespace bpo = boost::program_options;
+
+static const char* const AkliteSystemLock{"/var/lock/aklite.lock"};
+
+class FileLock {
+ public:
+  explicit FileLock(const char* path = AkliteSystemLock) : path_{path}, file_{path}, lock_{path} {
+    if (!lock_.try_lock()) {
+      throw std::runtime_error("Failed to obtain the aklite lock, another instance of aklite must be running !!!");
+    }
+  }
+
+  ~FileLock() {
+    try {
+      lock_.unlock();
+      boost::filesystem::remove(path_);
+    } catch (const std::exception& exc) {
+      LOG_WARNING << "Failed to unlock, " << path_ << ", error: " << exc.what();
+    }
+  }
+  FileLock(const FileLock&) = delete;
+  FileLock(const FileLock&&) = delete;
+  FileLock& operator=(const FileLock&) = delete;
+  FileLock& operator=(const FileLock&&) = delete;
+
+ private:
+  const char* const path_{nullptr};
+  boost::filesystem::ofstream file_;
+  boost::interprocess::file_lock lock_;
+};
 
 static int status_finalize(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
@@ -183,6 +213,7 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
 }
 
 static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
+  FileLock lock;
   client.complete();
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
@@ -209,6 +240,7 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
+  FileLock lock;
   if (client.config.uptane.repo_server.empty()) {
     LOG_ERROR << "[uptane]/repo_server is not configured";
     return EXIT_FAILURE;
