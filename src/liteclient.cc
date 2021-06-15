@@ -131,7 +131,7 @@ data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptan
   return ret;
 }
 
-bool LiteClient::complete() {
+bool LiteClient::finalizeInstall() {
   data::InstallationResult ret{data::ResultCode::Numeric::kNeedCompletion, ""};
   boost::optional<Uptane::Target> pending;
 

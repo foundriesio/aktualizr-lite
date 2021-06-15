@@ -129,7 +129,7 @@ class ClientTest :virtual public ::testing::Test {
     }
 
     auto client = std::make_shared<LiteClient>(conf, app_engine);
-    client->complete();
+    client->finalizeInstall();
     return client;
   }
 
