@@ -99,39 +99,6 @@ TEST(helpers, target_has_tags) {
   ASSERT_FALSE(target_has_tags(t, config_tags));
 }
 
-TEST(helpers, locking) {
-  TemporaryDirectory cfg_dir;
-  Config config;
-  config.storage.path = cfg_dir.Path();
-  config.pacman.sysroot = test_sysroot;
-  config.pacman.extra["booted"] = "0";
-  config.pacman.os = "dummy-os";
-  config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
-  config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
-  config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
-  config.pacman.type = ComposeAppManager::Name;
-
-  LiteClient client(config);
-  client.update_lockfile = cfg_dir / "update_lock";
-
-  // 1. Create a lock and hold in inside a thread for a small amount of time
-  std::unique_ptr<Lock> lock = client.getUpdateLock();
-  std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-  std::thread t([_ = std::move(lock)] {  // pass ownership of ptr into lambda
-    std::this_thread::sleep_for(std::chrono::milliseconds{500});
-  });
-
-  // 2. Get the lock - this should take a short period of time while its blocked
-  //    by the thread.
-  ASSERT_NE(nullptr, client.getUpdateLock());
-
-  // 3. - make sure some time has passed
-  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-  ASSERT_GT(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count(), 300);
-
-  t.join();
-}
-
 TEST(helpers, callback) {
   TemporaryDirectory cfg_dir;
 

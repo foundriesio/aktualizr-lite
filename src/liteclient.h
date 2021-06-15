@@ -35,8 +35,6 @@ class LiteClient {
 
   std::pair<Uptane::EcuSerial, Uptane::HardwareIdentifier> primary_ecu;
   std::shared_ptr<HttpClient> http_client;
-  boost::filesystem::path download_lockfile;
-  boost::filesystem::path update_lockfile;
 
   bool checkForUpdatesBegin();
   void checkForUpdatesEnd(const Uptane::Target& target);
