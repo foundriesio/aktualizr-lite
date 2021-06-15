@@ -128,7 +128,9 @@ class ClientTest :virtual public ::testing::Test {
       getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, "1");
     }
 
-    return std::make_shared<LiteClient>(conf, app_engine);
+    auto client = std::make_shared<LiteClient>(conf, app_engine);
+    client->complete();
+    return client;
   }
 
   /**

@@ -170,7 +170,9 @@ class ClientHSMTest : public ClientTest {
       addTarget(conf, version);
     }
 
-    return std::make_shared<LiteClient>(conf, app_engine, true, p11_);
+    auto lite_client = std::make_shared<LiteClient>(conf, app_engine, p11_);
+    lite_client->complete();
+    return lite_client;
   }
 
  protected:

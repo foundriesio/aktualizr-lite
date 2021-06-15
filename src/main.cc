@@ -16,7 +16,7 @@ namespace bpo = boost::program_options;
 
 static int status_finalize(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
-  return client.complete(true) ? EXIT_SUCCESS : EXIT_FAILURE;
+  return client.complete() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static int status_main(LiteClient& client, const bpo::variables_map& unused) {
@@ -183,6 +183,7 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
 }
 
 static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
+  client.complete();
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
   std::string version("latest");
@@ -216,6 +217,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     LOG_ERROR << "reboot command: " << client.config.bootloader.reboot_command << " is not executable";
     return EXIT_FAILURE;
   }
+
+  client.complete();
 
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
   if (variables_map.count("update-lockfile") > 0) {
@@ -420,8 +423,7 @@ int main(int argc, char* argv[]) {
     std::pair<bool, std::string> is_reboot_required{false, ""};
     {
       LOG_DEBUG << "Running " << (*cmd_to_run).first;
-      bool finalize = true ? cmd == "daemon" || cmd == "update" : false;
-      LiteClient client(config, nullptr, finalize);
+      LiteClient client(config, nullptr);
       ret_val = (*cmd_to_run).second(client, commandline_map);
       if (cmd == "daemon") {
         is_reboot_required = client.isRebootRequired();
