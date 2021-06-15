@@ -171,7 +171,7 @@ class ClientHSMTest : public ClientTest {
     }
 
     auto lite_client = std::make_shared<LiteClient>(conf, app_engine, p11_);
-    lite_client->complete();
+    lite_client->finalizeInstall();
     return lite_client;
   }
 

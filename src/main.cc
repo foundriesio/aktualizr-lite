@@ -46,7 +46,7 @@ class FileLock {
 
 static int status_finalize(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
-  return client.complete() ? EXIT_SUCCESS : EXIT_FAILURE;
+  return client.finalizeInstall() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static int status_main(LiteClient& client, const bpo::variables_map& unused) {
@@ -214,7 +214,7 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
 
 static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
   FileLock lock;
-  client.complete();
+  client.finalizeInstall();
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
   std::string version("latest");
@@ -250,7 +250,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     return EXIT_FAILURE;
   }
 
-  client.complete();
+  client.finalizeInstall();
 
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
   if (variables_map.count("update-lockfile") > 0) {

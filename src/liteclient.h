@@ -40,7 +40,7 @@ class LiteClient {
 
   bool checkForUpdatesBegin();
   void checkForUpdatesEnd(const Uptane::Target& target);
-  bool complete();
+  bool finalizeInstall();
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
