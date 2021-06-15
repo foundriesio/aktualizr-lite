@@ -11,8 +11,7 @@
 #include "crypto/keymanager.h"
 #include "target.h"
 
-LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool finalize,
-                       const std::shared_ptr<P11EngineGuard>& p11)
+LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11)
     : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
   storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
   storage->importData(config.import);
@@ -106,8 +105,6 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, bool
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
-
-  complete(finalize);
 }
 
 data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptane::Target>& target) {
@@ -134,18 +131,16 @@ data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptan
   return ret;
 }
 
-bool LiteClient::complete(bool finalize) {
+bool LiteClient::complete() {
   data::InstallationResult ret{data::ResultCode::Numeric::kNeedCompletion, ""};
   boost::optional<Uptane::Target> pending;
 
   // finalize pending installs
-  if (finalize) {
-    storage->loadInstalledVersions("", nullptr, &pending);
-    if (!!pending) {
-      ret = finalizePendingUpdate(pending);
-    } else {
-      LOG_INFO << "No Pending Installs";
-    }
+  storage->loadInstalledVersions("", nullptr, &pending);
+  if (!!pending) {
+    ret = finalizePendingUpdate(pending);
+  } else {
+    LOG_INFO << "No Pending Installs";
   }
 
   // write current to /var/sota
@@ -158,7 +153,7 @@ bool LiteClient::complete(bool finalize) {
     notifyInstallFinished(*pending, ret);
   }
 
-  return finalize ? ret.isSuccess() : true;
+  return ret.isSuccess();
 }
 
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {

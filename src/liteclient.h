@@ -26,7 +26,7 @@ class Lock {
 
 class LiteClient {
  public:
-  LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr, bool finalize = true,
+  LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
              const std::shared_ptr<P11EngineGuard>& p11 = nullptr);
 
   Config config;
@@ -40,7 +40,7 @@ class LiteClient {
 
   bool checkForUpdatesBegin();
   void checkForUpdatesEnd(const Uptane::Target& target);
-  bool complete(bool finalize);
+  bool complete();
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
