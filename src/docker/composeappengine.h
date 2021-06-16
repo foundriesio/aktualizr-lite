@@ -14,7 +14,6 @@ namespace Docker {
 class ComposeAppEngine : public AppEngine {
  public:
   static constexpr const char* const ArchiveExt{".tgz"};
-  static constexpr const char* const NeedStartFile{".need_start"};
   static constexpr const char* const ComposeFile{"docker-compose.yml"};
 
  public:

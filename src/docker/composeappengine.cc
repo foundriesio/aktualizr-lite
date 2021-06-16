@@ -324,7 +324,6 @@ bool ComposeAppEngine::pullImages(const App& app) {
 
 bool ComposeAppEngine::installApp(const App& app) {
   LOG_INFO << "Installing App";
-  boost::filesystem::ofstream flag_file(appRoot(app) / NeedStartFile);
   const auto result = cmd_streaming(compose_ + "up --remove-orphans --no-start", app);
   return result;
 }

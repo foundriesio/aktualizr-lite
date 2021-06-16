@@ -13,8 +13,6 @@ logger = logging.getLogger("Fake Docker Compose")
 
 def up(out_dir, app_name, compose, flags):
     logger.info("Up: " + flags[0] + " " + flags[1])
-    if "-d" not in flags:
-        return
 
     logger.info("Run services...")
     with open(os.path.join(out_dir, "containers.json"), "r") as f:
@@ -27,6 +25,7 @@ def up(out_dir, app_name, compose, flags):
         container["Labels"]["com.docker.compose.service"] = service
         container["Labels"]["io.compose-spec.config-hash"] = compose["services"][service]["labels"]["io.compose-spec.config-hash"]
         container["Image"] = compose["services"][service]["image"]
+        container["State"] = "running" if flags[1] == "-d" else "created"
         containers.append(container)
 
     with open(os.path.join(out_dir, "containers.json"), "w") as f:
@@ -43,10 +42,7 @@ def main():
         out_dir = sys.argv[1]
         cmd = sys.argv[2]
         logger.info("Command: " + cmd)
-        flags = sys.argv[3:]
-        if len(flags) > 2 and flags[1] == '--no-start':
-            logger.info(">>>>>>>>>>>> --no-start")
-            cmd = ""
+
         app_name = os.path.basename(os.getcwd())
         if cmd == "up":
             up(out_dir, app_name, compose, sys.argv[3:])

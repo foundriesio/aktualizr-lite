@@ -816,8 +816,9 @@ TEST(ComposeApp, DISABLED_installApp) {
     Uptane::Target installed_target("pull", installed_target_json);
     TestClient client("app1", &installed_target, &registry, false, hash_provider);
 
+    AppEngine::App app{"app1", registry.addApp("test_repo", "app1", nullptr, "myapp")};
     Json::Value target_to_install_json{installed_target_json};
-    target_to_install_json["custom"]["docker_compose_apps"]["app1"]["uri"] = registry.addApp("test_repo", "app1", nullptr, "myapp");
+    target_to_install_json["custom"]["docker_compose_apps"][app.name]["uri"] = app.uri;
 
     ASSERT_TRUE(client.pacman->fetchTarget({"pull", target_to_install_json}, *(client.fetcher), *(client.keys), nullptr, nullptr));
     ASSERT_TRUE(registry.wasManifestRequested());
@@ -827,7 +828,7 @@ TEST(ComposeApp, DISABLED_installApp) {
 
     ASSERT_EQ(data::ResultCode::Numeric::kNeedCompletion, client.pacman->install({"pull", target_to_install_json}).result_code.num_code);
     ASSERT_TRUE(boost::filesystem::exists(client.getRebootSentinel()));
-    ASSERT_TRUE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::NeedStartFile));
+    ASSERT_FALSE(client.app_engine_->isRunning(app));
 
     ASSERT_EQ("up --remove-orphans --no-start", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
 
@@ -835,7 +836,7 @@ TEST(ComposeApp, DISABLED_installApp) {
     client.fakeReboot();
     // make sure App has been restarted after reboot
     ASSERT_EQ("up --remove-orphans -d", Utils::readFile(client.tempdir->Path() / "apps/app1/up.log", true));
-    ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1" / Docker::ComposeAppEngine::NeedStartFile));
+    ASSERT_TRUE(client.app_engine_->isRunning(app));
   }
 }
 

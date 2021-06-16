@@ -42,7 +42,10 @@ bool DockerClient::isRunning(const Json::Value& root, const std::string& app, co
     if (val["Labels"]["com.docker.compose.project"].asString() == app) {
       if (val["Labels"]["com.docker.compose.service"].asString() == service) {
         if (val["Labels"]["io.compose-spec.config-hash"].asString() == hash) {
-          return true;
+          // All other states imply that a container was started
+          if (val["State"].asString() != "created") {
+            return true;
+          }
         }
       }
     }
