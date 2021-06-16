@@ -146,6 +146,7 @@ bool ComposeAppEngine::isRunning(const App& app) const {
     started_state = state() == AppState::State::kStarted;
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get/set App state, fallback to checking the dockerd state: " << exc.what();
+    started_state = true;
   }
 
   // let's fallback or do double check
@@ -177,7 +178,46 @@ bool ComposeAppEngine::isRunning(const App& app) const {
   return false;
 }
 
-std::string ComposeAppEngine::runningApps() const { return docker_client_->runningApps(); }
+Json::Value ComposeAppEngine::getRunningAppsInfo() const {
+  Json::Value apps;
+  try {
+    Json::Value containers;
+    docker_client_->getContainers(containers);
+
+    for (Json::ValueIterator ii = containers.begin(); ii != containers.end(); ++ii) {
+      Json::Value val = *ii;
+
+      std::string app_name = val["Labels"]["com.docker.compose.project"].asString();
+      if (app_name.empty()) {
+        continue;
+      }
+
+      if (!apps.isMember(app_name)) {
+        App app{app_name, ""};
+        AppState state(app, appRoot(app));
+        app.uri = state.version();
+        apps[app.name]["uri"] = app.uri;
+        apps[app.name]["state"] = state.toStr();
+      }
+
+      std::string service = val["Labels"]["com.docker.compose.service"].asString();
+      std::string hash = val["Labels"]["io.compose-spec.config-hash"].asString();
+      std::string image = val["Image"].asString();
+      std::string state = val["State"].asString();
+      std::string status = val["Status"].asString();
+
+      apps[app_name]["services"][service]["hash"] = hash;
+      apps[app_name]["services"][service]["image"] = image;
+      apps[app_name]["services"][service]["state"] = state;
+      apps[app_name]["services"][service]["status"] = status;
+    }
+
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
+  }
+
+  return apps;
+}
 
 // Private implementation
 
@@ -330,7 +370,7 @@ ComposeAppEngine::AppState::AppState(const App& app, const boost::filesystem::pa
 }
 , state_file_{(root / MetaDir / StateFile).string()} {
   version_ = version_file_.readStr();
-  if (version_ == app.uri) {
+  if (app.uri.empty() || version_ == app.uri) {
     state_ = static_cast<State>(state_file_.read());
     return;
   }

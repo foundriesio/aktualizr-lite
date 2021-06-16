@@ -50,24 +50,4 @@ bool DockerClient::isRunning(const Json::Value& root, const std::string& app, co
   return false;
 }
 
-std::string DockerClient::runningApps() {
-  std::string runningApps;
-  Json::Value root;
-  getContainers(root);
-  for (Json::ValueIterator ii = root.begin(); ii != root.end(); ++ii) {
-    Json::Value val = *ii;
-    std::string app = val["Labels"]["com.docker.compose.project"].asString();
-    std::string service = val["Labels"]["com.docker.compose.service"].asString();
-    std::string hash = val["Labels"]["io.compose-spec.config-hash"].asString();
-    std::string image = val["Image"].asString();
-    std::string state = val["State"].asString();
-    std::string status = val["Status"].asString();
-
-    boost::format format("App(%s) Service(%-10s %s)\tImage(%-120s)\tState(%-10s)\tStatus(%-10s)\n");
-    std::string line = boost::str(format % app % service % hash % image % state % status);
-    runningApps += line;
-  }
-  return runningApps;
-}
-
 }  // namespace Docker

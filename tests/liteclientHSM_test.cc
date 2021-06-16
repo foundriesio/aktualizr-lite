@@ -40,9 +40,10 @@ class MockAppEngine : public AppEngine {
     ON_CALL(*this, install).WillByDefault(Return(true));
     ON_CALL(*this, run).WillByDefault(Return(true));
     ON_CALL(*this, isRunning).WillByDefault(Return(true));
-    ON_CALL(*this, runningApps)
-        .WillByDefault(Return(
-            "Apps(app-01) Service(test-factory 7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243"));
+    ON_CALL(*this, getRunningAppsInfo)
+        .WillByDefault(
+            Return(Utils::parseJSON("{\"app-07\": {\"services\": {\"test-factory\": {\"hash\": "
+                                    "\"7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243\"}}}}")));
   }
 
  public:
@@ -51,7 +52,7 @@ class MockAppEngine : public AppEngine {
   MOCK_METHOD(bool, run, (const App& app), (override));
   MOCK_METHOD(void, remove, (const App& app), (override));
   MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
-  MOCK_METHOD(std::string, runningApps, (), (const, override));
+  MOCK_METHOD(Json::Value, getRunningAppsInfo, (), (const, override));
 };
 
 class LiteClientHSMTest : public fixtures::ClientHSMTest {

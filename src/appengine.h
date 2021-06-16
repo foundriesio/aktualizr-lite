@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include "json/json.h"
 
 class AppEngine {
  public:
@@ -19,7 +20,7 @@ class AppEngine {
   virtual bool run(const App& app) = 0;
   virtual void remove(const App& app) = 0;
   virtual bool isRunning(const App& app) const = 0;
-  virtual std::string runningApps() const = 0;
+  virtual Json::Value getRunningAppsInfo() const = 0;
 
  public:
   virtual ~AppEngine() = default;

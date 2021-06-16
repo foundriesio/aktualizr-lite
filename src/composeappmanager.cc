@@ -207,7 +207,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     res = OstreeManager::install(target);
     if (res.result_code.num_code == data::ResultCode::Numeric::kInstallFailed) {
       LOG_ERROR << "Failed to install OSTree target, skipping Docker Compose Apps";
-      res.description += "\n# Apps running:\n" + runningApps();
+      res.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
       return res;
     }
     const_cast<ComposeAppManager*>(this)->installNotify(target);
@@ -275,7 +275,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
   }
 
-  res.description += "\n# Apps running:\n" + runningApps();
+  res.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
   return res;
 }
 
@@ -295,7 +295,7 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
   }
 
   if (data::ResultCode::Numeric::kNeedCompletion != ir.result_code.num_code) {
-    ir.description += "\n# Apps running:\n" + runningApps();
+    ir.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
   }
   return ir;
 }
@@ -334,5 +334,21 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
 }
 
 std::string ComposeAppManager::getCurrentHash() const { return sysroot_->getCurDeploymentHash(); }
+Json::Value ComposeAppManager::getRunningAppsInfo() const { return app_engine_->getRunningAppsInfo(); }
+std::string ComposeAppManager::getRunningAppsInfoForReport() const {
+  std::string result;
+  const auto apps_info = getRunningAppsInfo();
+  for (Json::ValueConstIterator ii = apps_info.begin(); ii != apps_info.end(); ++ii) {
+    result += ii.key().asString() + ": " + (*ii)["uri"].asString() + "; state: " + (*ii)["state"].asString() + "\n";
+    ;
 
-std::string ComposeAppManager::runningApps() const { return app_engine_->runningApps(); }
+    Json::Value services = (*ii)["services"];
+    for (Json::ValueConstIterator jj = services.begin(); jj != services.end(); ++jj) {
+      result += "\t" + jj.key().asString() + ": " + (*jj)["hash"].asString();
+      result += "; image: " + (*jj)["image"].asString();
+      result += "; state: " + (*jj)["state"].asString();
+      result += "; status: " + (*jj)["status"].asString() + "\n";
+    }
+  }
+  return result;
+}

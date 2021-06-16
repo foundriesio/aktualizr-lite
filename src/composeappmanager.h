@@ -54,7 +54,8 @@ class ComposeAppManager : public OstreeManager {
 
  private:
   std::string getCurrentHash() const override;
-  std::string runningApps() const;
+  Json::Value getRunningAppsInfo() const;
+  std::string getRunningAppsInfoForReport() const;
 
  private:
   Config cfg_;

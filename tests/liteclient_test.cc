@@ -40,9 +40,10 @@ class MockAppEngine : public AppEngine {
     ON_CALL(*this, install).WillByDefault(Return(true));
     ON_CALL(*this, run).WillByDefault(Return(true));
     ON_CALL(*this, isRunning).WillByDefault(Return(true));
-    ON_CALL(*this, runningApps)
+    ON_CALL(*this, getRunningAppsInfo)
         .WillByDefault(
-            Return("Apps(app-07) Service(nginx-07 16e36b4ab48cb19c7100a22686f85ffcbdce5694c936bda03cb12a2cce88efcf"));
+            Return(Utils::parseJSON("{\"app-07\": {\"services\": {\"nginx-07\": {\"hash\": "
+                                    "\"16e36b4ab48cb19c7100a22686f85ffcbdce5694c936bda03cb12a2cce88efcf\"}}}}")));
   }
 
  public:
@@ -51,7 +52,7 @@ class MockAppEngine : public AppEngine {
   MOCK_METHOD(bool, run, (const App& app), (override));
   MOCK_METHOD(void, remove, (const App& app), (override));
   MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
-  MOCK_METHOD(std::string, runningApps, (), (const, override));
+  MOCK_METHOD(Json::Value, getRunningAppsInfo, (), (const, override));
 };
 
 class LiteClientTest : public fixtures::ClientTest {
