@@ -70,12 +70,16 @@ TEST_F(ComposeAppEngineTest, FetchRunCompare) {
 
   ASSERT_TRUE(app_engine->fetch(updated_app));
   ASSERT_FALSE(app_engine->isRunning(updated_app));
-  ASSERT_FALSE(boost::icontains(app_engine->runningApps(), id));
+  ASSERT_FALSE(app_engine->getRunningAppsInfo().isMember("app-02"));
 
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
   ASSERT_TRUE(app_engine->isRunning(updated_app));
-  ASSERT_TRUE(boost::icontains(app_engine->runningApps(), id));
+
+  Json::Value apps_info = app_engine->getRunningAppsInfo();
+  ASSERT_TRUE(apps_info.isMember("app-02"));
+  ASSERT_TRUE(apps_info["app-02"]["services"].isMember("service-02"));
+  ASSERT_EQ(apps_info["app-02"]["services"]["service-02"]["image"].asString(), "image-02");
 }
 
 int main(int argc, char** argv) {

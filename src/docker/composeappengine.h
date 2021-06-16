@@ -26,7 +26,7 @@ class ComposeAppEngine : public AppEngine {
   bool run(const App& app) override;
   void remove(const App& app) override;
   bool isRunning(const App& app) const override;
-  std::string runningApps() const override;
+  Json::Value getRunningAppsInfo() const override;
 
  private:
   static constexpr const char* const MetaDir{".meta"};
@@ -77,10 +77,28 @@ class ComposeAppEngine : public AppEngine {
 
     void setState(const State& state);
     const State& operator()() const { return state_; }
+    const std::string& version() const { return version_; }
+    std::string toStr() const {
+      static std::map<State, std::string> state2Str = {
+          {State::kUnknown, "Unknown"},
+          {State::kDownloaded, "Downloaded"},
+          {State::kDownloadFailed, "Download failed"},
+          {State::kVerified, "Compose file verified"},
+          {State::kVerifyFailed, "Compose file verification failure"},
+          {State::kPulled, "Images are pulled"},
+          {State::kPullFailed, "Image pull failed"},
+          {State::kInstalled, "Created"},
+          {State::kInstallFail, "Creation failed"},
+          {State::kStarted, "Started"},
+          {State::kStartFailed, "Start failed"},
+      };
+
+      return state2Str[state_];
+    }
 
    private:
-    std::string version_;
-    State state_;
+    std::string version_{""};
+    State state_{State::kUnknown};
 
     File version_file_;
     File state_file_;
