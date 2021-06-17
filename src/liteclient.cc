@@ -466,6 +466,18 @@ void LiteClient::setAppsNotChecked() {
   }
 }
 
+void LiteClient::setApps(std::vector<std::string> apps) {
+  config.pacman.extra["compose_apps"] = boost::algorithm::join(apps, ",");
+  if (package_manager_->name() == ComposeAppManager::Name) {
+    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    if (compose_pacman == nullptr) {
+      LOG_ERROR << "Cannot downcast the package manager to a specific type";
+    } else {
+      compose_pacman->setApps(apps);
+    }
+  }
+}
+
 std::string LiteClient::getDeviceID() const { return key_manager_->getCN(); }
 
 void LiteClient::add_apps_header(std::vector<std::string>& headers, PackageConfig& config) {

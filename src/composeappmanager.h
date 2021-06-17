@@ -48,6 +48,7 @@ class ComposeAppManager : public OstreeManager {
   // If Apps are not specified in the config then all Target's Apps are returned
   AppsContainer getApps(const Uptane::Target& t) const;
   AppsContainer getAppsToUpdate(const Uptane::Target& t) const;
+  void setApps(std::vector<std::string>& apps) { *cfg_.apps = apps; }
   bool checkForAppsToUpdate(const Uptane::Target& target);
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;

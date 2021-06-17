@@ -49,6 +49,75 @@ static void get_config(LiteClient& client, const httplib::Request& req, httplib:
   res.set_content(jsonss.str(), "application/json");
 }
 
+static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
+  auto target = client.getCurrent();
+  LOG_INFO << "Syncing Active Target Apps";
+
+  generate_correlation_id(target);
+
+  data::ResultCode::Numeric rc = client.download(target, "Sync active Target Apps");
+  if (rc != data::ResultCode::Numeric::kOk) {
+    return rc;
+  }
+
+  if (client.VerifyTarget(target) != TargetStatus::kGood) {
+    data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+    client.notifyInstallFinished(target, res);
+    LOG_ERROR << "Downloaded target is invalid";
+    return res.result_code.num_code;
+  }
+
+  return client.install(target);
+}
+
+static void config_apps(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  Json::Value data;
+  Json::Value input = Utils::parseJSON(req.body);
+
+  auto apps = input["apps"];
+  if (!apps.isArray()) {
+    data["error"] = "Missing required item: apps";
+    throw ApiException(400, data);
+  }
+  auto cfgFile = input["cfg-file"];
+  if (!cfgFile.isString()) {
+    data["error"] = "Missing required item: cfg-file";
+    throw ApiException(400, data);
+  }
+
+  auto curApps = client.config.pacman.extra["compose_apps"];
+
+  std::string content = "[pacman]\ncompose_apps = \"";
+  std::vector<std::string> appsList;
+  bool first = true;
+  for (Json::ValueIterator i = apps.begin(); i != apps.end(); ++i) {
+    auto app = (*i).asString();
+    if (!first) {
+      content += ",";
+    }
+    content += app;
+    appsList.emplace_back(app);
+    first = false;
+  }
+  content += "\"\n";
+  boost::filesystem::path path("/etc/sota/conf.d");
+  path = path / cfgFile.asString();
+  client.setApps(appsList);
+  if (!client.appsInSync()) {
+    auto rc = do_app_sync(client);
+    if (rc != data::ResultCode::Numeric::kOk) {
+      LOG_ERROR << "Rolling back to apps: " << curApps;
+      client.config.pacman.extra["compose_apps"] = curApps;
+      data["error"] = "Unable to sync apps";
+      data["rc"] = (int)rc;
+      json_resp(res, 500, data);
+      return;
+    }
+  }
+
+  Utils::writeFile(path, content);
+}
+
 static void send_telemetry(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
   client.reportNetworkInfo();
   client.reportHwInfo();
@@ -304,6 +373,10 @@ int main(int argc, char** argv) {
     // here so that a client doesn't mistakenly try the API this way.
     client.updateImageMeta();
 
+    if (!client.appsInSync()) {
+      do_app_sync(client);
+    }
+
     httplib::Server svr;
 
     svr.set_logger([](const httplib::Request& req, const httplib::Response& resp) {
@@ -321,6 +394,8 @@ int main(int argc, char** argv) {
 
     svr.Get("/config",
             [&client](const httplib::Request& req, httplib::Response& res) { get_config(client, req, res); });
+    svr.Post("/config/apps",
+             [&client](const httplib::Request& req, httplib::Response& res) { config_apps(client, req, res); });
     svr.Put("/telemetry",
             [&client](const httplib::Request& req, httplib::Response& res) { send_telemetry(client, req, res); });
     svr.Get("/targets",

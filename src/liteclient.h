@@ -58,6 +58,7 @@ class LiteClient {
   bool isTargetActive(const Uptane::Target& target) const;
   bool appsInSync() const;
   void setAppsNotChecked();
+  void setApps(std::vector<std::string> apps);
   std::string getDeviceID() const;
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
                                      PackageConfig& config);
