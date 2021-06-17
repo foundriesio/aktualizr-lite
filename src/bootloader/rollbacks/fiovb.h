@@ -39,7 +39,7 @@ class FiovbRollback : public Rollback {
     std::string sink;
     if (Utils::shell("fiovb_printenv bootfirmware_version", &sink) != 0) {
       LOG_WARNING << "Failed to read bootfirmware_version";
-      return;
+      sink = std::string();
     }
     LOG_INFO << "Current firmware version: " << sink;
     if (sink.compare(version) != 0) {
