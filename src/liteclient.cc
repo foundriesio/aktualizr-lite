@@ -311,13 +311,10 @@ bool LiteClient::checkImageMetaOffline() {
   return true;
 }
 
-std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& target,
-                                                          const api::FlowControlToken* token) {
+std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& target) {
   key_manager_->loadKeys();
-  auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
-    // report_progress_cb(events_channel.get(), t, description, progress);
-    // TODO: consider make use of it for download progress reporting
-  };
+
+  DownloadWatchdog dw;
 
   bool success = false;
   {
@@ -326,12 +323,12 @@ std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& 
     std::chrono::milliseconds wait(500);
 
     for (; tries < max_tries; tries++) {
-      success = package_manager_->fetchTarget(target, *uptane_fetcher_, *key_manager_, prog_cb, token);
-      // Skip trying to fetch the 'target' if control flow token transaction
-      // was set to the 'abort' or 'pause' state, see the CommandQueue and FlowControlToken.
-      if (success || (token != nullptr && !token->canContinue(false))) {
+      success = package_manager_->fetchTarget(target, *uptane_fetcher_, *key_manager_, dw.getProgressCallback(),
+                                              dw.getFlowCtrl());
+      if (success) {
         break;
       } else if (tries < max_tries - 1) {
+        dw.reset();
         std::this_thread::sleep_for(wait);
         wait *= 2;
       }
@@ -492,4 +489,46 @@ void LiteClient::logTarget(const std::string& prefix, const Uptane::Target& targ
   Target::log(
       prefix, target,
       config.pacman.type == ComposeAppManager::Name ? ComposeAppManager::Config(config.pacman).apps : boost::none);
+}
+
+DownloadWatchdog::DownloadWatchdog()
+    : flow_ctrl_token_{std::make_unique<api::FlowControlToken>()}, timer_thread_{[this]() { run(); }} {}
+
+DownloadWatchdog::~DownloadWatchdog() {
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    exit_ = true;
+    progress_cv_.notify_all();
+  }
+  if (timer_thread_.joinable()) {
+    timer_thread_.join();
+  }
+}
+
+FetcherProgressCb DownloadWatchdog::getProgressCallback() {
+  return [this](const Uptane::Target& /* unused */, const std::string& /* unused */, unsigned int /* unused */) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    progress_cv_.notify_all();
+  };
+}
+
+api::FlowControlToken* DownloadWatchdog::getFlowCtrl() const { return flow_ctrl_token_.get(); }
+
+void DownloadWatchdog::reset() {
+  flow_ctrl_token_->reset();
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    progress_cv_.notify_all();
+  }
+}
+
+void DownloadWatchdog::run() {
+  std::unique_lock<std::mutex> lock(mutex_);
+  while (!exit_) {
+    auto status = progress_cv_.wait_for(lock, std::chrono::seconds(timeout_seconds_));
+    if (status == std::cv_status::timeout) {
+      LOG_INFO << "Download timeout, cancelling the current download session !!!";
+      flow_ctrl_token_->setAbort();
+    }
+  }
 }

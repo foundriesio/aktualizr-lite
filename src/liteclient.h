@@ -64,8 +64,7 @@ class LiteClient {
   void writeCurrentTarget(const Uptane::Target& t) const;
 
   data::InstallationResult installPackage(const Uptane::Target& target);
-  std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
-                                                const api::FlowControlToken* token = nullptr);
+  std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
 
@@ -82,6 +81,33 @@ class LiteClient {
   Json::Value last_hw_info_reported_;
   bool is_reboot_required_{false};
   bool booted_sysroot{true};
+};
+
+class DownloadWatchdog {
+ public:
+  explicit DownloadWatchdog();
+  ~DownloadWatchdog();
+
+  DownloadWatchdog(const DownloadWatchdog&) = delete;
+  DownloadWatchdog(const DownloadWatchdog&&) = delete;
+  DownloadWatchdog& operator=(const DownloadWatchdog&) = delete;
+  DownloadWatchdog& operator=(const DownloadWatchdog&&) = delete;
+
+  FetcherProgressCb getProgressCallback();
+  api::FlowControlToken* getFlowCtrl() const;
+  void reset();
+
+ private:
+  void run();
+
+ private:
+  std::unique_ptr<api::FlowControlToken> flow_ctrl_token_;
+
+  std::mutex mutex_;
+  std::condition_variable progress_cv_;
+  bool exit_{false};
+  std::thread timer_thread_;
+  const int64_t timeout_seconds_{30};
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

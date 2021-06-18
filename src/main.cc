@@ -311,11 +311,14 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       } else {
         if (!client.appsInSync()) {
           client.checkForUpdatesEnd(client.getCurrent());
-          do_app_sync(client);
+          auto rc = do_app_sync(client);
+          if (rc == data::ResultCode::Numeric::kOk) {
+            LOG_INFO << "Device is up-to-date";
+          }
         } else {
           client.checkForUpdatesEnd(Uptane::Target::Unknown());
+          LOG_INFO << "Device is up-to-date";
         }
-        LOG_INFO << "Device is up-to-date";
       }
 
     } catch (const std::exception& exc) {
