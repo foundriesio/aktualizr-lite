@@ -52,6 +52,7 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   libsodium-dev \
   libsqlite3-dev \
   libssl-dev \
+  libsystemd-dev \
   libltdl-dev \
   libtool \
   lshw \

@@ -70,7 +70,7 @@ target_include_directories(${TARGET} PRIVATE ${INCS})
 target_include_directories(${TARGET_EXE} PRIVATE ${INCS})
 
 target_link_libraries(${TARGET} aktualizr_lib)
-target_link_libraries(${TARGET_EXE} ${TARGET})
+target_link_libraries(${TARGET_EXE} ${TARGET} ${SYSTEMD_LIBRARIES})
 
 # TODO: consider cleaning up the overall "install" elements as it includes
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)

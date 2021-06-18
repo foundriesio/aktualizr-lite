@@ -47,6 +47,7 @@ if(BUILD_AKLITE)
   find_package(OSTree REQUIRED)
   find_package(PkgConfig REQUIRED)
   pkg_search_module(GLIB REQUIRED glib-2.0)
+  pkg_search_module(SYSTEMD REQUIRED libsystemd)
 
   add_subdirectory(src)
 
@@ -63,4 +64,5 @@ endif(BUILD_AKLITE)
 message(STATUS "BUILD_AKLITE: ${BUILD_AKLITE}")
 message(STATUS "BUILD_OSTREE: ${BUILD_OSTREE}")
 message(STATUS "BUILD_SOTA_TOOLS: ${BUILD_SOTA_TOOLS}")
+message(STATUS "BUILD_SERVER: ${BUILD_SERVER}")
 message(STATUS "ALLOW_MANUAL_ROLLBACK: ${ALLOW_MANUAL_ROLLBACK}")

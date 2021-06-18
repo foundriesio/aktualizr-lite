@@ -178,6 +178,7 @@ using socket_t = SOCKET;
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <systemd/sd-daemon.h>
 
 using socket_t = int;
 #define INVALID_SOCKET (-1)
@@ -4420,6 +4421,15 @@ inline bool Server::listen(const char *host, int port, int socket_flags) {
 
 inline bool Server::listen_unix_domain(const char *path, int socket_flags) {
   struct sockaddr_un addr;
+
+  int n = sd_listen_fds(0);
+  if (n > 1) {
+    fprintf(stderr, "Too many file descriptors received from systemd.\n");
+    return false;
+  } else if (n == 1) {
+    svr_sock_ = SD_LISTEN_FDS_START + 0;
+    return listen_internal();
+  }
 
   svr_sock_ = ::socket(AF_UNIX, SOCK_STREAM, 0);
   if (svr_sock_ == -1) {
