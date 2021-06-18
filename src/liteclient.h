@@ -11,19 +11,6 @@
 
 class AppEngine;
 
-class Lock {
- public:
-  Lock(int fd) : fd_(fd) {}
-  ~Lock() {
-    if (fd_ != -1) {
-      close(fd_);
-    }
-  }
-
- private:
-  int fd_;
-};
-
 class LiteClient {
  public:
   LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
@@ -68,9 +55,6 @@ class LiteClient {
   FRIEND_TEST(helpers, callback);
 
   void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
-
-  std::unique_ptr<Lock> getDownloadLock() const;
-  std::unique_ptr<Lock> getUpdateLock() const;
 
   void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event);
   void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
