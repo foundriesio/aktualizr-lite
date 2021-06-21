@@ -12,6 +12,8 @@
 
 namespace bpo = boost::program_options;
 
+std::mutex g_client_mutex;
+
 static void json_resp(httplib::Response& res, int code, const Json::Value& data) {
   res.status = code;
   Json::StreamWriterBuilder builder;
@@ -35,6 +37,7 @@ class ApiException : public std::exception {
 };
 
 static void get_config(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  LOG_DEBUG << "get_config called";
   auto cmd = client.config.bootloader.reboot_command;
 
   std::stringstream ss;
@@ -71,6 +74,7 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
 }
 
 static void config_apps(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  LOG_DEBUG << "config_apps called";
   Json::Value data;
   Json::Value input = Utils::parseJSON(req.body);
 
@@ -85,6 +89,7 @@ static void config_apps(LiteClient& client, const httplib::Request& req, httplib
     throw ApiException(400, data);
   }
 
+  std::lock_guard<std::mutex> guard(g_client_mutex);
   auto curApps = client.config.pacman.extra["compose_apps"];
 
   std::string content = "[pacman]\ncompose_apps = \"";
@@ -119,6 +124,7 @@ static void config_apps(LiteClient& client, const httplib::Request& req, httplib
 }
 
 static void send_telemetry(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  LOG_DEBUG << "send_telemetry called";
   client.reportNetworkInfo();
   client.reportHwInfo();
   Json::Value resp;
@@ -126,6 +132,8 @@ static void send_telemetry(LiteClient& client, const httplib::Request& req, http
 }
 
 static void get_current_target(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  LOG_DEBUG << "get_current_target called";
+  std::lock_guard<std::mutex> guard(g_client_mutex);
   auto current = client.getCurrent();
   Json::Value target;
   target["name"] = current.filename();
@@ -136,6 +144,8 @@ static void get_current_target(LiteClient& client, const httplib::Request& req, 
 }
 
 static void get_targets(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  LOG_DEBUG << "get_targets called";
+  std::lock_guard<std::mutex> guard(g_client_mutex);
   Json::Value data;
 
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
@@ -223,6 +233,7 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, const std
 }
 
 static void download_target(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  LOG_DEBUG << "download_target called";
   Json::Value data;
   Json::Value input = Utils::parseJSON(req.body);
 
@@ -243,6 +254,7 @@ static void download_target(LiteClient& client, const httplib::Request& req, htt
     reason = reason_val.asString();
   }
 
+  std::lock_guard<std::mutex> guard(g_client_mutex);
   auto target = find_target(client, target_name.asString());
   client.logTarget("Downloading: ", *target);
   target->setCorrelationId(correlation_id.asString());
@@ -273,6 +285,7 @@ static void download_target(LiteClient& client, const httplib::Request& req, htt
 }
 
 static void install_target(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  LOG_DEBUG << "install_target called";
   Json::Value data;
   Json::Value input = Utils::parseJSON(req.body);
 
@@ -287,6 +300,7 @@ static void install_target(LiteClient& client, const httplib::Request& req, http
     throw ApiException(400, data);
   }
 
+  std::lock_guard<std::mutex> guard(g_client_mutex);
   auto target = find_target(client, target_name.asString());
   client.logTarget("Installing: ", *target);
   target->setCorrelationId(correlation_id.asString());
