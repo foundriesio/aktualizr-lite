@@ -145,7 +145,7 @@ bool ComposeAppEngine::isRunning(const App& app) const {
     AppState state(app, appRoot(app));
     started_state = state() == AppState::State::kStarted;
   } catch (const std::exception& exc) {
-    LOG_WARNING << "Failed to get/set App state, fallback to checking the dockerd state: " << exc.what();
+    LOG_DEBUG << "Failed to get/set App state, fallback to checking the dockerd state: " << exc.what();
     started_state = true;
   }
 
