@@ -123,6 +123,25 @@ static void config_apps(LiteClient& client, const httplib::Request& req, httplib
   Utils::writeFile(path, content);
 }
 
+static void get_config_name(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
+  LOG_DEBUG << "get_config_name called";
+  Json::Value val;
+  val["uuid"] = client.getDeviceID();
+
+  const auto http_res = client.http_client->get(client.config.tls.server + "/device", HttpInterface::kNoLimit);
+  if (http_res.isOk()) {
+    const Json::Value device_info = http_res.getJson();
+    if (!device_info.empty()) {
+      val["name"] = device_info["Name"].asString();
+    } else {
+      LOG_WARNING << "Failed to get a device name from a device info: " << device_info;
+    }
+  } else {
+    LOG_WARNING << "Failed to get a device info: " << http_res.getStatusStr();
+  }
+  json_resp(res, 200, val);
+}
+
 static void send_telemetry(LiteClient& client, const httplib::Request& req, httplib::Response& res) {
   LOG_DEBUG << "send_telemetry called";
   client.reportNetworkInfo();
@@ -410,6 +429,8 @@ int main(int argc, char** argv) {
             [&client](const httplib::Request& req, httplib::Response& res) { get_config(client, req, res); });
     svr.Post("/config/apps",
              [&client](const httplib::Request& req, httplib::Response& res) { config_apps(client, req, res); });
+    svr.Get("/config/name",
+            [&client](const httplib::Request& req, httplib::Response& res) { get_config_name(client, req, res); });
     svr.Put("/telemetry",
             [&client](const httplib::Request& req, httplib::Response& res) { send_telemetry(client, req, res); });
     svr.Get("/targets",
