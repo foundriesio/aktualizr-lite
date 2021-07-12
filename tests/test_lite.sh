@@ -50,7 +50,7 @@ EOF
                --hwid hwid-for-test --targetcustom $custom_json
 }
 
-uptane_gen --command generate --expires 2021-07-04T16:33:27Z
+uptane_gen --command generate --expires 2041-07-04T16:33:27Z
 add_target foo1
 add_target foo2
 uptane_gen --command signtargets

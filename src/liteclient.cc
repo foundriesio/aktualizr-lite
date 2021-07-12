@@ -278,6 +278,19 @@ void LiteClient::writeCurrentTarget(const Uptane::Target& t) const {
   if (!tmp.empty()) {
     ss << "CONTAINERS_SHA=\"" << tmp << "\"\n";
   }
+
+  ss << "TAG=\"";
+  const auto& tags = custom["tags"];
+  bool first = true;
+  for (Json::ValueConstIterator i = tags.begin(); i != tags.end(); ++i) {
+    if (!first) {
+      ss << ",";
+    }
+    ss << (*i).asString();
+    first = false;
+  }
+  ss << "\"\n";
+
   Utils::writeFile(config.storage.path / "current-target", ss.str());
 }
 
