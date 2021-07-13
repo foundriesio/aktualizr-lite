@@ -19,8 +19,8 @@ class ComposeApp {
 
  public:
   static Ptr create(const std::string& name,
-                    const std::string& service = "service-01", const std::string& image = "image-01") {
-    Ptr app{new ComposeApp(name)};
+                    const std::string& service = "service-01", const std::string& image = "image-01", const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile) {
+    Ptr app{new ComposeApp(name, compose_file)};
     app->updateService(service, image);
     return app;
   }
@@ -41,13 +41,13 @@ class ComposeApp {
 
 
  private:
-  ComposeApp(const std::string& name):name_{name} {}
+  ComposeApp(const std::string& name, const std::string& compose_file):name_{name}, compose_file_{compose_file} {}
 
   const std::string& update() {
     TemporaryDirectory app_dir;
     TemporaryFile arch_file{"arch.tgz"};
 
-    Utils::writeFile(app_dir.Path() / Docker::ComposeAppEngine::ComposeFile, std::string(content_));
+    Utils::writeFile(app_dir.Path() / compose_file_, std::string(content_));
     boost::process::system("tar -czf " + arch_file.Path().string() + " .",  boost::process::start_dir = app_dir.Path());
     arch_ = Utils::readFile(arch_file.Path());
     arch_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(arch_)));
@@ -62,6 +62,7 @@ class ComposeApp {
   }
 
  private:
+  const std::string compose_file_;
   const std::string name_;
   char content_[4096];
 

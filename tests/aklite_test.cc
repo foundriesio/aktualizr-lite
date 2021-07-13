@@ -69,6 +69,30 @@ TEST_F(AkliteTest, AppUpdate) {
   ASSERT_TRUE(app_engine->isRunning(app01_updated));
 }
 
+TEST_F(AkliteTest, AppInvalidUpdate) {
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  auto target01 = createAppTarget({app01});
+
+  updateApps(*client, getInitialTarget(), target01);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
+  ASSERT_TRUE(app_engine->isRunning(app01));
+
+  // update app
+  auto app01_updated =
+      registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02", "incorrect-compose-file.yml"));
+  auto target02 = createAppTarget({app01_updated});
+  updateApps(*client, target01, target02, data::ResultCode::Numeric::kDownloadFailed);
+  ASSERT_FALSE(targetsMatch(client->getCurrent(), target02));
+
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
+  ASSERT_TRUE(app_engine->isRunning(app01));
+}
+
 TEST_F(AkliteTest, OstreeAndAppUpdate) {
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
 
