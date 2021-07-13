@@ -143,7 +143,15 @@ bool ComposeAppEngine::isRunning(const App& app) const {
   bool started_state = false;
   try {
     AppState state(app, appRoot(app));
-    started_state = state() == AppState::State::kStarted;
+    if (app.uri == state.version()) {
+      started_state = state() == AppState::State::kStarted;
+    } else {
+      // The state file exists but it describes a state of some other App not the one
+      // that specified via the param. It can happen if a new Target App download or start fails
+      // and aklite checks if the current App is running
+      LOG_DEBUG << "Failed to get/set App state, fallback to checking the dockerd state";
+      started_state = true;
+    }
   } catch (const std::exception& exc) {
     LOG_DEBUG << "Failed to get/set App state, fallback to checking the dockerd state: " << exc.what();
     started_state = true;
@@ -299,6 +307,7 @@ bool ComposeAppEngine::download(const App& app) {
     }
 
     registry_client_->downloadBlob(archive_uri, appRoot(app) / archive_file_name, manifest.archiveSize());
+    verifyAppArchive(app, archive_file_name);
     extractAppArchive(app, archive_file_name);
 
     result = true;
@@ -349,6 +358,13 @@ bool ComposeAppEngine::checkAvailableStorageSpace(const boost::filesystem::path&
 
   out_available_size = (available_bytes - reserved_bytes);
   return true;
+}
+
+void ComposeAppEngine::verifyAppArchive(const App& app, const std::string& archive_file_name) {
+  if (!cmd_streaming("tar -tf " + archive_file_name + " " + ComposeFile, app) &&
+      !cmd_streaming("tar -tf " + archive_file_name + " ./" + ComposeFile, app)) {
+    throw std::runtime_error(std::string("Received an invalid App, a compose file is missing: ") + ComposeFile);
+  }
 }
 
 void ComposeAppEngine::extractAppArchive(const App& app, const std::string& archive_file_name,

@@ -114,6 +114,7 @@ class ComposeAppEngine : public AppEngine {
   bool start(const App& app);
 
   static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);
+  void verifyAppArchive(const App& app, const std::string& archive_file_name);
   void extractAppArchive(const App& app, const std::string& archive_file_name, bool delete_after_extraction = true);
   boost::filesystem::path appRoot(const App& app) const { return root_ / app.name; }
 
