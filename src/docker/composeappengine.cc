@@ -200,7 +200,7 @@ Json::Value ComposeAppEngine::getRunningAppsInfo() const {
         continue;
       }
 
-      if (!apps.isMember(app_name)) {
+      if (!apps.isMember(app_name) && AppState::exists(root_ / app_name)) {
         App app{app_name, ""};
         AppState state(app, appRoot(app));
         app.uri = state.version();
@@ -398,6 +398,11 @@ ComposeAppEngine::AppState::AppState(const App& app, const boost::filesystem::pa
 }
 catch (const std::exception& exc) {
   LOG_ERROR << "Failed to read version or state file: " << exc.what();
+}
+
+bool ComposeAppEngine::AppState::exists(const boost::filesystem::path& root) {
+  return boost::filesystem::exists(root / MetaDir / VersionFile) &&
+         boost::filesystem::exists(root / MetaDir / StateFile);
 }
 
 void ComposeAppEngine::AppState::setState(const State& state) {
