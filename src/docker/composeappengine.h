@@ -74,6 +74,8 @@ class ComposeAppEngine : public AppEngine {
     AppState(const AppState&) = delete;
     AppState& operator=(const AppState&) = delete;
 
+    static bool exists(const boost::filesystem::path& root);
+
     void setState(const State& state);
     const State& operator()() const { return state_; }
     const std::string& version() const { return version_; }
