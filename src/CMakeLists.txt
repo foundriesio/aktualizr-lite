@@ -18,6 +18,7 @@ set(SRC helpers.cc
 
 set(HEADERS helpers.h
         composeappmanager.h
+        rootfstreemanager.h
         docker/composeappengine.h
         docker/composeapptree.h
         docker/composeinfo.h

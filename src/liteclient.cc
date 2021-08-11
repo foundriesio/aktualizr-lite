@@ -9,6 +9,7 @@
 
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
+#include "rootfstreemanager.h"
 #include "target.h"
 
 LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11)
@@ -100,8 +101,9 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   if (config.pacman.type == ComposeAppManager::Name) {
     package_manager_ = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
                                                            ostree_sysroot, app_engine);
-  } else if (config.pacman.type == PACKAGE_MANAGER_OSTREE) {
-    package_manager_ = std::make_shared<OstreeManager>(config.pacman, config.bootloader, storage, http_client);
+  } else if (config.pacman.type == RootfsTreeManager::Name) {
+    package_manager_ =
+        std::make_shared<RootfsTreeManager>(config.pacman, config.bootloader, storage, http_client, ostree_sysroot);
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
