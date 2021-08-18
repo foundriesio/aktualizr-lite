@@ -3,6 +3,7 @@ set(TARGET ${MAIN_TARGET_LIB})
 
 set(SRC helpers.cc
         composeappmanager.cc
+        rootfstreemanager.cc
         docker/composeappengine.cc
         docker/composeapptree.cc
         docker/composeinfo.cc

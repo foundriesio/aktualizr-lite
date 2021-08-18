@@ -53,9 +53,8 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
                                      std::shared_ptr<OSTree::Sysroot> sysroot, AppEngine::Ptr app_engine)
-    : OstreeManager(pconfig, bconfig, storage, http, new BootloaderLite(bconfig, *storage)),
+    : RootfsTreeManager(pconfig, bconfig, storage, http, std::move(sysroot)),
       cfg_{pconfig},
-      sysroot_{std::move(sysroot)},
       app_engine_{std::move(app_engine)} {
   if (!app_engine_) {
     app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
@@ -156,7 +155,7 @@ bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                                     const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
-  if (!OstreeManager::fetchTarget(target, fetcher, keys, progress_cb, token)) {
+  if (!RootfsTreeManager::fetchTarget(target, fetcher, keys, progress_cb, token)) {
     return false;
   }
 
@@ -328,7 +327,6 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
   }
 }
 
-std::string ComposeAppManager::getCurrentHash() const { return sysroot_->getCurDeploymentHash(); }
 Json::Value ComposeAppManager::getRunningAppsInfo() const { return app_engine_->getRunningAppsInfo(); }
 std::string ComposeAppManager::getRunningAppsInfoForReport() const {
   std::string result;
