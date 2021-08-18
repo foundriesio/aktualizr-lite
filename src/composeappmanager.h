@@ -9,9 +9,9 @@
 #include "docker/composeapptree.h"
 #include "docker/docker.h"
 #include "ostree/sysroot.h"
-#include "package_manager/ostreemanager.h"
+#include "rootfstreemanager.h"
 
-class ComposeAppManager : public OstreeManager {
+class ComposeAppManager : public RootfsTreeManager {
  public:
   static constexpr const char* const Name{"ostree+compose_apps"};
 
@@ -53,13 +53,11 @@ class ComposeAppManager : public OstreeManager {
   void handleRemovedApps(const Uptane::Target& target) const;
 
  private:
-  std::string getCurrentHash() const override;
   Json::Value getRunningAppsInfo() const;
   std::string getRunningAppsInfoForReport() const;
 
  private:
   Config cfg_;
-  std::shared_ptr<OSTree::Sysroot> sysroot_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;
   bool are_apps_checked_{false};
   AppEngine::Ptr app_engine_;

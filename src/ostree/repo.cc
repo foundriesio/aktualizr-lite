@@ -52,12 +52,15 @@ void Repo::addRemote(const std::string& name, const std::string& url, const std:
 
   {
     g_variant_builder_add(&var_builder, "{s@v}", "gpg-verify", g_variant_new_variant(g_variant_new_boolean(FALSE)));
-    g_variant_builder_add(&var_builder, "{s@v}", "tls-ca-path",
-                          g_variant_new_variant(g_variant_new_string(ca.c_str())));
-    g_variant_builder_add(&var_builder, "{s@v}", "tls-client-cert-path",
-                          g_variant_new_variant(g_variant_new_string(cert.c_str())));
-    g_variant_builder_add(&var_builder, "{s@v}", "tls-client-key-path",
-                          g_variant_new_variant(g_variant_new_string(key.c_str())));
+
+    if (!ca.empty()) {
+      g_variant_builder_add(&var_builder, "{s@v}", "tls-ca-path",
+                            g_variant_new_variant(g_variant_new_string(ca.c_str())));
+      g_variant_builder_add(&var_builder, "{s@v}", "tls-client-cert-path",
+                            g_variant_new_variant(g_variant_new_string(cert.c_str())));
+      g_variant_builder_add(&var_builder, "{s@v}", "tls-client-key-path",
+                            g_variant_new_variant(g_variant_new_string(key.c_str())));
+    }
   }
 
   remote_options = g_variant_builder_end(&var_builder);
