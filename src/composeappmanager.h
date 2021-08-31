@@ -20,7 +20,9 @@ class ComposeAppManager : public RootfsTreeManager {
     Config(const PackageConfig& pconfig);
 
     boost::optional<std::vector<std::string>> apps;
+    boost::optional<std::vector<std::string>> reset_apps;
     boost::filesystem::path apps_root{"/var/sota/compose-apps"};
+    boost::filesystem::path reset_apps_root{"/var/sota/reset-apps"};
     boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
     bool docker_prune{true};
     bool force_update{false};
@@ -32,6 +34,9 @@ class ComposeAppManager : public RootfsTreeManager {
   };
 
   using AppsContainer = std::unordered_map<std::string, std::string>;
+
+  static AppEngine::Ptr createAppEngine(Config& cfg, Docker::DockerClient::Ptr docker_client,
+                                        Docker::RegistryClient::Ptr registry_client);
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
@@ -47,6 +52,7 @@ class ComposeAppManager : public RootfsTreeManager {
   // Returns an intersection of Target's Apps and Apps listed in the config (sota.toml:compose_apps)
   // If Apps are not specified in the config then all Target's Apps are returned
   AppsContainer getApps(const Uptane::Target& t) const;
+  AppsContainer getResetApps(const Uptane::Target& t) const;
   AppsContainer getAppsToUpdate(const Uptane::Target& t) const;
   bool checkForAppsToUpdate(const Uptane::Target& target);
   void setAppsNotChecked() { are_apps_checked_ = false; }

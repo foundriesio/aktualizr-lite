@@ -1,5 +1,6 @@
 #include "composeappmanager.h"
 #include "bootloader/bootloaderlite.h"
+#include "docker/restorableappengine.h"
 #include "target.h"
 
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
@@ -15,8 +16,21 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
     }
   }
 
+  if (raw.count("reset_apps") == 1) {
+    std::string val = raw.at("reset_apps");
+    // if reset_apps is specified then `reset_apps` optional configuration variable is initialized with an empty vector
+    reset_apps = boost::make_optional(std::vector<std::string>());
+    if (val.length() > 0) {
+      // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
+      boost::split(*reset_apps, val, boost::is_any_of(", "), boost::token_compress_on);
+    }
+  }
+
   if (raw.count("compose_apps_root") == 1) {
     apps_root = raw.at("compose_apps_root");
+  }
+  if (raw.count("reset_apps_root") == 1) {
+    reset_apps_root = raw.at("reset_apps_root");
   }
   if (raw.count("compose_apps_tree") == 1) {
     apps_tree = raw.at("compose_apps_tree");
@@ -49,6 +63,18 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   }
 }
 
+AppEngine::Ptr ComposeAppManager::createAppEngine(Config& cfg, Docker::DockerClient::Ptr docker_client,
+                                                  Docker::RegistryClient::Ptr registry_client) {
+  if (!!cfg.reset_apps && (*(cfg.reset_apps)).size() > 0) {
+    return std::make_shared<Docker::RestorableAppEngine>(cfg.reset_apps_root, cfg.apps_root,
+                                                         boost::filesystem::canonical(cfg.compose_bin).string() + " ",
+                                                         docker_client, registry_client);
+  } else {
+    return std::make_shared<Docker::ComposeAppEngine>(
+        cfg.apps_root, boost::filesystem::canonical(cfg.compose_bin).string() + " ", docker_client, registry_client);
+  }
+}
+
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
@@ -57,10 +83,8 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       cfg_{pconfig},
       app_engine_{std::move(app_engine)} {
   if (!app_engine_) {
-    app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
-        cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
-        std::make_shared<Docker::DockerClient>(),
-        std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint));
+    app_engine_ = createAppEngine(cfg_, std::make_shared<Docker::DockerClient>(),
+                                  std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint));
   }
 
   try {
@@ -93,6 +117,37 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
       } else {
         // if `compose_apps` is not specified just add all Target's apps
         apps[target_app_name] = target_app_uri;
+      }
+
+    } else {
+      LOG_ERROR << "Invalid custom data for docker_compose_app: " << i.key().asString() << " -> " << *i;
+    }
+  }
+
+  return apps;
+}
+
+// Returns an intersection of apps specified in Target and in the reset_apps list
+ComposeAppManager::AppsContainer ComposeAppManager::getResetApps(const Uptane::Target& t) const {
+  AppsContainer apps;
+
+  auto target_apps = t.custom_data()["docker_compose_apps"];
+  for (Json::ValueIterator i = target_apps.begin(); i != target_apps.end(); ++i) {
+    if ((*i).isObject() && (*i).isMember("uri")) {
+      const auto& target_app_name = i.key().asString();
+      const auto& target_app_uri = (*i)["uri"].asString();
+
+      if (!!cfg_.reset_apps) {
+        // if `reset_apps` is specified in the config then add the current Target app only if it listed in
+        // `reset_apps`
+        for (const auto& app : *(cfg_.reset_apps)) {
+          if (target_app_name == app) {
+            apps[target_app_name] = target_app_uri;
+            break;
+          }
+        }
+      } else {
+        // if `reset_apps` is not specified just do nothing
       }
 
     } else {
@@ -184,7 +239,12 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
     }
 
   } else {
-    for (const auto& pair : cur_apps_to_fetch_and_update_) {
+    AppsContainer apps_to_fetch{cur_apps_to_fetch_and_update_};
+    const auto reset_apps = getResetApps(target);
+
+    apps_to_fetch.insert(reset_apps.begin(), reset_apps.end());
+
+    for (const auto& pair : apps_to_fetch) {
       LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
       if (!app_engine_->fetch({pair.first, pair.second})) {
         passed = false;
