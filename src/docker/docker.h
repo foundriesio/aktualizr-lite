@@ -55,6 +55,7 @@ class RegistryClient {
 
   Json::Value getAppManifest(const Uri& uri, const std::string& format) const;
   void downloadBlob(const Uri& uri, const boost::filesystem::path& filepath, size_t expected_size) const;
+  std::string getBasicAuthMaterial() const;
 
  private:
   std::string getBasicAuthHeader() const;

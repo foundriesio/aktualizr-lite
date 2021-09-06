@@ -187,6 +187,22 @@ void RegistryClient::downloadBlob(const Uri& uri, const boost::filesystem::path&
   }
 }
 
+std::string RegistryClient::getBasicAuthMaterial() const {
+  LOG_DEBUG << "Getting Docker Registry credentials from " << auth_creds_endpoint_;
+
+  auto creds_resp = ota_lite_client_->get(auth_creds_endpoint_, AuthMaterialMaxSize);
+
+  if (!creds_resp.isOk()) {
+    throw std::runtime_error("Failed to get Docker Registry credentials from " + auth_creds_endpoint_ +
+                             "; error: " + creds_resp.getStatusStr());
+  }
+
+  auto creds_json = creds_resp.getJson();
+  auto username = creds_json["Username"].asString();
+  auto secret = creds_json["Secret"].asString();
+  return username + ':' + secret;
+}
+
 std::string RegistryClient::getBasicAuthHeader() const {
   // TODO: to make it working against any Registry, not just FIO's one
   // we will need to make use of the Docker's mechanisms for it,

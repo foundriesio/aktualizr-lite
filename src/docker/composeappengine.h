@@ -116,6 +116,8 @@ class ComposeAppEngine : public AppEngine {
   virtual bool start(const App& app);
   void extractAppArchive(const App& app, const std::string& archive_file_name, bool delete_after_extraction = false);
 
+  Docker::RegistryClient::Ptr registryClient() { return registry_client_; }
+
  private:
   bool cmd_streaming(const std::string& cmd, const App& app);
   static std::pair<bool, std::string> cmd(const std::string& cmd);
