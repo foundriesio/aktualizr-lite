@@ -51,6 +51,7 @@ class ClientTest :virtual public ::testing::Test {
     if (!!apps) {
       conf.pacman.extra["compose_apps"] = boost::algorithm::join(*apps, ",");
     }
+
     app_shortlist_ = apps;
     conf.pacman.ostree_server = device_gateway_.getOsTreeUri();
 

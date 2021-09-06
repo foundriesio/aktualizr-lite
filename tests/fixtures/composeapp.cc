@@ -19,7 +19,7 @@ class ComposeApp {
 
  public:
   static Ptr create(const std::string& name,
-                    const std::string& service = "service-01", const std::string& image = "image-01", const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile) {
+                    const std::string& service = "service-01", const std::string& image = "hub.foundries.io/factory/image-01@sha256:5f80d09611ee4f0ba07e7318f9c2970a2d8d0ca84e187e99eae971189a207a71", const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile) {
     Ptr app{new ComposeApp(name, compose_file)};
     app->updateService(service, image);
     return app;

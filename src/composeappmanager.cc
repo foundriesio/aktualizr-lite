@@ -47,6 +47,9 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("docker_compose_bin") == 1) {
     compose_bin = raw.at("docker_compose_bin");
   }
+  if (raw.count("skopeo_bin") == 1) {
+    skopeo_bin = raw.at("skopeo_bin");
+  }
 
   if (raw.count("docker_prune") == 1) {
     std::string val = raw.at("docker_prune");
@@ -65,9 +68,11 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
 
 AppEngine::Ptr ComposeAppManager::createAppEngine(Config& cfg, Docker::DockerClient::Ptr docker_client,
                                                   Docker::RegistryClient::Ptr registry_client) {
-  if (!!cfg.reset_apps && (*(cfg.reset_apps)).size() > 0) {
+  //if (!!cfg.reset_apps && (*(cfg.reset_apps)).size() > 0) {
+  if (true) {
     return std::make_shared<Docker::RestorableAppEngine>(cfg.reset_apps_root, cfg.apps_root,
                                                          boost::filesystem::canonical(cfg.compose_bin).string() + " ",
+                                                         boost::filesystem::canonical(cfg.skopeo_bin).string() + " ",
                                                          docker_client, registry_client);
   } else {
     return std::make_shared<Docker::ComposeAppEngine>(

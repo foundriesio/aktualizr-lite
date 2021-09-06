@@ -2,6 +2,8 @@
 #include "docker/composeinfo.h"
 
 #include <boost/process.hpp>
+#include <boost/format.hpp>
+
 
 namespace Docker {
 
@@ -24,7 +26,7 @@ bool RestorableAppEngine::verify(const App& app) {
 }
 
 bool RestorableAppEngine::pullImages(const App& app) {
-  // return pullImagesWithDocker(app);
+   //return pullImagesWithDocker(app);
   return pullImagesWithSkopeo(app);
 }
 
@@ -80,29 +82,16 @@ bool RestorableAppEngine::installAppWithDocker(const App& app) {
   return true;
 }
 
-bool cmd_str(const std::string& cmd) {
-  LOG_DEBUG << "Running: " << cmd;
-  int exit_code = boost::process::system(cmd);
-  return exit_code == 0;
-}
-
-bool skopeo_copy(const std::string& auth, const std::string& src_uri, const std::string& dst_blob_path,
-                 const std::string& dst_path) {
-  std::string cmd{"skopeo copy -f v2s2 --src-creds=" + auth + " --dest-shared-blob-dir " + dst_blob_path +
-                  " docker://" + src_uri + " oci:" + dst_path};
-  LOG_ERROR << "???? " << cmd;
-  return cmd_str(cmd);
-}
-
 bool RestorableAppEngine::pullImagesWithSkopeo(const App& app) {
-  std::string fio_hub_auth;
+
   use_restore_root_ = true;
+  std::string fio_hub_auth;
+
   ComposeInfo compose{(appRoot(app) / ComposeAppEngine::ComposeFile).string()};
   for (const auto& service : compose.getServices()) {
     const auto image = compose.getImage(service);
-    LOG_ERROR << ">>>" << image;
     const Uri uri{Uri::parseUri(image)};
-    std::string auth{"anonymous:"};
+    std::string auth;
 
     if (uri.registryHostname == "hub.foundries.io") {
       if (fio_hub_auth.empty()) {
@@ -112,8 +101,10 @@ bool RestorableAppEngine::pullImagesWithSkopeo(const App& app) {
     }
     const auto dst_path{images_root_ / uri.registryHostname / uri.repo};
     boost::filesystem::create_directories(dst_path);
-    skopeo_copy(auth, image, images_blobs_root_.string(), dst_path.string());
+
+    skopeo_cmd_.pullFromRegistry(image, dst_path.string(), images_blobs_root_.string(), auth);
   }
+
   use_restore_root_ = false;
   return true;
 }
@@ -127,13 +118,43 @@ bool RestorableAppEngine::installAppWithSkopeo(const App& app) {
   for (const auto& service : compose.getServices()) {
     const auto image = compose.getImage(service);
     const Uri uri{Uri::parseUri(image)};
+
     const auto src_path{images_root_ / uri.registryHostname / uri.repo};
-    std::string cmd{"skopeo copy --src-shared-blob-dir " + images_blobs_root_.string() + " oci:" + src_path.string() +
-                    " docker-daemon:" + uri.registryHostname + '/' + uri.repo + ":latest"};
-    LOG_ERROR << "???? " << cmd;
-    cmd_str(cmd);
+    skopeo_cmd_.copyToDockerStore(src_path.string(), images_blobs_root_.string(), uri.registryHostname + '/' + uri.repo + ':' + uri.digest.shortHash());
   }
   return true;
+}
+
+bool SkopeoCmd::run_cmd(const std::string& cmd) {
+  LOG_DEBUG << "Running: " << cmd;
+  int exit_code = boost::process::system(cmd, boost::this_process::environment());
+  return exit_code == 0;
+}
+
+bool SkopeoCmd::pullFromRegistry(const std::string& srs, const std::string& dst_images, const std::string& dst_blobs, const std::string& auth) {
+  std::string cmd;
+  const std::string format{ManifestFormat};
+
+  if (auth.empty()) {
+    // use REGISTRY_AUTH_FILE env var for the aktualizr service to setup
+    // access to private Docker Registries, e.g.
+    // export REGISTRY_AUTH_FILE=/usr/lib/docker/config.json
+    // The file lists docker cred helpers
+    boost::format cmd_fmt{"%s copy -f %s --dest-shared-blob-dir %s docker://%s oci:%s"};
+    cmd = boost::str(cmd_fmt % skopeo_bin_ % format % dst_blobs % srs % dst_images);
+  } else {
+    boost::format cmd_fmt{"%s copy -f %s --src-creds %s --dest-shared-blob-dir %s docker://%s oci:%s"};
+    cmd = boost::str(cmd_fmt % skopeo_bin_ % format % auth % dst_blobs % srs % dst_images);
+  }
+
+  return run_cmd(cmd);
+}
+
+bool SkopeoCmd::copyToDockerStore(const std::string& srs_image, const std::string& src_blobs, const std::string& dst) {
+  const std::string format{ManifestFormat};
+  boost::format cmd_fmt{"%s copy -f %s --src-shared-blob-dir %s oci:%s docker-daemon:%s"};
+  std::string cmd{boost::str(cmd_fmt % skopeo_bin_ % format % src_blobs % srs_image % dst)};
+  return run_cmd(cmd);
 }
 
 }  // namespace Docker

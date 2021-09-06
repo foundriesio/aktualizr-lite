@@ -2,6 +2,8 @@
 #include "fixtures/composeapp.cc"
 #include "fixtures/dockerdaemon.cc"
 #include "fixtures/dockerregistry.cc"
+#include "docker/restorableappengine.h"
+
 
 namespace fixtures {
 
@@ -13,10 +15,16 @@ class AppEngineTest : virtual public ::testing::Test {
   void SetUp() override {
     auto compose_cmd =
         boost::filesystem::canonical("tests/docker-compose_fake.py").string() + " " + daemon_.dir().string() + " ";
+    auto skopeo_cmd =
+        boost::filesystem::canonical("tests/skopeo_fake.py").string() + " " + daemon_.dir().string() + " ";
 
     apps_root_dir = test_dir_.Path() / "compose-apps";
-    app_engine = std::make_shared<Docker::ComposeAppEngine>(apps_root_dir, compose_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()),
-                                                            std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory()));
+//    app_engine = std::make_shared<Docker::ComposeAppEngine>(apps_root_dir, compose_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()),
+//                                                            std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory()));
+
+
+    app_engine = std::make_shared<Docker::RestorableAppEngine>(test_dir_.Path() / "reset-apps", apps_root_dir,
+                                                         compose_cmd, skopeo_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()), std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory()));
   }
 
  protected:
