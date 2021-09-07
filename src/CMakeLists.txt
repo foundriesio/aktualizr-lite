@@ -4,6 +4,7 @@ set(TARGET ${MAIN_TARGET_LIB})
 set(SRC helpers.cc
         composeappmanager.cc
         rootfstreemanager.cc
+        docker/appstore.cc
         docker/composeappengine.cc
         docker/restorableappengine.cc
         docker/composeapptree.cc
@@ -21,6 +22,7 @@ set(SRC helpers.cc
 set(HEADERS helpers.h
         composeappmanager.h
         rootfstreemanager.h
+        docker/appstore.h
         docker/composeappengine.h
         docker/restorableappengine.h
         docker/composeapptree.h

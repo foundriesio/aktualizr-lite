@@ -8,6 +8,7 @@
 #include "docker/composeappengine.h"
 #include "docker/composeapptree.h"
 #include "docker/docker.h"
+#include "docker/appstore.h"
 #include "ostree/sysroot.h"
 #include "rootfstreemanager.h"
 
@@ -37,7 +38,7 @@ class ComposeAppManager : public RootfsTreeManager {
   using AppsContainer = std::unordered_map<std::string, std::string>;
 
   static AppEngine::Ptr createAppEngine(Config& cfg, Docker::DockerClient::Ptr docker_client,
-                                        Docker::RegistryClient::Ptr registry_client);
+                                        Docker::RegistryClient::Ptr registry_client, Docker::AppStore::Ptr app_store);
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
