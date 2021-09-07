@@ -62,7 +62,8 @@ TEST_F(ComposeAppEngineTest, FetchRunAndUpdate) {
 }
 
 TEST_F(ComposeAppEngineTest, FetchRunCompare) {
-  auto updated_app = registry.addApp(fixtures::ComposeApp::create("app-02", "service-02", "image-02"));
+  const auto& app{fixtures::ComposeApp::create("app-02", "service-02", "image-02")};
+  auto updated_app = registry.addApp(app);
 
   // the format is defined by DockerClient.cc
   boost::format format("App(%s) Service(%s ");
@@ -79,7 +80,7 @@ TEST_F(ComposeAppEngineTest, FetchRunCompare) {
   Json::Value apps_info = app_engine->getRunningAppsInfo();
   ASSERT_TRUE(apps_info.isMember("app-02"));
   ASSERT_TRUE(apps_info["app-02"]["services"].isMember("service-02"));
-  ASSERT_EQ(apps_info["app-02"]["services"]["service-02"]["image"].asString(), "image-02");
+  ASSERT_EQ(apps_info["app-02"]["services"]["service-02"]["image"].asString(), app->image());
 }
 
 int main(int argc, char** argv) {

@@ -266,7 +266,7 @@ struct Manifest : Json::Value {
 
 // Utils::shell isn't interactive. The compose commands can take a few
 // seconds to run, so we use boost::process:system to stream it to stdout/sterr
-bool ComposeAppEngine::cmd_streaming(const std::string& cmd, const App& app) {
+bool ComposeAppEngine::cmd_streaming(const std::string& cmd, const App& app) const {
   LOG_DEBUG << "Running: " << cmd;
   int exit_code = boost::process::system(cmd, boost::process::start_dir = appRoot(app));
   return exit_code == 0;

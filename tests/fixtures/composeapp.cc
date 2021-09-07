@@ -19,9 +19,12 @@ class ComposeApp {
 
  public:
   static Ptr create(const std::string& name,
-                    const std::string& service = "service-01", const std::string& image = "hub.foundries.io/factory/image-01@sha256:5f80d09611ee4f0ba07e7318f9c2970a2d8d0ca84e187e99eae971189a207a71", const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile) {
+                    const std::string& service = "service-01", const std::string& image = "image-01",
+                    const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile) {
     Ptr app{new ComposeApp(name, compose_file)};
-    app->updateService(service, image);
+    char image_uri[512];
+    sprintf(image_uri, "hub.foundries.io/factory/%s@sha256:5f80d09611ee4f0ba07e7318f9c2970a2d8d0ca84e187e99eae971189a207a71", image.c_str());
+    app->updateService(service, image_uri);
     return app;
   }
 
@@ -30,6 +33,7 @@ class ComposeApp {
     sprintf(service_content, ServiceTemplate.c_str(), service.c_str(), image.c_str());
     auto service_hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(service_content)));
     sprintf(content_, DefaultTemplate.c_str(), service.c_str(), image.c_str(), service_hash.c_str());
+    image_ = image;
     return update();
   }
 
@@ -38,6 +42,7 @@ class ComposeApp {
   const std::string& archHash() const { return arch_hash_; }
   const std::string& archive() const { return arch_; }
   const std::string& manifest() const { return manifest_; }
+  const std::string& image() const { return image_; }
 
 
  private:
@@ -70,6 +75,7 @@ class ComposeApp {
   std::string arch_hash_;
   std::string manifest_;
   std::string hash_;
+  std::string image_;
 };
 
 

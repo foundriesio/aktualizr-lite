@@ -1,9 +1,8 @@
 #include "restorableappengine.h"
 #include "docker/composeinfo.h"
 
-#include <boost/process.hpp>
 #include <boost/format.hpp>
-
+#include <boost/process.hpp>
 
 namespace Docker {
 
@@ -53,9 +52,7 @@ bool RestorableAppEngine::installApp(const App& app) {
   return installAppImages(app) && ComposeAppEngine::installApp(app);
 }
 
-bool RestorableAppEngine::start(const App& app) {
-  return installAppImages(app) && ComposeAppEngine::start(app);
-}
+bool RestorableAppEngine::start(const App& app) { return installAppImages(app) && ComposeAppEngine::start(app); }
 
 boost::filesystem::path RestorableAppEngine::appRoot(const App& app) const {
   if (use_restore_root_) {

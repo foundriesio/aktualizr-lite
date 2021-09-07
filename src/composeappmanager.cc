@@ -66,13 +66,13 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   }
 }
 
-AppEngine::Ptr ComposeAppManager::createAppEngine(Config& cfg, Docker::DockerClient::Ptr docker_client,
-                                                  Docker::RegistryClient::Ptr registry_client, Docker::AppStore::Ptr app_store) {
-  //if (!!cfg.reset_apps && (*(cfg.reset_apps)).size() > 0) {
-  if (true) {
-    return std::make_shared<Docker::RestorableAppEngine>(cfg.reset_apps_root, cfg.apps_root,
-                                                         boost::filesystem::canonical(cfg.compose_bin).string() + " ",
-                                                         docker_client, registry_client, app_store);
+AppEngine::Ptr ComposeAppManager::createAppEngine(Config& cfg, const Docker::DockerClient::Ptr& docker_client,
+                                                  const Docker::RegistryClient::Ptr& registry_client) {
+  if (!!cfg.reset_apps && !(*(cfg.reset_apps)).empty()) {
+    return std::make_shared<Docker::RestorableAppEngine>(
+        cfg.apps_root, boost::filesystem::canonical(cfg.compose_bin).string() + " ", docker_client, registry_client,
+        std::make_shared<Docker::SkopeoAppStore>(boost::filesystem::canonical(cfg.skopeo_bin).string() + " ",
+                                                 cfg.reset_apps_root));
   } else {
     return std::make_shared<Docker::ComposeAppEngine>(
         cfg.apps_root, boost::filesystem::canonical(cfg.compose_bin).string() + " ", docker_client, registry_client);
@@ -82,16 +82,13 @@ AppEngine::Ptr ComposeAppManager::createAppEngine(Config& cfg, Docker::DockerCli
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
-                                     std::shared_ptr<OSTree::Sysroot> sysroot,
-                                     AppEngine::Ptr app_engine)
+                                     std::shared_ptr<OSTree::Sysroot> sysroot, AppEngine::Ptr app_engine)
     : RootfsTreeManager(pconfig, bconfig, storage, http, std::move(sysroot)),
       cfg_{pconfig},
       app_engine_{std::move(app_engine)} {
   if (!app_engine_) {
     app_engine_ = createAppEngine(cfg_, std::make_shared<Docker::DockerClient>(),
-                                  std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint),
-                                  std::make_shared<Docker::SkopeoAppStore>(boost::filesystem::canonical(cfg_.skopeo_bin).string() + " ",
-                                                                           cfg_.reset_apps_root));
+                                  std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint));
   }
 
   try {

@@ -119,7 +119,7 @@ class ComposeAppEngine : public AppEngine {
   Docker::RegistryClient::Ptr registryClient() { return registry_client_; }
 
  private:
-  bool cmd_streaming(const std::string& cmd, const App& app);
+  bool cmd_streaming(const std::string& cmd, const App& app) const;
   static std::pair<bool, std::string> cmd(const std::string& cmd);
 
   static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);

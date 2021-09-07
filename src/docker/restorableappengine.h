@@ -1,13 +1,11 @@
-#include "composeappengine.h"
 #include "appstore.h"
-
+#include "composeappengine.h"
 
 namespace Docker {
 
 class RestorableAppEngine : public ComposeAppEngine {
  public:
-  RestorableAppEngine(boost::filesystem::path reset_app_root_dir, boost::filesystem::path app_root_dir,
-                      std::string compose_bin, DockerClient::Ptr docker_client,
+  RestorableAppEngine(boost::filesystem::path app_root_dir, std::string compose_bin, DockerClient::Ptr docker_client,
                       RegistryClient::Ptr registry_client, AppStore::Ptr app_store)
       : ComposeAppEngine(app_root_dir, compose_bin, docker_client, registry_client),
         app_store_{app_store},

@@ -36,6 +36,7 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.os = "dummy-os";
   config.pacman.extra["booted"] = "0";
   config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
+  config.pacman.extra["reset_apps_root"] = (cfg_dir.Path() / "reset_apps_root").string();
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
   std::shared_ptr<INvStorage> storage = INvStorage::newStorage(config.storage);
@@ -59,6 +60,7 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.os = "dummy-os";
   config.pacman.extra["booted"] = "0";
   config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
+  config.pacman.extra["reset_apps_root"] = (cfg_dir.Path() / "reset_apps_root").string();
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
 
@@ -109,6 +111,7 @@ TEST(helpers, callback) {
   bad_config.pacman.extra["booted"] = "0";
   bad_config.pacman.os = "dummy-os";
   bad_config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
+  bad_config.pacman.extra["reset_apps_root"] = (cfg_dir.Path() / "reset_apps_root").string();
   bad_config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   bad_config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   bad_config.pacman.type = ComposeAppManager::Name;
@@ -125,6 +128,7 @@ TEST(helpers, callback) {
   config.pacman.sysroot = test_sysroot;
   config.pacman.extra["booted"] = "0";
   config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
+  config.pacman.extra["reset_apps_root"] = (cfg_dir.Path() / "reset_apps_root").string();
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   config.pacman.os = "dummy-os";
@@ -174,6 +178,7 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
+  config.pacman.extra["reset_apps_root"] = (cfg_dir.Path() / "reset_apps_root").string();
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
 

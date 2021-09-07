@@ -7,6 +7,19 @@
 
 namespace fixtures {
 
+class MockAppStore: public Docker::SkopeoAppStore {
+ public:
+  MockAppStore(boost::filesystem::path root):Docker::SkopeoAppStore("", root) {}
+
+  bool pullFromRegistry(const std::string& uri, const std::string& auth) const override {
+    return true;
+  }
+  bool copyToDockerStore(const std::string& image) const override {
+    return true;
+  }
+
+};
+
 
 class AppEngineTest : virtual public ::testing::Test {
  protected:
@@ -15,16 +28,11 @@ class AppEngineTest : virtual public ::testing::Test {
   void SetUp() override {
     auto compose_cmd =
         boost::filesystem::canonical("tests/docker-compose_fake.py").string() + " " + daemon_.dir().string() + " ";
-    auto skopeo_cmd =
-        boost::filesystem::canonical("tests/skopeo_fake.py").string() + " " + daemon_.dir().string() + " ";
 
     apps_root_dir = test_dir_.Path() / "compose-apps";
-    app_engine = std::make_shared<Docker::ComposeAppEngine>(apps_root_dir, compose_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()),
-                                                            std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory()));
-
-
-//    app_engine = std::make_shared<Docker::RestorableAppEngine>(test_dir_.Path() / "reset-apps", apps_root_dir,
-//                                                         compose_cmd, skopeo_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()), std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory()));
+    const auto apps_store_root_dir{test_dir_.Path() / "reset-apps"};
+    app_engine = std::make_shared<Docker::RestorableAppEngine>(apps_root_dir, compose_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()), std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory()),
+                                                               std::make_shared<MockAppStore>(apps_store_root_dir));
   }
 
  protected:
