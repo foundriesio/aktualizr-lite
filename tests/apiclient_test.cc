@@ -140,6 +140,9 @@ TEST_F(ApiClientTest, Install) {
 
   auto dresult = client.Download(latest);
   ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+  auto iresult = dresult.Install();
+  ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
 }
 
 int main(int argc, char** argv) {
