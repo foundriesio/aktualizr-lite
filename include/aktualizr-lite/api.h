@@ -106,6 +106,13 @@ class AkliteClient {
   TufTarget GetCurrent() const;
 
   /**
+   * Check if the Target has been installed but failed to boot. This would
+   * make this be considered a "rollback target" and one we shouldn't consider
+   * installing.
+   */
+  bool IsRollback(const TufTarget &t) const;
+
+  /**
    * Default files/paths to search for sota toml when configuration client.
    */
   static std::vector<boost::filesystem::path> CONFIG_DIRS;
