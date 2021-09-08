@@ -104,6 +104,27 @@ TEST_F(ApiClientTest, CheckIn) {
   ASSERT_EQ(new_target.sha256Hash(), result.Targets()[0].Sha256Hash());
 }
 
+TEST_F(ApiClientTest, Rollback) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createTarget();
+  update(*liteclient, getInitialTarget(), new_target);
+
+  AkliteClient client(liteclient);
+  auto result = client.CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_FALSE(client.IsRollback(result.GetLatest()));
+
+  // deploy the initial version/commit to emulate rollback
+  getSysRepo().deploy(getInitialTarget().sha256Hash());
+
+  reboot(liteclient);
+
+  ASSERT_TRUE(client.IsRollback(result.GetLatest()));
+}
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";
