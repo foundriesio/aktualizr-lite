@@ -65,6 +65,22 @@ class CheckInResult {
 };
 
 /**
+ * The response from an AkliteClient call to Download()
+ */
+class DownloadResult {
+ public:
+  enum class Status {
+    Ok = 0,
+    DownloadFailed,
+    VerificationFailed,
+  };
+  Status status;
+  std::string description;
+};
+
+std::ostream &operator<<(std::ostream &os, const DownloadResult &res);
+
+/**
  * AkliteClient provides an easy-to-use API for users wanting to customize
  * the behavior of aktualizr-lite.
  */
@@ -104,6 +120,11 @@ class AkliteClient {
    * Return the Target currently running on the system.
    */
   TufTarget GetCurrent() const;
+
+  /**
+   * Download and verify the content of the given target.
+   */
+  DownloadResult Download(const TufTarget &t, std::string reason = "");
 
   /**
    * Check if the Target has been installed but failed to boot. This would
