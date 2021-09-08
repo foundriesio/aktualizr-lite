@@ -1,4 +1,5 @@
 set(TARGET_EXE aktualizr-lite)
+set(TARGET_LIB aktualizr_lite)
 set(TARGET ${MAIN_TARGET_LIB})
 
 set(SRC helpers.cc
@@ -41,6 +42,7 @@ set(HEADERS helpers.h
 
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
+add_library(${TARGET_LIB} SHARED ${SRC} api.cc)
 
 if(ALLOW_MANUAL_ROLLBACK)
   add_definitions(-DALLOW_MANUAL_ROLLBACK)
@@ -62,14 +64,16 @@ set(INCS
 
 target_include_directories(${TARGET} PRIVATE ${INCS})
 target_include_directories(${TARGET_EXE} PRIVATE ${INCS})
+target_include_directories(${TARGET_LIB} PRIVATE ${AKLITE_DIR}/include ${INCS})
 
 target_link_libraries(${TARGET} aktualizr_lib)
+target_link_libraries(${TARGET_LIB} aktualizr_lib)
 target_link_libraries(${TARGET_EXE} ${TARGET})
-
 
 # TODO: consider cleaning up the overall "install" elements as it includes
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
 install(TARGETS ${TARGET_EXE} RUNTIME DESTINATION bin COMPONENT ${TARGET_EXE})
+install(TARGETS ${TARGET_LIB} LIBRARY DESTINATION lib COMPONENT ${TARGET_LIB})
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
-aktualizr_source_file_checks(main.cc ${SRC} ${HEADERS})
+aktualizr_source_file_checks(main.cc api.cc ../include/aktualizr-lite/api.h ${SRC} ${HEADERS})
