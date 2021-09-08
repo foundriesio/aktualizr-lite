@@ -125,6 +125,23 @@ TEST_F(ApiClientTest, Rollback) {
   ASSERT_TRUE(client.IsRollback(result.GetLatest()));
 }
 
+TEST_F(ApiClientTest, Install) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createTarget();
+
+  AkliteClient client(liteclient);
+  auto result = client.CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+  auto latest = result.GetLatest();
+
+  auto dresult = client.Download(latest);
+  ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+}
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";

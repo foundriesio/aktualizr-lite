@@ -1,11 +1,26 @@
 #include "aktualizr-lite/api.h"
 
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
+
 #include "helpers.h"
 #include "libaktualizr/config.h"
 #include "liteclient.h"
 
 std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                   "/etc/sota/conf.d/"};
+
+std::ostream& operator<<(std::ostream& os, const DownloadResult& res) {
+  if (res.status == DownloadResult::Status::Ok) {
+    os << "Ok/";
+  } else if (res.status == DownloadResult::Status::DownloadFailed) {
+    os << "DownloadFailed/";
+  } else if (res.status == DownloadResult::Status::VerificationFailed) {
+    os << "VerificationFailed/";
+  }
+  os << res.description;
+  return os;
+}
 
 AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs) {
   Config config(config_dirs);
@@ -80,6 +95,42 @@ TufTarget AkliteClient::GetCurrent() const {
     LOG_ERROR << "Invalid version number format: " << current.custom_version();
   }
   return TufTarget(current.filename(), current.sha256Hash(), ver, current.custom_data());
+}
+
+DownloadResult AkliteClient::Download(const TufTarget& t, std::string reason) {
+  std::shared_ptr<Uptane::Target> target = nullptr;
+  for (const auto& tt : client_->allTargets()) {
+    if (tt.filename() == t.Name()) {
+      target = std::make_shared<Uptane::Target>(tt);
+      break;
+    }
+  }
+  if (target == nullptr) {
+    return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to find target"};
+  }
+
+  boost::uuids::uuid tmp = boost::uuids::random_generator()();
+  auto correlation_id = std::to_string(t.Version()) + "-" + boost::uuids::to_string(tmp);
+
+  if (reason.empty()) {
+    reason = "Update to " + t.Name();
+  }
+
+  client_->logTarget("Downloading: ", *target);
+  target->setCorrelationId(correlation_id);
+
+  data::ResultCode::Numeric rc = client_->download(*target, reason);
+  if (rc != data::ResultCode::Numeric::kOk) {
+    return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to download target"};
+  }
+
+  if (client_->VerifyTarget(*target) != TargetStatus::kGood) {
+    data::InstallationResult ires{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+    client_->notifyInstallFinished(*target, ires);
+    return DownloadResult{DownloadResult::Status::VerificationFailed, ires.description};
+  }
+
+  return DownloadResult{DownloadResult::Status::Ok};
 }
 
 bool AkliteClient::IsRollback(const TufTarget& t) const {
