@@ -22,3 +22,14 @@ boost::property_tree::ptree AkliteClient::GetConfig() const {
   boost::property_tree::ini_parser::read_ini(ss, pt);
   return pt;
 }
+
+TufTarget AkliteClient::GetCurrent() const {
+  auto current = client_->getCurrent();
+  int ver = -1;
+  try {
+    ver = std::stoi(current.custom_version(), nullptr, 0);
+  } catch (const std::invalid_argument& exc) {
+    LOG_ERROR << "Invalid version number format: " << current.custom_version();
+  }
+  return TufTarget(current.filename(), current.sha256Hash(), ver, current.custom_data());
+}

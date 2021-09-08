@@ -72,6 +72,12 @@ TEST_F(ApiClientTest, GetConfig) {
   ASSERT_EQ("\"ostree+compose_apps\"", client.GetConfig().get("pacman.type", ""));
 }
 
+TEST_F(ApiClientTest, GetCurrent) {
+  auto cur = AkliteClient(createLiteClient(InitialVersion::kOff)).GetCurrent();
+  ASSERT_EQ("unknown", cur.Name());
+  ASSERT_EQ(-1, cur.Version());
+}
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";
