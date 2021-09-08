@@ -46,6 +46,25 @@ class TufTarget {
 };
 
 /**
+ * The response from an AkliteClient call to CheckIn()
+ */
+class CheckInResult {
+ public:
+  enum class Status {
+    Ok = 0,    // check-in was good
+    OkCached,  // check-in failed, but locally cached meta-data is still valid
+    Failed,    // check-in failed and there's no valid local meta-data
+  };
+  CheckInResult(Status status, std::vector<TufTarget> targets) : status(status), targets_(std::move(targets)) {}
+  Status status;
+  const std::vector<TufTarget> &Targets() const { return targets_; }
+  TufTarget GetLatest() const { return targets_.back(); }
+
+ private:
+  std::vector<TufTarget> targets_;
+};
+
+/**
  * AkliteClient provides an easy-to-use API for users wanting to customize
  * the behavior of aktualizr-lite.
  */
@@ -66,6 +85,17 @@ class AkliteClient {
   AkliteClient(std::shared_ptr<LiteClient> client) : client_(client) {}
 
   /**
+   * Performs a "check-in" with the device-gateway. A check-in consists of:
+   *  1) Report sota.toml. Only do once.
+   *  2) Report network info. Only done once unless it changes aftert startup
+   *  3) Report hardware info. Only done once.
+   *  4) ask device-gateway for a new root.json - normally a 404.
+   *  5) ask device-gateway for timestamp and snapshot metadata.
+   *  6) pull down a new targets.json if needed
+   */
+  CheckInResult CheckIn() const;
+
+  /**
    * Return the active aktualizr-lite configuration.
    */
   boost::property_tree::ptree GetConfig() const;
@@ -82,4 +112,5 @@ class AkliteClient {
 
  private:
   std::shared_ptr<LiteClient> client_;
+  mutable bool configUploaded_{false};
 };

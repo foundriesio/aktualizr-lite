@@ -78,6 +78,32 @@ TEST_F(ApiClientTest, GetCurrent) {
   ASSERT_EQ(-1, cur.Version());
 }
 
+TEST_F(ApiClientTest, CheckIn) {
+  AkliteClient client(createLiteClient(InitialVersion::kOff));
+
+  auto result = client.CheckIn();
+
+  auto events = getDeviceGateway().getEvents();
+  ASSERT_EQ(2, events.size());
+  auto val = getDeviceGateway().readSotaToml();
+  ASSERT_NE(std::string::npos, val.find("[pacman]"));
+
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(0, result.Targets().size());
+
+  ASSERT_TRUE(getDeviceGateway().resetSotaToml());
+  ASSERT_TRUE(getDeviceGateway().resetEvents());
+
+  auto new_target = createTarget();
+  result = client.CheckIn();
+  ASSERT_EQ(0, getDeviceGateway().getEvents().size());
+  ASSERT_EQ("", getDeviceGateway().readSotaToml());
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(1, result.Targets().size());
+  ASSERT_EQ(new_target.filename(), result.Targets()[0].Name());
+  ASSERT_EQ(new_target.sha256Hash(), result.Targets()[0].Sha256Hash());
+}
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";

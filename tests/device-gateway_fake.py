@@ -19,6 +19,37 @@ class Handler(SimpleHTTPRequestHandler):
     RegistryAuthPrefix = "/token-auth/"
     RegistryPrefix = "/v2/"
     EventPrefix = "/events"
+    SysInfoPrefix = "/system_info"
+
+    def do_PUT(self):
+        if not self.path.startswith(self.SysInfoPrefix):
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        data_len = int(self.headers.get('content-length', 0))
+        body = self.rfile.read(data_len)
+
+        if self.path == "/system_info/config":
+            with open(self.server.sota_toml_file, "wb") as f:
+                f.write(body)
+        else:
+            events = []
+            try:
+                with open(self.server.events_file) as f:
+                    b = f.read()
+                    if b:
+                        events = json.loads(b)
+            except FileNotFoundError:
+                pass
+
+            event = json.loads(body.decode("utf-8"))
+            events.append(event)
+            with open(self.server.events_file, "w") as f:
+                json.dump(events, f)
+
+        self.send_response(200)
+        self.end_headers()
 
     def do_POST(self):
         if self.path.startswith(self.EventPrefix):
@@ -130,11 +161,12 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 class FakeDeviceGateway(HTTPServer):
-    def __init__(self, addr, ostree_repo, tuf_repo, headers_file, events_file, mtls=None):
+    def __init__(self, addr, ostree_repo, tuf_repo, headers_file, events_file, sota_toml_file, mtls=None):
         self.ostree_repo = ostree_repo
         self.tuf_repo = tuf_repo
         self.headers_file = headers_file
         self.events_file = events_file
+        self.sota_toml_file = sota_toml_file
         super(HTTPServer, self).__init__(server_address=addr, RequestHandlerClass=Handler)
 
         if mtls:
@@ -155,6 +187,7 @@ def main():
     parser.add_argument('-t', '--tuf-repo', help='TUF repo directory')
     parser.add_argument('-j', '--headers-file', help='File to dump request headers to')
     parser.add_argument('-e', '--events-file', help='File to dump events to')
+    parser.add_argument('-S', '--sota-toml-file', help='File to dump sota toml data to')
     parser.add_argument('-s', '--mtls', default=None,
                         help='Enables mTLS (HTTP over mTLS) and specifies directory with certs/key')
 
@@ -162,7 +195,7 @@ def main():
 
     try:
         httpd = FakeDeviceGateway(('', args.port), args.ostree, args.tuf_repo, args.headers_file,
-                                  args.events_file, args.mtls)
+                                  args.events_file, args.sota_toml_file, args.mtls)
         httpd.serve_forever()
     except KeyboardInterrupt:
         httpd.server_close()

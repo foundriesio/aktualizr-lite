@@ -14,6 +14,54 @@ AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_di
   client_ = std::make_unique<LiteClient>(config, nullptr);
 }
 
+static bool compareTargets(const TufTarget& a, const TufTarget& b) { return a.Version() < b.Version(); }
+
+CheckInResult AkliteClient::CheckIn() const {
+  if (!configUploaded_) {
+    client_->reportAktualizrConfiguration();
+    configUploaded_ = true;
+  }
+  client_->reportNetworkInfo();
+  client_->reportHwInfo();
+
+  auto status = CheckInResult::Status::Ok;
+  Uptane::HardwareIdentifier hwidToFind(client_->config.provision.primary_ecu_hardware_id);
+
+  LOG_INFO << "Refreshing Targets metadata";
+  const auto rc = client_->updateImageMeta();
+  if (!std::get<0>(rc)) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
+    if (!client_->checkImageMetaOffline()) {
+      LOG_ERROR << "Unable to use local copy of TUF data";
+      return CheckInResult(CheckInResult::Status::Failed, {});
+    }
+    status = CheckInResult::Status::OkCached;
+  }
+
+  std::vector<TufTarget> targets;
+  for (const auto& t : client_->allTargets()) {
+    int ver = 0;
+    try {
+      ver = std::stoi(t.custom_version(), nullptr, 0);
+    } catch (const std::invalid_argument& exc) {
+      LOG_ERROR << "Invalid version number format: " << t.custom_version();
+      ver = -1;
+    }
+    if (!target_has_tags(t, client_->tags)) {
+      continue;
+    }
+    for (const auto& it : t.hardwareIds()) {
+      if (it == hwidToFind) {
+        targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
+        break;
+      }
+    }
+  }
+
+  std::sort(targets.begin(), targets.end(), compareTargets);
+  return CheckInResult(status, targets);
+}
+
 boost::property_tree::ptree AkliteClient::GetConfig() const {
   std::stringstream ss;
   ss << client_->config;
