@@ -65,6 +65,20 @@ class CheckInResult {
 };
 
 /**
+ * The response from an AkliteClient call to Install
+ */
+class InstallResult {
+ public:
+  enum class Status {
+    Ok = 0,
+    NeedsCompletion,
+    Failed,
+  };
+  Status status;
+  std::string description;
+};
+
+/**
  * The response from an AkliteClient call to Download()
  */
 class DownloadResult {
@@ -76,8 +90,10 @@ class DownloadResult {
   };
   Status status;
   std::string description;
+  std::function<InstallResult()> Install;
 };
 
+std::ostream &operator<<(std::ostream &os, const InstallResult &res);
 std::ostream &operator<<(std::ostream &os, const DownloadResult &res);
 
 /**
@@ -125,6 +141,11 @@ class AkliteClient {
    * Download and verify the content of the given target.
    */
   DownloadResult Download(const TufTarget &t, std::string reason = "");
+
+  /**
+   * Install the Target
+   */
+  InstallResult Install(const TufTarget &t);
 
   /**
    * Check if the Target has been installed but failed to boot. This would
