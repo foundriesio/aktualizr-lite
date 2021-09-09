@@ -405,15 +405,17 @@ void LiteClient::reportHwInfo() {
     LOG_DEBUG << "Not reporting hwinfo information because telemetry is disabled";
     return;
   }
+
+  if (hwinfo_reported_) {
+    return;
+  }
   Json::Value hw_info = Utils::getHardwareInfo();
   if (!hw_info.empty()) {
-    if (hw_info != last_hw_info_reported_) {
-      const HttpResponse response = http_client->put(config.tls.server + "/system_info", hw_info);
-      if (response.isOk()) {
-        last_hw_info_reported_ = hw_info;
-      } else {
-        LOG_DEBUG << "Unable to report hwinfo information: " << response.getStatusStr();
-      }
+    const HttpResponse response = http_client->put(config.tls.server + "/system_info", hw_info);
+    if (response.isOk()) {
+      hwinfo_reported_ = true;
+    } else {
+      LOG_DEBUG << "Unable to report hwinfo information: " << response.getStatusStr();
     }
   } else {
     LOG_WARNING << "Unable to fetch hardware information from host system.";

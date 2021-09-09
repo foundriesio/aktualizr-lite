@@ -79,7 +79,7 @@ class LiteClient {
   std::shared_ptr<Uptane::Fetcher> uptane_fetcher_;
 
   Json::Value last_network_info_reported_;
-  Json::Value last_hw_info_reported_;
+  bool hwinfo_reported_{false};
   bool is_reboot_required_{false};
   bool booted_sysroot{true};
 };
