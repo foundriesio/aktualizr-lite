@@ -17,6 +17,8 @@ class RestorableAppEngine : public ComposeAppEngine {
   bool pullImages(const App& app) override;
   bool installApp(const App& app) override;
   bool start(const App& app) override;
+  void purge(const Apps& app_shortlist) const override;
+
   boost::filesystem::path appRoot(const App& app) const override;
 
   bool installAppImages(const App& app);

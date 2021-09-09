@@ -9,12 +9,12 @@ namespace fixtures {
 
 class MockAppStore: public Docker::SkopeoAppStore {
  public:
-  MockAppStore(boost::filesystem::path root):Docker::SkopeoAppStore("", root) {}
+  MockAppStore(boost::filesystem::path root, Docker::RegistryClient::Ptr registry_client):Docker::SkopeoAppStore("", root, registry_client) {}
 
-  bool pullFromRegistry(const std::string& uri, const std::string& auth) const override {
+  bool pullAppImage(const AppEngine::App& app, const std::string& uri, const std::string& auth) const override {
     return true;
   }
-  bool copyToDockerStore(const std::string& image) const override {
+  bool copyAppImageToDockerStore(const AppEngine::App& app, const std::string& image) const override {
     return true;
   }
 
@@ -31,8 +31,9 @@ class AppEngineTest : virtual public ::testing::Test {
 
     apps_root_dir = test_dir_.Path() / "compose-apps";
     const auto apps_store_root_dir{test_dir_.Path() / "reset-apps"};
-    app_engine = std::make_shared<Docker::RestorableAppEngine>(apps_root_dir, compose_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()), std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory()),
-                                                               std::make_shared<MockAppStore>(apps_store_root_dir));
+    auto registry_client{std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory())};
+    app_engine = std::make_shared<Docker::RestorableAppEngine>(apps_root_dir, compose_cmd, std::make_shared<Docker::DockerClient>(daemon_.getClient()), registry_client,
+                                                               std::make_shared<MockAppStore>(apps_store_root_dir, registry_client));
   }
 
  protected:

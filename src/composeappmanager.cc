@@ -72,7 +72,7 @@ AppEngine::Ptr ComposeAppManager::createAppEngine(Config& cfg, const Docker::Doc
     return std::make_shared<Docker::RestorableAppEngine>(
         cfg.apps_root, boost::filesystem::canonical(cfg.compose_bin).string() + " ", docker_client, registry_client,
         std::make_shared<Docker::SkopeoAppStore>(boost::filesystem::canonical(cfg.skopeo_bin).string() + " ",
-                                                 cfg.reset_apps_root));
+                                                 cfg.reset_apps_root, registry_client));
   } else {
     return std::make_shared<Docker::ComposeAppEngine>(
         cfg.apps_root, boost::filesystem::canonical(cfg.compose_bin).string() + " ", docker_client, registry_client);
@@ -324,6 +324,19 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
       res.description += "\n" + pair.second;
     }
   };
+
+  if (res.needCompletion() || res.isSuccess()) {
+    AppsContainer apps_to_be_stored{getApps(target)};
+    const auto reset_apps = getResetApps(target);
+    apps_to_be_stored.insert(reset_apps.begin(), reset_apps.end());
+
+    AppEngine::Apps apps;
+    std::for_each(apps_to_be_stored.begin(), apps_to_be_stored.end(),
+                  [&apps](const std::pair<std::string, std::string>& val) {
+                    apps.emplace_back(AppEngine::App{val.first, val.second});
+                  });
+    app_engine_->purge(apps);
+  }
 
   // there is no much reason in re-trying to install app if its installation has failed for the first time
   // TODO: we might add more advanced logic here, e.g. try to install a few times and then fail

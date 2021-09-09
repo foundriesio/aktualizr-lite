@@ -7,12 +7,14 @@
 namespace Docker {
 
 bool RestorableAppEngine::download(const App& app) {
-  use_restore_root_ = true;
+  bool res{true};
 
-  boost::filesystem::create_directories(app_store_->appRoot(app));
-  auto res = ComposeAppEngine::download(app);
-
-  use_restore_root_ = false;
+  try {
+    app_store_->pullApp(app);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to download App: " << exc.what();
+    res = false;
+  }
   return res;
 }
 
@@ -41,7 +43,7 @@ bool RestorableAppEngine::pullImages(const App& app) {
       auth = fio_hub_auth;
     }
 
-    res = app_store_->pullFromRegistry(image_uri, auth);
+    res = app_store_->pullAppImage(app, image_uri, auth);
   }
 
   use_restore_root_ = false;
@@ -65,15 +67,17 @@ boost::filesystem::path RestorableAppEngine::appRoot(const App& app) const {
 bool RestorableAppEngine::installAppImages(const App& app) {
   bool res{false};
   // extract a compose app archive to compose-apps/<app> dir
-  extractAppArchive(app, (app_store_->appArchive(app)).string());
+  app_store_->copyApp(app, ComposeAppEngine::appRoot(app));
 
   // copy images from <reset-apps-dir>/images to the docker daemon dir
   ComposeInfo compose{(appRoot(app) / ComposeAppEngine::ComposeFile).string()};
   for (const auto& service : compose.getServices()) {
     const auto image = compose.getImage(service);
-    res = app_store_->copyToDockerStore(image);
+    res = app_store_->copyAppImageToDockerStore(app, image);
   }
   return res;
 }
+
+void RestorableAppEngine::purge(const Apps& app_shortlist) const { app_store_->purge(app_shortlist); }
 
 }  // namespace Docker

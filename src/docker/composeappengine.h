@@ -13,7 +13,6 @@ namespace Docker {
 
 class ComposeAppEngine : public AppEngine {
  public:
-  static constexpr const char* const ArchiveExt{".tgz"};
   static constexpr const char* const ComposeFile{"docker-compose.yml"};
 
  public:
@@ -26,6 +25,7 @@ class ComposeAppEngine : public AppEngine {
   void remove(const App& app) override;
   bool isRunning(const App& app) const override;
   Json::Value getRunningAppsInfo() const override;
+  void purge(const Apps& app_shortlist) const override {}
 
  private:
   static constexpr const char* const MetaDir{".meta"};

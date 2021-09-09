@@ -12,6 +12,7 @@ class AppEngine {
     std::string uri;
   };
 
+  using Apps = std::vector<App>;
   using Ptr = std::shared_ptr<AppEngine>;
 
  public:
@@ -21,6 +22,7 @@ class AppEngine {
   virtual void remove(const App& app) = 0;
   virtual bool isRunning(const App& app) const = 0;
   virtual Json::Value getRunningAppsInfo() const = 0;
+  virtual void purge(const Apps& app_shortlist) const = 0;
 
  public:
   virtual ~AppEngine() = default;

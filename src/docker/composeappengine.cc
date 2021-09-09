@@ -229,41 +229,6 @@ Json::Value ComposeAppEngine::getRunningAppsInfo() const {
 
 // Private implementation
 
-struct Manifest : Json::Value {
-  static constexpr const char* const Format{"application/vnd.oci.image.manifest.v1+json"};
-  static constexpr const char* const Version{"v1"};
-
-  explicit Manifest(const Json::Value& value = Json::Value()) : Json::Value(value) {
-    auto manifest_version{(*this)["annotations"]["compose-app"].asString()};
-    if (manifest_version.empty()) {
-      throw std::runtime_error("Got invalid App manifest, missing a manifest version: " +
-                               Utils::jsonToCanonicalStr(value));
-    }
-    if (Version != manifest_version) {
-      throw std::runtime_error("Got unsupported App manifest version: " + Utils::jsonToCanonicalStr(value));
-    }
-  }
-
-  std::string archiveDigest() const {
-    auto digest{(*this)["layers"][0]["digest"].asString()};
-    if (digest.empty()) {
-      throw std::runtime_error("Got invalid App manifest, failed to extract App Archive digest from App manifest: " +
-                               Utils::jsonToCanonicalStr(*this));
-    }
-    return digest;
-  }
-
-  size_t archiveSize() const {
-    uint64_t arch_size{(*this)["layers"][0]["size"].asUInt64()};
-    if (0 == arch_size || arch_size > std::numeric_limits<size_t>::max()) {
-      throw std::runtime_error("Invalid size of App Archive is specified in App manifest: " +
-                               Utils::jsonToCanonicalStr(*this));
-    }
-
-    return arch_size;
-  }
-};
-
 // Utils::shell isn't interactive. The compose commands can take a few
 // seconds to run, so we use boost::process:system to stream it to stdout/sterr
 bool ComposeAppEngine::cmd_streaming(const std::string& cmd, const App& app) const {
@@ -289,7 +254,7 @@ bool ComposeAppEngine::download(const App& app) {
     Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
     Manifest manifest{registry_client_->getAppManifest(uri, Manifest::Format)};
 
-    const std::string archive_file_name{uri.digest.shortHash() + '.' + app.name + ArchiveExt};
+    const std::string archive_file_name{uri.digest.shortHash() + '.' + app.name + Manifest::ArchiveExt};
     Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
 
     uint64_t available_storage;
