@@ -6,6 +6,8 @@
 
 namespace Docker {
 
+bool RestorableAppEngine::fetch(const App& app) { return download(app) && verify(app) && pullImages(app); }
+
 bool RestorableAppEngine::download(const App& app) {
   bool res{true};
 
@@ -50,6 +52,26 @@ bool RestorableAppEngine::pullImages(const App& app) {
   return res;
 }
 
+bool RestorableAppEngine::install(const App& app) {
+  // extract a compose app archive to compose-apps/<app> dir
+  boost::filesystem::create_directories(ComposeAppEngine::appRoot(app) / MetaDir);
+  AppState state(app, ComposeAppEngine::appRoot(app), true);
+  app_store_->copyApp(app, ComposeAppEngine::appRoot(app));
+  state.setState(AppState::State::kPulled);
+
+  return ComposeAppEngine::install(app);
+}
+
+bool RestorableAppEngine::run(const App& app) {
+  // extract a compose app archive to compose-apps/<app> dir
+  boost::filesystem::create_directories(ComposeAppEngine::appRoot(app) / MetaDir);
+  AppState state(app, ComposeAppEngine::appRoot(app), true);
+  app_store_->copyApp(app, ComposeAppEngine::appRoot(app));
+  state.setState(AppState::State::kPulled);
+
+  return ComposeAppEngine::run(app);
+}
+
 bool RestorableAppEngine::installApp(const App& app) {
   return installAppImages(app) && ComposeAppEngine::installApp(app);
 }
@@ -66,8 +88,6 @@ boost::filesystem::path RestorableAppEngine::appRoot(const App& app) const {
 
 bool RestorableAppEngine::installAppImages(const App& app) {
   bool res{false};
-  // extract a compose app archive to compose-apps/<app> dir
-  app_store_->copyApp(app, ComposeAppEngine::appRoot(app));
 
   // copy images from <reset-apps-dir>/images to the docker daemon dir
   ComposeInfo compose{(appRoot(app) / ComposeAppEngine::ComposeFile).string()};

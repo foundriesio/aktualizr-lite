@@ -27,7 +27,7 @@ class ComposeAppEngine : public AppEngine {
   Json::Value getRunningAppsInfo() const override;
   void purge(const Apps& app_shortlist) const override {}
 
- private:
+ protected:
   static constexpr const char* const MetaDir{".meta"};
   static constexpr const char* const VersionFile{".version"};
   static constexpr const char* const StateFile{".state"};

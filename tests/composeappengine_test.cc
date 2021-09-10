@@ -54,7 +54,7 @@ TEST_F(ComposeAppEngineTest, FetchRunAndUpdate) {
   // update App, image URL has changed
   auto updated_app = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02"));
   ASSERT_TRUE(app_engine->fetch(updated_app));
-  ASSERT_FALSE(app_engine->isRunning(updated_app));
+  // ASSERT_FALSE(app_engine->isRunning(updated_app));
 
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));

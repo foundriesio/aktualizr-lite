@@ -12,10 +12,13 @@ class RestorableAppEngine : public ComposeAppEngine {
         use_restore_root_{false} {}
 
  private:
+  bool fetch(const App& app) override;
   bool download(const App& app) override;
   bool verify(const App& app) override;
   bool pullImages(const App& app) override;
+  bool install(const App& app) override;
   bool installApp(const App& app) override;
+  bool run(const App& app) override;
   bool start(const App& app) override;
   void purge(const Apps& app_shortlist) const override;
 
