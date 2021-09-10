@@ -4,6 +4,8 @@
 #include <boost/format.hpp>
 #include <boost/process.hpp>
 
+#include "composeinfo.h"
+
 namespace Docker {
 
 bool AppStore::runCmd(const std::string& cmd, const boost::filesystem::path& dir) {
@@ -65,12 +67,16 @@ SkopeoAppStore::SkopeoAppStore(std::string skopeo_bin, boost::filesystem::path r
                                Docker::RegistryClient::Ptr registry_client)
     : AppStore(std::move(root), std::move(registry_client)), skopeo_bin_{std::move(skopeo_bin)} {}
 
+boost::filesystem::path SkopeoAppStore::getAppImageRoot(const AppEngine::App& app, const std::string& uri) const {
+  const Uri uri_parts{Uri::parseUri(uri)};
+  return appRoot(app) / "images" / uri_parts.registryHostname / uri_parts.repo / uri_parts.digest.hash();
+}
+
 bool SkopeoAppStore::pullAppImage(const AppEngine::App& app, const std::string& uri, const std::string& auth) const {
   std::string cmd;
   const std::string format{ManifestFormat};
 
-  const Uri uri_parts{Uri::parseUri(uri)};
-  const auto dst_path{appRoot(app) / "images" / uri_parts.registryHostname / uri_parts.repo / uri_parts.digest.hash()};
+  const auto dst_path{getAppImageRoot(app, uri)};
   boost::filesystem::create_directories(dst_path);
 
   if (auth.empty()) {
@@ -92,7 +98,7 @@ bool SkopeoAppStore::copyAppImageToDockerStore(const AppEngine::App& app, const 
   const Uri uri_parts{Uri::parseUri(uri)};
   const std::string format{ManifestFormat};
 
-  const auto src_path{appRoot(app) / "images" / uri_parts.registryHostname / uri_parts.repo / uri_parts.digest.hash()};
+  const auto src_path{getAppImageRoot(app, uri)};
   const std::string tag{uri_parts.registryHostname + '/' + uri_parts.repo + ':' + uri_parts.digest.shortHash()};
 
   boost::format cmd_fmt{"%s copy -f %s --src-shared-blob-dir %s oci:%s docker-daemon:%s"};
@@ -102,16 +108,18 @@ bool SkopeoAppStore::copyAppImageToDockerStore(const AppEngine::App& app, const 
 
 void SkopeoAppStore::purge(const AppEngine::Apps& app_shortlist) const {
   // purge Apps and make sure that we have only the shortlisted apps under root/apps directory
-  purgeApps(app_shortlist);
+  std::unordered_set<std::string> blob_shortlist;
+  purgeApps(app_shortlist, blob_shortlist);
 
   // parse all shortlisted App images' metadata in order to get a list/array of required/referenced blobs
-  std::unordered_set<std::string> blob_shortlist;
-  generateAppBlobIndex(blob_shortlist);
+
+  // generateAppBlobIndex(blob_shortlist);
   // purge blobs that are not in the list
   purgeBlobs(blob_shortlist);
 }
 
-void SkopeoAppStore::purgeApps(const AppEngine::Apps& app_shortlist) const {
+void SkopeoAppStore::purgeApps(const AppEngine::Apps& app_shortlist,
+                               std::unordered_set<std::string>& blob_shortlist) const {
   for (const auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(appsRoot()), {})) {
     if (!boost::filesystem::is_directory(entry)) {
       continue;
@@ -137,16 +145,55 @@ void SkopeoAppStore::purgeApps(const AppEngine::Apps& app_shortlist) const {
         continue;
       }
 
-      const std::string dir = entry.path().filename().native();
-      if (dir != uri.digest.hash()) {
+      const std::string app_version_dir = entry.path().filename().native();
+      if (app_version_dir != uri.digest.hash()) {
         boost::filesystem::remove_all(dir);
+        continue;
+      }
+
+      // add blobs of the shortlisted apps to the blob shortlist
+      ComposeInfo compose{(entry.path() / "docker-compose.yml").string()};
+      for (const auto& service : compose.getServices()) {
+        const auto image = compose.getImage(service);
+        const auto image_root{getAppImageRoot(app, image)};
+        const auto image_manifest_desc{Utils::parseJSONFile(image_root / "index.json")};
+        HashedDigest image_digest{image_manifest_desc["manifests"][0]["digest"].asString()};
+        blob_shortlist.emplace(image_digest.hash());
+
+        const auto image_manifest{Utils::parseJSONFile(blobsRoot() / "sha256" / image_digest.hash())};
+        blob_shortlist.emplace(HashedDigest(image_manifest["config"]["digest"].asString()).hash());
+
+        const auto image_layers{image_manifest["layers"]};
+        for (Json::ValueConstIterator ii = image_layers.begin(); ii != image_layers.end(); ++ii) {
+          if ((*ii).isObject() && (*ii).isMember("digest")) {
+            const auto layer_digest{HashedDigest{(*ii)["digest"].asString()}};
+            blob_shortlist.emplace(layer_digest.hash());
+          } else {
+            LOG_ERROR << "Invalid image manifest: " << ii.key().asString() << " -> " << *ii;
+          }
+        }
       }
     }
   }
 }
 
-void SkopeoAppStore::generateAppBlobIndex(std::unordered_set<std::string>& blobs) const {}
+void SkopeoAppStore::purgeBlobs(const std::unordered_set<std::string>& blob_shortlist) const {
+  if (!boost::filesystem::exists(blobsRoot() / "sha256")) {
+    return;
+  }
 
-void SkopeoAppStore::purgeBlobs(const std::unordered_set<std::string>& blob_shortlist) const {}
+  for (const auto& entry :
+       boost::make_iterator_range(boost::filesystem::directory_iterator(blobsRoot() / "sha256"), {})) {
+    if (boost::filesystem::is_directory(entry)) {
+      continue;
+    }
+
+    const std::string blob_sha = entry.path().filename().native();
+    if (blob_shortlist.end() == blob_shortlist.find(blob_sha)) {
+      LOG_ERROR << "Removing blob: " << entry.path();
+      boost::filesystem::remove_all(entry.path());
+    }
+  }
+}
 
 }  // namespace Docker

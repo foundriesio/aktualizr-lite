@@ -54,9 +54,9 @@ class SkopeoAppStore : public AppStore {
   bool copyAppImageToDockerStore(const AppEngine::App& app, const std::string& uri) const override;
   void purge(const AppEngine::Apps& app_shortlist) const override;
 
- private:
-  void purgeApps(const AppEngine::Apps& app_shortlist) const;
-  void generateAppBlobIndex(std::unordered_set<std::string>& blobs) const;
+ protected:
+  boost::filesystem::path getAppImageRoot(const AppEngine::App& app, const std::string& uri) const;
+  void purgeApps(const AppEngine::Apps& app_shortlist, std::unordered_set<std::string>& blob_shortlist) const;
   void purgeBlobs(const std::unordered_set<std::string>& blob_shortlist) const;
 
  private:
