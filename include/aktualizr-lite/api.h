@@ -58,12 +58,18 @@ class CheckInResult {
     OkCached,  // check-in failed, but locally cached meta-data is still valid
     Failed,    // check-in failed and there's no valid local meta-data
   };
-  CheckInResult(Status status, std::vector<TufTarget> targets) : status(status), targets_(std::move(targets)) {}
+  CheckInResult(Status status, std::string primary_hwid, std::vector<TufTarget> targets)
+      : status(status), primary_hwid_(std::move(primary_hwid)), targets_(std::move(targets)) {}
   Status status;
   const std::vector<TufTarget> &Targets() const { return targets_; }
-  TufTarget GetLatest() const { return targets_.back(); }
+  /**
+   * If no hwid is specified, this method will return the latest target for
+   * the primary.
+   */
+  TufTarget GetLatest(std::string hwid = "") const;
 
  private:
+  std::string primary_hwid_;
   std::vector<TufTarget> targets_;
 };
 

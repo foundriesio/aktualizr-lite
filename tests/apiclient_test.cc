@@ -154,6 +154,15 @@ TEST_F(ApiClientTest, Secondaries) {
   auto events = getDeviceGateway().getEvents();
   ASSERT_EQ(1, events.size());
   ASSERT_EQ("target12", events[0]["123"]["target"].asString());
+
+  auto new_target = createTarget();
+  auto secondary_target = createTarget(nullptr, "riscv");
+  auto result = client.CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+  ASSERT_EQ(2, result.Targets().size());
+  ASSERT_EQ(new_target.filename(), result.GetLatest().Name());
+  ASSERT_EQ(secondary_target.filename(), result.GetLatest("riscv").Name());
 }
 
 int main(int argc, char** argv) {

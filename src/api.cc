@@ -10,6 +10,19 @@
 std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                   "/etc/sota/conf.d/"};
 
+TufTarget CheckInResult::GetLatest(std::string hwid) const {
+  if (hwid.empty()) {
+    hwid = primary_hwid_;
+  }
+
+  for (auto it = targets_.crbegin(); it != targets_.crend(); ++it) {
+    if ((*it).Custom()["hardwareIds"][0] == hwid) {
+      return *it;
+    }
+  }
+  throw std::runtime_error("no target for this hwid");
+}
+
 std::ostream& operator<<(std::ostream& os, const DownloadResult& res) {
   if (res.status == DownloadResult::Status::Ok) {
     os << "Ok/";
@@ -61,7 +74,7 @@ CheckInResult AkliteClient::CheckIn() const {
     LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
     if (!client_->checkImageMetaOffline()) {
       LOG_ERROR << "Unable to use local copy of TUF data";
-      return CheckInResult(CheckInResult::Status::Failed, {});
+      return CheckInResult(CheckInResult::Status::Failed, "", {});
     }
     status = CheckInResult::Status::OkCached;
   }
@@ -83,11 +96,17 @@ CheckInResult AkliteClient::CheckIn() const {
         targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
         break;
       }
+      for (const auto& hwid : secondary_hwids_) {
+        if (it == Uptane::HardwareIdentifier(hwid)) {
+          targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
+          break;
+        }
+      }
     }
   }
 
   std::sort(targets.begin(), targets.end(), compareTargets);
-  return CheckInResult(status, targets);
+  return CheckInResult(status, client_->config.provision.primary_ecu_hardware_id, targets);
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
