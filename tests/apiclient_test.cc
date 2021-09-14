@@ -145,6 +145,17 @@ TEST_F(ApiClientTest, Install) {
   ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
 }
 
+TEST_F(ApiClientTest, Secondaries) {
+  AkliteClient client(createLiteClient(InitialVersion::kOff));
+  std::vector<SecondaryEcu> ecus;
+  ecus.emplace_back("123", "riscv", "target12");
+  auto res = client.SetSecondaries(ecus);
+  ASSERT_EQ(InstallResult::Status::Ok, res.status);
+  auto events = getDeviceGateway().getEvents();
+  ASSERT_EQ(1, events.size());
+  ASSERT_EQ("target12", events[0]["123"]["target"].asString());
+}
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";

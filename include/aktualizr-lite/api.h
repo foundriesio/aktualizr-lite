@@ -99,6 +99,14 @@ class DownloadResult {
 std::ostream &operator<<(std::ostream &os, const InstallResult &res);
 std::ostream &operator<<(std::ostream &os, const DownloadResult &res);
 
+struct SecondaryEcu {
+  SecondaryEcu(std::string serial, std::string hwid, std::string target_name)
+      : serial(std::move(serial)), hwid(std::move(hwid)), target_name(std::move(target_name)) {}
+  std::string serial;
+  std::string hwid;
+  std::string target_name;
+};
+
 /**
  * AkliteClient provides an easy-to-use API for users wanting to customize
  * the behavior of aktualizr-lite.
@@ -158,12 +166,20 @@ class AkliteClient {
   bool IsRollback(const TufTarget &t) const;
 
   /**
+   * Set the secondary ECUs managed by this device. Will update the status of
+   * the ECUs on the device-gateway and instruct the CheckIn method to also
+   * look for targets with the given hardware ids.
+   */
+  InstallResult SetSecondaries(const std::vector<SecondaryEcu> &ecus);
+
+  /**
    * Default files/paths to search for sota toml when configuration client.
    */
   static std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  private:
   std::shared_ptr<LiteClient> client_;
+  std::vector<std::string> secondary_hwids_;
   mutable bool configUploaded_{false};
 };
 

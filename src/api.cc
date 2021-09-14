@@ -173,3 +173,20 @@ bool AkliteClient::IsRollback(const TufTarget& t) const {
 
   return known_local_target(*client_, target, known_but_not_installed_versions);
 }
+
+InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus) {
+  std::vector<std::string> hwids;
+  Json::Value data;
+  for (const auto& ecu : ecus) {
+    Json::Value entry;
+    entry["target"] = ecu.target_name;
+    data[ecu.serial] = entry;
+    hwids.emplace_back(ecu.hwid);
+  }
+  const HttpResponse response = client_->http_client->put(client_->config.tls.server + "/ecus", data);
+  if (!response.isOk()) {
+    return InstallResult{InstallResult::Status::Failed, response.getStatusStr()};
+  }
+  secondary_hwids_ = std::move(hwids);
+  return InstallResult{InstallResult::Status::Ok, ""};
+}
