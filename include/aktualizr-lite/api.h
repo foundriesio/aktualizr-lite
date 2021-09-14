@@ -109,6 +109,19 @@ class InstallContext {
   virtual ~InstallContext() = default;
   virtual DownloadResult Download() = 0;
   virtual InstallResult Install() = 0;
+
+  enum class SecondaryEvent {
+    DownloadStarted,
+    DownloadFailed,
+    DownloadCompleted,
+
+    InstallStarted,
+    InstallNeedsCompletion,
+    InstallCompleted,
+    InstallFailed,
+  };
+
+  virtual void QueueEvent(std::string ecu_serial, SecondaryEvent event, std::string details = "") = 0;
 };
 
 struct SecondaryEcu {

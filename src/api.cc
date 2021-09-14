@@ -170,6 +170,36 @@ class LiteInstall : public InstallContext {
     return DownloadResult{DownloadResult::Status::Ok, ""};
   }
 
+  void QueueEvent(std::string ecu_serial, SecondaryEvent event, std::string details) override {
+    Uptane::EcuSerial serial(ecu_serial);
+    std::unique_ptr<ReportEvent> e;
+    if (event == InstallContext::SecondaryEvent::DownloadStarted) {
+      e = std::make_unique<EcuDownloadStartedReport>(serial, target_->correlation_id());
+    } else if (event == InstallContext::SecondaryEvent::DownloadCompleted) {
+      e = std::make_unique<EcuDownloadCompletedReport>(serial, target_->correlation_id(), true);
+    } else if (event == InstallContext::SecondaryEvent::DownloadFailed) {
+      e = std::make_unique<EcuDownloadCompletedReport>(serial, target_->correlation_id(), false);
+    } else if (event == InstallContext::SecondaryEvent::InstallStarted) {
+      e = std::make_unique<EcuInstallationStartedReport>(serial, target_->correlation_id());
+    } else if (event == InstallContext::SecondaryEvent::InstallCompleted) {
+      e = std::make_unique<EcuInstallationCompletedReport>(serial, target_->correlation_id(), true);
+    } else if (event == InstallContext::SecondaryEvent::InstallFailed) {
+      e = std::make_unique<EcuInstallationCompletedReport>(serial, target_->correlation_id(), false);
+    } else if (event == InstallContext::SecondaryEvent::InstallNeedsCompletion) {
+      e = std::make_unique<EcuInstallationAppliedReport>(serial, target_->correlation_id());
+    } else {
+      throw std::runtime_error("Invalid secondary event");
+    }
+
+    if (!details.empty()) {
+      e->custom["details"] = details;
+    }
+
+    e->custom["targetName"] = target_->filename();
+    e->custom["version"] = target_->custom_version();
+    client_->report_queue->enqueue(std::move(e));
+  }
+
  private:
   std::shared_ptr<LiteClient> client_;
   std::unique_ptr<Uptane::Target> target_;
