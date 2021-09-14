@@ -99,11 +99,17 @@ class DownloadResult {
   };
   Status status;
   std::string description;
-  std::function<InstallResult()> Install;
 };
 
 std::ostream &operator<<(std::ostream &os, const InstallResult &res);
 std::ostream &operator<<(std::ostream &os, const DownloadResult &res);
+
+class InstallContext {
+ public:
+  virtual ~InstallContext() = default;
+  virtual DownloadResult Download() = 0;
+  virtual InstallResult Install() = 0;
+};
 
 struct SecondaryEcu {
   SecondaryEcu(std::string serial, std::string hwid, std::string target_name)
@@ -155,9 +161,9 @@ class AkliteClient {
   TufTarget GetCurrent() const;
 
   /**
-   * Download and verify the content of the given target.
+   * Create an InstallContext object to help drive an update.
    */
-  DownloadResult Download(const TufTarget &t, std::string reason = "");
+  std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "") const;
 
   /**
    * Check if the Target has been installed but failed to boot. This would

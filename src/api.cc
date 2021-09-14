@@ -129,55 +129,68 @@ TufTarget AkliteClient::GetCurrent() const {
   return TufTarget(current.filename(), current.sha256Hash(), ver, current.custom_data());
 }
 
-static InstallResult install(LiteClient& client, const Uptane::Target& t) {
-  client.logTarget("Installing: ", t);
+class LiteInstall : public InstallContext {
+ public:
+  LiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason)
+      : client_(std::move(client)), target_(std::move(t)), reason_(reason) {}
 
-  auto rc = client.install(t);
-  auto status = InstallResult::Status::Failed;
-  if (rc == data::ResultCode::Numeric::kNeedCompletion) {
-    status = InstallResult::Status::NeedsCompletion;
-  } else if (rc == data::ResultCode::Numeric::kOk) {
-    client.http_client->updateHeader("x-ats-target", t.filename());
-    status = InstallResult::Status::Ok;
+  InstallResult Install() override {
+    client_->logTarget("Installing: ", *target_);
+
+    auto rc = client_->install(*target_);
+    auto status = InstallResult::Status::Failed;
+    if (rc == data::ResultCode::Numeric::kNeedCompletion) {
+      status = InstallResult::Status::NeedsCompletion;
+    } else if (rc == data::ResultCode::Numeric::kOk) {
+      client_->http_client->updateHeader("x-ats-target", target_->filename());
+      status = InstallResult::Status::Ok;
+    }
+    return InstallResult{status, ""};
   }
-  return InstallResult{status, ""};
-}
 
-DownloadResult AkliteClient::Download(const TufTarget& t, std::string reason) {
-  std::shared_ptr<Uptane::Target> target = nullptr;
+  DownloadResult Download() override {
+    auto reason = reason_;
+    if (reason.empty()) {
+      reason = "Update to " + target_->filename();
+    }
+
+    client_->logTarget("Downloading: ", *target_);
+
+    data::ResultCode::Numeric rc = client_->download(*target_, reason);
+    if (rc != data::ResultCode::Numeric::kOk) {
+      return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to download target"};
+    }
+
+    if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {
+      data::InstallationResult ires{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+      client_->notifyInstallFinished(*target_, ires);
+      return DownloadResult{DownloadResult::Status::VerificationFailed, ires.description};
+    }
+
+    return DownloadResult{DownloadResult::Status::Ok, ""};
+  }
+
+ private:
+  std::shared_ptr<LiteClient> client_;
+  std::unique_ptr<Uptane::Target> target_;
+  std::string reason_;
+};
+
+std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason) const {
+  std::unique_ptr<Uptane::Target> target;
   for (const auto& tt : client_->allTargets()) {
     if (tt.filename() == t.Name()) {
-      target = std::make_shared<Uptane::Target>(tt);
+      target = std::make_unique<Uptane::Target>(tt);
       break;
     }
   }
   if (target == nullptr) {
-    return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to find target"};
+    return nullptr;
   }
-
   boost::uuids::uuid tmp = boost::uuids::random_generator()();
   auto correlation_id = std::to_string(t.Version()) + "-" + boost::uuids::to_string(tmp);
-
-  if (reason.empty()) {
-    reason = "Update to " + t.Name();
-  }
-
-  client_->logTarget("Downloading: ", *target);
   target->setCorrelationId(correlation_id);
-
-  data::ResultCode::Numeric rc = client_->download(*target, reason);
-  if (rc != data::ResultCode::Numeric::kOk) {
-    return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to download target"};
-  }
-
-  if (client_->VerifyTarget(*target) != TargetStatus::kGood) {
-    data::InstallationResult ires{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
-    client_->notifyInstallFinished(*target, ires);
-    return DownloadResult{DownloadResult::Status::VerificationFailed, ires.description};
-  }
-
-  auto installer = [this, target]() -> InstallResult { return install(*client_, *target); };
-  return DownloadResult{DownloadResult::Status::Ok, "", installer};
+  return std::make_unique<LiteInstall>(client_, std::move(target), reason);
 }
 
 bool AkliteClient::IsRollback(const TufTarget& t) const {

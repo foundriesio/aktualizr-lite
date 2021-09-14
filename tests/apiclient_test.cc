@@ -138,10 +138,12 @@ TEST_F(ApiClientTest, Install) {
 
   auto latest = result.GetLatest();
 
-  auto dresult = client.Download(latest);
+  auto installer = client.Installer(latest);
+  ASSERT_NE(nullptr, installer);
+  auto dresult = installer->Download();
   ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
 
-  auto iresult = dresult.Install();
+  auto iresult = installer->Install();
   ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
 }
 
