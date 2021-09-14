@@ -74,6 +74,7 @@ target_link_libraries(${TARGET_EXE} ${TARGET})
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
 install(TARGETS ${TARGET_EXE} RUNTIME DESTINATION bin COMPONENT ${TARGET_EXE})
 install(TARGETS ${TARGET_LIB} LIBRARY DESTINATION lib COMPONENT ${TARGET_LIB})
+install(DIRECTORY ../include/aktualizr-lite DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
 aktualizr_source_file_checks(main.cc api.cc ../include/aktualizr-lite/api.h ${SRC} ${HEADERS})
