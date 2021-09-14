@@ -160,11 +160,6 @@ class AkliteClient {
   DownloadResult Download(const TufTarget &t, std::string reason = "");
 
   /**
-   * Install the Target
-   */
-  InstallResult Install(const TufTarget &t);
-
-  /**
    * Check if the Target has been installed but failed to boot. This would
    * make this be considered a "rollback target" and one we shouldn't consider
    * installing.
