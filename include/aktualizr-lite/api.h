@@ -1,6 +1,9 @@
 // Copyright (c) 2021 Foundries.io
 // SPDX-License-Identifier: Apache-2.0
 
+#ifndef AKTUALIZR_LITE_API_H_
+#define AKTUALIZR_LITE_API_H_
+
 #include <string>
 
 #include <boost/filesystem.hpp>
@@ -163,3 +166,5 @@ class AkliteClient {
   std::shared_ptr<LiteClient> client_;
   mutable bool configUploaded_{false};
 };
+
+#endif  // AKTUALIZR_LITE_API_H_
