@@ -113,6 +113,7 @@ add_aktualizr_test(NAME composeappengine
 
 target_compile_definitions(t_composeappengine PRIVATE ${TEST_DEFS})
 target_include_directories(t_composeappengine PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_composeappengine ${TEST_LIBS} testutilities)
 set_tests_properties(test_composeappengine PROPERTIES LABELS "aklite:appengine")
 
 aktualizr_source_file_checks(composeappengine_test.cc)
@@ -124,6 +125,7 @@ add_aktualizr_test(NAME restorableappengine
 
 target_compile_definitions(t_restorableappengine PRIVATE ${TEST_DEFS})
 target_include_directories(t_restorableappengine PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_restorableappengine ${TEST_LIBS} testutilities)
 set_tests_properties(test_restorableappengine PROPERTIES LABELS "aklite:restorableappengine")
 
 aktualizr_source_file_checks(restorableappengine_test.cc)

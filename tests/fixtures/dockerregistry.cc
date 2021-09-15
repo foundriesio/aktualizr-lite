@@ -2,11 +2,20 @@ namespace fixtures {
 
 class DockerRegistry {
  public:
+  static std::string RunCmd;
+
+ public:
   DockerRegistry(const boost::filesystem::path& dir,
                  const std::string& base_url = "hub.foundries.io",
                  const std::string& auth_url = "https://ota-lite.foundries.io:8443/hub-creds/",
                  const std::string& repo = "factory"):
-                 dir_{dir}, base_url_{base_url}, auth_url_{auth_url}, repo_{repo} {}
+                 dir_{dir}, base_url_{base_url}, auth_url_{auth_url}, repo_{repo}, port_{TestUtils::getFreePort()}, process_{RunCmd, "--port", port_, "--dir", dir.string()} {
+  }
+
+  ~DockerRegistry() {
+    process_.terminate();
+    process_.wait_for(std::chrono::seconds(10));
+  }
 
   std::shared_ptr<HttpInterface> getClient() { return std::make_shared<HttpClient>(*this); }
   Docker::RegistryClient::HttpClientFactory getClientFactory() {
@@ -19,6 +28,10 @@ class DockerRegistry {
     auto app_uri = base_url_ + '/' + repo_ + '/' + app->name() + '@' + "sha256:" + app->hash();
     manifest2app_.emplace("sha256:" + app->hash(), app);
     blob2app_.emplace("sha256:" + app->archHash(), app);
+
+    Utils::writeFile(dir_ / app->image().name() / "blobs" / app->image().layerBlob().hash, app->image().layerBlob().data);
+    Utils::writeFile(dir_ / app->image().name() / "blobs" / app->image().config().hash, app->image().config().data);
+    Utils::writeFile(dir_ / app->image().name() / "manifests" / app->image().manifest().hash, app->image().manifest().data);
     return {app->name(), app_uri};
   }
 
@@ -118,8 +131,13 @@ class DockerRegistry {
   const std::string auth_url_; // URL to Device Gateway, docker gets initial auth token from it
   const std::string repo_; // repo, aka Factory name
 
+  const std::string port_;
+  boost::process::child process_;
+
   std::unordered_map<std::string, ComposeApp::Ptr> manifest2app_;
   std::unordered_map<std::string, ComposeApp::Ptr> blob2app_;
 };
+
+std::string DockerRegistry::RunCmd{"./tests/docker-registry_fake.py"};
 
 } // namespace fixtures
