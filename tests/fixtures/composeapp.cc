@@ -92,7 +92,10 @@ class ComposeApp {
     TemporaryFile arch_file{"arch.tgz"};
 
     Utils::writeFile(app_dir.Path() / compose_file_, std::string(content_));
-    boost::process::system("tar -czf " + arch_file.Path().string() + " .",  boost::process::start_dir = app_dir.Path());
+    auto cmd = std::string("tar -czf ") + arch_file.Path().string() + " " + compose_file_;
+    if (0 != boost::process::system(cmd, boost::process::start_dir = app_dir.Path())) {
+      throw std::runtime_error("failed to create App archive: " + name());
+    }
     arch_ = Utils::readFile(arch_file.Path());
     arch_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(arch_)));
 

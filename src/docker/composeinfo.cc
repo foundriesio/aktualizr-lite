@@ -7,7 +7,7 @@ namespace Docker {
 
 ComposeInfo::ComposeInfo(const std::string& yaml) : json_(yaml) {}
 
-std::vector<Json::Value> ComposeInfo::getServices() {
+std::vector<Json::Value> ComposeInfo::getServices() const {
   Json::Value p = json_.root_["services"];
   std::vector<Json::Value> services;
   for (Json::ValueIterator ii = p.begin(); ii != p.end(); ++ii) {
@@ -16,11 +16,11 @@ std::vector<Json::Value> ComposeInfo::getServices() {
   return services;
 }
 
-std::string ComposeInfo::getImage(const Json::Value& service) {
+std::string ComposeInfo::getImage(const Json::Value& service) const {
   return json_.root_["services"][service.asString()]["image"].asString();
 }
 
-std::string ComposeInfo::getHash(const Json::Value& service) {
+std::string ComposeInfo::getHash(const Json::Value& service) const {
   return json_.root_["services"][service.asString()]["labels"]["io.compose-spec.config-hash"].asString();
 }
 
