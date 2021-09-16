@@ -19,8 +19,8 @@ class RestorableAppEngineTest : public fixtures::AppEngineTest {
   void SetUp() override {
     fixtures::AppEngineTest::SetUp();
 
-    app_engine = std::make_shared<Docker::RestorableAppEngine>(apps_store_root_dir_, registry_client_,
-                                                               registry.getSkopeoClient());
+    app_engine = std::make_shared<Docker::RestorableAppEngine>(apps_store_root_dir_, apps_root_dir, registry_client_,
+                                                               registry.getSkopeoClient(), daemon_.getUrl());
   }
 
  protected:
@@ -32,6 +32,14 @@ TEST_F(RestorableAppEngineTest, InitDeinit) {}
 TEST_F(RestorableAppEngineTest, Fetch) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
+}
+
+TEST_F(RestorableAppEngineTest, FetchAndInstall) {
+  auto app = registry.addApp(fixtures::ComposeApp::create("app-02"));
+  ASSERT_TRUE(app_engine->fetch(app));
+  // TODO: AppEngine API doesn't provide mean(s) to check if App is installed
+  ASSERT_TRUE(app_engine->install(app));
+  // ASSERT_FALSE(app_engine->isRunning(app));
 }
 
 int main(int argc, char** argv) {

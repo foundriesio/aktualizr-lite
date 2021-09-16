@@ -4,12 +4,19 @@ namespace fixtures {
 
 class DockerDaemon {
  public:
+  static std::string RunCmd;
+ public:
   // tests/docker-compose_fake.py fills/populates this file with "running" containers
   static constexpr const char* const ContainersFile{"containers.json"};
  public:
-  DockerDaemon(boost::filesystem::path dir): dir_{std::move(dir)} {
+  DockerDaemon(boost::filesystem::path dir): dir_{std::move(dir)}, port_{TestUtils::getFreePort()}, process_{RunCmd, "--port", port_, "--dir", dir.string()} {
     // zero containers are running in the beginning
     Utils::writeFile(dir_ / ContainersFile, std::string("[]"), true);
+    TestUtils::waitForServer("http://localhost:" + port_ + "/");
+  }
+
+  std::string getUrl() const {
+    return "http://localhost:" + port_;
   }
 
   std::shared_ptr<HttpInterface> getClient() { return std::make_shared<DockerDaemon::HttpClient>(*this); }
@@ -27,6 +34,10 @@ class DockerDaemon {
 
  private:
   boost::filesystem::path dir_;
+  const std::string port_;
+  boost::process::child process_;
 };
+
+std::string DockerDaemon::RunCmd{"./tests/docker-daemon_fake.py"};
 
 } // namespace fixtures

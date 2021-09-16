@@ -12,8 +12,9 @@ class RestorableAppEngine : public AppEngine {
   static const std::string ComposeFile;
 
  public:
-  RestorableAppEngine(boost::filesystem::path store_root, Docker::RegistryClient::Ptr registry_client,
-                      const std::string& client = "skopeo");
+  RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
+                      Docker::RegistryClient::Ptr registry_client, const std::string& client = "skopeo",
+                      const std::string& docker_host = "unix:///var/run/docker.sock");
 
  public:
   bool fetch(const App& app) override;
@@ -27,13 +28,22 @@ class RestorableAppEngine : public AppEngine {
   boost::filesystem::path pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
   void pullAppImages(const boost::filesystem::path& app_compose_file, const boost::filesystem::path& dst_dir);
 
-  // image tranfer utility specific functions
+  void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);
+  void installAppImages(const boost::filesystem::path& app_dir);
+
+  // functions specific to an image tranfer utility
   static void pullImage(const std::string& client, const std::string& uri, const boost::filesystem::path& dst_dir,
                         const boost::filesystem::path& shared_blob_dir, const std::string& format = "v2s2");
 
+  static void installImage(const std::string& client, const boost::filesystem::path& image_dir,
+                           const boost::filesystem::path& shared_blob_dir, const std::string& docker_host,
+                           const std::string& tag, const std::string& format = "v2s2");
+
  private:
   const boost::filesystem::path store_root_;
+  const boost::filesystem::path install_root_;
   const std::string client_;
+  const std::string docker_host_;
   const boost::filesystem::path apps_root_{store_root_ / "apps"};
   const boost::filesystem::path blobs_root_{store_root_ / "blobs"};
   Docker::RegistryClient::Ptr registry_client_;
