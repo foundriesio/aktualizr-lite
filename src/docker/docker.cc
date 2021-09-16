@@ -39,7 +39,7 @@ Uri Uri::parseUri(const std::string& uri) {
   return Uri{HashedDigest{digest}, app, factory, repo, registry_hostname};
 }
 
-Uri Uri::createUri(const HashedDigest& digest_in) {
+Uri Uri::createUri(const HashedDigest& digest_in) const {
   return Uri{HashedDigest{digest_in}, app, factory, repo, registryHostname};
 }
 

@@ -10,11 +10,21 @@ class DockerRegistry {
                  const std::string& auth_url = "https://ota-lite.foundries.io:8443/hub-creds/",
                  const std::string& repo = "factory"):
                  dir_{dir}, base_url_{base_url}, auth_url_{auth_url}, repo_{repo}, port_{TestUtils::getFreePort()}, process_{RunCmd, "--port", port_, "--dir", dir.string()} {
+    TestUtils::waitForServer("http://localhost:" + port_ + "/v2/");
   }
 
   ~DockerRegistry() {
     process_.terminate();
     process_.wait_for(std::chrono::seconds(10));
+  }
+
+  std::string getSkopeoClient() const {
+    const std::string registry_config{"[[registry]]\nprefix = \"localhost\"\ninsecure = true\nlocation = \"localhost:" + port_ + "\""};
+    static const std::string registry_config_file{"registries.conf"};
+
+    Utils::writeFile(dir_ / registry_config_file, registry_config);
+
+    return "skopeo --registries-conf " + (dir_ / registry_config_file).string();
   }
 
   std::shared_ptr<HttpInterface> getClient() { return std::make_shared<HttpClient>(*this); }

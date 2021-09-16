@@ -25,13 +25,50 @@ struct HashedDigest {
 
 struct Uri {
   static Uri parseUri(const std::string& uri);
-  Uri createUri(const HashedDigest& digest_in);
+  Uri createUri(const HashedDigest& digest_in) const;
 
   const HashedDigest digest;
   const std::string app;
   const std::string factory;
   const std::string repo;
   const std::string registryHostname;
+};
+
+struct Manifest : Json::Value {
+  static constexpr const char* const Format{"application/vnd.oci.image.manifest.v1+json"};
+  static constexpr const char* const Version{"v1"};
+  static constexpr const char* const ArchiveExt{".tgz"};
+  static constexpr const char* const Filename{"manifest.json"};
+
+  explicit Manifest(const Json::Value& value = Json::Value()) : Json::Value(value) {
+    auto manifest_version{(*this)["annotations"]["compose-app"].asString()};
+    if (manifest_version.empty()) {
+      throw std::runtime_error("Got invalid App manifest, missing a manifest version: " +
+                               Utils::jsonToCanonicalStr(value));
+    }
+    if (Version != manifest_version) {
+      throw std::runtime_error("Got unsupported App manifest version: " + Utils::jsonToCanonicalStr(value));
+    }
+  }
+
+  std::string archiveDigest() const {
+    auto digest{(*this)["layers"][0]["digest"].asString()};
+    if (digest.empty()) {
+      throw std::runtime_error("Got invalid App manifest, failed to extract App Archive digest from App manifest: " +
+                               Utils::jsonToCanonicalStr(*this));
+    }
+    return digest;
+  }
+
+  size_t archiveSize() const {
+    uint64_t arch_size{(*this)["layers"][0]["size"].asUInt64()};
+    if (0 == arch_size || arch_size > std::numeric_limits<size_t>::max()) {
+      throw std::runtime_error("Invalid size of App Archive is specified in App manifest: " +
+                               Utils::jsonToCanonicalStr(*this));
+    }
+
+    return arch_size;
+  }
 };
 
 class RegistryClient {
