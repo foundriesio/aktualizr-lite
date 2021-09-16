@@ -196,7 +196,7 @@ bool LiteClient::checkForUpdatesBegin() {
 
 void LiteClient::checkForUpdatesEnd(const Uptane::Target& target) { callback("check-for-update-post", target, "OK"); }
 
-void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) {
+void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const {
   if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
     event->custom["version"] = t.custom_version();

@@ -57,7 +57,7 @@ class LiteClient {
 
   void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
 
-  void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event);
+  void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const;
   void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
   void notifyDownloadFinished(const Uptane::Target& t, bool success);
   void notifyInstallStarted(const Uptane::Target& t);
