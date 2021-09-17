@@ -78,6 +78,9 @@ class ApiServerTest : public fixtures::ClientTest {
     std::string sota_toml = (test_dir_.Path() / "sota.toml").string();
     Utils::writeFile(sota_toml, ss.str());
 
+    auto new_target = createTarget();
+    update(*client, getInitialTarget(), new_target);
+
     LOG_INFO << "Starting socket server at " << getSocketPath();
     aklite_ =
         std::make_unique<boost::process::child>(aklite_bin, "--config", sota_toml, "--socket-path", getSocketPath());
@@ -105,6 +108,16 @@ TEST_F(ApiServerTest, GetConfig) {
   ASSERT_TRUE(resp.isOk());
   auto data = resp.getJson();
   ASSERT_EQ("true", data["telemetry"]["report_network"].asString());
+}
+
+TEST_F(ApiServerTest, GetCurrent) {
+  startServer();
+  HttpClient client(getSocketPath());
+  auto resp = client.get("http://localhost/targets/current", HttpInterface::kNoLimit);
+  ASSERT_TRUE(resp.isOk());
+  auto data = resp.getJson();
+  ASSERT_EQ("raspberrypi4-64-lmp-1", data["name"].asString());
+  ASSERT_EQ(1, data["version"].asInt());
 }
 
 int main(int argc, char** argv) {

@@ -41,6 +41,17 @@ static void get_config(const AkliteClient& client, const httplib::Request& req, 
   res.set_content(jsonss.str(), "application/json");
 }
 
+static void get_current_target(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
+  (void)req;
+  LOG_DEBUG << "get_current_target called";
+  auto current = client.GetCurrent();
+  Json::Value target;
+  target["name"] = current.Name();
+  target["version"] = current.Version();
+  target["ostree-sha256"] = current.Sha256Hash();
+  json_resp(res, 200, target);
+}
+
 bpo::variables_map parse_options(int argc, char** argv) {
   bpo::options_description description("aktualizr-lited command line options");
 
@@ -111,6 +122,8 @@ int main(int argc, char** argv) {
 
     svr.Get("/config",
             [&client](const httplib::Request& req, httplib::Response& res) { get_config(client, req, res); });
+    svr.Get("/targets/current",
+            [&client](const httplib::Request& req, httplib::Response& res) { get_current_target(client, req, res); });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
     if (cli_map.count("socket-path") == 1) {
