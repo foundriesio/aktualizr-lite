@@ -153,6 +153,15 @@ class AkliteClient {
   AkliteClient(std::shared_ptr<LiteClient> client) : client_(client) {}
 
   /**
+   * This method can be run at start up to ensure the correct compose apps
+   * are running in the event the device's configured list of apps has
+   * changed. This method returns nullptr if the apps are in sync. Otherwise
+   * an InstallContext is returned that may be called to synchronize the
+   * apps.
+   */
+  std::unique_ptr<InstallContext> CheckAppsInSync() const;
+
+  /**
    * Performs a "check-in" with the device-gateway. A check-in consists of:
    *  1) Report sota.toml. Only do once.
    *  2) Report network info. Only done once unless it changes aftert startup

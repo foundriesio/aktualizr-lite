@@ -25,15 +25,13 @@ static std::string get_reboot_cmd(const AkliteClient &client) {
     reboot_cmd.erase(0, 1);
   }
   if (reboot_cmd.back() == '"') {
-    reboot_cmd.erase(reboot_cmd.size()-1);
+    reboot_cmd.erase(reboot_cmd.size() - 1);
   }
 
   return reboot_cmd;
 }
 
 int main(int argc, char **argv) {
-  //std::vector<boost::filesystem::path> cfg = {"/var/code/og/aktualizr-dev/aktualizr-lite/local-root/sota"};
-  //AkliteClient client(cfg);
   AkliteClient client(AkliteClient::CONFIG_DIRS);
   auto interval = client.GetConfig().get("uptane.polling_sec", 600);
   auto reboot_cmd = get_reboot_cmd(client);
@@ -79,8 +77,22 @@ int main(int argc, char **argv) {
         } else {
           LOG_ERROR << "Unable to install target: " << ires;
         }
+      } else {
+        auto installer = client.CheckAppsInSync();
+        if (installer != nullptr) {
+          LOG_INFO << "Syncing Active Target Apps";
+          auto dres = installer->Download();
+          if (dres.status != DownloadResult::Status::Ok) {
+            LOG_ERROR << "Unable to download target: " << dres;
+          } else {
+            auto ires = installer->Install();
+            if (ires.status != InstallResult::Status::Ok) {
+              LOG_ERROR << "Unable to install target: " << ires;
+            }
+          }
+        }
       }
-    } catch (const std::exception& exc) {
+    } catch (const std::exception &exc) {
       LOG_ERROR << "Failed to find or update Target: " << exc.what();
       continue;
     }
