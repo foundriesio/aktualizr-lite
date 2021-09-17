@@ -11,18 +11,19 @@ const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
 
 RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                                          Docker::RegistryClient::Ptr registry_client, const std::string& client,
-                                         const std::string& docker_host)
+                                         const std::string& docker_host, const std::string& compose_cmd)
     : store_root_{std::move(store_root)},
       install_root_{std::move(install_root)},
       client_{std::move(client)},
       docker_host_{std::move(docker_host)},
+      compose_cmd_{std::move(compose_cmd)},
       registry_client_{std::move(registry_client)} {
   boost::filesystem::create_directories(apps_root_);
   boost::filesystem::create_directories(blobs_root_);
 }
 
 bool RestorableAppEngine::fetch(const App& app) {
-  bool res{true};
+  bool res{false};
   try {
     const Uri uri{Uri::parseUri(app.uri)};
     const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
@@ -32,6 +33,7 @@ bool RestorableAppEngine::fetch(const App& app) {
     const auto images_dir{app_dir / "images"};
     LOG_DEBUG << app.name << ": downloading App images from Registry(ies): " << app.uri << " --> " << images_dir;
     pullAppImages(app_compose_file, images_dir);
+    res = true;
   } catch (const std::exception& exc) {
     LOG_ERROR << "failed to fetch App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
   }
@@ -40,23 +42,26 @@ bool RestorableAppEngine::fetch(const App& app) {
 }
 
 bool RestorableAppEngine::install(const App& app) {
-  bool res{true};
+  bool res{false};
   try {
-    const Uri uri{Uri::parseUri(app.uri)};
-    const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
-    const auto app_install_dir{install_root_ / app.name};
-    LOG_DEBUG << app.name << ": installing App: " << app_dir << " --> " << app_install_dir;
-    installApp(app_dir, app_install_dir);
-    LOG_DEBUG << app.name << ": installing App images: " << app_dir << " --> docker://";
-    installAppImages(app_dir);
+    const auto app_install_root{installAppAndImages(app)};
+    startComposeApp(compose_cmd_, app_install_root, "--remove-orphans --no-start");
+    res = true;
   } catch (const std::exception& exc) {
-    LOG_ERROR << "failed to fetch App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
+    LOG_ERROR << "failed to install App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
   }
   return res;
 }
 
 bool RestorableAppEngine::run(const App& app) {
-  bool res{true};
+  bool res{false};
+  try {
+    const auto app_install_root{installAppAndImages(app)};
+    startComposeApp(compose_cmd_, app_install_root, "--remove-orphans -d");
+    res = true;
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "failed to start App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
+  }
   return res;
 }
 
@@ -108,6 +113,17 @@ void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compo
   }
 }
 
+boost::filesystem::path RestorableAppEngine::installAppAndImages(const App& app) {
+  const Uri uri{Uri::parseUri(app.uri)};
+  const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
+  const auto app_install_dir{install_root_ / app.name};
+  LOG_DEBUG << app.name << ": installing App: " << app_dir << " --> " << app_install_dir;
+  installApp(app_dir, app_install_dir);
+  LOG_DEBUG << app.name << ": installing App images: " << app_dir << " --> docker://";
+  installAppImages(app_dir);
+  return app_install_dir;
+}
+
 void RestorableAppEngine::installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir) {
   const Manifest manifest{Utils::parseJSONFile(app_dir / Manifest::Filename)};
   const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
@@ -132,7 +148,7 @@ void RestorableAppEngine::installAppImages(const boost::filesystem::path& app_di
   }
 }
 
-// static methods to manage image data
+// static methods to manage image data and Compose App
 
 void RestorableAppEngine::pullImage(const std::string& client, const std::string& uri,
                                     const boost::filesystem::path& dst_dir,
@@ -156,6 +172,15 @@ void RestorableAppEngine::installImage(const std::string& client, const boost::f
       boost::str(cmd_fmt % client % format % docker_host % shared_blob_dir.string() % image_dir.string() % tag)};
   if (0 != boost::process::system(cmd, boost::this_process::environment())) {
     throw std::runtime_error("failed to install image ");
+  }
+}
+
+void RestorableAppEngine::startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
+                                          const std::string& flags) {
+  boost::format cmd_fmt{"%s up %s"};
+  const auto cmd{boost::str(cmd_fmt % compose_cmd % flags)};
+  if (0 != boost::process::system(cmd, boost::process::start_dir = app_dir)) {
+    throw std::runtime_error("failed to bring Compose App up: " + cmd);
   }
 }
 
