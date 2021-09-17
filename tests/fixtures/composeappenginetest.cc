@@ -12,7 +12,7 @@ class AppEngineTest : virtual public ::testing::Test {
   AppEngineTest() : registry{test_dir_.Path() / "registry"}, daemon_{test_dir_.Path() / "daemon"} {}
 
   void SetUp() override {
-    auto compose_cmd =
+    compose_cmd =
         boost::filesystem::canonical("tests/docker-compose_fake.py").string() + " " + daemon_.dir().string() + " ";
 
     apps_root_dir = test_dir_.Path() / "compose-apps";
@@ -26,6 +26,7 @@ class AppEngineTest : virtual public ::testing::Test {
   fixtures::DockerDaemon daemon_;
   Docker::RegistryClient::Ptr registry_client_;
 
+  std::string compose_cmd;
   boost::filesystem::path apps_root_dir;
   std::shared_ptr<AppEngine> app_engine;
 

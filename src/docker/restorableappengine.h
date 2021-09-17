@@ -14,7 +14,8 @@ class RestorableAppEngine : public AppEngine {
  public:
   RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                       Docker::RegistryClient::Ptr registry_client, const std::string& client = "skopeo",
-                      const std::string& docker_host = "unix:///var/run/docker.sock");
+                      const std::string& docker_host = "unix:///var/run/docker.sock",
+                      const std::string& compose_cmd = "/usr/bin/docker-compose");
 
  public:
   bool fetch(const App& app) override;
@@ -28,6 +29,7 @@ class RestorableAppEngine : public AppEngine {
   boost::filesystem::path pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
   void pullAppImages(const boost::filesystem::path& app_compose_file, const boost::filesystem::path& dst_dir);
 
+  boost::filesystem::path installAppAndImages(const App& app);
   void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);
   void installAppImages(const boost::filesystem::path& app_dir);
 
@@ -39,11 +41,15 @@ class RestorableAppEngine : public AppEngine {
                            const boost::filesystem::path& shared_blob_dir, const std::string& docker_host,
                            const std::string& tag, const std::string& format = "v2s2");
 
+  static void startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
+                              const std::string& flags = "up --remove-orphans -d");
+
  private:
   const boost::filesystem::path store_root_;
   const boost::filesystem::path install_root_;
   const std::string client_;
   const std::string docker_host_;
+  const std::string compose_cmd_;
   const boost::filesystem::path apps_root_{store_root_ / "apps"};
   const boost::filesystem::path blobs_root_{store_root_ / "blobs"};
   Docker::RegistryClient::Ptr registry_client_;
