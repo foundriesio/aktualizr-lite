@@ -173,6 +173,9 @@ TEST_F(ApiServerTest, Installer) {
 
   resp = client.post("http://localhost/targets/installer/" + std::to_string(installer_id) + "/download", req);
   ASSERT_EQ(200, resp.http_status_code);
+
+  resp = client.post("http://localhost/targets/installer/" + std::to_string(installer_id) + "/install", req);
+  ASSERT_EQ(202, resp.http_status_code);
 }
 
 int main(int argc, char** argv) {

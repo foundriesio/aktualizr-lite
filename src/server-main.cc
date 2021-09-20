@@ -126,6 +126,45 @@ static void installer_download(const httplib::Request& req, httplib::Response& r
   json_resp(res, code, data);
 }
 
+static void installer_install(const httplib::Request& req, httplib::Response& res, CurrentInstaller* cur_installer) {
+  auto id_match = req.matches[1];
+  LOG_DEBUG << "installer_install(" << id_match << ") called";
+
+  Json::Value data;
+  int id = -1;
+  try {
+    id = std::stoi(id_match.str(), nullptr, 0);
+  } catch (const std::invalid_argument& exc) {
+    // This should be "impossible". The regex given to httplib requires an int
+    data["error"] = "Invalid format for installer-id";
+    throw ApiException(400, data);
+  }
+
+  if (id != cur_installer->id) {
+    data["error"] = "Invalid installer-id";
+    throw ApiException(404, data);
+  }
+
+  auto result = cur_installer->installer->Install();
+  int code = 500;
+  if (result.status == InstallResult::Status::Ok) {
+    data["status"] = "Ok";
+    code = 200;
+  } else if (result.status == InstallResult::Status::NeedsCompletion) {
+    data["status"] = "NeedsCompletion";
+    code = 202;
+  } else if (result.status == InstallResult::Status::Failed) {
+    data["status"] = "Failed";
+  } else {
+    data["status"] = "Unknown Error";
+  }
+
+  if (!result.description.empty()) {
+    data["description"] = result.description;
+  }
+  json_resp(res, code, data);
+}
+
 static void get_config(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
   (void)req;
   auto pt = client.GetConfig();
@@ -253,6 +292,11 @@ int main(int argc, char** argv) {
              [&client, &client_mutex, &installer](const httplib::Request& req, httplib::Response& res) {
                std::lock_guard<std::mutex> guard(client_mutex);
                installer_download(req, res, &installer);
+             });
+    svr.Post("/targets/installer/(\\d+)/install",
+             [&client, &client_mutex, &installer](const httplib::Request& req, httplib::Response& res) {
+               std::lock_guard<std::mutex> guard(client_mutex);
+               installer_install(req, res, &installer);
              });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
