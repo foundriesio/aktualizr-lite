@@ -358,6 +358,15 @@ void ComposeAppEngine::extractAppArchive(const App& app, const std::string& arch
   }
 }
 
+void ComposeAppEngine::pruneDockerStore() {
+  LOG_INFO << "Pruning unused docker images";
+  // Utils::shell which isn't interactive, we'll use std::system so that
+  // stdout/stderr is streamed while docker sets things up.
+  if (std::system("docker image prune -a -f --filter=\"label!=aktualizr-no-prune\"") != 0) {
+    LOG_WARNING << "Unable to prune unused docker images";
+  }
+}
+
 ComposeAppEngine::AppState::AppState(const App& app, const boost::filesystem::path& root, bool set_version) try
     : version_file_ {
   (root / MetaDir / VersionFile).string()

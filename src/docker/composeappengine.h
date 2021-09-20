@@ -27,6 +27,13 @@ class ComposeAppEngine : public AppEngine {
   bool isFetched(const App& app) const override;
   bool isRunning(const App& app) const override;
   Json::Value getRunningAppsInfo() const override;
+  void prune(const Apps& app_shortlist) override {
+    (void)app_shortlist;
+    pruneDockerStore();
+  }
+
+ public:
+  static void pruneDockerStore();
 
  private:
   static constexpr const char* const MetaDir{".meta"};
