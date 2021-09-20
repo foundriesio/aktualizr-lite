@@ -142,6 +142,13 @@ TEST_F(ApiServerTest, CheckIn) {
   ASSERT_EQ(3, data["targets"][2]["version"].asInt());
 }
 
+TEST_F(ApiServerTest, GetRollback) {
+  startServer();
+  HttpClient client(getSocketPath());
+  auto resp = client.get("http://localhost/targets/rollback/111", HttpInterface::kNoLimit);
+  ASSERT_EQ(404, resp.http_status_code);
+}
+
 int main(int argc, char** argv) {
   if (argc != 4) {
     std::cerr << argv[0] << " invalid arguments\n";

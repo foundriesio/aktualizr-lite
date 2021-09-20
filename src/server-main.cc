@@ -74,6 +74,18 @@ static void get_current_target(const AkliteClient& client, const httplib::Reques
   json_resp(res, 200, target);
 }
 
+static void get_rollback_target(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
+  (void)req;
+  auto target_name = req.matches[1];
+  LOG_ERROR << "get_rollback_target(" << target_name << ") called";
+  TufTarget t(target_name, "", 0, Json::Value());
+  int code = 404;
+  if (client.IsRollback(t)) {
+    code = 200;
+  }
+  json_resp(res, code, Json::Value());
+}
+
 bpo::variables_map parse_options(int argc, char** argv) {
   bpo::options_description description("aktualizr-lited command line options");
 
@@ -148,6 +160,8 @@ int main(int argc, char** argv) {
             [&client](const httplib::Request& req, httplib::Response& res) { get_config(client, req, res); });
     svr.Get("/targets/current",
             [&client](const httplib::Request& req, httplib::Response& res) { get_current_target(client, req, res); });
+    svr.Get("/targets/rollback/(\\S+)",
+            [&client](const httplib::Request& req, httplib::Response& res) { get_rollback_target(client, req, res); });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
     if (cli_map.count("socket-path") == 1) {
