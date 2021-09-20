@@ -164,6 +164,15 @@ TEST_F(ApiServerTest, Installer) {
   ASSERT_EQ(201, resp.http_status_code);
   auto installer_id = resp.getJson()["installer-id"].asInt();
   ASSERT_EQ(1, installer_id);
+
+  resp = client.post("http://localhost/targets/installer/badid/download", req);
+  ASSERT_EQ(404, resp.http_status_code);
+
+  resp = client.post("http://localhost/targets/installer/42/download", req);
+  ASSERT_EQ(404, resp.http_status_code);
+
+  resp = client.post("http://localhost/targets/installer/" + std::to_string(installer_id) + "/download", req);
+  ASSERT_EQ(200, resp.http_status_code);
 }
 
 int main(int argc, char** argv) {

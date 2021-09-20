@@ -21,7 +21,7 @@ static void json_resp(httplib::Response& res, int code, const Json::Value& data)
 class ApiException : public std::exception {
  public:
   ApiException(int status, Json::Value resp) : status(status), resp(std::move(resp)) {
-    what_ = "HTTP_" + std::to_string(status) + " : " + this->resp.asString();
+    what_ = "HTTP_" + std::to_string(status);
   }
 
   const char* what() const noexcept override { return what_.c_str(); }
@@ -88,6 +88,44 @@ static void create_installer(const AkliteClient& client, const httplib::Request&
   json_resp(res, 201, data);
 }
 
+static void installer_download(const httplib::Request& req, httplib::Response& res, CurrentInstaller* cur_installer) {
+  auto id_match = req.matches[1];
+  LOG_DEBUG << "installer_download(" << id_match << ") called";
+
+  Json::Value data;
+  int id = -1;
+  try {
+    id = std::stoi(id_match.str(), nullptr, 0);
+  } catch (const std::invalid_argument& exc) {
+    // This should be "impossible". The regex given to httplib requires an int
+    data["error"] = "Invalid format for installer-id";
+    throw ApiException(400, data);
+  }
+
+  if (id != cur_installer->id) {
+    data["error"] = "Invalid installer-id";
+    throw ApiException(404, data);
+  }
+
+  auto result = cur_installer->installer->Download();
+  int code = 500;
+  if (result.status == DownloadResult::Status::Ok) {
+    data["status"] = "Ok";
+    code = 200;
+  } else if (result.status == DownloadResult::Status::DownloadFailed) {
+    data["status"] = "DownloadFailed";
+  } else if (result.status == DownloadResult::Status::VerificationFailed) {
+    data["status"] = "VerificationFailed";
+  } else {
+    data["status"] = "Unknown Error";
+  }
+
+  if (!result.description.empty()) {
+    data["description"] = result.description;
+  }
+  json_resp(res, code, data);
+}
+
 static void get_config(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
   (void)req;
   auto pt = client.GetConfig();
@@ -109,7 +147,6 @@ static void get_current_target(const AkliteClient& client, const httplib::Reques
 }
 
 static void get_rollback_target(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
-  (void)req;
   auto target_name = req.matches[1];
   LOG_ERROR << "get_rollback_target(" << target_name << ") called";
   TufTarget t(target_name, "", 0, Json::Value());
@@ -211,6 +248,11 @@ int main(int argc, char** argv) {
              [&client, &client_mutex, &installer](const httplib::Request& req, httplib::Response& res) {
                std::lock_guard<std::mutex> guard(client_mutex);
                create_installer(client, req, res, &installer);
+             });
+    svr.Post("/targets/installer/(\\d+)/download",
+             [&client, &client_mutex, &installer](const httplib::Request& req, httplib::Response& res) {
+               std::lock_guard<std::mutex> guard(client_mutex);
+               installer_download(req, res, &installer);
              });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
