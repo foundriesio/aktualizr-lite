@@ -9,6 +9,7 @@
 #include "utilities/utils.h"
 
 #include "composeappmanager.h"
+#include "docker/restorableappengine.h"
 #include "liteclient.h"
 #include "target.h"
 #include "uptane_generator/image_repo.h"
@@ -16,8 +17,27 @@
 #include "fixtures/composeappenginetest.cc"
 #include "fixtures/liteclienttest.cc"
 
-class AkliteTest : public fixtures::ClientTest, public fixtures::AppEngineTest {
+class AkliteTest : public fixtures::ClientTest,
+                   public fixtures::AppEngineTest,
+                   public ::testing::WithParamInterface<std::string> {
  protected:
+  void SetUp() override {
+    fixtures::AppEngineTest::SetUp();
+
+    const auto app_engine_type{GetParam()};
+
+    if (app_engine_type == "ComposeAppEngine") {
+      app_engine =
+          std::make_shared<Docker::ComposeAppEngine>(apps_root_dir, compose_cmd, docker_client_, registry_client_);
+    } else if (app_engine_type == "RestorableAppEngine") {
+      app_engine = std::make_shared<Docker::RestorableAppEngine>(
+          fixtures::ClientTest::test_dir_.Path() / "apps-store", apps_root_dir, registry_client_, docker_client_,
+          registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd);
+    } else {
+      throw std::invalid_argument("Unsupported AppEngine type: " + app_engine_type);
+    }
+  }
+
   std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none) override {
     return ClientTest::createLiteClient(app_engine, initial_version, apps, apps_root_dir.string());
@@ -26,7 +46,7 @@ class AkliteTest : public fixtures::ClientTest, public fixtures::AppEngineTest {
  private:
 };
 
-TEST_F(AkliteTest, OstreeUpdate) {
+TEST_P(AkliteTest, OstreeUpdate) {
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
 
   auto client = createLiteClient();
@@ -48,7 +68,7 @@ TEST_F(AkliteTest, OstreeUpdate) {
   ASSERT_FALSE(app_engine->isRunning(app01));
 }
 
-TEST_F(AkliteTest, AppUpdate) {
+TEST_P(AkliteTest, AppUpdate) {
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
 
   auto client = createLiteClient();
@@ -69,7 +89,7 @@ TEST_F(AkliteTest, AppUpdate) {
   ASSERT_TRUE(app_engine->isRunning(app01_updated));
 }
 
-TEST_F(AkliteTest, AppInvalidUpdate) {
+TEST_P(AkliteTest, AppInvalidUpdate) {
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
 
   auto client = createLiteClient();
@@ -93,7 +113,7 @@ TEST_F(AkliteTest, AppInvalidUpdate) {
   ASSERT_TRUE(app_engine->isRunning(app01));
 }
 
-TEST_F(AkliteTest, OstreeAndAppUpdate) {
+TEST_P(AkliteTest, OstreeAndAppUpdate) {
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
 
   auto client = createLiteClient();
@@ -116,7 +136,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdate) {
   checkEvents(*client, new_target, UpdateType::kOstree);
 }
 
-TEST_F(AkliteTest, OstreeAndAppUpdateWithShortlist) {
+TEST_P(AkliteTest, OstreeAndAppUpdateWithShortlist) {
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
   auto app02 = registry.addApp(fixtures::ComposeApp::create("app-02"));
 
@@ -142,7 +162,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdateWithShortlist) {
   ASSERT_TRUE(app_engine->isRunning(app02));
 }
 
-TEST_F(AkliteTest, OstreeAndAppUpdateWithEmptyShortlist) {
+TEST_P(AkliteTest, OstreeAndAppUpdateWithEmptyShortlist) {
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
   auto app02 = registry.addApp(fixtures::ComposeApp::create("app-02"));
 
@@ -168,7 +188,7 @@ TEST_F(AkliteTest, OstreeAndAppUpdateWithEmptyShortlist) {
   ASSERT_FALSE(app_engine->isRunning(app02));
 }
 
-TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
+TEST_P(AkliteTest, OstreeAndAppUpdateIfRollback) {
   // boot device
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
@@ -216,6 +236,8 @@ TEST_F(AkliteTest, OstreeAndAppUpdateIfRollback) {
     ASSERT_TRUE(app_engine->isRunning(app01));
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(MultiEngine, AkliteTest, ::testing::Values("ComposeAppEngine", "RestorableAppEngine"));
 
 int main(int argc, char** argv) {
   if (argc != 3) {

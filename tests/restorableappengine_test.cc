@@ -15,17 +15,13 @@
 
 class RestorableAppEngineTest : public fixtures::AppEngineTest {
  protected:
-  RestorableAppEngineTest() : fixtures::AppEngineTest(), apps_store_root_dir_{test_dir_.Path() / "apps-store"} {}
   void SetUp() override {
     fixtures::AppEngineTest::SetUp();
 
-    app_engine = std::make_shared<Docker::RestorableAppEngine>(apps_store_root_dir_, apps_root_dir, registry_client_,
-                                                               docker_client_, registry.getSkopeoClient(),
-                                                               daemon_.getUrl(), compose_cmd);
+    app_engine = std::make_shared<Docker::RestorableAppEngine>(
+        test_dir_.Path() / "apps-store", apps_root_dir, registry_client_, docker_client_, registry.getSkopeoClient(),
+        daemon_.getUrl(), compose_cmd);
   }
-
- protected:
-  boost::filesystem::path apps_store_root_dir_;
 };
 
 TEST_F(RestorableAppEngineTest, InitDeinit) {}

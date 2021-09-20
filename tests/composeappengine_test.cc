@@ -14,7 +14,14 @@
 
 #include "fixtures/composeappenginetest.cc"
 
-class ComposeAppEngineTest : public fixtures::AppEngineTest {};
+class ComposeAppEngineTest : public fixtures::AppEngineTest {
+ protected:
+  void SetUp() override {
+    fixtures::AppEngineTest::SetUp();
+    app_engine =
+        std::make_shared<Docker::ComposeAppEngine>(apps_root_dir, compose_cmd, docker_client_, registry_client_);
+  }
+};
 
 TEST_F(ComposeAppEngineTest, Fetch) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
