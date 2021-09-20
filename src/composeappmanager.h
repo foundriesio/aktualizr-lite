@@ -58,7 +58,7 @@ class ComposeAppManager : public RootfsTreeManager {
   Json::Value getRunningAppsInfo() const;
   std::string getRunningAppsInfoForReport() const;
 
-  AppsContainer getAppsToFetch(const Uptane::Target& t) const;
+  AppsContainer getAppsToFetch(const Uptane::Target& target, bool check_store = true) const;
 
  private:
   Config cfg_;

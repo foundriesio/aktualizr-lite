@@ -27,6 +27,7 @@ class RestorableAppEngine : public AppEngine {
   bool isFetched(const App& app) const override;
   bool isRunning(const App& app) const override;
   Json::Value getRunningAppsInfo() const override;
+  void prune(const Apps& app_shortlist) override;
 
  private:
   // pull App&Images

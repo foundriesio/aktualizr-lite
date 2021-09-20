@@ -293,19 +293,22 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
   };
 
+  if ((cfg_.docker_prune || !!cfg_.reset_apps) && (res.isSuccess() || res.needCompletion())) {
+    AppEngine::Apps app_shortlist;
+    const auto enabled_apps{getAppsToFetch(target, false)};
+
+    std::for_each(enabled_apps.cbegin(), enabled_apps.cend(),
+                  [&app_shortlist](const std::pair<std::string, std::string>& val) {
+                    app_shortlist.emplace_back(AppEngine::App{val.first, val.second});
+                  });
+
+    app_engine_->prune(app_shortlist);
+  }
+
   // there is no much reason in re-trying to install app if its installation has failed for the first time
   // TODO: we might add more advanced logic here, e.g. try to install a few times and then fail
   cur_apps_to_fetch_and_update_.clear();
   cur_apps_to_fetch_.clear();
-
-  if (cfg_.docker_prune) {
-    LOG_INFO << "Pruning unused docker images";
-    // Utils::shell which isn't interactive, we'll use std::system so that
-    // stdout/stderr is streamed while docker sets things up.
-    if (std::system("docker image prune -a -f --filter=\"label!=aktualizr-no-prune\"") != 0) {
-      LOG_WARNING << "Unable to prune unused docker images";
-    }
-  }
 
   res.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
   return res;
@@ -379,25 +382,30 @@ std::string ComposeAppManager::getRunningAppsInfoForReport() const {
   return result;
 }
 
-ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target) const {
+ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target,
+                                                                   bool check_store) const {
   AppsContainer apps;
   std::set<std::string> cfg_apps_union;
+  const auto& target_apps = Target::Apps(target);
 
   if (!!cfg_.apps) {
     cfg_apps_union.insert((*cfg_.apps).begin(), (*cfg_.apps).end());
+  } else {
+    std::for_each(target_apps.begin(), target_apps.end(),
+                  [&cfg_apps_union](const Target::Apps::AppDesc& val) { cfg_apps_union.insert(val.name); });
   }
+
   if (!!cfg_.reset_apps) {
     cfg_apps_union.insert((*cfg_.reset_apps).begin(), (*cfg_.reset_apps).end());
   }
 
-  const auto& target_apps = Target::Apps(target);
   for (const auto& app_name : cfg_apps_union) {
     if (!target_apps.isPresent(app_name)) {
       continue;
     }
 
     const auto app{target_apps[app_name]};
-    if (!app_engine_->isFetched({app.name, app.uri})) {
+    if (!check_store || !app_engine_->isFetched({app.name, app.uri})) {
       apps[app.name] = app.uri;
     }
   }

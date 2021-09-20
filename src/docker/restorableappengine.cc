@@ -1,9 +1,12 @@
 #include "restorableappengine.h"
 
+#include <unordered_set>
+
 #include <boost/format.hpp>
 #include <boost/process.hpp>
 
 #include "crypto/crypto.h"
+#include "docker/composeappengine.h"
 #include "docker/composeinfo.h"
 
 namespace Docker {
@@ -124,6 +127,91 @@ Json::Value RestorableAppEngine::getRunningAppsInfo() const {
   }
 
   return apps;
+}
+
+void RestorableAppEngine::prune(const Apps& app_shortlist) {
+  std::unordered_set<std::string> blob_shortlist;
+
+  for (const auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(apps_root_), {})) {
+    if (!boost::filesystem::is_directory(entry)) {
+      continue;
+    }
+    const std::string dir = entry.path().filename().native();
+    auto foundAppIt = std::find_if(app_shortlist.begin(), app_shortlist.end(),
+                                   [&dir](const AppEngine::App& app) { return dir == app.name; });
+
+    if (foundAppIt == app_shortlist.end()) {
+      // remove App dir tree since it's not found in the shortlist
+      boost::filesystem::remove_all(entry.path());
+      continue;
+    }
+
+    const auto& app{*foundAppIt};
+    const Uri uri{Uri::parseUri(app.uri)};
+
+    // iterate over `app` subdirectories/versions and remove those that doesn't match the specified version
+    const auto app_dir{apps_root_ / uri.app};
+
+    for (const auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(app_dir), {})) {
+      if (!boost::filesystem::is_directory(entry)) {
+        LOG_WARNING << "Found file while expected an App version directory: " << entry.path().filename().native();
+        continue;
+      }
+
+      const std::string app_version_dir = entry.path().filename().native();
+      if (app_version_dir != uri.digest.hash()) {
+        boost::filesystem::remove_all(entry.path());
+        continue;
+      }
+
+      // add blobs of the shortlisted apps to the blob shortlist
+      ComposeInfo compose{(entry.path() / ComposeFile).string()};
+      for (const auto& service : compose.getServices()) {
+        const auto image = compose.getImage(service);
+        const Uri image_uri{Uri::parseUri(image)};
+        const auto image_root{app_dir / app_version_dir / "images" / image_uri.registryHostname / image_uri.repo /
+                              image_uri.digest.hash()};
+
+        const auto image_manifest_desc{Utils::parseJSONFile(image_root / "index.json")};
+        HashedDigest image_digest{image_manifest_desc["manifests"][0]["digest"].asString()};
+        blob_shortlist.emplace(image_digest.hash());
+
+        const auto image_manifest{Utils::parseJSONFile(blobs_root_ / "sha256" / image_digest.hash())};
+        blob_shortlist.emplace(HashedDigest(image_manifest["config"]["digest"].asString()).hash());
+
+        const auto image_layers{image_manifest["layers"]};
+        for (Json::ValueConstIterator ii = image_layers.begin(); ii != image_layers.end(); ++ii) {
+          if ((*ii).isObject() && (*ii).isMember("digest")) {
+            const auto layer_digest{HashedDigest{(*ii)["digest"].asString()}};
+            blob_shortlist.emplace(layer_digest.hash());
+          } else {
+            LOG_ERROR << "Invalid image manifest: " << ii.key().asString() << " -> " << *ii;
+          }
+        }
+      }
+    }
+  }
+
+  // prune blobs
+  if (!boost::filesystem::exists(blobs_root_ / "sha256")) {
+    return;
+  }
+
+  for (const auto& entry :
+       boost::make_iterator_range(boost::filesystem::directory_iterator(blobs_root_ / "sha256"), {})) {
+    if (boost::filesystem::is_directory(entry)) {
+      continue;
+    }
+
+    const std::string blob_sha = entry.path().filename().native();
+    if (blob_shortlist.end() == blob_shortlist.find(blob_sha)) {
+      LOG_DEBUG << "Removing blob: " << entry.path();
+      boost::filesystem::remove_all(entry.path());
+    }
+  }
+
+  // prune docker store
+  ComposeAppEngine::pruneDockerStore();
 }
 
 // protected & private implementation
@@ -336,7 +424,6 @@ void RestorableAppEngine::installImage(const std::string& client, const boost::f
                                        const boost::filesystem::path& shared_blob_dir, const std::string& docker_host,
                                        const std::string& tag, const std::string& format) {
   boost::format cmd_fmt{"%s copy -f %s --dest-daemon-host %s --src-shared-blob-dir %s oci:%s docker-daemon:%s"};
-  LOG_ERROR << image_dir;
   std::string cmd{
       boost::str(cmd_fmt % client % format % docker_host % shared_blob_dir.string() % image_dir.string() % tag)};
   if (0 != boost::process::system(cmd, boost::this_process::environment())) {
