@@ -5,6 +5,7 @@
 #include "httplib.h"
 #include "libaktualizr/config.h"
 #include "logging/logging.h"
+#include "utilities/utils.h"
 
 #include "aktualizr-lite/api.h"
 
@@ -32,6 +33,11 @@ class ApiException : public std::exception {
   std::string what_;
 };
 
+struct CurrentInstaller {
+  int id;
+  std::unique_ptr<InstallContext> installer;
+};
+
 static void check_in(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
   (void)req;
   LOG_DEBUG << "check_in called";
@@ -52,6 +58,34 @@ static void check_in(const AkliteClient& client, const httplib::Request& req, ht
   Json::Value data;
   data["targets"] = targets;
   json_resp(res, code, data);
+}
+
+static void create_installer(const AkliteClient& client, const httplib::Request& req, httplib::Response& res,
+                             CurrentInstaller* cur_installer) {
+  (void)req;
+  LOG_DEBUG << "create_installer called";
+
+  Json::Value data;
+  Json::Value input = Utils::parseJSON(req.body);
+
+  auto target_name = input["target-name"];
+  if (!target_name.isString()) {
+    data["error"] = "Missing required item: target-name";
+    throw ApiException(400, data);
+  }
+
+  std::string reason = "Update to " + target_name.asString();
+  auto reason_val = input["reason"];
+  if (reason_val.isString()) {
+    reason = reason_val.asString();
+  }
+
+  TufTarget t(target_name.asString(), "", 0, Json::Value());
+  cur_installer->id++;
+  cur_installer->installer = client.Installer(t, reason);
+
+  data["installer-id"] = cur_installer->id;
+  json_resp(res, 201, data);
 }
 
 static void get_config(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
@@ -155,6 +189,7 @@ int main(int argc, char** argv) {
     });
 
     std::mutex client_mutex;
+    CurrentInstaller installer{0, nullptr};
 
     svr.Get("/check_in", [&client, &client_mutex](const httplib::Request& req, httplib::Response& res) {
       std::lock_guard<std::mutex> guard(client_mutex);
@@ -172,6 +207,11 @@ int main(int argc, char** argv) {
       std::lock_guard<std::mutex> guard(client_mutex);
       get_rollback_target(client, req, res);
     });
+    svr.Post("/targets/installer",
+             [&client, &client_mutex, &installer](const httplib::Request& req, httplib::Response& res) {
+               std::lock_guard<std::mutex> guard(client_mutex);
+               create_installer(client, req, res, &installer);
+             });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
     if (cli_map.count("socket-path") == 1) {

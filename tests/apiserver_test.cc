@@ -149,6 +149,23 @@ TEST_F(ApiServerTest, GetRollback) {
   ASSERT_EQ(404, resp.http_status_code);
 }
 
+TEST_F(ApiServerTest, Installer) {
+  startServer();
+  HttpClient client(getSocketPath());
+
+  createTarget();
+  auto resp = client.get("http://localhost/check_in", HttpInterface::kNoLimit);
+  ASSERT_TRUE(resp.isOk());
+  auto data = resp.getJson();
+  ASSERT_EQ(2, data["targets"].size());
+  Json::Value req;
+  req["target-name"] = data["targets"][1]["name"];
+  resp = client.post("http://localhost/targets/installer", req);
+  ASSERT_EQ(201, resp.http_status_code);
+  auto installer_id = resp.getJson()["installer-id"].asInt();
+  ASSERT_EQ(1, installer_id);
+}
+
 int main(int argc, char** argv) {
   if (argc != 4) {
     std::cerr << argv[0] << " invalid arguments\n";
