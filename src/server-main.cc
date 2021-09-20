@@ -32,6 +32,28 @@ class ApiException : public std::exception {
   std::string what_;
 };
 
+static void check_in(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
+  (void)req;
+  LOG_DEBUG << "check_in called";
+  auto result = client.CheckIn();
+  int code = 200;
+  Json::Value targets;
+  if (result.status != CheckInResult::Status::Ok && result.status != CheckInResult::Status::OkCached) {
+    code = 500;
+  } else {
+    for (const auto& t : result.Targets()) {
+      Json::Value target;
+      target["name"] = t.Name();
+      target["version"] = t.Version();
+      target["ostree-sha256"] = t.Sha256Hash();
+      targets.append(target);
+    }
+  }
+  Json::Value data;
+  data["targets"] = targets;
+  json_resp(res, code, data);
+}
+
 static void get_config(const AkliteClient& client, const httplib::Request& req, httplib::Response& res) {
   (void)req;
   auto pt = client.GetConfig();
@@ -120,6 +142,8 @@ int main(int argc, char** argv) {
       }
     });
 
+    svr.Get("/check_in",
+            [&client](const httplib::Request& req, httplib::Response& res) { check_in(client, req, res); });
     svr.Get("/config",
             [&client](const httplib::Request& req, httplib::Response& res) { get_config(client, req, res); });
     svr.Get("/targets/current",

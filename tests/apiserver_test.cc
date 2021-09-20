@@ -120,6 +120,28 @@ TEST_F(ApiServerTest, GetCurrent) {
   ASSERT_EQ(1, data["version"].asInt());
 }
 
+TEST_F(ApiServerTest, CheckIn) {
+  startServer();
+  HttpClient client(getSocketPath());
+  auto resp = client.get("http://localhost/check_in", HttpInterface::kNoLimit);
+  ASSERT_TRUE(resp.isOk());
+  auto data = resp.getJson();
+  ASSERT_EQ(1, data["targets"].size());
+
+  createTarget();
+  createTarget();
+  resp = client.get("http://localhost/check_in", HttpInterface::kNoLimit);
+  ASSERT_TRUE(resp.isOk());
+  data = resp.getJson();
+  ASSERT_EQ(3, data["targets"].size());
+  ASSERT_EQ("raspberrypi4-64-lmp-1", data["targets"][0]["name"].asString());
+  ASSERT_EQ("raspberrypi4-64-lmp-2", data["targets"][1]["name"].asString());
+  ASSERT_EQ("raspberrypi4-64-lmp-3", data["targets"][2]["name"].asString());
+  ASSERT_EQ(1, data["targets"][0]["version"].asInt());
+  ASSERT_EQ(2, data["targets"][1]["version"].asInt());
+  ASSERT_EQ(3, data["targets"][2]["version"].asInt());
+}
+
 int main(int argc, char** argv) {
   if (argc != 4) {
     std::cerr << argv[0] << " invalid arguments\n";
