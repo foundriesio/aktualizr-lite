@@ -49,6 +49,7 @@ class LiteClient {
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
                                      PackageConfig& config);
   void logTarget(const std::string& prefix, const Uptane::Target& target) const;
+  std::unique_ptr<ReportQueue> report_queue;
 
  private:
   FRIEND_TEST(helpers, locking);
@@ -56,7 +57,7 @@ class LiteClient {
 
   void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
 
-  void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event);
+  void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const;
   void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
   void notifyDownloadFinished(const Uptane::Target& t, bool success);
   void notifyInstallStarted(const Uptane::Target& t);
@@ -73,7 +74,6 @@ class LiteClient {
   boost::filesystem::path callback_program;
   std::unique_ptr<KeyManager> key_manager_;
   std::shared_ptr<PackageManagerInterface> package_manager_;
-  std::unique_ptr<ReportQueue> report_queue;
 
   Uptane::ImageRepository image_repo_;
   std::shared_ptr<Uptane::Fetcher> uptane_fetcher_;

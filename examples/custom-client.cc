@@ -63,12 +63,13 @@ int main(int argc, char **argv) {
       LOG_INFO << "Found Latest Target: " << latest.Name();
       if (latest.Name() != current.Name() && !client.IsRollback(latest)) {
         std::string reason = "Updating from " + current.Name() + " to " + latest.Name();
-        auto dres = client.Download(latest, reason);
+        auto installer = client.Installer(latest, reason);
+        auto dres = installer->Download();
         if (dres.status != DownloadResult::Status::Ok) {
           LOG_ERROR << "Unable to download target: " << dres;
           continue;
         }
-        auto ires = dres.Install();
+        auto ires = installer->Install();
         if (ires.status == InstallResult::Status::Ok) {
           current = latest;
           continue;

@@ -138,11 +138,33 @@ TEST_F(ApiClientTest, Install) {
 
   auto latest = result.GetLatest();
 
-  auto dresult = client.Download(latest);
+  auto installer = client.Installer(latest);
+  ASSERT_NE(nullptr, installer);
+  auto dresult = installer->Download();
   ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
 
-  auto iresult = dresult.Install();
+  auto iresult = installer->Install();
   ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+}
+
+TEST_F(ApiClientTest, Secondaries) {
+  AkliteClient client(createLiteClient(InitialVersion::kOff));
+  std::vector<SecondaryEcu> ecus;
+  ecus.emplace_back("123", "riscv", "target12");
+  auto res = client.SetSecondaries(ecus);
+  ASSERT_EQ(InstallResult::Status::Ok, res.status);
+  auto events = getDeviceGateway().getEvents();
+  ASSERT_EQ(1, events.size());
+  ASSERT_EQ("target12", events[0]["123"]["target"].asString());
+
+  auto new_target = createTarget();
+  auto secondary_target = createTarget(nullptr, "riscv");
+  auto result = client.CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+  ASSERT_EQ(2, result.Targets().size());
+  ASSERT_EQ(new_target.filename(), result.GetLatest().Name());
+  ASSERT_EQ(secondary_target.filename(), result.GetLatest("riscv").Name());
 }
 
 int main(int argc, char** argv) {

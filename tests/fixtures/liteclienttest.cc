@@ -136,7 +136,7 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method createTarget
    */
-  Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr) {
+  Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid="") {
     const auto& latest_target{getTufRepo().getLatest()};
     std::string version;
     try {
@@ -159,9 +159,13 @@ class ClientTest :virtual public ::testing::Test {
       }
     }
 
+    if (hwid.empty()) {
+      hwid = hw_id;
+    }
+
     // add new target to TUF repo
-    const std::string name = hw_id + "-" + os + "-" + version;
-    return getTufRepo().addTarget(name, hash, hw_id, version, apps_json);
+    const std::string name = hwid + "-" + os + "-" + version;
+    return getTufRepo().addTarget(name, hash, hwid, version, apps_json);
   }
 
   /**

@@ -22,7 +22,7 @@ class Handler(SimpleHTTPRequestHandler):
     SysInfoPrefix = "/system_info"
 
     def do_PUT(self):
-        if not self.path.startswith(self.SysInfoPrefix):
+        if not self.path.startswith(self.SysInfoPrefix) and not self.path.startswith("/ecus"):
             self.send_response(404)
             self.end_headers()
             return

@@ -58,12 +58,18 @@ class CheckInResult {
     OkCached,  // check-in failed, but locally cached meta-data is still valid
     Failed,    // check-in failed and there's no valid local meta-data
   };
-  CheckInResult(Status status, std::vector<TufTarget> targets) : status(status), targets_(std::move(targets)) {}
+  CheckInResult(Status status, std::string primary_hwid, std::vector<TufTarget> targets)
+      : status(status), primary_hwid_(std::move(primary_hwid)), targets_(std::move(targets)) {}
   Status status;
   const std::vector<TufTarget> &Targets() const { return targets_; }
-  TufTarget GetLatest() const { return targets_.back(); }
+  /**
+   * If no hwid is specified, this method will return the latest target for
+   * the primary.
+   */
+  TufTarget GetLatest(std::string hwid = "") const;
 
  private:
+  std::string primary_hwid_;
   std::vector<TufTarget> targets_;
 };
 
@@ -93,11 +99,38 @@ class DownloadResult {
   };
   Status status;
   std::string description;
-  std::function<InstallResult()> Install;
 };
 
 std::ostream &operator<<(std::ostream &os, const InstallResult &res);
 std::ostream &operator<<(std::ostream &os, const DownloadResult &res);
+
+class InstallContext {
+ public:
+  virtual ~InstallContext() = default;
+  virtual DownloadResult Download() = 0;
+  virtual InstallResult Install() = 0;
+
+  enum class SecondaryEvent {
+    DownloadStarted,
+    DownloadFailed,
+    DownloadCompleted,
+
+    InstallStarted,
+    InstallNeedsCompletion,
+    InstallCompleted,
+    InstallFailed,
+  };
+
+  virtual void QueueEvent(std::string ecu_serial, SecondaryEvent event, std::string details = "") = 0;
+};
+
+struct SecondaryEcu {
+  SecondaryEcu(std::string serial, std::string hwid, std::string target_name)
+      : serial(std::move(serial)), hwid(std::move(hwid)), target_name(std::move(target_name)) {}
+  std::string serial;
+  std::string hwid;
+  std::string target_name;
+};
 
 /**
  * AkliteClient provides an easy-to-use API for users wanting to customize
@@ -141,14 +174,9 @@ class AkliteClient {
   TufTarget GetCurrent() const;
 
   /**
-   * Download and verify the content of the given target.
+   * Create an InstallContext object to help drive an update.
    */
-  DownloadResult Download(const TufTarget &t, std::string reason = "");
-
-  /**
-   * Install the Target
-   */
-  InstallResult Install(const TufTarget &t);
+  std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "") const;
 
   /**
    * Check if the Target has been installed but failed to boot. This would
@@ -158,12 +186,20 @@ class AkliteClient {
   bool IsRollback(const TufTarget &t) const;
 
   /**
+   * Set the secondary ECUs managed by this device. Will update the status of
+   * the ECUs on the device-gateway and instruct the CheckIn method to also
+   * look for targets with the given hardware ids.
+   */
+  InstallResult SetSecondaries(const std::vector<SecondaryEcu> &ecus);
+
+  /**
    * Default files/paths to search for sota toml when configuration client.
    */
   static std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  private:
   std::shared_ptr<LiteClient> client_;
+  std::vector<std::string> secondary_hwids_;
   mutable bool configUploaded_{false};
 };
 

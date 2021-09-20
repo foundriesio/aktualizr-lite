@@ -10,6 +10,19 @@
 std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                   "/etc/sota/conf.d/"};
 
+TufTarget CheckInResult::GetLatest(std::string hwid) const {
+  if (hwid.empty()) {
+    hwid = primary_hwid_;
+  }
+
+  for (auto it = targets_.crbegin(); it != targets_.crend(); ++it) {
+    if ((*it).Custom()["hardwareIds"][0] == hwid) {
+      return *it;
+    }
+  }
+  throw std::runtime_error("no target for this hwid");
+}
+
 std::ostream& operator<<(std::ostream& os, const DownloadResult& res) {
   if (res.status == DownloadResult::Status::Ok) {
     os << "Ok/";
@@ -61,7 +74,7 @@ CheckInResult AkliteClient::CheckIn() const {
     LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
     if (!client_->checkImageMetaOffline()) {
       LOG_ERROR << "Unable to use local copy of TUF data";
-      return CheckInResult(CheckInResult::Status::Failed, {});
+      return CheckInResult(CheckInResult::Status::Failed, "", {});
     }
     status = CheckInResult::Status::OkCached;
   }
@@ -83,11 +96,17 @@ CheckInResult AkliteClient::CheckIn() const {
         targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
         break;
       }
+      for (const auto& hwid : secondary_hwids_) {
+        if (it == Uptane::HardwareIdentifier(hwid)) {
+          targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
+          break;
+        }
+      }
     }
   }
 
   std::sort(targets.begin(), targets.end(), compareTargets);
-  return CheckInResult(status, targets);
+  return CheckInResult(status, client_->config.provision.primary_ecu_hardware_id, targets);
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
@@ -110,55 +129,98 @@ TufTarget AkliteClient::GetCurrent() const {
   return TufTarget(current.filename(), current.sha256Hash(), ver, current.custom_data());
 }
 
-static InstallResult install(LiteClient& client, const Uptane::Target& t) {
-  client.logTarget("Installing: ", t);
+class LiteInstall : public InstallContext {
+ public:
+  LiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason)
+      : client_(std::move(client)), target_(std::move(t)), reason_(reason) {}
 
-  auto rc = client.install(t);
-  auto status = InstallResult::Status::Failed;
-  if (rc == data::ResultCode::Numeric::kNeedCompletion) {
-    status = InstallResult::Status::NeedsCompletion;
-  } else if (rc == data::ResultCode::Numeric::kOk) {
-    client.http_client->updateHeader("x-ats-target", t.filename());
-    status = InstallResult::Status::Ok;
+  InstallResult Install() override {
+    client_->logTarget("Installing: ", *target_);
+
+    auto rc = client_->install(*target_);
+    auto status = InstallResult::Status::Failed;
+    if (rc == data::ResultCode::Numeric::kNeedCompletion) {
+      status = InstallResult::Status::NeedsCompletion;
+    } else if (rc == data::ResultCode::Numeric::kOk) {
+      client_->http_client->updateHeader("x-ats-target", target_->filename());
+      status = InstallResult::Status::Ok;
+    }
+    return InstallResult{status, ""};
   }
-  return InstallResult{status, ""};
-}
 
-DownloadResult AkliteClient::Download(const TufTarget& t, std::string reason) {
-  std::shared_ptr<Uptane::Target> target = nullptr;
+  DownloadResult Download() override {
+    auto reason = reason_;
+    if (reason.empty()) {
+      reason = "Update to " + target_->filename();
+    }
+
+    client_->logTarget("Downloading: ", *target_);
+
+    data::ResultCode::Numeric rc = client_->download(*target_, reason);
+    if (rc != data::ResultCode::Numeric::kOk) {
+      return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to download target"};
+    }
+
+    if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {
+      data::InstallationResult ires{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+      client_->notifyInstallFinished(*target_, ires);
+      return DownloadResult{DownloadResult::Status::VerificationFailed, ires.description};
+    }
+
+    return DownloadResult{DownloadResult::Status::Ok, ""};
+  }
+
+  void QueueEvent(std::string ecu_serial, SecondaryEvent event, std::string details) override {
+    Uptane::EcuSerial serial(ecu_serial);
+    std::unique_ptr<ReportEvent> e;
+    if (event == InstallContext::SecondaryEvent::DownloadStarted) {
+      e = std::make_unique<EcuDownloadStartedReport>(serial, target_->correlation_id());
+    } else if (event == InstallContext::SecondaryEvent::DownloadCompleted) {
+      e = std::make_unique<EcuDownloadCompletedReport>(serial, target_->correlation_id(), true);
+    } else if (event == InstallContext::SecondaryEvent::DownloadFailed) {
+      e = std::make_unique<EcuDownloadCompletedReport>(serial, target_->correlation_id(), false);
+    } else if (event == InstallContext::SecondaryEvent::InstallStarted) {
+      e = std::make_unique<EcuInstallationStartedReport>(serial, target_->correlation_id());
+    } else if (event == InstallContext::SecondaryEvent::InstallCompleted) {
+      e = std::make_unique<EcuInstallationCompletedReport>(serial, target_->correlation_id(), true);
+    } else if (event == InstallContext::SecondaryEvent::InstallFailed) {
+      e = std::make_unique<EcuInstallationCompletedReport>(serial, target_->correlation_id(), false);
+    } else if (event == InstallContext::SecondaryEvent::InstallNeedsCompletion) {
+      e = std::make_unique<EcuInstallationAppliedReport>(serial, target_->correlation_id());
+    } else {
+      throw std::runtime_error("Invalid secondary event");
+    }
+
+    if (!details.empty()) {
+      e->custom["details"] = details;
+    }
+
+    e->custom["targetName"] = target_->filename();
+    e->custom["version"] = target_->custom_version();
+    client_->report_queue->enqueue(std::move(e));
+  }
+
+ private:
+  std::shared_ptr<LiteClient> client_;
+  std::unique_ptr<Uptane::Target> target_;
+  std::string reason_;
+};
+
+std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason) const {
+  std::unique_ptr<Uptane::Target> target;
   for (const auto& tt : client_->allTargets()) {
     if (tt.filename() == t.Name()) {
-      target = std::make_shared<Uptane::Target>(tt);
+      target = std::make_unique<Uptane::Target>(tt);
       break;
     }
   }
   if (target == nullptr) {
-    return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to find target"};
+    return nullptr;
   }
-
   boost::uuids::uuid tmp = boost::uuids::random_generator()();
   auto correlation_id = std::to_string(t.Version()) + "-" + boost::uuids::to_string(tmp);
-
-  if (reason.empty()) {
-    reason = "Update to " + t.Name();
-  }
-
-  client_->logTarget("Downloading: ", *target);
   target->setCorrelationId(correlation_id);
-
-  data::ResultCode::Numeric rc = client_->download(*target, reason);
-  if (rc != data::ResultCode::Numeric::kOk) {
-    return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to download target"};
-  }
-
-  if (client_->VerifyTarget(*target) != TargetStatus::kGood) {
-    data::InstallationResult ires{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
-    client_->notifyInstallFinished(*target, ires);
-    return DownloadResult{DownloadResult::Status::VerificationFailed, ires.description};
-  }
-
-  auto installer = [this, target]() -> InstallResult { return install(*client_, *target); };
-  return DownloadResult{DownloadResult::Status::Ok, "", installer};
+  return std::make_unique<LiteInstall>(client_, std::move(target), reason);
 }
 
 bool AkliteClient::IsRollback(const TufTarget& t) const {
@@ -172,4 +234,21 @@ bool AkliteClient::IsRollback(const TufTarget& t) const {
   Uptane::Target target(t.Name(), target_json);
 
   return known_local_target(*client_, target, known_but_not_installed_versions);
+}
+
+InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus) {
+  std::vector<std::string> hwids;
+  Json::Value data;
+  for (const auto& ecu : ecus) {
+    Json::Value entry;
+    entry["target"] = ecu.target_name;
+    data[ecu.serial] = entry;
+    hwids.emplace_back(ecu.hwid);
+  }
+  const HttpResponse response = client_->http_client->put(client_->config.tls.server + "/ecus", data);
+  if (!response.isOk()) {
+    return InstallResult{InstallResult::Status::Failed, response.getStatusStr()};
+  }
+  secondary_hwids_ = std::move(hwids);
+  return InstallResult{InstallResult::Status::Ok, ""};
 }
