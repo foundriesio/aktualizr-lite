@@ -154,14 +154,24 @@ int main(int argc, char** argv) {
       }
     });
 
-    svr.Get("/check_in",
-            [&client](const httplib::Request& req, httplib::Response& res) { check_in(client, req, res); });
-    svr.Get("/config",
-            [&client](const httplib::Request& req, httplib::Response& res) { get_config(client, req, res); });
-    svr.Get("/targets/current",
-            [&client](const httplib::Request& req, httplib::Response& res) { get_current_target(client, req, res); });
-    svr.Get("/targets/rollback/(\\S+)",
-            [&client](const httplib::Request& req, httplib::Response& res) { get_rollback_target(client, req, res); });
+    std::mutex client_mutex;
+
+    svr.Get("/check_in", [&client, &client_mutex](const httplib::Request& req, httplib::Response& res) {
+      std::lock_guard<std::mutex> guard(client_mutex);
+      check_in(client, req, res);
+    });
+    svr.Get("/config", [&client, &client_mutex](const httplib::Request& req, httplib::Response& res) {
+      std::lock_guard<std::mutex> guard(client_mutex);
+      get_config(client, req, res);
+    });
+    svr.Get("/targets/current", [&client, &client_mutex](const httplib::Request& req, httplib::Response& res) {
+      std::lock_guard<std::mutex> guard(client_mutex);
+      get_current_target(client, req, res);
+    });
+    svr.Get("/targets/rollback/(\\S+)", [&client, &client_mutex](const httplib::Request& req, httplib::Response& res) {
+      std::lock_guard<std::mutex> guard(client_mutex);
+      get_rollback_target(client, req, res);
+    });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
     if (cli_map.count("socket-path") == 1) {
