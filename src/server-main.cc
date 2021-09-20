@@ -60,6 +60,23 @@ static void check_in(const AkliteClient& client, const httplib::Request& req, ht
   json_resp(res, code, data);
 }
 
+static void check_apps_in_sync(const AkliteClient& client, const httplib::Request& req, httplib::Response& res,
+                               CurrentInstaller* cur_installer) {
+  (void)req;
+  LOG_DEBUG << "check_apps_in_sync called";
+
+  auto installer = client.CheckAppsInSync();
+  if (installer == nullptr) {
+    json_resp(res, 204, Json::Value());
+  } else {
+    cur_installer->id++;
+    cur_installer->installer = std::move(installer);
+    Json::Value data;
+    data["installer-id"] = cur_installer->id;
+    json_resp(res, 200, data);
+  }
+}
+
 static void create_installer(const AkliteClient& client, const httplib::Request& req, httplib::Response& res,
                              CurrentInstaller* cur_installer) {
   (void)req;
@@ -298,6 +315,10 @@ int main(int argc, char** argv) {
                std::lock_guard<std::mutex> guard(client_mutex);
                installer_install(req, res, &installer);
              });
+    svr.Get("/apps_in_sync", [&client, &client_mutex, &installer](const httplib::Request& req, httplib::Response& res) {
+      std::lock_guard<std::mutex> guard(client_mutex);
+      check_apps_in_sync(client, req, res, &installer);
+    });
 
     boost::filesystem::path socket_path("/var/run/aklite.sock");
     if (cli_map.count("socket-path") == 1) {

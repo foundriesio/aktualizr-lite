@@ -178,6 +178,13 @@ TEST_F(ApiServerTest, Installer) {
   ASSERT_EQ(202, resp.http_status_code);
 }
 
+TEST_F(ApiServerTest, AppsInSync) {
+  startServer();
+  HttpClient client(getSocketPath());
+  auto resp = client.get("http://localhost/apps_in_sync", HttpInterface::kNoLimit);
+  ASSERT_EQ(204, resp.http_status_code);
+}
+
 int main(int argc, char** argv) {
   if (argc != 4) {
     std::cerr << argv[0] << " invalid arguments\n";
