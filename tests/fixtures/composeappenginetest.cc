@@ -18,7 +18,6 @@ class AppEngineTest : virtual public ::testing::Test {
     apps_root_dir = test_dir_.Path() / "compose-apps";
     registry_client_ = std::make_shared<Docker::RegistryClient>(registry.getClient(), registry.authURL(), registry.getClientFactory());
     docker_client_ = std::make_shared<Docker::DockerClient>(daemon_.getClient());
-    app_engine = std::make_shared<Docker::ComposeAppEngine>(apps_root_dir, compose_cmd, docker_client_, registry_client_);
   }
 
  protected:
