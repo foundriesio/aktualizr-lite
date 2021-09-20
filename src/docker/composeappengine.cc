@@ -135,6 +135,20 @@ void ComposeAppEngine::remove(const App& app) {
   }
 }
 
+bool ComposeAppEngine::isFetched(const App& app) const {
+  if (!boost::filesystem::exists(appRoot(app))) {
+    return false;
+  }
+  bool res{false};
+  try {
+    AppState state(app, appRoot(app));
+    res = state() == AppState::State::kPulled;
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to get/set App state: " << exc.what();
+  }
+  return res;
+}
+
 bool ComposeAppEngine::isRunning(const App& app) const {
   if (!boost::filesystem::exists(appRoot(app))) {
     return false;

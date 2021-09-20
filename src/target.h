@@ -69,6 +69,8 @@ class Target {
 
     Iterator begin() const { return target_apps_json_.begin(); }
     Iterator end() const { return target_apps_json_.end(); }
+    bool isPresent(const std::string& app_name) const { return target_apps_json_.isMember(app_name); }
+    AppDesc operator[](const std::string& app_name) const { return AppDesc(app_name, target_apps_json_[app_name]); }
 
    private:
     Json::Value target_apps_json_;

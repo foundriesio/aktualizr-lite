@@ -20,7 +20,9 @@ class ComposeAppManager : public RootfsTreeManager {
     Config(const PackageConfig& pconfig);
 
     boost::optional<std::vector<std::string>> apps;
+    boost::optional<std::vector<std::string>> reset_apps;
     boost::filesystem::path apps_root{"/var/sota/compose-apps"};
+    boost::filesystem::path reset_apps_root{"/var/sota/reset-apps"};
     boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
     bool docker_prune{true};
     bool force_update{false};
@@ -56,9 +58,12 @@ class ComposeAppManager : public RootfsTreeManager {
   Json::Value getRunningAppsInfo() const;
   std::string getRunningAppsInfoForReport() const;
 
+  AppsContainer getAppsToFetch(const Uptane::Target& t) const;
+
  private:
   Config cfg_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;
+  mutable AppsContainer cur_apps_to_fetch_;
   bool are_apps_checked_{false};
   AppEngine::Ptr app_engine_;
   std::unique_ptr<ComposeAppTree> app_tree_;
