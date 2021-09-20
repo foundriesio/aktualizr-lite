@@ -39,6 +39,7 @@ class MockAppEngine : public AppEngine {
     ON_CALL(*this, fetch).WillByDefault(Return(true));
     ON_CALL(*this, install).WillByDefault(Return(true));
     ON_CALL(*this, run).WillByDefault(Return(true));
+    ON_CALL(*this, isFetched).WillByDefault(Return(true));
     ON_CALL(*this, isRunning).WillByDefault(Return(true));
     ON_CALL(*this, getRunningAppsInfo)
         .WillByDefault(
@@ -51,6 +52,7 @@ class MockAppEngine : public AppEngine {
   MOCK_METHOD(bool, install, (const App& app), (override));
   MOCK_METHOD(bool, run, (const App& app), (override));
   MOCK_METHOD(void, remove, (const App& app), (override));
+  MOCK_METHOD(bool, isFetched, (const App& app), (const, override));
   MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
   MOCK_METHOD(Json::Value, getRunningAppsInfo, (), (const, override));
 };

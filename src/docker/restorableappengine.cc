@@ -70,13 +70,24 @@ bool RestorableAppEngine::run(const App& app) {
 
 void RestorableAppEngine::remove(const App& app) {}
 
+bool RestorableAppEngine::isFetched(const App& app) const {
+  bool res{false};
+  try {
+    res = isAppFetched(app);
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "App: " << app.name << ", cannot check whether App is fetched: " << exc.what();
+  }
+  return res;
+}
+
 bool RestorableAppEngine::isRunning(const App& app) const {
   bool res{false};
 
   try {
-    res = isAppInstalled(app) && isRunning(app, (install_root_ / app.name / ComposeFile).string(), docker_client_);
+    res = isAppFetched(app) && isAppInstalled(app) &&
+          isRunning(app, (install_root_ / app.name / ComposeFile).string(), docker_client_);
   } catch (const std::exception& exc) {
-    LOG_WARNING << "App: " << app.name << ", cant check whether App is running: " << exc.what();
+    LOG_WARNING << "App: " << app.name << ", cannot check whether App is running: " << exc.what();
   }
 
   return res;
@@ -139,12 +150,22 @@ boost::filesystem::path RestorableAppEngine::pullApp(const Uri& uri, const boost
 
 void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compose_file,
                                         const boost::filesystem::path& dst_dir) {
+  // REGISTRY_AUTH_FILE env. var. must be set and point to the docker's `config.json` (e.g.
+  // /usr/lib/docker/config.json)`
+  // {
+  //  "credHelpers": {
+  //    "hub.foundries.io": "fio-helper"
+  //  }
+  // }
+  //
+  // `"hub.foundries.io": "fio-helper"` implies that there is `/usr/bin/docker-credential-fio-helper` which returns
+  // creds access to customer specific registry can be provided in the same way, i.e. defining the registry specific
+  // cred helper.
   boost::filesystem::create_directories(dst_dir);
 
   const auto compose{ComposeInfo(app_compose_file.string())};
   for (const auto& service : compose.getServices()) {
     const auto image_uri = compose.getImage(service);
-    LOG_ERROR << image_uri;
 
     const Uri uri{Uri::parseUri(image_uri)};
     const auto image_dir{dst_dir / uri.registryHostname / uri.repo / uri.digest.hash()};
@@ -180,8 +201,6 @@ void RestorableAppEngine::installAppImages(const boost::filesystem::path& app_di
   const auto compose{ComposeInfo((app_dir / ComposeFile).string())};
   for (const auto& service : compose.getServices()) {
     const auto image_uri = compose.getImage(service);
-    LOG_ERROR << image_uri;
-
     const Uri uri{Uri::parseUri(image_uri)};
     const std::string tag{uri.registryHostname + '/' + uri.repo + ':' + uri.digest.shortHash()};
     const auto image_dir{app_dir / "images" / uri.registryHostname / uri.repo / uri.digest.hash()};
@@ -189,7 +208,7 @@ void RestorableAppEngine::installAppImages(const boost::filesystem::path& app_di
   }
 }
 
-bool RestorableAppEngine::isAppInstalled(const App& app) const {
+bool RestorableAppEngine::isAppFetched(const App& app) const {
   bool res{false};
   const Uri uri{Uri::parseUri(app.uri)};
   const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
@@ -225,6 +244,26 @@ bool RestorableAppEngine::isAppInstalled(const App& app) const {
       break;
     }
 
+    // TODO: check if App images are installed, require a function to generate sha256 hash while reading data from a
+    // file.
+    res = true;
+  } while (0);
+
+  return res;
+}
+
+bool RestorableAppEngine::isAppInstalled(const App& app) const {
+  bool res{false};
+  const Uri uri{Uri::parseUri(app.uri)};
+  const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
+  const auto app_install_dir{install_root_ / app.name};
+
+  do {
+    const auto manifest_file{app_dir / Manifest::Filename};
+    const Manifest manifest{Utils::parseJSONFile(manifest_file)};
+    const auto archive_manifest_hash{HashedDigest(manifest.archiveDigest()).hash()};
+    const auto archive_full_path{app_dir / (archive_manifest_hash + Manifest::ArchiveExt)};
+
     auto cmd = boost::str(boost::format("tar -xzf %s %s") % archive_full_path % ComposeFile);
     if (0 != boost::process::system(cmd, boost::this_process::environment(), boost::process::start_dir = app_dir)) {
       LOG_DEBUG << app.name
@@ -244,8 +283,8 @@ bool RestorableAppEngine::isAppInstalled(const App& app) const {
                 << "fetched: " << compose_file_hash;
       break;
     }
-    // TODO: check if App images are installed, require a function to generate sha256 hash while reading data from a
-    // file.
+    // TODO: check whether docker store has all App images
+
     res = true;
   } while (0);
 

@@ -24,6 +24,7 @@ class RestorableAppEngine : public AppEngine {
   bool install(const App& app) override;
   bool run(const App& app) override;
   void remove(const App& app) override;
+  bool isFetched(const App& app) const override;
   bool isRunning(const App& app) const override;
   Json::Value getRunningAppsInfo() const override;
 
@@ -37,6 +38,7 @@ class RestorableAppEngine : public AppEngine {
   void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);
   void installAppImages(const boost::filesystem::path& app_dir);
 
+  bool isAppFetched(const App& app) const;
   bool isAppInstalled(const App& app) const;
 
   // check if App&Images are running

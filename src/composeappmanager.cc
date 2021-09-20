@@ -1,5 +1,9 @@
 #include "composeappmanager.h"
+
+#include <set>
+
 #include "bootloader/bootloaderlite.h"
+#include "docker/restorableappengine.h"
 #include "target.h"
 
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
@@ -15,8 +19,20 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
     }
   }
 
+  if (raw.count("reset_apps") == 1) {
+    std::string val = raw.at("reset_apps");
+    reset_apps = boost::make_optional(std::vector<std::string>());
+    if (val.length() > 0) {
+      // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
+      boost::split(*reset_apps, val, boost::is_any_of(", "), boost::token_compress_on);
+    }
+  }
+
   if (raw.count("compose_apps_root") == 1) {
     apps_root = raw.at("compose_apps_root");
+  }
+  if (raw.count("reset_apps_root") == 1) {
+    reset_apps_root = raw.at("reset_apps_root");
   }
   if (raw.count("compose_apps_tree") == 1) {
     apps_tree = raw.at("compose_apps_tree");
@@ -57,10 +73,19 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       cfg_{pconfig},
       app_engine_{std::move(app_engine)} {
   if (!app_engine_) {
-    app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
-        cfg_.apps_root, boost::filesystem::canonical(cfg_.compose_bin).string() + " ",
-        std::make_shared<Docker::DockerClient>(),
-        std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint));
+    auto docker_client{std::make_shared<Docker::DockerClient>()};
+    auto registry_client{std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint)};
+    const auto compose_cmd{boost::filesystem::canonical(cfg_.compose_bin).string() + " "};
+    const std::string skopeo_cmd{"skopeo"};
+    const std::string docker_host{"unix:///var/run/docker.sock"};
+
+    if (!!cfg_.reset_apps) {
+      app_engine_ = std::make_shared<Docker::RestorableAppEngine>(cfg_.reset_apps_root, cfg_.apps_root, registry_client,
+                                                                  docker_client, skopeo_cmd, docker_host, compose_cmd);
+    } else {
+      app_engine_ =
+          std::make_shared<Docker::ComposeAppEngine>(cfg_.apps_root, compose_cmd, docker_client, registry_client);
+    }
   }
 
   try {
@@ -149,8 +174,11 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
 
 bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
   cur_apps_to_fetch_and_update_ = getAppsToUpdate(target);
+  if (!!cfg_.reset_apps) {
+    cur_apps_to_fetch_ = getAppsToFetch(target);
+  }
   are_apps_checked_ = true;
-  return cur_apps_to_fetch_and_update_.empty();
+  return cur_apps_to_fetch_and_update_.empty() && cur_apps_to_fetch_.empty();
 }
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
@@ -184,7 +212,11 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
     }
 
   } else {
-    for (const auto& pair : cur_apps_to_fetch_and_update_) {
+    AppsContainer all_apps_to_fetch;
+    all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
+    all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
+
+    for (const auto& pair : all_apps_to_fetch) {
       LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
       if (!app_engine_->fetch({pair.first, pair.second})) {
         passed = false;
@@ -264,6 +296,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   // there is no much reason in re-trying to install app if its installation has failed for the first time
   // TODO: we might add more advanced logic here, e.g. try to install a few times and then fail
   cur_apps_to_fetch_and_update_.clear();
+  cur_apps_to_fetch_.clear();
 
   if (cfg_.docker_prune) {
     LOG_INFO << "Pruning unused docker images";
@@ -344,4 +377,30 @@ std::string ComposeAppManager::getRunningAppsInfoForReport() const {
     }
   }
   return result;
+}
+
+ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target) const {
+  AppsContainer apps;
+  std::set<std::string> cfg_apps_union;
+
+  if (!!cfg_.apps) {
+    cfg_apps_union.insert((*cfg_.apps).begin(), (*cfg_.apps).end());
+  }
+  if (!!cfg_.reset_apps) {
+    cfg_apps_union.insert((*cfg_.reset_apps).begin(), (*cfg_.reset_apps).end());
+  }
+
+  const auto& target_apps = Target::Apps(target);
+  for (const auto& app_name : cfg_apps_union) {
+    if (!target_apps.isPresent(app_name)) {
+      continue;
+    }
+
+    const auto app{target_apps[app_name]};
+    if (!app_engine_->isFetched({app.name, app.uri})) {
+      apps[app.name] = app.uri;
+    }
+  }
+
+  return apps;
 }
