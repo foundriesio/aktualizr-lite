@@ -102,6 +102,11 @@ RUN curl -sSL https://get.docker.com/ | sh
 ADD ./docker/wrapdocker /usr/local/bin/wrapdocker
 RUN chmod +x /usr/local/bin/wrapdocker
 
+# Install skopeo
+RUN echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
+    wget -nv https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key -O- | apt-key add -
+RUN apt-get update && apt-get -y install skopeo
+
 RUN useradd testuser
 
 WORKDIR /
