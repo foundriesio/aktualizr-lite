@@ -1,4 +1,3 @@
 [submodule "aktualizr"]
 	path = aktualizr
-	url = https://github.com/foundriesio/aktualizr
-	branch = 2021.11+fio
+	url = https://github.com/uptane/aktualizr
