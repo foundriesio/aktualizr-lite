@@ -330,12 +330,30 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
   return ir;
 }
 
+void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
+  removeDisabledComposeApps(target);
+
+  // prune the restorable app store, make sure we remove unused blobs of Apps removed in the previous call,
+  // as well as the apps and their blobs that had been only in `reset_apps` list and were removed from it
+  if (!!cfg_.reset_apps) {
+    // get all Apps that we need to keep in the store
+    const auto required_apps{getAppsToFetch(target, false)};
+    // remove not required apps, only apps listed in required_apps will be preserved
+    AppEngine::Apps app_shortlist;
+    std::for_each(required_apps.cbegin(), required_apps.cend(),
+                  [&app_shortlist](const std::pair<std::string, std::string>& val) {
+                    app_shortlist.emplace_back(AppEngine::App{val.first, val.second});
+                  });
+    app_engine_->prune(app_shortlist);
+  }
+}
+
 // Handle the case like:
 //  1) sota.toml is configured with 2 compose apps: "app1, app2"
 //  2) update is applied, so we are now running both app1 and app2
 //  3) sota.toml is updated with 1 docker app: "app1"
 // At this point we should stop app2 and remove it.
-void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
+void ComposeAppManager::removeDisabledComposeApps(const Uptane::Target& target) const {
   if (!boost::filesystem::is_directory(cfg_.apps_root)) {
     LOG_DEBUG << "cfg_.apps_root does not exist";
     return;

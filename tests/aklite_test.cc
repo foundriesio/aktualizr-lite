@@ -40,7 +40,15 @@ class AkliteTest : public fixtures::ClientTest,
 
   std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none) override {
-    return ClientTest::createLiteClient(app_engine, initial_version, apps, apps_root_dir.string());
+    const auto app_engine_type{GetParam()};
+
+    if (app_engine_type == "ComposeAppEngine") {
+      return ClientTest::createLiteClient(app_engine, initial_version, apps, apps_root_dir.string());
+    } else if (app_engine_type == "RestorableAppEngine") {
+      return ClientTest::createLiteClient(app_engine, initial_version, apps, apps_root_dir.string(), apps);
+    } else {
+      throw std::invalid_argument("Unsupported AppEngine type: " + app_engine_type);
+    }
   }
 
  private:
@@ -87,6 +95,34 @@ TEST_P(AkliteTest, AppUpdate) {
   updateApps(*client, target01, target02);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target02));
   ASSERT_TRUE(app_engine->isRunning(app01_updated));
+}
+
+TEST_P(AkliteTest, AppRemoval) {
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  auto app02 = registry.addApp(fixtures::ComposeApp::create("app-02"));
+
+  auto client =
+      createLiteClient(InitialVersion::kOn, boost::make_optional(std::vector<std::string>{"app-01", "app-02"}));
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_FALSE(app_engine->isRunning(app02));
+
+  auto target01 = createAppTarget({app01, app02});
+
+  updateApps(*client, getInitialTarget(), target01);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
+  ASSERT_TRUE(app_engine->isRunning(app01));
+  ASSERT_TRUE(app_engine->isRunning(app02));
+
+  reboot(client, boost::make_optional(std::vector<std::string>{"app-01"}));
+  // make sure the "hadleRemovedApps" is called
+  client->appsInSync();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
+  checkHeaders(*client, target01);
+  checkEvents(*client, target01, UpdateType::kApp);
+  ASSERT_TRUE(app_engine->isRunning(app01));
+  ASSERT_FALSE(app_engine->isFetched(app02));
+  ASSERT_FALSE(app_engine->isRunning(app02));
 }
 
 TEST_P(AkliteTest, AppInvalidUpdate) {

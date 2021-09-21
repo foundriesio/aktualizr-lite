@@ -57,6 +57,8 @@ class RestorableAppEngine : public AppEngine {
   static void startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
                               const std::string& flags = "up --remove-orphans -d");
 
+  static void stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir);
+
  private:
   const boost::filesystem::path store_root_;
   const boost::filesystem::path install_root_;
