@@ -71,7 +71,18 @@ bool RestorableAppEngine::run(const App& app) {
   return res;
 }
 
-void RestorableAppEngine::remove(const App& app) {}
+void RestorableAppEngine::remove(const App& app) {
+  try {
+    const auto app_install_dir{install_root_ / app.name};
+
+    // just installed app are removed, the restorable store Apps will be removed by means of prune() call
+    stopComposeApp(compose_cmd_, app_install_dir);
+    boost::filesystem::remove_all(app_install_dir);
+
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "App: " << app.name << ", failed to remove: " << exc.what();
+  }
+}
 
 bool RestorableAppEngine::isFetched(const App& app) const {
   bool res{false};
@@ -437,6 +448,14 @@ void RestorableAppEngine::startComposeApp(const std::string& compose_cmd, const 
   const auto cmd{boost::str(cmd_fmt % compose_cmd % flags)};
   if (0 != boost::process::system(cmd, boost::process::start_dir = app_dir)) {
     throw std::runtime_error("failed to bring Compose App up: " + cmd);
+  }
+}
+
+void RestorableAppEngine::stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
+  boost::format cmd_fmt{"%s down"};
+  const auto cmd{boost::str(cmd_fmt % compose_cmd)};
+  if (0 != boost::process::system(cmd, boost::process::start_dir = app_dir)) {
+    throw std::runtime_error("failed to bring Compose App down: " + cmd);
   }
 }
 

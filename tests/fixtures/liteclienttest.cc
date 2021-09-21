@@ -36,7 +36,8 @@ class ClientTest :virtual public ::testing::Test {
   std::shared_ptr<LiteClient> createLiteClient(const std::shared_ptr<AppEngine>& app_engine,
                                                InitialVersion initial_version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none,
-                                               const std::string& compose_apps_root = "") {
+                                               const std::string& compose_apps_root = "",
+                                               boost::optional<std::vector<std::string>> reset_apps = boost::none) {
     Config conf;
     conf.tls.server = device_gateway_.getTlsUri();
     conf.uptane.repo_server = device_gateway_.getTufRepoUri();
@@ -50,6 +51,9 @@ class ClientTest :virtual public ::testing::Test {
     conf.pacman.extra["compose_apps_root"] = compose_apps_root.empty() ? (test_dir_.Path() / "compose-apps").string() : compose_apps_root;
     if (!!apps) {
       conf.pacman.extra["compose_apps"] = boost::algorithm::join(*apps, ",");
+    }
+    if (!!reset_apps) {
+      conf.pacman.extra["reset_apps"] = boost::algorithm::join(*reset_apps, ",");
     }
     app_shortlist_ = apps;
     conf.pacman.ostree_server = device_gateway_.getOsTreeUri();
@@ -292,11 +296,14 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method reboot
    */
-  void reboot(std::shared_ptr<LiteClient>& client) {
+  void reboot(std::shared_ptr<LiteClient>& client, boost::optional<std::vector<std::string>> new_app_list = boost::none) {
     boost::filesystem::remove(test_dir_.Path() / "need_reboot");
     // make sure we tear down an existing instance of a client before a new one is created
     // otherwise we hit race condition with sending events by the report queue thread, the same event is sent twice
     client.reset();
+    if (!!new_app_list) {
+      app_shortlist_ = new_app_list;
+    }
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
   }
 
