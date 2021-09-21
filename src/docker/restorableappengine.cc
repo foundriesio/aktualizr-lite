@@ -15,8 +15,8 @@ const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
 
 RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                                          Docker::RegistryClient::Ptr registry_client,
-                                         Docker::DockerClient::Ptr docker_client, const std::string& client,
-                                         const std::string& docker_host, const std::string& compose_cmd)
+                                         Docker::DockerClient::Ptr docker_client, std::string client,
+                                         std::string docker_host, std::string compose_cmd)
     : store_root_{std::move(store_root)},
       install_root_{std::move(install_root)},
       client_{std::move(client)},
@@ -277,7 +277,7 @@ void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compo
 boost::filesystem::path RestorableAppEngine::installAppAndImages(const App& app) {
   const Uri uri{Uri::parseUri(app.uri)};
   const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
-  const auto app_install_dir{install_root_ / app.name};
+  auto app_install_dir{install_root_ / app.name};
   LOG_DEBUG << app.name << ": installing App: " << app_dir << " --> " << app_install_dir;
   installApp(app_dir, app_install_dir);
   LOG_DEBUG << app.name << ": installing App images: " << app_dir << " --> docker://";
@@ -346,7 +346,7 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
     // TODO: check if App images are installed, require a function to generate sha256 hash while reading data from a
     // file.
     res = true;
-  } while (0);
+  } while (false);
 
   return res;
 }
@@ -385,7 +385,7 @@ bool RestorableAppEngine::isAppInstalled(const App& app) const {
     // TODO: check whether docker store has all App images
 
     res = true;
-  } while (0);
+  } while (false);
 
   return res;
 }
