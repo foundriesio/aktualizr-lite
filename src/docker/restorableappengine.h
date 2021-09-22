@@ -15,7 +15,7 @@ class RestorableAppEngine : public AppEngine {
  public:
   RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                       Docker::RegistryClient::Ptr registry_client, Docker::DockerClient::Ptr docker_client,
-                      std::string client = "skopeo", std::string docker_host = "unix:///var/run/docker.sock",
+                      std::string client = "/sbin/skopeo", std::string docker_host = "unix:///var/run/docker.sock",
                       std::string compose_cmd = "/usr/bin/docker-compose");
 
  public:

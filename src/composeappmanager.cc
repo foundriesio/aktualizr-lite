@@ -49,6 +49,9 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("docker_compose_bin") == 1) {
     compose_bin = raw.at("docker_compose_bin");
   }
+  if (raw.count("skopeo_bin") == 1) {
+    skopeo_bin = raw.at("skopeo_bin");
+  }
 
   if (raw.count("docker_prune") == 1) {
     std::string val = raw.at("docker_prune");
@@ -76,7 +79,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     auto docker_client{std::make_shared<Docker::DockerClient>()};
     auto registry_client{std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint)};
     const auto compose_cmd{boost::filesystem::canonical(cfg_.compose_bin).string() + " "};
-    const std::string skopeo_cmd{"skopeo"};
+    const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
     const std::string docker_host{"unix:///var/run/docker.sock"};
 
     if (!!cfg_.reset_apps) {
