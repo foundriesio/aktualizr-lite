@@ -13,6 +13,9 @@ namespace Docker {
 
 const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
 
+template <typename... Args>
+static void exec(const boost::format& cmd, const std::string& err_msg, Args&&... args);
+
 RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                                          Docker::RegistryClient::Ptr registry_client,
                                          Docker::DockerClient::Ptr docker_client, std::string client,
@@ -216,7 +219,7 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
 
     const std::string blob_sha = entry.path().filename().native();
     if (blob_shortlist.end() == blob_shortlist.find(blob_sha)) {
-      LOG_DEBUG << "Removing blob: " << entry.path();
+      LOG_INFO << "Removing blob: " << entry.path();
       boost::filesystem::remove_all(entry.path());
     }
   }
@@ -239,10 +242,8 @@ boost::filesystem::path RestorableAppEngine::pullApp(const Uri& uri, const boost
 
   Utils::writeFile(app_dir / Manifest::Filename, manifest);
   // extract docker-compose.yml, temporal hack, we don't need to extract it
-  auto cmd = boost::str(boost::format("tar -xzf %s %s") % archive_full_path % ComposeFile);
-  if (0 != boost::process::system(cmd, boost::this_process::environment(), boost::process::start_dir = app_dir)) {
-    throw std::runtime_error("failed to extract the compose app archive: " + archive_full_path.string());
-  }
+  exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "failed to extract the compose app archive",
+       boost::process::start_dir = app_dir);
 
   return app_dir / ComposeFile;
 }
@@ -290,10 +291,8 @@ void RestorableAppEngine::installApp(const boost::filesystem::path& app_dir, con
   const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
 
   boost::filesystem::create_directories(dst_dir);
-  auto cmd = boost::str(boost::format("tar --overwrite -xzf %s") % archive_full_path.string());
-  if (0 != boost::process::system(cmd, boost::process::start_dir = dst_dir)) {
-    throw std::runtime_error("failed to install Compose App: " + app_dir.string());
-  }
+  exec(boost::format{"tar --overwrite -xzf %s"} % archive_full_path.string(), "failed to install Compose App",
+       boost::process::start_dir = dst_dir);
 }
 
 void RestorableAppEngine::installAppImages(const boost::filesystem::path& app_dir) {
@@ -363,12 +362,9 @@ bool RestorableAppEngine::isAppInstalled(const App& app) const {
     const auto archive_manifest_hash{HashedDigest(manifest.archiveDigest()).hash()};
     const auto archive_full_path{app_dir / (archive_manifest_hash + Manifest::ArchiveExt)};
 
-    auto cmd = boost::str(boost::format("tar -xzf %s %s") % archive_full_path % ComposeFile);
-    if (0 != boost::process::system(cmd, boost::this_process::environment(), boost::process::start_dir = app_dir)) {
-      LOG_DEBUG << app.name
-                << ": failed to extract a compose file from the compose app archive: " + archive_full_path.string();
-      break;
-    }
+    exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile,
+         app.name + ": failed to extract a compose file from the compose app archive",
+         boost::this_process::environment(), boost::process::start_dir = app_dir);
 
     const auto compose_file_str = Utils::readFile(app_dir / ComposeFile);
     const auto compose_file_hash =
@@ -422,40 +418,33 @@ void RestorableAppEngine::pullImage(const std::string& client, const std::string
                                     const boost::filesystem::path& dst_dir,
                                     const boost::filesystem::path& shared_blob_dir, const std::string& format) {
   boost::filesystem::create_directories(dst_dir);
-
-  boost::format cmd_fmt{"%s copy -f %s --dest-shared-blob-dir %s docker://%s oci:%s"};
-  const auto cmd{boost::str(cmd_fmt % client % format % shared_blob_dir.string() % uri % dst_dir.string())};
-
-  if (0 != boost::process::system(cmd, boost::this_process::environment())) {
-    throw std::runtime_error("failed to install image " + uri);
-  }
+  exec(boost::format{"%s copy -f %s --dest-shared-blob-dir %s docker://%s oci:%s"} % client % format %
+           shared_blob_dir.string() % uri % dst_dir.string(),
+       "failed to pull image", boost::this_process::environment());
 }
 
 void RestorableAppEngine::installImage(const std::string& client, const boost::filesystem::path& image_dir,
                                        const boost::filesystem::path& shared_blob_dir, const std::string& docker_host,
                                        const std::string& tag, const std::string& format) {
-  boost::format cmd_fmt{"%s copy -f %s --dest-daemon-host %s --src-shared-blob-dir %s oci:%s docker-daemon:%s"};
-  std::string cmd{
-      boost::str(cmd_fmt % client % format % docker_host % shared_blob_dir.string() % image_dir.string() % tag)};
-  if (0 != boost::process::system(cmd, boost::this_process::environment())) {
-    throw std::runtime_error("failed to install image ");
-  }
+  exec(boost::format{"%s copy -f %s --dest-daemon-host %s --src-shared-blob-dir %s oci:%s docker-daemon:%s"} % client %
+           format % docker_host % shared_blob_dir.string() % image_dir.string() % tag,
+       "failed to install image", boost::this_process::environment());
 }
 
 void RestorableAppEngine::startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
                                           const std::string& flags) {
-  boost::format cmd_fmt{"%s up %s"};
-  const auto cmd{boost::str(cmd_fmt % compose_cmd % flags)};
-  if (0 != boost::process::system(cmd, boost::process::start_dir = app_dir)) {
-    throw std::runtime_error("failed to bring Compose App up: " + cmd);
-  }
+  exec(boost::format{"%s up %s"} % compose_cmd % flags, "failed to bring Compose App up",
+       boost::process::start_dir = app_dir);
 }
 
 void RestorableAppEngine::stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
-  boost::format cmd_fmt{"%s down"};
-  const auto cmd{boost::str(cmd_fmt % compose_cmd)};
-  if (0 != boost::process::system(cmd, boost::process::start_dir = app_dir)) {
-    throw std::runtime_error("failed to bring Compose App down: " + cmd);
+  exec(boost::format{"%s down"} % compose_cmd, "failed to bring Compose App down", boost::process::start_dir = app_dir);
+}
+
+template <typename... Args>
+void exec(const boost::format& cmd, const std::string& err_msg, Args&&... args) {
+  if (0 != boost::process::system(cmd.str(), std::forward<Args>(args)...)) {
+    throw std::runtime_error(err_msg + "; cmd: " + cmd.str());
   }
 }
 
