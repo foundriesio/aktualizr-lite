@@ -145,6 +145,7 @@ Json::Value RestorableAppEngine::getRunningAppsInfo() const {
 
 void RestorableAppEngine::prune(const Apps& app_shortlist) {
   std::unordered_set<std::string> blob_shortlist;
+  bool prune_docker_store{false};
 
   for (const auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(apps_root_), {})) {
     if (!boost::filesystem::is_directory(entry)) {
@@ -157,6 +158,8 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
     if (foundAppIt == app_shortlist.end()) {
       // remove App dir tree since it's not found in the shortlist
       boost::filesystem::remove_all(entry.path());
+      LOG_INFO << "Removing App dir: " << entry.path();
+      prune_docker_store = true;
       continue;
     }
 
@@ -174,7 +177,9 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
 
       const std::string app_version_dir = entry.path().filename().native();
       if (app_version_dir != uri.digest.hash()) {
+        LOG_INFO << "Removing App version dir: " << entry.path();
         boost::filesystem::remove_all(entry.path());
+        prune_docker_store = true;
         continue;
       }
 
@@ -221,11 +226,14 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
     if (blob_shortlist.end() == blob_shortlist.find(blob_sha)) {
       LOG_INFO << "Removing blob: " << entry.path();
       boost::filesystem::remove_all(entry.path());
+      prune_docker_store = true;
     }
   }
 
   // prune docker store
-  ComposeAppEngine::pruneDockerStore();
+  if (prune_docker_store) {
+    ComposeAppEngine::pruneDockerStore();
+  }
 }
 
 // protected & private implementation
