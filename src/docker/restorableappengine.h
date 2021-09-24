@@ -8,6 +8,67 @@
 
 namespace Docker {
 
+/**
+ * @brief RestorableAppEngine, implementation of App Engine that can reset or restore Apps in case of docker engine
+ * failure
+ *
+ *
+ * PackageManagerInterface::fetchTarget()
+ * - Pulls Apps from Registries by using `skopeo` and store Apps' content under the folder defined in
+ * sota.toml:[pacman].reset_apps_root param
+ *
+ * PackageManagerInterface::install()
+ * - Copy Apps' content from sota.toml:[pacman].reset_apps_root to sota.toml:[pacman].compose_apps_root and a docker
+ * store;
+ * - Bring Apps up, `docker-compose up [--no-start]` for each App dir in sota.toml:[pacman].compose_apps_root;
+ *
+ *
+ * Store layout
+ *
+ * sota.toml:[pacman].reset_apps_root/
+ *      apps/
+ *        <app-name>/
+ *          <app-hash>/
+ *            manifest.json (refers to the App archive)
+ *            <app-archive-hash>.tgz (contains docker-compose.yml and accompanied files)
+ *            /images/
+ *              <registry-host-name>/
+ *                <factory|org>/
+ *                  <repo|image-name>/
+ *                    <image-hash>/
+ *                      index.json (refers to the image manifest blob)
+ *                      oci-layout
+ *
+ *
+ *      blobs/
+ *        sha256/ (it contains manifest, container config and layer blobs)
+ *          <blob-01>
+ *          ...
+ *          <blob-N>
+ *
+ *
+ * Compose App dir layout
+ *
+ * sota.toml:[pacman].compose_apps_root/
+ *   <app-name>/ (content of App archive is extracted into this directory)
+ *     docker-compose.yml
+ *     [optional App additionl files]
+ *
+ *
+ * Docker image&layer store layout
+ *
+ * <docker-data-root>/
+ *   image/
+ *     overlay2/
+ *       repositories.json (`docker images` entry point, maps an image URI to the images present in the store)
+ *       imagedb/
+ *         metadata/ (engine specific metadata about images)
+ *         content/ (image manifests, each image config and its layers)
+ *       layerdb/ (references on the extracted/unpacked layer filesystems located under <docker-data-root>/overlay2) as
+ * well as R/W top-layer mounts
+ *
+ */
+
 class RestorableAppEngine : public AppEngine {
  public:
   static const std::string ComposeFile;
