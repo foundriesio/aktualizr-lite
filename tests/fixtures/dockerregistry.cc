@@ -37,6 +37,7 @@ class DockerRegistry {
   AppEngine::App addApp(const ComposeApp::Ptr& app) {
     auto app_uri = base_url_ + '/' + repo_ + '/' + app->name() + '@' + "sha256:" + app->hash();
     manifest2app_.emplace("sha256:" + app->hash(), app);
+    manifest2pull_numb_.emplace("sha256:" + app->hash(), 0);
     blob2app_.emplace("sha256:" + app->archHash(), app);
 
     Utils::writeFile(dir_ / app->image().name() / "blobs" / app->image().layerBlob().hash, app->image().layerBlob().data);
@@ -45,12 +46,21 @@ class DockerRegistry {
     return {app->name(), app_uri};
   }
 
-  std::string getAppManifest(const std::string &url) const {
+  std::string getAppManifest(const std::string &url) {
     auto digest = parseUrl(url, "manifests");
     if (manifest2app_.count(digest) == 0) {
       return ""; //TODO: throw exception
     }
+    ++manifest2pull_numb_.at(digest);
     return manifest2app_.at(digest)->manifest();
+  }
+
+  int getAppManifestPullNumb(const std::string &app_uri) const {
+    const Docker::Uri uri{Docker::Uri::parseUri(app_uri)};
+    if (manifest2app_.count(uri.digest()) == 0) {
+      return 0;
+    }
+    return manifest2pull_numb_.at(uri.digest());
   }
 
   std::string getAppArchive(const std::string &url) const {
@@ -145,6 +155,7 @@ class DockerRegistry {
   boost::process::child process_;
 
   std::unordered_map<std::string, ComposeApp::Ptr> manifest2app_;
+  std::unordered_map<std::string, int> manifest2pull_numb_;
   std::unordered_map<std::string, ComposeApp::Ptr> blob2app_;
 };
 

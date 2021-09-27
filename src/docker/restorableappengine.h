@@ -91,7 +91,7 @@ class RestorableAppEngine : public AppEngine {
 
  private:
   // pull App&Images
-  boost::filesystem::path pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
+  void pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
   void pullAppImages(const boost::filesystem::path& app_compose_file, const boost::filesystem::path& dst_dir);
 
   // install App&Images

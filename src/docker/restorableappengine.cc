@@ -36,9 +36,15 @@ bool RestorableAppEngine::fetch(const App& app) {
   try {
     const Uri uri{Uri::parseUri(app.uri)};
     const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
-    LOG_DEBUG << app.name << ": downloading App from Registry: " << app.uri << " --> " << app_dir;
-    const auto app_compose_file{pullApp(uri, app_dir)};
+    const auto app_compose_file{app_dir / ComposeFile};
 
+    if (!isAppFetched(app)) {
+      LOG_DEBUG << app.name << ": downloading App from Registry: " << app.uri << " --> " << app_dir;
+      pullApp(uri, app_dir);
+    }
+
+    // Invoke download of App images unconditionally because `skopeo` is supposed
+    // to skip already downloaded image blobs internally while performing `copy` command
     const auto images_dir{app_dir / "images"};
     LOG_DEBUG << app.name << ": downloading App images from Registry(ies): " << app.uri << " --> " << images_dir;
     pullAppImages(app_compose_file, images_dir);
@@ -238,7 +244,7 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
 
 // protected & private implementation
 
-boost::filesystem::path RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path& app_dir) {
+void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path& app_dir) {
   boost::filesystem::create_directories(app_dir);
 
   const Manifest manifest{registry_client_->getAppManifest(uri, Manifest::Format)};
@@ -248,12 +254,10 @@ boost::filesystem::path RestorableAppEngine::pullApp(const Uri& uri, const boost
   registry_client_->downloadBlob(archive_uri, archive_full_path, manifest.archiveSize());
   // TODO: verify archive
 
-  Utils::writeFile(app_dir / Manifest::Filename, manifest);
+  Utils::writeFile(app_dir / Manifest::Filename, Utils::jsonToCanonicalStr(manifest));
   // extract docker-compose.yml, temporal hack, we don't need to extract it
   exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "failed to extract the compose app archive",
        boost::process::start_dir = app_dir);
-
-  return app_dir / ComposeFile;
 }
 
 void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compose_file,
@@ -318,7 +322,6 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
   bool res{false};
   const Uri uri{Uri::parseUri(app.uri)};
   const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
-  const auto app_install_dir{install_root_ / app.name};
 
   do {
     if (!boost::filesystem::exists(app_dir)) {
@@ -333,6 +336,17 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
     }
 
     const Manifest manifest{Utils::parseJSONFile(manifest_file)};
+    const std::string manifest_str{Utils::jsonToCanonicalStr(manifest)};
+    const auto manifest_hash =
+        boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(manifest_str)));
+
+    if (manifest_hash != uri.digest.hash()) {
+      LOG_DEBUG << app.name << ": App manifest hash mismatch; actual: " << manifest_hash
+                << "; expected: " << uri.digest.hash();
+      break;
+    }
+
+    // verify App archive/blob hash
     const auto archive_manifest_hash{HashedDigest(manifest.archiveDigest()).hash()};
     const auto archive_full_path{app_dir / (archive_manifest_hash + Manifest::ArchiveExt)};
     if (!boost::filesystem::exists(archive_full_path)) {
@@ -350,8 +364,9 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
       break;
     }
 
-    // TODO: check if App images are installed, require a function to generate sha256 hash while reading data from a
-    // file.
+    // No need to check hashes of a Merkle tree of each App image
+    // since skopeo does it internally within in the `skopeo copy` command
+
     res = true;
   } while (false);
 
