@@ -20,7 +20,6 @@ Uri Uri::parseUri(const std::string& uri) {
 
   auto app = uri.substr(app_name_pos + 1, split_pos - app_name_pos - 1);
   auto digest = uri.substr(split_pos + 1);
-  LOG_DEBUG << app << ": App digest: " << digest;
 
   auto factory_name_pos = uri.rfind('/', app_name_pos - 1);
   if (factory_name_pos == std::string::npos) {
@@ -28,13 +27,8 @@ Uri Uri::parseUri(const std::string& uri) {
   }
 
   auto factory = uri.substr(factory_name_pos + 1, app_name_pos - factory_name_pos - 1);
-  LOG_DEBUG << app << ": Factory: " << factory;
-
   auto repo = uri.substr(factory_name_pos + 1, split_pos - factory_name_pos - 1);
-  LOG_DEBUG << app << ": App Repo: " << repo;
-
   auto registry_hostname = uri.substr(0, factory_name_pos);
-  LOG_DEBUG << app << ": App Registry hostname: " << registry_hostname;
 
   return Uri{HashedDigest{digest}, app, factory, repo, registry_hostname};
 }
