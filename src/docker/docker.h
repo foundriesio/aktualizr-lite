@@ -40,6 +40,7 @@ struct Manifest : Json::Value {
   static constexpr const char* const ArchiveExt{".tgz"};
   static constexpr const char* const Filename{"manifest.json"};
 
+  explicit Manifest(const std::string& json_str) : Manifest(Utils::parseJSON(json_str)) {}
   explicit Manifest(const Json::Value& value = Json::Value()) : Json::Value(value) {
     auto manifest_version{(*this)["annotations"]["compose-app"].asString()};
     if (manifest_version.empty()) {
@@ -90,7 +91,7 @@ class RegistryClient {
   RegistryClient(std::shared_ptr<HttpInterface> ota_lite_client, std::string auth_creds_endpoint = DefAuthCredsEndpoint,
                  HttpClientFactory http_client_factory = RegistryClient::DefaultHttpClientFactory);
 
-  Json::Value getAppManifest(const Uri& uri, const std::string& format) const;
+  std::string getAppManifest(const Uri& uri, const std::string& format) const;
   void downloadBlob(const Uri& uri, const boost::filesystem::path& filepath, size_t expected_size) const;
 
  private:

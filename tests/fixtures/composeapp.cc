@@ -103,7 +103,9 @@ class ComposeApp {
     manifest["annotations"]["compose-app"] = "v1";
     manifest["layers"][0]["digest"] = "sha256:" + arch_hash_;
     manifest["layers"][0]["size"] = arch_.size();
-    manifest_ = Utils::jsonToCanonicalStr(manifest);
+    // emulate compose-publish work, i.e. calculate hash on a manifest json as it is,
+    // no need to normalize it to a canonical representation
+    manifest_ = Utils::jsonToStr(manifest);
     hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(manifest_)));
     return hash_;
   }
