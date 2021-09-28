@@ -145,8 +145,9 @@ class AkliteClient {
    *   AkliteClient c(AkliteClient::CONFIG_DIRS)
    *
    * @param config_dirs The list of files/directories to parse sota toml from.
+   * @param rw Run this client in a read-write mode (can do updates)
    */
-  AkliteClient(const std::vector<boost::filesystem::path> &config_dirs);
+  AkliteClient(const std::vector<boost::filesystem::path> &config_dirs, bool read_only = false);
   /**
    * Used for unit-testing purposes.
    */
@@ -207,6 +208,7 @@ class AkliteClient {
   static std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  private:
+  bool read_only_{false};
   std::shared_ptr<LiteClient> client_;
   std::vector<std::string> secondary_hwids_;
   mutable bool configUploaded_{false};

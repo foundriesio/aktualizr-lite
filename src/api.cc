@@ -1,5 +1,6 @@
 #include "aktualizr-lite/api.h"
 
+#include <sys/file.h>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
@@ -47,12 +48,33 @@ std::ostream& operator<<(std::ostream& os, const InstallResult& res) {
   return os;
 }
 
-AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs) {
+static void assert_lock() {
+  // Leave this open for the remainder of the process to keep the lock held
+  int fd = open("/var/lock/aklite.lock", O_CREAT | O_RDONLY, 0444);
+  if (fd == -1) {
+    throw std::system_error(errno, std::system_category(), "An error occurred opening the aklite lock");
+  }
+
+  if (flock(fd, LOCK_NB | LOCK_EX) == -1) {
+    if (errno == EWOULDBLOCK) {
+      throw std::runtime_error("Failed to obtain the aklite lock, another instance must be running !!!");
+    }
+    throw std::system_error(errno, std::system_category(), "An error occurred obtaining the aklite lock");
+  }
+}
+
+AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only) {
+  read_only_ = read_only;
   Config config(config_dirs);
-  config.telemetry.report_network = !config.tls.server.empty();
-  config.telemetry.report_config = !config.tls.server.empty();
+  if (!read_only_) {
+    assert_lock();
+    config.telemetry.report_network = !config.tls.server.empty();
+    config.telemetry.report_config = !config.tls.server.empty();
+  }
   client_ = std::make_unique<LiteClient>(config, nullptr);
-  client_->finalizeInstall();
+  if (!read_only_) {
+    client_->finalizeInstall();
+  }
 }
 
 static bool compareTargets(const TufTarget& a, const TufTarget& b) { return a.Version() < b.Version(); }
@@ -221,6 +243,9 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
 }
 
 std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason) const {
+  if (read_only_) {
+    throw std::runtime_error("Can't perform this operation from read-only mode");
+  }
   std::unique_ptr<Uptane::Target> target;
   for (const auto& tt : client_->allTargets()) {
     if (tt.filename() == t.Name()) {
@@ -251,6 +276,9 @@ bool AkliteClient::IsRollback(const TufTarget& t) const {
 }
 
 InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus) {
+  if (read_only_) {
+    throw std::runtime_error("Can't perform this operation from read-only mode");
+  }
   std::vector<std::string> hwids;
   Json::Value data;
   for (const auto& ecu : ecus) {
