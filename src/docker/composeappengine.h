@@ -21,6 +21,7 @@ class ComposeAppEngine : public AppEngine {
                    Docker::RegistryClient::Ptr registry_client);
 
   bool fetch(const App& app) override;
+  bool verify(const App& app) override;
   bool install(const App& app) override;
   bool run(const App& app) override;
   void remove(const App& app) override;
@@ -118,7 +119,6 @@ class ComposeAppEngine : public AppEngine {
   static std::pair<bool, std::string> cmd(const std::string& cmd);
 
   bool download(const App& app);
-  bool verify(const App& app);
   bool pullImages(const App& app);
   bool installApp(const App& app);
   bool start(const App& app);

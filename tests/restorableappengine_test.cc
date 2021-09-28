@@ -58,6 +58,7 @@ TEST_F(RestorableAppEngineTest, Fetch) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
@@ -65,6 +66,7 @@ TEST_F(RestorableAppEngineTest, FetchAndInstall) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-02"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
   ASSERT_FALSE(app_engine->isRunning(app));
   ASSERT_TRUE(app_engine->install(app));
   ASSERT_FALSE(app_engine->isRunning(app));
@@ -74,6 +76,7 @@ TEST_F(RestorableAppEngineTest, FetchAndRun) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-03"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
   ASSERT_TRUE(app_engine->run(app));
   ASSERT_TRUE(app_engine->isRunning(app));
 }
@@ -85,6 +88,7 @@ TEST_F(RestorableAppEngineTest, FetchFetchAndRun) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-031"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
   ASSERT_FALSE(app_engine->isRunning(app));
   ASSERT_EQ(1, registry.getAppManifestPullNumb(app.uri));
 
@@ -101,6 +105,7 @@ TEST_F(RestorableAppEngineTest, FetchInstallAndRun) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-04"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
   ASSERT_TRUE(app_engine->install(app));
   ASSERT_TRUE(app_engine->run(app));
   ASSERT_TRUE(app_engine->isRunning(app));
@@ -110,6 +115,7 @@ TEST_F(RestorableAppEngineTest, FetchRunAndUpdate) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-05"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
   ASSERT_TRUE(app_engine->run(app));
   ASSERT_TRUE(app_engine->isRunning(app));
 
@@ -117,6 +123,7 @@ TEST_F(RestorableAppEngineTest, FetchRunAndUpdate) {
   auto updated_app = registry.addApp(fixtures::ComposeApp::create("app-05", "service-01", "image-02"));
   ASSERT_TRUE(app_engine->fetch(updated_app));
   ASSERT_TRUE(app_engine->isFetched(updated_app));
+  ASSERT_TRUE(app_engine->verify(updated_app));
   ASSERT_FALSE(app_engine->isRunning(updated_app));
 
   // run updated App
@@ -134,6 +141,7 @@ TEST_F(RestorableAppEngineTest, FetchRunCompare) {
 
   ASSERT_TRUE(app_engine->fetch(updated_app));
   ASSERT_TRUE(app_engine->isFetched(updated_app));
+  ASSERT_TRUE(app_engine->verify(updated_app));
   ASSERT_FALSE(app_engine->isRunning(updated_app));
   ASSERT_FALSE(app_engine->getRunningAppsInfo().isMember("app-06"));
 
@@ -162,6 +170,7 @@ TEST_F(RestorableAppEngineTest, ManifestFetchFailureAndRun) {
 
     ASSERT_TRUE(app_engine->fetch(app));
     ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
     ASSERT_FALSE(app_engine->isRunning(app));
     ASSERT_EQ(2, registry.getAppManifestPullNumb(app.uri));
   }
@@ -173,6 +182,7 @@ TEST_F(RestorableAppEngineTest, ManifestFetchFailureAndRun) {
 
     ASSERT_TRUE(app_engine->fetch(app));
     ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
     ASSERT_FALSE(app_engine->isRunning(app));
     ASSERT_EQ(3, registry.getAppManifestPullNumb(app.uri));
   }
@@ -194,11 +204,29 @@ TEST_F(RestorableAppEngineTest, AppArchiveFetchFailureAndRun) {
 
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
   ASSERT_FALSE(app_engine->isRunning(app));
   ASSERT_EQ(2, registry.getAppManifestPullNumb(app.uri));
 
   ASSERT_TRUE(app_engine->run(app));
   ASSERT_TRUE(app_engine->isRunning(app));
+}
+
+TEST_F(RestorableAppEngineTest, VerifyFailure) {
+  // invalid service definition, `ports` value must be integer
+  const std::string AppInvalidServiceTemplate = R"(
+      %s:
+        image: %s
+        ports:
+          - foo:bar)";
+
+  auto app =
+      registry.addApp(fixtures::ComposeApp::create("app-005", "service-01", "image-01", AppInvalidServiceTemplate));
+
+  ASSERT_TRUE(app_engine->fetch(app));
+  ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_EQ(1, registry.getAppManifestPullNumb(app.uri));
+  ASSERT_FALSE(app_engine->verify(app));
 }
 
 int main(int argc, char** argv) {

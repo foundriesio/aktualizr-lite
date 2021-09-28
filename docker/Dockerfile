@@ -73,7 +73,8 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   valgrind \
   wget \
   xsltproc \
-  zip
+  zip \
+  docker-compose
 
 RUN ln -s clang-10 /usr/bin/clang && \
     ln -s clang++-10 /usr/bin/clang++

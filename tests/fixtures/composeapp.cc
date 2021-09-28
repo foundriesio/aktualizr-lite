@@ -46,33 +46,33 @@ class Image {
 class ComposeApp {
  public:
   using Ptr = std::shared_ptr<ComposeApp>;
-  const std::string DefaultTemplate = R"(
+  static constexpr const char* const DefaultTemplate = R"(
     services:
-      %s:
-        image: %s
+      %s
         labels:
           io.compose-spec.config-hash: %s
     version: "3.2"
     )";
 
-  const std::string ServiceTemplate = R"(
-    %s:
-      image: %s
-    )";
+  static constexpr const char* const ServiceTemplate = R"(
+      %s:
+        image: %s)";
 
  public:
   static Ptr create(const std::string& name,
-                    const std::string& service = "service-01", const std::string& image = "image-01", const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile) {
+                    const std::string& service = "service-01", const std::string& image = "image-01",
+                    const std::string& service_template = ServiceTemplate,
+                    const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile) {
     Ptr app{new ComposeApp(name, compose_file, "factory/" + image)};
-    app->updateService(service);
+    app->updateService(service, service_template);
     return app;
   }
 
-  const std::string& updateService(const std::string& service) {
+  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate) {
     char service_content[1024];
-    sprintf(service_content, ServiceTemplate.c_str(), service.c_str(), image_.uri().c_str());
+    sprintf(service_content, service_template.c_str(), service.c_str(), image_.uri().c_str());
     auto service_hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(service_content)));
-    sprintf(content_, DefaultTemplate.c_str(), service.c_str(), image_.uri().c_str(), service_hash.c_str());
+    sprintf(content_, DefaultTemplate, service_content, service_hash.c_str());
     return update();
   }
 

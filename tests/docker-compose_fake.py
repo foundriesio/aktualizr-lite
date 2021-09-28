@@ -3,6 +3,7 @@
 import sys
 import logging
 import os
+import subprocess
 import yaml
 import traceback
 import json
@@ -46,6 +47,8 @@ def main():
         app_name = os.path.basename(os.getcwd())
         if cmd == "up":
             up(out_dir, app_name, compose, sys.argv[3:])
+        elif cmd == "config":
+            exit_code = subprocess.call(["docker-compose", "config"], timeout=10)
     except Exception as exc:
         logger.error("Failed to process compose file: {}\n{}".format(exc, traceback.format_exc()))
         exit_code = 1
