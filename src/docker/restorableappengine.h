@@ -81,6 +81,7 @@ class RestorableAppEngine : public AppEngine {
 
  public:
   bool fetch(const App& app) override;
+  bool verify(const App& app) override;
   bool install(const App& app) override;
   bool run(const App& app) override;
   void remove(const App& app) override;
@@ -114,6 +115,7 @@ class RestorableAppEngine : public AppEngine {
                            const boost::filesystem::path& shared_blob_dir, const std::string& docker_host,
                            const std::string& tag, const std::string& format = "v2s2");
 
+  static void verifyComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir);
   static void startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
                               const std::string& flags = "up --remove-orphans -d");
 

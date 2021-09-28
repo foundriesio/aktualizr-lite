@@ -139,8 +139,8 @@ TEST_P(AkliteTest, AppInvalidUpdate) {
   ASSERT_TRUE(app_engine->isRunning(app01));
 
   // update app
-  auto app01_updated =
-      registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02", "incorrect-compose-file.yml"));
+  auto app01_updated = registry.addApp(fixtures::ComposeApp::create(
+      "app-01", "service-01", "image-02", fixtures::ComposeApp::ServiceTemplate, "incorrect-compose-file.yml"));
   auto target02 = createAppTarget({app01_updated});
   updateApps(*client, target01, target02, data::ResultCode::Numeric::kDownloadFailed);
   ASSERT_FALSE(targetsMatch(client->getCurrent(), target02));
@@ -269,6 +269,55 @@ TEST_P(AkliteTest, OstreeAndAppUpdateIfRollback) {
     // emulate do_app_sync
     updateApps(*client, target_01, client->getCurrent());
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+}
+
+TEST_P(AkliteTest, InvalidAppComposeUpdate) {
+  // invalid service definition, `ports` value must be integer
+  const std::string AppInvalidServiceTemplate = R"(
+      %s:
+        image: %s
+        ports:
+          - foo:bar)";
+
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  auto target01 = createAppTarget({app01});
+
+  updateApps(*client, getInitialTarget(), target01);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
+  ASSERT_TRUE(app_engine->isRunning(app01));
+
+  // update app
+  auto app01_updated =
+      registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02", AppInvalidServiceTemplate));
+  auto target02 = createAppTarget({app01_updated});
+
+  const auto app_engine_type{GetParam()};
+
+  // in the case of Restorable App we expect that download/fetch is successfull
+  data::ResultCode::Numeric expected_download_res{data::ResultCode::Numeric::kOk};
+  if (app_engine_type == "ComposeAppEngine") {
+    // App is verified (docker-compose config) at the "fetch" phase for ComposeAppEngine
+    // this is a bug that became a feature bug, so let's adjust to it
+    expected_download_res = data::ResultCode::Numeric::kDownloadFailed;
+  }
+  // updateApps() emulates LiteClient's client which invokes the fecthed Target verification.
+  // the verification is supposed to fail and the installation process is never invoked
+  updateApps(*client, target01, target02, expected_download_res, data::ResultCode::Numeric::kVerificationFailed);
+  ASSERT_FALSE(targetsMatch(client->getCurrent(), target02));
+
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
+  if (app_engine_type == "RestorableAppEngine") {
+    // make sure that the update with invalid App compose file didn't break currently running App
+    // it works only for RestorableAppEngine because in the case of ComposeAppEngine
+    // App content in <compose-apps>/<app-dir> has been already replaced with invalid app01_updated, so
+    // there is no means to check if app01 is running (there is no its docker-compose.yml of file system)
     ASSERT_TRUE(app_engine->isRunning(app01));
   }
 }

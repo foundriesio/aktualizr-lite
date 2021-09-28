@@ -58,6 +58,22 @@ bool RestorableAppEngine::fetch(const App& app) {
   return res;
 }
 
+bool RestorableAppEngine::verify(const App& app) {
+  bool res{false};
+  try {
+    const Uri uri{Uri::parseUri(app.uri)};
+    const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
+    TemporaryDirectory app_tmp_dir;
+    installApp(app_dir, app_tmp_dir.Path());
+    LOG_DEBUG << app.name << ": verifying App: " << app_dir << " --> " << app_tmp_dir.Path();
+    res = EXIT_SUCCESS ==
+          boost::process::system(compose_cmd_ + " config -q", boost::process::start_dir = app_tmp_dir.Path());
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "failed to verify App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
+  }
+  return res;
+}
+
 bool RestorableAppEngine::install(const App& app) {
   bool res{false};
   try {
@@ -255,8 +271,6 @@ void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path&
   const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
 
   registry_client_->downloadBlob(archive_uri, archive_full_path, manifest.archiveSize());
-  // TODO: verify archive
-
   Utils::writeFile(app_dir / Manifest::Filename, manifest_str);
   // extract docker-compose.yml, temporal hack, we don't need to extract it
   exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "failed to extract the compose app archive",
@@ -296,7 +310,9 @@ boost::filesystem::path RestorableAppEngine::installAppAndImages(const App& app)
   auto app_install_dir{install_root_ / app.name};
   LOG_DEBUG << app.name << ": installing App: " << app_dir << " --> " << app_install_dir;
   installApp(app_dir, app_install_dir);
-  LOG_DEBUG << app.name << ": installing App images: " << app_dir << " --> docker://";
+  LOG_DEBUG << app.name << ": verifying App: " << app_install_dir;
+  verifyComposeApp(compose_cmd_, app_install_dir);
+  LOG_DEBUG << app.name << ": installing App images: " << app_dir << " --> docker-daemon://";
   installAppImages(app_dir);
   return app_install_dir;
 }
@@ -458,6 +474,11 @@ void RestorableAppEngine::installImage(const std::string& client, const boost::f
        "failed to install image", boost::this_process::environment());
 }
 
+void RestorableAppEngine::verifyComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
+  exec(boost::format{"%s config"} % compose_cmd, "Compose App verification failed",
+       boost::process::start_dir = app_dir);
+}
+
 void RestorableAppEngine::startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
                                           const std::string& flags) {
   exec(boost::format{"%s up %s"} % compose_cmd % flags, "failed to bring Compose App up",
@@ -470,7 +491,7 @@ void RestorableAppEngine::stopComposeApp(const std::string& compose_cmd, const b
 
 template <typename... Args>
 void exec(const boost::format& cmd, const std::string& err_msg, Args&&... args) {
-  if (0 != boost::process::system(cmd.str(), std::forward<Args>(args)...)) {
+  if (EXIT_SUCCESS != boost::process::system(cmd.str(), std::forward<Args>(args)...)) {
     throw std::runtime_error(err_msg + "; cmd: " + cmd.str());
   }
 }

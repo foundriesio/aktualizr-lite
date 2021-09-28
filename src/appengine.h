@@ -19,6 +19,7 @@ class AppEngine {
 
  public:
   virtual bool fetch(const App& app) = 0;
+  virtual bool verify(const App& app) = 0;
   virtual bool install(const App& app) = 0;
   virtual bool run(const App& app) = 0;
   virtual void remove(const App& app) = 0;

@@ -230,6 +230,24 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   return passed;
 }
 
+TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const {
+  const auto ostree_target_status{RootfsTreeManager::verifyTarget(target)};
+  if (TargetStatus::kGood != ostree_target_status) {
+    return ostree_target_status;
+  }
+
+  AppsContainer all_apps_to_fetch;
+  all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
+  all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
+
+  for (const auto& pair : all_apps_to_fetch) {
+    if (!app_engine_->verify({pair.first, pair.second})) {
+      return TargetStatus::kInvalid;
+    }
+  }
+  return ostree_target_status;
+}
+
 data::InstallationResult ComposeAppManager::install(const Uptane::Target& target) const {
   data::InstallationResult res;
   Uptane::Target current = OstreeManager::getCurrent();
