@@ -39,8 +39,10 @@ bool RestorableAppEngine::fetch(const App& app) {
     const auto app_compose_file{app_dir / ComposeFile};
 
     if (!isAppFetched(app)) {
-      LOG_DEBUG << app.name << ": downloading App from Registry: " << app.uri << " --> " << app_dir;
+      LOG_INFO << app.name << ": downloading App from Registry: " << app.uri << " --> " << app_dir;
       pullApp(uri, app_dir);
+    } else {
+      LOG_INFO << app.name << ": App already fetched: " << app_dir;
     }
 
     // Invoke download of App images unconditionally because `skopeo` is supposed
@@ -283,7 +285,7 @@ void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compo
     const Uri uri{Uri::parseUri(image_uri)};
     const auto image_dir{dst_dir / uri.registryHostname / uri.repo / uri.digest.hash()};
 
-    LOG_DEBUG << uri.app << ": downloading image from Registry: " << image_uri << " --> " << dst_dir;
+    LOG_INFO << uri.app << ": downloading image from Registry if missing: " << image_uri << " --> " << dst_dir;
     pullImage(client_, image_uri, image_dir, blobs_root_);
   }
 }
