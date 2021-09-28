@@ -247,14 +247,15 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
 void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path& app_dir) {
   boost::filesystem::create_directories(app_dir);
 
-  const Manifest manifest{registry_client_->getAppManifest(uri, Manifest::Format)};
+  const std::string manifest_str{registry_client_->getAppManifest(uri, Manifest::Format)};
+  const Manifest manifest{manifest_str};
   Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
   const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
 
   registry_client_->downloadBlob(archive_uri, archive_full_path, manifest.archiveSize());
   // TODO: verify archive
 
-  Utils::writeFile(app_dir / Manifest::Filename, Utils::jsonToCanonicalStr(manifest));
+  Utils::writeFile(app_dir / Manifest::Filename, manifest_str);
   // extract docker-compose.yml, temporal hack, we don't need to extract it
   exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "failed to extract the compose app archive",
        boost::process::start_dir = app_dir);
@@ -335,8 +336,7 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
       break;
     }
 
-    const Manifest manifest{Utils::parseJSONFile(manifest_file)};
-    const std::string manifest_str{Utils::jsonToCanonicalStr(manifest)};
+    const auto manifest_str{Utils::readFile(manifest_file)};
     const auto manifest_hash =
         boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(manifest_str)));
 
@@ -345,6 +345,8 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
                 << "; expected: " << uri.digest.hash();
       break;
     }
+
+    const Manifest manifest{Utils::parseJSON(manifest_str)};
 
     // verify App archive/blob hash
     const auto archive_manifest_hash{HashedDigest(manifest.archiveDigest()).hash()};

@@ -71,7 +71,7 @@ RegistryClient::RegistryClient(std::shared_ptr<HttpInterface> ota_lite_client, s
       ota_lite_client_{std::move(ota_lite_client)},
       http_client_factory_{std::move(http_client_factory)} {}
 
-Json::Value RegistryClient::getAppManifest(const Uri& uri, const std::string& format) const {
+std::string RegistryClient::getAppManifest(const Uri& uri, const std::string& format) const {
   const std::string manifest_url{composeManifestUrl(uri)};
   LOG_DEBUG << "Downloading App manifest: " << manifest_url;
 
@@ -99,7 +99,7 @@ Json::Value RegistryClient::getAppManifest(const Uri& uri, const std::string& fo
   }
 
   LOG_TRACE << "Received App manifest: \n" << manifest_resp.getJson();
-  return manifest_resp.getJson();
+  return manifest_resp.body;
 }
 
 struct DownloadCtx {
