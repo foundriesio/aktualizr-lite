@@ -284,6 +284,7 @@ InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus
   for (const auto& ecu : ecus) {
     Json::Value entry;
     entry["target"] = ecu.target_name;
+    entry["hwid"] = ecu.hwid;
     data[ecu.serial] = entry;
     hwids.emplace_back(ecu.hwid);
   }

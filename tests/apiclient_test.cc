@@ -161,6 +161,7 @@ TEST_F(ApiClientTest, Secondaries) {
   auto events = getDeviceGateway().getEvents();
   ASSERT_EQ(1, events.size());
   ASSERT_EQ("target12", events[0]["123"]["target"].asString());
+  ASSERT_EQ("riscv", events[0]["123"]["hwid"].asString());
 
   auto new_target = createTarget();
   auto secondary_target = createTarget(nullptr, "riscv");
