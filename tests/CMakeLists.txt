@@ -89,6 +89,9 @@ target_link_libraries(t_liteclient ${TEST_LIBS} uptane_generator_lib testutiliti
 add_dependencies(t_liteclient make_ostree_sysroot)
 set_tests_properties(test_liteclient PROPERTIES LABELS "aklite:liteclient")
 
+aktualizr_source_file_checks(liteclient_test.cc)
+
+if(BUILD_P11)
 add_aktualizr_test(NAME liteclientHSM
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> liteclientHSM_test.cc
   PROJECT_WORKING_DIRECTORY
@@ -102,8 +105,9 @@ target_include_directories(t_liteclientHSM PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}
 target_link_libraries(t_liteclientHSM ${TEST_LIBS} uptane_generator_lib testutilities)
 add_dependencies(t_liteclientHSM make_ostree_sysroot)
 set_tests_properties(test_liteclientHSM PROPERTIES LABELS "aklite:liteclientHSM")
+add_dependencies(aklite-tests t_liteclientHSM)
+endif(BUILD_P11)
 
-aktualizr_source_file_checks(liteclient_test.cc)
 aktualizr_source_file_checks(liteclientHSM_test.cc)
 
 add_aktualizr_test(NAME composeappengine
