@@ -4,6 +4,7 @@
 #include <boost/uuid/uuid_io.hpp>
 
 #include "composeappmanager.h"
+#include "storage/invstorage.h"
 
 static bool appListChanged(const Json::Value& target_apps, std::vector<std::string>& cfg_apps_in,
                            const boost::filesystem::path& apps_dir) {

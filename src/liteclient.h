@@ -1,20 +1,27 @@
 #ifndef AKTUALIZR_LITE_CLIENT_H_
 #define AKTUALIZR_LITE_CLIENT_H_
 
-#include "http/httpclient.h"
+#include "gtest/gtest_prod.h"
 #include "libaktualizr/config.h"
-#include "ostree/sysroot.h"
-#include "package_manager/packagemanagerfake.h"
-#include "primary/reportqueue.h"
-#include "storage/invstorage.h"
+#include "libaktualizr/packagemanagerinterface.h"
 #include "uptane/imagerepository.h"
 
 class AppEngine;
+class HttpClient;
+class INvStorage;
+class KeyManager;
+class P11EngineGuard;
+class ReportEvent;
+class ReportQueue;
 
 class LiteClient {
  public:
   LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
              const std::shared_ptr<P11EngineGuard>& p11 = nullptr);
+  // Prevent inlining to enable forward declarations.
+  ~LiteClient();
+  LiteClient(LiteClient&&) = default;
+  LiteClient& operator=(LiteClient&&) = default;
 
   Config config;
   std::vector<std::string> tags;

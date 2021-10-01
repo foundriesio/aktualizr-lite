@@ -9,7 +9,12 @@
 
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
+#include "crypto/p11engine.h"
+#include "http/httpclient.h"
+#include "ostree/sysroot.h"
+#include "primary/reportqueue.h"
 #include "rootfstreemanager.h"
+#include "storage/invstorage.h"
 #include "target.h"
 
 LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11)
@@ -108,6 +113,8 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
 }
+
+LiteClient::~LiteClient() {}  // NOLINT(modernize-use-equals-default, hicpp-use-equals-default)
 
 data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptane::Target>& target) {
   data::InstallationResult ret{data::ResultCode::Numeric::kNeedCompletion, ""};
