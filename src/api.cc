@@ -5,8 +5,10 @@
 #include <boost/uuid/uuid_io.hpp>
 
 #include "helpers.h"
+#include "http/httpclient.h"
 #include "libaktualizr/config.h"
 #include "liteclient.h"
+#include "primary/reportqueue.h"
 
 std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                   "/etc/sota/conf.d/"};

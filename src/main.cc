@@ -8,8 +8,9 @@
 
 #include "crypto/keymanager.h"
 #include "helpers.h"
+#include "http/httpclient.h"
 #include "libaktualizr/config.h"
-
+#include "storage/invstorage.h"
 #include "target.h"
 #include "utilities/aktualizr_version.h"
 

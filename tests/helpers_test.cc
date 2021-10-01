@@ -2,6 +2,8 @@
 
 #include "helpers.h"
 #include "composeappmanager.h"
+#include "primary/reportqueue.h"
+#include "storage/invstorage.h"
 #include "target.h"
 
 static boost::filesystem::path test_sysroot;
