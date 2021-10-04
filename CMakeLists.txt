@@ -51,8 +51,6 @@ if(BUILD_AKLITE)
   include(CTest)
   add_subdirectory(tests EXCLUDE_FROM_ALL)
 
-  add_subdirectory(examples/custom-client-cxx)
-
 endif(BUILD_AKLITE)
 
 # Use `-LH` options (cmake <args> -LH) to output all variables
