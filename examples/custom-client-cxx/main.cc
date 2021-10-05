@@ -1,7 +1,14 @@
 #include <thread>
 
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/expressions.hpp>
+
 #include "aktualizr-lite/api.h"
-#include "logging.h"
+
+#define LOG_INFO    BOOST_LOG_TRIVIAL(info)
+#define LOG_WARNING BOOST_LOG_TRIVIAL(warning)
+#define LOG_ERROR   BOOST_LOG_TRIVIAL(error)
 
 static void reboot(const std::string &reboot_cmd) {
   LOG_INFO << "Device is going to reboot with " << reboot_cmd;
@@ -32,6 +39,8 @@ static std::string get_reboot_cmd(const AkliteClient &client) {
 }
 
 int main(int argc, char **argv) {
+  boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+
   AkliteClient client(AkliteClient::CONFIG_DIRS);
   auto interval = client.GetConfig().get("uptane.polling_sec", 600);
   auto reboot_cmd = get_reboot_cmd(client);
