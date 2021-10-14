@@ -41,7 +41,7 @@ class ClientHSMTest : public ClientTest {
     conf.pacman.ostree_server = device_gateway_.getOsTreeUri();
     conf.pacman.sysroot = sys_repo_.getPath();
     conf.pacman.os = os;
-    conf.pacman.extra["booted"] = "0";
+    conf.pacman.booted = BootedType::kStaged;
     conf.pacman.extra["compose_apps_root"] = compose_apps_root.empty() ?
       (test_dir_.Path() / "compose-apps").string() : compose_apps_root;
 

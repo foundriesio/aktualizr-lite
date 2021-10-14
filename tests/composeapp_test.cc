@@ -159,7 +159,7 @@ class TestSysroot: public OSTree::Sysroot {
 
  public:
     TestSysroot(Hasher hasher, const std::string& sysroot_path):
-      OSTree::Sysroot(sysroot_path, false),
+      OSTree::Sysroot(sysroot_path, BootedType::kStaged),
       hasher_{std::move(hasher)} {}
 
     virtual std::string getCurDeploymentHash() const {
@@ -205,7 +205,7 @@ struct TestClient {
       storage->savePrimaryInstalledVersion(*installedTarget, InstalledVersionUpdateMode::kCurrent);
     }
 
-    sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), false) :
+    sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), BootedType::kStaged) :
                                             std::make_shared<TestSysroot>(sysroot_hasher, config.pacman.sysroot.string());
 
     fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());

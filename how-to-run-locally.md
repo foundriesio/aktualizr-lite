@@ -49,7 +49,7 @@ Make sure that `ostree --version | grep libcurl` produces `libcurl`, if not try 
 
 ### Setup a system rootfs that aktualizr-lite will be managing
 
-#### Init the system rootfs  
+#### Init the system rootfs
 ```
 mkdir sysroot
 export OS=lmp
@@ -104,7 +104,7 @@ cd ..
 ```
 #### Get API token
 $FACTORY_API_TOKEN can be obtain from https://app.foundries.io/settings/tokens/,
-make sure you have chosen at least `devices:create` scope for your API token. 
+make sure you have chosen at least `devices:create` scope for your API token.
 ```
 DEVICE_FACTORY=<you-factory-name> lmp-device-register -d $PWD -n <device-name>  --start-daemon 0 -T $FACTORY_API_TOKEN
 chmod 700 .
@@ -115,7 +115,7 @@ Create a toml file/snippet, e.g. local.toml with the following content.
 [pacman]
 os = "lmp"
 sysroot = "$PWD/sysroot"
-booted = "0"
+booted = "staged"
 docker_compose_bin = "$PWD/venv/bin/docker-compose"
 compose_apps_root = "$PWD/compose-apps"
 

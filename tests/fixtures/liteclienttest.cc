@@ -47,7 +47,7 @@ class ClientTest :virtual public ::testing::Test {
     conf.pacman.type = ComposeAppManager::Name;
     conf.pacman.sysroot = sys_repo_.getPath();
     conf.pacman.os = os;
-    conf.pacman.extra["booted"] = "0";
+    conf.pacman.booted = BootedType::kStaged;
     conf.pacman.extra["compose_apps_root"] = compose_apps_root.empty() ? (test_dir_.Path() / "compose-apps").string() : compose_apps_root;
     if (!!apps) {
       conf.pacman.extra["compose_apps"] = boost::algorithm::join(*apps, ",");

@@ -10,16 +10,15 @@ namespace OSTree {
 
 class Sysroot {
  public:
-  Sysroot(std::string sysroot_path, bool booted = true);
+  Sysroot(std::string sysroot_path, BootedType booted = BootedType::kBooted);
 
   const std::string& path() const { return path_; }
-  std::string type() const { return booted_ ? "booted" : "staged"; }
 
   virtual std::string getCurDeploymentHash() const;
 
  private:
   const std::string path_;
-  const bool booted_;
+  const BootedType booted_;
 
   GObjectUniquePtr<OstreeSysroot> sysroot_;
 };
