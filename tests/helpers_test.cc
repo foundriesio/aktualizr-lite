@@ -36,7 +36,7 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   config.pacman.os = "dummy-os";
-  config.pacman.extra["booted"] = "0";
+  config.pacman.booted = BootedType::kStaged;
   config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
@@ -59,7 +59,7 @@ TEST(helpers, lite_client_finalize) {
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
   config.pacman.os = "dummy-os";
-  config.pacman.extra["booted"] = "0";
+  config.pacman.booted = BootedType::kStaged;
   config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
   config.pacman.extra["compose_apps_tree"] = (cfg_dir.Path() / "apps-tree").string();
   config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
@@ -108,7 +108,7 @@ TEST(helpers, callback) {
   Config bad_config;
   bad_config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   bad_config.pacman.sysroot = test_sysroot;
-  bad_config.pacman.extra["booted"] = "0";
+  bad_config.pacman.booted = BootedType::kStaged;
   bad_config.pacman.os = "dummy-os";
   bad_config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
   bad_config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
@@ -125,7 +125,7 @@ TEST(helpers, callback) {
   Config config;
   config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   config.pacman.sysroot = test_sysroot;
-  config.pacman.extra["booted"] = "0";
+  config.pacman.booted = BootedType::kStaged;
   config.pacman.extra["compose_apps_root"] = (cfg_dir.Path() / "compose_apps").string();
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
@@ -171,7 +171,7 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   config.pacman.type = pacman_type;
   config.pacman.sysroot = test_sysroot;
   config.pacman.extra = extra;
-  config.pacman.extra["booted"] = "0";
+  config.pacman.booted = BootedType::kStaged;
   config.bootloader.reboot_sentinel_dir = cfg_dir.Path();
   config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
   config.pacman.extra["docker_bin"] = "tests/docker_fake.sh";
