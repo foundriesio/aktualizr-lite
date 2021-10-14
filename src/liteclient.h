@@ -89,7 +89,6 @@ class LiteClient {
   Json::Value last_network_info_reported_;
   bool hwinfo_reported_{false};
   bool is_reboot_required_{false};
-  bool booted_sysroot{true};
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

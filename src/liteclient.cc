@@ -70,11 +70,8 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   primary_ecu = ecu_serials[0];
 
   std::vector<std::string> headers;
-  if (config.pacman.extra.count("booted") == 1) {
-    booted_sysroot = boost::lexical_cast<bool>(config.pacman.extra.at("booted"));
-  }
 
-  auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), booted_sysroot);
+  auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), config.pacman.booted);
   auto cur_hash = ostree_sysroot->getCurDeploymentHash();
 
   std::string header("x-ats-ostreehash: ");
@@ -446,7 +443,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
-    is_reboot_required_ = booted_sysroot;
+    is_reboot_required_ = (config.pacman.booted == BootedType::kBooted);
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);

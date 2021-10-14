@@ -20,7 +20,7 @@ class TufRepoMock {
     custom_json["targetFormat"] = "OSTREE";
     custom_json["version"] = version;
     custom_json[Target::ComposeAppField] = apps_json;
-    repo_.addCustomImage(name, hash_obj, 0, hardware_id, "", null_delegation, custom_json);
+    repo_.addCustomImage(name, hash_obj, 0, hardware_id, "", 0, null_delegation, custom_json);
 
     Json::Value target_json;
     target_json["length"] = 0;
