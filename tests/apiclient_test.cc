@@ -126,8 +126,12 @@ TEST_F(ApiClientTest, Rollback) {
   getSysRepo().deploy(getInitialTarget().sha256Hash());
 
   reboot(liteclient);
+  // reboot re-creates an instance of LiteClient so `client` refers to an invalid/removed instance of LiteClient now,
+  // hence we need to re-create an instance of AkliteClient
+  AkliteClient rebooted_client(liteclient);
 
-  ASSERT_TRUE(client.IsRollback(result.GetLatest()));
+  ASSERT_TRUE(rebooted_client.IsRollback(result.GetLatest()));
+  ASSERT_EQ(rebooted_client.GetCurrent().Sha256Hash(), getInitialTarget().sha256Hash());
 }
 
 TEST_F(ApiClientTest, Install) {

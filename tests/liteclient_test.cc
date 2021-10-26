@@ -181,9 +181,7 @@ TEST_F(LiteClientTest, OstreeUpdateRollback) {
   checkHeaders(*client, getInitialTarget());
 
   // make sure we cannot install the bad version
-  std::vector<Uptane::Target> known_but_not_installed_versions;
-  get_known_but_not_installed_versions(*client, known_but_not_installed_versions);
-  ASSERT_TRUE(known_local_target(*client, new_target, known_but_not_installed_versions));
+  ASSERT_TRUE(client->isRollback(new_target));
 
   // make sure we can update a device with a new valid Target
   auto new_target_03 = createTarget();
@@ -218,9 +216,7 @@ TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
 
   // make sure we can install the latest version that has been installed before
   // the succesfully installed Target should be "not known"
-  std::vector<Uptane::Target> known_but_not_installed_versions;
-  get_known_but_not_installed_versions(*client, known_but_not_installed_versions);
-  ASSERT_FALSE(known_local_target(*client, new_target, known_but_not_installed_versions));
+  ASSERT_FALSE(client->isRollback(new_target));
 
   // emulate auto update to the latest
   update(*client, getInitialTarget(), new_target);

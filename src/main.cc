@@ -261,9 +261,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     interval = variables_map["interval"].as<uint64_t>();
   }
 
-  std::vector<Uptane::Target> known_but_not_installed_versions;
-  get_known_but_not_installed_versions(client, known_but_not_installed_versions);
-
   client.reportAktualizrConfiguration();
 
   while (true) {
@@ -289,10 +286,10 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // easy way to find just the bad versions without api/storage changes. As a workaround we
       // just check if the version is not current nor pending nor known (old hash) and never been succesfully installed,
       // if so then skip an update to the such version/Target
-      bool known_target_sha = known_local_target(client, *found_latest_target, known_but_not_installed_versions);
+      bool is_rollback_target = client.isRollback(*found_latest_target);
 
       LOG_INFO << "Latest Target: " << found_latest_target->filename();
-      if (!known_target_sha && !client.isTargetActive(*found_latest_target)) {
+      if (!is_rollback_target && !client.isTargetActive(*found_latest_target)) {
         client.checkForUpdatesEnd(*found_latest_target);
         // New Target is available, try to update a device with it
         std::string reason = "Updating from " + current.filename() + " to " + found_latest_target->filename();
