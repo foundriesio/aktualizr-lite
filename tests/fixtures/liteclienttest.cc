@@ -24,7 +24,7 @@ class ClientTest :virtual public ::testing::Test {
   }
 
   enum class InitialVersion { kOff, kOn, kCorrupted1, kCorrupted2 };
-  enum class UpdateType { kOstree, kApp,  kOstreeApply };
+  enum class UpdateType { kOstree, kApp,  kOstreeApply, kFailed };
 
 
   virtual std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
@@ -140,7 +140,8 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method createTarget
    */
-  Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid="") {
+  Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid = "",
+                              const std::string& rootfs_path = "") {
     const auto& latest_target{getTufRepo().getLatest()};
     std::string version;
     try {
@@ -153,8 +154,12 @@ class ClientTest :virtual public ::testing::Test {
     // update rootfs and commit it into Treehub's repo
     const std::string unique_content = Utils::randomUuid();
     const std::string unique_file = Utils::randomUuid();
-    Utils::writeFile(getSysRootFs().path + "/" + unique_file, unique_content, true);
-    auto hash = getOsTreeRepo().commit(getSysRootFs().path, "lmp");
+    std::string rootfs{rootfs_path};
+    if (rootfs.empty()) {
+      rootfs = getSysRootFs().path;
+    }
+    Utils::writeFile(rootfs + "/" + unique_file, unique_content, true);
+    auto hash = getOsTreeRepo().commit(rootfs, "lmp");
 
     Json::Value apps_json;
     if (apps) {
@@ -202,20 +207,21 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * mehod update
    */
-  void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to) {
+  void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
+              data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kNeedCompletion) {
     device_gateway_.resetEvents();
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
     // TODO: call client->getTarget() once the method is moved to LiteClient
     ASSERT_EQ(client.download(to, ""), data::ResultCode::Numeric::kOk);
-    ASSERT_EQ(client.install(to), data::ResultCode::Numeric::kNeedCompletion);
+    ASSERT_EQ(client.install(to), expected_install_code);
 
     // make sure that the new Target hasn't been applied/finalized before reboot
     ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
     ASSERT_EQ(client.getCurrent().filename(), from.filename());
     checkHeaders(client, from);
-    checkEvents(client, from, UpdateType::kOstreeApply);
+    checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed);
   }
 
   /**
@@ -340,6 +346,7 @@ class ClientTest :virtual public ::testing::Test {
         { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},
         { UpdateType::kApp, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},
         { UpdateType::kOstreeApply, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied" }},
+        { UpdateType::kFailed, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},
     };
     const std::vector<std::string>& expected_events{updateToevents.at(update_type)};
     auto expected_event_it = expected_events.begin();

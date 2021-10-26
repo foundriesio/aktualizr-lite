@@ -322,6 +322,136 @@ TEST_P(AkliteTest, InvalidAppComposeUpdate) {
   }
 }
 
+TEST_P(AkliteTest, RollbackIfOstreeInstallFails) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update both rootfs and add new app
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  std::vector<AppEngine::App> apps{app01};
+  auto target_01 = createTarget(&apps);
+
+  {
+    // update to the latest version
+    update(*client, getInitialTarget(), target_01);
+  }
+
+  {
+    // reboot and make sure that the update succeeded
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    checkHeaders(*client, target_01);
+    checkEvents(*client, target_01, UpdateType::kOstree);
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+
+  {
+    // create a new "bad" Target, it includes both ostree and app update, rootfs is invalid
+    auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02"));
+    std::vector<AppEngine::App> apps{app01_updated};
+
+    TemporaryDirectory broken_rootfs_dir;
+    auto target_02 = createTarget(&apps, "", broken_rootfs_dir.PathString());
+
+    // try to update to the latest version, it must fail because the target's rootfs is invalid (no kernel)
+    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed);
+
+    // emulate next iteration/update cycle of daemon_main
+    client->checkForUpdatesBegin();
+    ASSERT_TRUE(client->isRollback(target_02));
+    const auto app_engine_type{GetParam()};
+    if (app_engine_type == "RestorableAppEngine") {
+      // a download process doesn't "break" currently installed and running retsorable apps
+      // appsInSync cleans any unneeded layers stored in the skopeo/OCI store
+      ASSERT_TRUE(client->appsInSync());
+    } else {
+      ASSERT_FALSE(client->appsInSync());
+      // sync target_01 apps
+      updateApps(*client, client->getCurrent(), client->getCurrent());
+    }
+    client->checkForUpdatesEnd(target_01);
+
+    // make sure the initial target_01 is running
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+}
+
+TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update both rootfs and add new app
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  std::vector<AppEngine::App> apps{app01};
+  auto target_01 = createTarget(&apps);
+
+  {
+    // update to the latest version
+    update(*client, getInitialTarget(), target_01);
+  }
+
+  {
+    // reboot and make sure that the update succeeded
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    checkHeaders(*client, target_01);
+    checkEvents(*client, target_01, UpdateType::kOstree);
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+
+  {
+    // create a new "bad" Target, it includes both ostree and app update, App is invalid
+    auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02",
+                                                                      fixtures::ComposeApp::ServiceTemplate,
+                                                                      Docker::ComposeAppEngine::ComposeFile, false));
+    std::vector<AppEngine::App> apps{app01_updated};
+    auto target_02 = createTarget(&apps);
+
+    // try to update to the latest version, it must fail because App is invalid
+    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed);
+
+    // emulate next iteration/update cycle of daemon_main
+    client->checkForUpdatesBegin();
+    ASSERT_TRUE(client->isRollback(target_02));
+    ASSERT_FALSE(client->appsInSync());
+    // sync target_01 apps
+    updateApps(*client, client->getCurrent(), client->getCurrent());
+    client->checkForUpdatesEnd(target_01);
+
+    // make sure the initial target_01 is running
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+
+  {
+    // create a new "bad" Target, it includes just app update, App is invalid
+    auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-03",
+                                                                      fixtures::ComposeApp::ServiceTemplate,
+                                                                      Docker::ComposeAppEngine::ComposeFile, false));
+    std::vector<AppEngine::App> apps{app01_updated};
+    auto target_02 = createAppTarget(apps);
+
+    // try to update to the latest version, it must fail because App is invalid
+    updateApps(*client, target_01, target_02, data::ResultCode::Numeric::kOk,
+               data::ResultCode::Numeric::kInstallFailed);
+
+    // emulate next iteration/update cycle of daemon_main
+    client->checkForUpdatesBegin();
+    ASSERT_TRUE(client->isRollback(target_02));
+    ASSERT_FALSE(client->appsInSync());
+    // sync target_01 apps
+    updateApps(*client, client->getCurrent(), client->getCurrent());
+    client->checkForUpdatesEnd(target_01);
+
+    // make sure the initial target_01 is running
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(MultiEngine, AkliteTest, ::testing::Values("ComposeAppEngine", "RestorableAppEngine"));
 
 int main(int argc, char** argv) {

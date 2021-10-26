@@ -51,7 +51,9 @@ class ComposeApp {
       %s
         labels:
           io.compose-spec.config-hash: %s
-    version: "3.2"
+    x-status:
+      valid: %s
+    version: "3.8"
     )";
 
   static constexpr const char* const ServiceTemplate = R"(
@@ -62,17 +64,18 @@ class ComposeApp {
   static Ptr create(const std::string& name,
                     const std::string& service = "service-01", const std::string& image = "image-01",
                     const std::string& service_template = ServiceTemplate,
-                    const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile) {
+                    const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile,
+                    bool valid = true) {
     Ptr app{new ComposeApp(name, compose_file, "factory/" + image)};
-    app->updateService(service, service_template);
+    app->updateService(service, service_template, valid);
     return app;
   }
 
-  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate) {
+  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate, bool valid = true) {
     char service_content[1024];
     sprintf(service_content, service_template.c_str(), service.c_str(), image_.uri().c_str());
     auto service_hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(service_content)));
-    sprintf(content_, DefaultTemplate, service_content, service_hash.c_str());
+    sprintf(content_, DefaultTemplate, service_content, service_hash.c_str(), valid?"true":"false");
     return update();
   }
 

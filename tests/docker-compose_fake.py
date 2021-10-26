@@ -15,6 +15,9 @@ logger = logging.getLogger("Fake Docker Compose")
 def up(out_dir, app_name, compose, flags):
     logger.info("Up: " + flags[0] + " " + flags[1])
 
+    if not compose["x-status"]["valid"]:
+        exit(1)
+
     logger.info("Run services...")
     with open(os.path.join(out_dir, "containers.json"), "r") as f:
         containers = json.load(f)
