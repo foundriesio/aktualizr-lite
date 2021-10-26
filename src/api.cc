@@ -265,16 +265,13 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
 }
 
 bool AkliteClient::IsRollback(const TufTarget& t) const {
-  std::vector<Uptane::Target> known_but_not_installed_versions;
-  get_known_but_not_installed_versions(*client_, known_but_not_installed_versions);
-
   Json::Value target_json;
   target_json["hashes"]["sha256"] = t.Sha256Hash();
   target_json["custom"]["targetFormat"] = "OSTREE";
   target_json["length"] = 0;
   Uptane::Target target(t.Name(), target_json);
 
-  return known_local_target(*client_, target, known_but_not_installed_versions);
+  return client_->isRollback(target);
 }
 
 InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus) {

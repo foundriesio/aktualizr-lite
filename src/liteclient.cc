@@ -10,6 +10,7 @@
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
 #include "crypto/p11engine.h"
+#include "helpers.h"
 #include "http/httpclient.h"
 #include "ostree/sysroot.h"
 #include "primary/reportqueue.h"
@@ -162,6 +163,7 @@ bool LiteClient::finalizeInstall() {
     notifyInstallFinished(*pending, ret);
   }
 
+  setKnownVersions();
   return ret.isSuccess();
 }
 
@@ -517,3 +519,9 @@ void LiteClient::logTarget(const std::string& prefix, const Uptane::Target& targ
       prefix, target,
       config.pacman.type == ComposeAppManager::Name ? ComposeAppManager::Config(config.pacman).apps : boost::none);
 }
+
+bool LiteClient::isRollback(const Uptane::Target& target) {
+  return known_local_target(*this, target, known_but_not_installed_versions_);
+}
+
+void LiteClient::setKnownVersions() { get_known_but_not_installed_versions(*this, known_but_not_installed_versions_); }
