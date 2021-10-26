@@ -304,6 +304,12 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
           // no point to continue running TUF cycle (check for update, download, install)
           // since reboot is required to apply/finalize the currently installed update (aka pending update)
           break;
+        } else if (rc == data::ResultCode::Numeric::kInstallFailed) {
+          // If installation of the new Target has failed then do not wait `interval` time for the next update cycle,
+          // just do it immediately in order to sync Apps for the current Target, what effectively leads to Apps'
+          // rollback.
+          client.setAppsNotChecked();
+          continue;
         }
 
       } else {
