@@ -77,7 +77,6 @@ class LiteClient {
                                                 const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
-  void setKnownVersions();
 
  private:
   boost::filesystem::path callback_program;
@@ -91,7 +90,6 @@ class LiteClient {
   bool hwinfo_reported_{false};
   bool is_reboot_required_{false};
   bool booted_sysroot{true};
-  std::vector<Uptane::Target> known_but_not_installed_versions_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

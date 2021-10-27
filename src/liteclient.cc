@@ -163,7 +163,6 @@ bool LiteClient::finalizeInstall() {
     notifyInstallFinished(*pending, ret);
   }
 
-  setKnownVersions();
   return ret.isSuccess();
 }
 
@@ -453,9 +452,8 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
   } else {
     LOG_ERROR << "Unable to install update: " << iresult.description;
-    LOG_ERROR << "Mark " << target.filename() << " as a bad/rollback version";
+    LOG_ERROR << "Marking " << target.filename() << " as a bad/rollback version";
     storage->saveInstalledVersion("", target, InstalledVersionUpdateMode::kNone);
-    setKnownVersions();
     // let go of the lock since we couldn't update
   }
   notifyInstallFinished(target, iresult);
@@ -524,7 +522,7 @@ void LiteClient::logTarget(const std::string& prefix, const Uptane::Target& targ
 }
 
 bool LiteClient::isRollback(const Uptane::Target& target) {
-  return known_local_target(*this, target, known_but_not_installed_versions_);
+  std::vector<Uptane::Target> known_but_not_installed_versions;
+  get_known_but_not_installed_versions(*this, known_but_not_installed_versions);
+  return known_local_target(*this, target, known_but_not_installed_versions);
 }
-
-void LiteClient::setKnownVersions() { get_known_but_not_installed_versions(*this, known_but_not_installed_versions_); }
