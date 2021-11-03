@@ -23,14 +23,26 @@ def up(out_dir, app_name, compose, flags):
         containers = json.load(f)
 
     for service in compose["services"]:
-        container = {"Labels": {}}
         logger.info("Run service " + service)
-        container["Labels"]["com.docker.compose.project"] = app_name
-        container["Labels"]["com.docker.compose.service"] = service
-        container["Labels"]["io.compose-spec.config-hash"] = compose["services"][service]["labels"]["io.compose-spec.config-hash"]
-        container["Image"] = compose["services"][service]["image"]
-        container["State"] = "running" if flags[1] == "-d" else "created"
-        containers.append(container)
+
+        def find_existing_container(config_hash):
+            for c in containers:
+                if c["Labels"]["io.compose-spec.config-hash"] == config_hash:
+                    return c
+            return None
+
+        container = find_existing_container(compose["services"][service]["labels"]["io.compose-spec.config-hash"])
+        if container is None:
+            container = {"Labels": {}}
+            container["Labels"]["com.docker.compose.project"] = app_name
+            container["Labels"]["com.docker.compose.service"] = service
+            container["Labels"]["io.compose-spec.config-hash"] = compose["services"][service]["labels"][
+                "io.compose-spec.config-hash"]
+            container["Image"] = compose["services"][service]["image"]
+            container["State"] = "running" if "-d" in flags else "created"
+            containers.append(container)
+        else:
+            container["State"] = "running" if "-d" in flags else "created"
 
     with open(os.path.join(out_dir, "containers.json"), "w") as f:
         json.dump(containers, f)
