@@ -122,6 +122,7 @@ class ComposeAppEngine : public AppEngine {
   bool pullImages(const App& app);
   bool installApp(const App& app);
   bool start(const App& app);
+  bool areContainersCreated(const App& app);
 
   static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);
   void verifyAppArchive(const App& app, const std::string& archive_file_name);

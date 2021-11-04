@@ -79,6 +79,9 @@ bool RestorableAppEngine::install(const App& app) {
   try {
     const auto app_install_root{installAppAndImages(app)};
     startComposeApp(compose_cmd_, app_install_root, "--remove-orphans --no-start");
+    if (!areContainersCreated(app, (install_root_ / app.name / ComposeFile).string(), docker_client_)) {
+      throw std::runtime_error("failed to create App containers");
+    }
     res = true;
   } catch (const std::exception& exc) {
     LOG_ERROR << "failed to install App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
@@ -91,6 +94,9 @@ bool RestorableAppEngine::run(const App& app) {
   try {
     const auto app_install_root{installAppAndImages(app)};
     startComposeApp(compose_cmd_, app_install_root, "--remove-orphans -d");
+    if (!areContainersCreated(app, (install_root_ / app.name / ComposeFile).string(), docker_client_)) {
+      throw std::runtime_error("failed to create App containers");
+    }
     res = true;
   } catch (const std::exception& exc) {
     LOG_ERROR << "failed to start App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
@@ -431,6 +437,16 @@ bool RestorableAppEngine::isAppInstalled(const App& app) const {
 
 bool RestorableAppEngine::isRunning(const App& app, const std::string& compose_file,
                                     const Docker::DockerClient::Ptr& docker_client) {
+  return checkAppContainers(app, compose_file, docker_client);
+}
+
+bool RestorableAppEngine::areContainersCreated(const App& app, const std::string& compose_file,
+                                               const Docker::DockerClient::Ptr& docker_client) {
+  return checkAppContainers(app, compose_file, docker_client, false);
+}
+
+bool RestorableAppEngine::checkAppContainers(const App& app, const std::string& compose_file,
+                                             const Docker::DockerClient::Ptr& docker_client, bool check_state) {
   ComposeInfo compose{compose_file};
   std::vector<Json::Value> services = compose.getServices();
 
@@ -445,7 +461,9 @@ bool RestorableAppEngine::isRunning(const App& app, const std::string& compose_f
   for (std::size_t i = 0; i < services.size(); i++) {
     std::string service = services[i].asString();
     std::string hash = compose.getHash(services[i]);
-    if (docker_client->isRunning(containers, app.name, service, hash)) {
+    const auto container_state{docker_client->getContainerState(containers, app.name, service, hash)};
+    if (std::get<0>(container_state) /* container exists */ &&
+        (!check_state || std::get<1>(container_state) != "created")) {
       continue;
     }
     LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
