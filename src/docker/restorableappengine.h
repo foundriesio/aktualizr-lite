@@ -107,6 +107,11 @@ class RestorableAppEngine : public AppEngine {
   static bool isRunning(const App& app, const std::string& compose_file,
                         const Docker::DockerClient::Ptr& docker_client);
 
+  static bool areContainersCreated(const App& app, const std::string& compose_file,
+                                   const Docker::DockerClient::Ptr& docker_client);
+  static bool checkAppContainers(const App& app, const std::string& compose_file,
+                                 const Docker::DockerClient::Ptr& docker_client, bool check_state = true);
+
   // functions specific to an image tranfer utility
   static void pullImage(const std::string& client, const std::string& uri, const boost::filesystem::path& dst_dir,
                         const boost::filesystem::path& shared_blob_dir, const std::string& format = "v2s2");

@@ -66,7 +66,7 @@ bool ComposeAppEngine::install(const App& app) {
     switch (state()) {
       case AppState::State::kPulled:
       case AppState::State::kInstallFail: {
-        if (!installApp(app)) {
+        if (!installApp(app) || !areContainersCreated(app)) {
           state.setState(AppState::State::kInstallFail);
           break;
         }
@@ -82,7 +82,7 @@ bool ComposeAppEngine::install(const App& app) {
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get/set App state, fallback to forced install: " << exc.what();
 
-    if (installApp(app)) {
+    if (installApp(app) && areContainersCreated(app)) {
       result = true;
     }
   }
@@ -105,7 +105,7 @@ bool ComposeAppEngine::run(const App& app) {
       case AppState::State::kInstalled:
       case AppState::State::kInstallFail:
       case AppState::State::kStartFailed: {
-        if (!start(app)) {
+        if (!start(app) || !areContainersCreated(app)) {
           state.setState(AppState::State::kStartFailed);
           break;
         }
@@ -120,7 +120,7 @@ bool ComposeAppEngine::run(const App& app) {
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get/set App state, fallback to forced run: " << exc.what();
 
-    if (start(app)) {
+    if (start(app) && areContainersCreated(app)) {
       result = true;
     }
   }
@@ -186,7 +186,9 @@ bool ComposeAppEngine::isRunning(const App& app) const {
     for (std::size_t i = 0; i < services.size(); i++) {
       std::string service = services[i].asString();
       std::string hash = info.getHash(services[i]);
-      if (docker_client_->isRunning(containers, app.name, service, hash)) {
+      const auto container_state{docker_client_->getContainerState(containers, app.name, service, hash)};
+      if (std::get<0>(container_state) /* container exists */ &&
+          std::get<1>(container_state) != "created" /* container was started */) {
         continue;
       }
       LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
@@ -319,6 +321,37 @@ bool ComposeAppEngine::installApp(const App& app) {
 bool ComposeAppEngine::start(const App& app) {
   LOG_INFO << "Starting App";
   const auto result = cmd_streaming(compose_ + "up --remove-orphans -d", app);
+  return result;
+}
+
+bool ComposeAppEngine::areContainersCreated(const App& app) {
+  bool result{false};
+  try {
+    ComposeInfo info((appRoot(app) / ComposeFile).string());
+    std::vector<Json::Value> services = info.getServices();
+    if (services.empty()) {
+      LOG_ERROR << "App: " << app.name << ", no services in docker file!";
+      return false;
+    }
+
+    Json::Value containers;
+    docker_client_->getContainers(containers);
+
+    for (std::size_t i = 0; i < services.size(); i++) {
+      std::string service = services[i].asString();
+      std::string hash = info.getHash(services[i]);
+      const auto container_state{docker_client_->getContainerState(containers, app.name, service, hash)};
+      if (std::get<0>(container_state) /* container exists */) {
+        continue;
+      }
+      LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
+      return false;
+    }
+
+    result = true;
+  } catch (...) {
+    LOG_WARNING << "App: " << app.name << ", cant check if it is running!";
+  }
   return result;
 }
 

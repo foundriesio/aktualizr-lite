@@ -51,8 +51,8 @@ class ComposeApp {
       %s
         labels:
           io.compose-spec.config-hash: %s
-    x-status:
-      valid: %s
+    x-fault-injection:
+      failure-type: %s
     version: "3.8"
     )";
 
@@ -65,17 +65,17 @@ class ComposeApp {
                     const std::string& service = "service-01", const std::string& image = "image-01",
                     const std::string& service_template = ServiceTemplate,
                     const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile,
-                    bool valid = true) {
+                    const std::string& failure = "none") {
     Ptr app{new ComposeApp(name, compose_file, "factory/" + image)};
-    app->updateService(service, service_template, valid);
+    app->updateService(service, service_template, failure);
     return app;
   }
 
-  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate, bool valid = true) {
+  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate, const std::string& failure = "none") {
     char service_content[1024];
     sprintf(service_content, service_template.c_str(), service.c_str(), image_.uri().c_str());
     auto service_hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(service_content)));
-    sprintf(content_, DefaultTemplate, service_content, service_hash.c_str(), valid?"true":"false");
+    sprintf(content_, DefaultTemplate, service_content, service_hash.c_str(), failure.c_str());
     return update();
   }
 

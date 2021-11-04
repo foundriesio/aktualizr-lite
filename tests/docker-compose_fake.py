@@ -15,8 +15,11 @@ logger = logging.getLogger("Fake Docker Compose")
 def up(out_dir, app_name, compose, flags):
     logger.info("Up: " + flags[0] + " " + flags[1])
 
-    if not compose["x-status"]["valid"]:
+    if compose["x-fault-injection"]["failure-type"] == "compose-failure":
         exit(1)
+
+    if compose["x-fault-injection"]["failure-type"] == "container-failure":
+        exit(0)
 
     logger.info("Run services...")
     with open(os.path.join(out_dir, "containers.json"), "r") as f:
