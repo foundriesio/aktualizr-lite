@@ -7,10 +7,12 @@
 #include <string>
 
 #include <boost/filesystem.hpp>
+#include <boost/program_options.hpp>
 #include <boost/property_tree/ptree.hpp>
 
 #include "json/json.h"
 
+class Config;
 class LiteClient;
 
 /**
@@ -145,9 +147,16 @@ class AkliteClient {
    *   AkliteClient c(AkliteClient::CONFIG_DIRS)
    *
    * @param config_dirs The list of files/directories to parse sota toml from.
-   * @param rw Run this client in a read-write mode (can do updates)
+   * @param read_only Run this client in a read-write mode (can do updates)
    */
   AkliteClient(const std::vector<boost::filesystem::path> &config_dirs, bool read_only = false);
+  /**
+   * Construct a client instance with configuration generated from command line
+   * arguments.
+   * @param cmdline_args The map of commandline arguments.
+   * @param read_only Run this client in a read-write mode (can do updates)
+   */
+  AkliteClient(const boost::program_options::variables_map &cmdline_args, bool read_only = false);
   /**
    * Used for unit-testing purposes.
    */
@@ -208,6 +217,8 @@ class AkliteClient {
   static std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  private:
+  void Init(Config &config);
+
   bool read_only_{false};
   std::shared_ptr<LiteClient> client_;
   std::vector<std::string> secondary_hwids_;

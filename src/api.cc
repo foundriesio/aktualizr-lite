@@ -65,9 +65,7 @@ static void assert_lock() {
   }
 }
 
-AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only) {
-  read_only_ = read_only;
-  Config config(config_dirs);
+void AkliteClient::Init(Config& config) {
   if (!read_only_) {
     assert_lock();
     config.telemetry.report_network = !config.tls.server.empty();
@@ -77,6 +75,18 @@ AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_di
   if (!read_only_) {
     client_->finalizeInstall();
   }
+}
+
+AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only) {
+  read_only_ = read_only;
+  Config config(config_dirs);
+  Init(config);
+}
+
+AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_args, bool read_only) {
+  read_only_ = read_only;
+  Config config(cmdline_args);
+  Init(config);
 }
 
 static bool compareTargets(const TufTarget& a, const TufTarget& b) { return a.Version() < b.Version(); }
