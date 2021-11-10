@@ -248,6 +248,8 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
+  // Make sure the metadata is loaded from storage and valid.
+  client_->checkImageMetaOffline();
   std::unique_ptr<Uptane::Target> target;
   for (const auto& tt : client_->allTargets()) {
     if (tt.filename() == t.Name()) {
