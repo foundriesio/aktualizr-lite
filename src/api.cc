@@ -204,6 +204,8 @@ class LiteInstall : public InstallContext {
     return DownloadResult{DownloadResult::Status::Ok, ""};
   }
 
+  std::string GetCorrelationId() override { return target_->correlation_id(); }
+
   void QueueEvent(std::string ecu_serial, SecondaryEvent event, std::string details) override {
     Uptane::EcuSerial serial(ecu_serial);
     std::unique_ptr<ReportEvent> e;
@@ -254,7 +256,8 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
   return installer;
 }
 
-std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason) const {
+std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason,
+                                                        std::string correlation_id) const {
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
@@ -270,8 +273,14 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   if (target == nullptr) {
     return nullptr;
   }
-  boost::uuids::uuid tmp = boost::uuids::random_generator()();
-  auto correlation_id = std::to_string(t.Version()) + "-" + boost::uuids::to_string(tmp);
+  if (correlation_id.empty()) {
+    boost::uuids::uuid tmp = boost::uuids::random_generator()();
+    correlation_id = std::to_string(t.Version()) + "-" + boost::uuids::to_string(tmp);
+  }
+  if (correlation_id.size() > 63) {
+    // The backend will reject this
+    throw std::runtime_error("Correlation ID's must be less than 64 bytes");
+  }
   target->setCorrelationId(correlation_id);
   return std::make_unique<LiteInstall>(client_, std::move(target), reason);
 }

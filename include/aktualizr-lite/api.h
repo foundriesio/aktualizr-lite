@@ -111,6 +111,7 @@ class InstallContext {
   virtual ~InstallContext() = default;
   virtual DownloadResult Download() = 0;
   virtual InstallResult Install() = 0;
+  virtual std::string GetCorrelationId() = 0;
 
   enum class SecondaryEvent {
     DownloadStarted,
@@ -195,7 +196,8 @@ class AkliteClient {
   /**
    * Create an InstallContext object to help drive an update.
    */
-  std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "") const;
+  std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
+                                            std::string correlation_id = "") const;
 
   /**
    * Check if the Target has been installed but failed to boot. This would
