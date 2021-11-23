@@ -10,7 +10,7 @@ namespace Docker {
 
 class ComposeInfo {
  public:
-  ComposeInfo(const std::string& yaml);
+  explicit ComposeInfo(const std::string& yaml);
   std::vector<Json::Value> getServices() const;
   std::string getImage(const Json::Value& service) const;
   std::string getHash(const Json::Value& service) const;

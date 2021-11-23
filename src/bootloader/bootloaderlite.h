@@ -9,8 +9,8 @@ class INvStorage;
 
 class BootloaderLite : public Bootloader {
  public:
-  BootloaderLite(BootloaderConfig config, INvStorage& storage);
-  virtual ~BootloaderLite() {}
+  explicit BootloaderLite(BootloaderConfig config, INvStorage& storage);
+
   void setBootOK() const override;
   void updateNotify() const override;
   void installNotify(const Uptane::Target& target) const override;

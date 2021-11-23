@@ -10,10 +10,14 @@ namespace OSTree {
 
 class Repo {
  public:
-  Repo(std::string path, bool create = false);
+  explicit Repo(std::string path, bool create = false);
   ~Repo();
 
- public:
+  Repo(const Repo&) = delete;
+  Repo(Repo&&) = delete;
+  Repo& operator=(const Repo&) = delete;
+  Repo& operator=(Repo&&) = delete;
+
   void addRemote(const std::string& name, const std::string& url, const std::string& ca, const std::string& cert,
                  const std::string& key);
 
@@ -23,7 +27,6 @@ class Repo {
  private:
   void init(bool create);
 
- private:
   const std::string path_;
   OstreeRepo* repo_;
 };

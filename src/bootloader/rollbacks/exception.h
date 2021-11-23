@@ -6,10 +6,10 @@
 
 class ExceptionRollback : public Rollback {
  public:
-  ExceptionRollback() : Rollback() {}
-  void setBootOK() { throw NotImplementedException(); }
-  void updateNotify() { throw NotImplementedException(); }
-  void installNotify(const Uptane::Target& target) { throw NotImplementedException(); }
+  ExceptionRollback() = default;
+  void setBootOK() override { throw NotImplementedException(); }
+  void updateNotify() override { throw NotImplementedException(); }
+  void installNotify(const Uptane::Target& /*target*/) override { throw NotImplementedException(); }
 };
 
 #endif  // AKTUALIZR_LITE_EXCEPTION_ROLLBACK_H_

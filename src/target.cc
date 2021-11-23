@@ -42,7 +42,8 @@ Json::Value Target::appsJson(const Uptane::Target& target) {
   return target.custom_data().get(Target::ComposeAppField, Json::Value(Json::nullValue));
 }
 
-std::string Target::appsStr(const Uptane::Target& target, boost::optional<std::vector<std::string>> app_shortlist) {
+std::string Target::appsStr(const Uptane::Target& target,
+                            const boost::optional<std::vector<std::string>>& app_shortlist) {
   std::vector<std::string> apps;
   for (const auto& app : Target::Apps(target)) {
     if (!app_shortlist ||

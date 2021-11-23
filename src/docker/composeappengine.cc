@@ -271,7 +271,7 @@ bool ComposeAppEngine::download(const App& app) {
     Manifest manifest{registry_client_->getAppManifest(uri, Manifest::Format)};
 
     const std::string archive_file_name{uri.digest.shortHash() + '.' + app.name + ArchiveExt};
-    Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
+    Docker::Uri archive_uri{uri.createUri(Docker::HashedDigest(manifest.archiveDigest()))};
 
     uint64_t available_storage;
     if (checkAvailableStorageSpace(appRoot(app), available_storage)) {
