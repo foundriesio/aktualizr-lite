@@ -108,6 +108,11 @@ std::ostream &operator<<(std::ostream &os, const DownloadResult &res);
 
 class InstallContext {
  public:
+  InstallContext(const InstallContext &) = delete;
+  InstallContext(InstallContext &&) = delete;
+  InstallContext &operator=(const InstallContext &) = delete;
+  InstallContext &operator=(InstallContext &&) = delete;
+
   virtual ~InstallContext() = default;
   virtual DownloadResult Download() = 0;
   virtual InstallResult Install() = 0;
@@ -124,7 +129,10 @@ class InstallContext {
     InstallFailed,
   };
 
-  virtual void QueueEvent(std::string ecu_serial, SecondaryEvent event, std::string details = "") = 0;
+  virtual void QueueEvent(std::string ecu_serial, SecondaryEvent event, std::string details) = 0;
+
+ protected:
+  InstallContext() = default;
 };
 
 struct SecondaryEcu {
@@ -150,18 +158,18 @@ class AkliteClient {
    * @param config_dirs The list of files/directories to parse sota toml from.
    * @param read_only Run this client in a read-write mode (can do updates)
    */
-  AkliteClient(const std::vector<boost::filesystem::path> &config_dirs, bool read_only = false);
+  explicit AkliteClient(const std::vector<boost::filesystem::path> &config_dirs, bool read_only = false);
   /**
    * Construct a client instance with configuration generated from command line
    * arguments.
    * @param cmdline_args The map of commandline arguments.
    * @param read_only Run this client in a read-write mode (can do updates)
    */
-  AkliteClient(const boost::program_options::variables_map &cmdline_args, bool read_only = false);
+  explicit AkliteClient(const boost::program_options::variables_map &cmdline_args, bool read_only = false);
   /**
    * Used for unit-testing purposes.
    */
-  AkliteClient(std::shared_ptr<LiteClient> client) : client_(client) {}
+  explicit AkliteClient(std::shared_ptr<LiteClient> client) : client_(std::move(client)) {}
 
   /**
    * This method can be run at start up to ensure the correct compose apps

@@ -16,7 +16,6 @@ class ComposeAppEngine : public AppEngine {
   static constexpr const char* const ArchiveExt{".tgz"};
   static constexpr const char* const ComposeFile{"docker-compose.yml"};
 
- public:
   ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin, Docker::DockerClient::Ptr docker_client,
                    Docker::RegistryClient::Ptr registry_client);
 
@@ -33,7 +32,6 @@ class ComposeAppEngine : public AppEngine {
     pruneDockerStore();
   }
 
- public:
   static void pruneDockerStore();
 
  private:
@@ -45,8 +43,12 @@ class ComposeAppEngine : public AppEngine {
    public:
     class File {
      public:
-      File(const std::string& path) : path_{path} {}
+      explicit File(std::string path) : path_{std::move(path)} {}
       ~File() = default;
+      File(const File&) = delete;
+      File(File&&) = delete;
+      File& operator=(const File&) = delete;
+      File& operator=(File&&) = delete;
 
       void write(int val);
       void write(const std::string& val);
@@ -60,10 +62,8 @@ class ComposeAppEngine : public AppEngine {
       void read(void* data, ssize_t size) const;
 
       const std::string path_;
-      int fd_;
     };
 
-   public:
     enum class State {
       kUnknown = 0,
       kDownloaded = 0x10,
@@ -82,6 +82,8 @@ class ComposeAppEngine : public AppEngine {
     ~AppState() = default;
     AppState(const AppState&) = delete;
     AppState& operator=(const AppState&) = delete;
+    AppState(AppState&&) = delete;
+    AppState& operator=(AppState&&) = delete;
 
     static bool exists(const boost::filesystem::path& root);
 
@@ -114,7 +116,6 @@ class ComposeAppEngine : public AppEngine {
     File state_file_;
   };
 
- private:
   bool cmd_streaming(const std::string& cmd, const App& app);
   static std::pair<bool, std::string> cmd(const std::string& cmd);
 
@@ -129,7 +130,6 @@ class ComposeAppEngine : public AppEngine {
   void extractAppArchive(const App& app, const std::string& archive_file_name, bool delete_after_extraction = true);
   boost::filesystem::path appRoot(const App& app) const { return root_ / app.name; }
 
- private:
   const boost::filesystem::path root_;
   const std::string compose_;
   Docker::DockerClient::Ptr docker_client_;

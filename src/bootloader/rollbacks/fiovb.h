@@ -6,9 +6,7 @@
 
 class FiovbRollback : public Rollback {
  public:
-  FiovbRollback() : Rollback() {}
-
-  void setBootOK() {
+  void setBootOK() override {
     std::string sink;
     if (Utils::shell("fiovb_setenv bootcount 0", &sink) != 0) {
       LOG_WARNING << "Failed resetting bootcount";
@@ -18,7 +16,7 @@ class FiovbRollback : public Rollback {
     }
   }
 
-  void updateNotify() {
+  void updateNotify() override {
     std::string sink;
     if (Utils::shell("fiovb_setenv bootcount 0", &sink) != 0) {
       LOG_WARNING << "Failed resetting bootcount";
@@ -31,7 +29,7 @@ class FiovbRollback : public Rollback {
     }
   }
 
-  void installNotify(const Uptane::Target& target) {
+  void installNotify(const Uptane::Target& target) override {
     std::string version = getVersion(target);
     if (version.empty()) {
       return;
@@ -42,7 +40,7 @@ class FiovbRollback : public Rollback {
       sink = std::string();
     }
     LOG_INFO << "Current firmware version: " << sink;
-    if (sink.compare(version) != 0) {
+    if (sink != version) {
       LOG_INFO << "Update firmware to version: " << version;
       if (Utils::shell("fiovb_setenv bootupgrade_available 1", &sink) != 0) {
         LOG_WARNING << "Failed to set bootupgrade_available";

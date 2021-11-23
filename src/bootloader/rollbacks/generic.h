@@ -6,16 +6,14 @@
 
 class GenericRollback : public Rollback {
  public:
-  GenericRollback() : Rollback() {}
-
-  void setBootOK() {
+  void setBootOK() override {
     std::string sink;
     if (Utils::shell("fw_setenv bootcount 0", &sink) != 0) {
       LOG_WARNING << "Failed resetting bootcount";
     }
   }
 
-  void updateNotify() {
+  void updateNotify() override {
     std::string sink;
     if (Utils::shell("fw_setenv bootcount 0", &sink) != 0) {
       LOG_WARNING << "Failed resetting bootcount";

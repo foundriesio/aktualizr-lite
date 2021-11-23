@@ -16,12 +16,13 @@ class ReportQueue;
 
 class LiteClient {
  public:
-  LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
-             const std::shared_ptr<P11EngineGuard>& p11 = nullptr);
-  // Prevent inlining to enable forward declarations.
+  explicit LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
+                      const std::shared_ptr<P11EngineGuard>& p11 = nullptr);
   ~LiteClient();
+  LiteClient(const LiteClient&) = delete;
+  LiteClient& operator=(const LiteClient&) = delete;
   LiteClient(LiteClient&&) = default;
-  LiteClient& operator=(LiteClient&&) = default;
+  LiteClient& operator=(LiteClient&&) = delete;
 
   Config config;
   std::vector<std::string> tags;
@@ -78,7 +79,6 @@ class LiteClient {
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
 
- private:
   boost::filesystem::path callback_program;
   std::unique_ptr<KeyManager> key_manager_;
   std::shared_ptr<PackageManagerInterface> package_manager_;

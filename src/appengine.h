@@ -17,7 +17,6 @@ class AppEngine {
   using Apps = std::vector<App>;
   using Ptr = std::shared_ptr<AppEngine>;
 
- public:
   virtual bool fetch(const App& app) = 0;
   virtual bool verify(const App& app) = 0;
   virtual bool install(const App& app) = 0;
@@ -28,11 +27,11 @@ class AppEngine {
   virtual Json::Value getRunningAppsInfo() const = 0;
   virtual void prune(const Apps& app_shortlist) = 0;
 
- public:
   virtual ~AppEngine() = default;
   AppEngine(const AppEngine&&) = delete;
   AppEngine(const AppEngine&) = delete;
   AppEngine& operator=(const AppEngine&) = delete;
+  AppEngine& operator=(const AppEngine&&) = delete;
 
  protected:
   AppEngine() = default;

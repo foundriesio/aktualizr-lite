@@ -6,7 +6,6 @@
 
 class RollbackFactory {
  public:
-  RollbackFactory() {}
   static std::unique_ptr<Rollback> makeRollback(RollbackMode mode);
 };
 

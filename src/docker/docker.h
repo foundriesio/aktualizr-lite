@@ -11,7 +11,7 @@ namespace Docker {
 struct HashedDigest {
   static const std::string Type;
 
-  HashedDigest(const std::string& hash_digest);
+  explicit HashedDigest(const std::string& hash_digest);
 
   const std::string& operator()() const { return digest_; }
   const std::string& hash() const { return hash_; }
@@ -87,9 +87,9 @@ class RegistryClient {
   static HttpClientFactory DefaultHttpClientFactory;
   using Ptr = std::shared_ptr<RegistryClient>;
 
- public:
-  RegistryClient(std::shared_ptr<HttpInterface> ota_lite_client, std::string auth_creds_endpoint = DefAuthCredsEndpoint,
-                 HttpClientFactory http_client_factory = RegistryClient::DefaultHttpClientFactory);
+  explicit RegistryClient(std::shared_ptr<HttpInterface> ota_lite_client,
+                          std::string auth_creds_endpoint = DefAuthCredsEndpoint,
+                          HttpClientFactory http_client_factory = RegistryClient::DefaultHttpClientFactory);
 
   std::string getAppManifest(const Uri& uri, const std::string& format) const;
   void downloadBlob(const Uri& uri, const boost::filesystem::path& filepath, size_t expected_size) const;
@@ -106,7 +106,6 @@ class RegistryClient {
     return "https://" + uri.registryHostname + SupportedRegistryVersion + uri.repo + BlobEndpoint + uri.digest();
   }
 
- private:
   const std::string auth_creds_endpoint_;
   std::shared_ptr<HttpInterface> ota_lite_client_;
   HttpClientFactory http_client_factory_;

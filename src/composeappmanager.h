@@ -17,7 +17,7 @@ class ComposeAppManager : public RootfsTreeManager {
 
   struct Config {
    public:
-    Config(const PackageConfig& pconfig);
+    explicit Config(const PackageConfig& pconfig);
 
     boost::optional<std::vector<std::string>> apps;
     boost::optional<std::vector<std::string>> reset_apps;
@@ -63,7 +63,6 @@ class ComposeAppManager : public RootfsTreeManager {
   AppsContainer getAppsToFetch(const Uptane::Target& target, bool check_store = true) const;
   void removeDisabledComposeApps(const Uptane::Target& target) const;
 
- private:
   Config cfg_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;
   mutable AppsContainer cur_apps_to_fetch_;

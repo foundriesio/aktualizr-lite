@@ -11,14 +11,19 @@
 
 class Rollback {
  public:
-  Rollback() {}
-  virtual ~Rollback() {}
+  Rollback() = default;
+  virtual ~Rollback() = default;
+  Rollback(const Rollback&) = delete;
+  Rollback(Rollback&&) = delete;
+  Rollback& operator=(const Rollback&) = delete;
+  Rollback& operator=(Rollback&&) = delete;
+
   virtual void setBootOK() {}
   virtual void updateNotify() {}
   virtual void installNotify(const Uptane::Target& target) { (void)target; }
 
  protected:
-  std::string getVersion(const Uptane::Target& target) {
+  static std::string getVersion(const Uptane::Target& target) {
     std::string file;
     for (auto& p : boost::filesystem::directory_iterator("/ostree/deploy/lmp/deploy/")) {
       std::string dir = p.path().string();

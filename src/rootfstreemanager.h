@@ -24,17 +24,15 @@ class RootfsTreeManager : public OstreeManager {
         http_client_{http},
         gateway_url_{pconfig.ostree_server} {}
 
- public:
   bool fetchTarget(const Uptane::Target &target, Uptane::Fetcher &fetcher, const KeyManager &keys,
                    const FetcherProgressCb &progress_cb, const api::FlowControlToken *token) override;
 
  private:
-  std::string getCurrentHash() const { return sysroot_->getCurDeploymentHash(); }
+  std::string getCurrentHash() const override { return sysroot_->getCurDeploymentHash(); }
   void getAdditionalRemotes(std::vector<Remote> &remotes, const std::string &target_name);
 
   void setRemote(const std::string &name, const std::string &url);
 
- private:
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   std::shared_ptr<HttpInterface> http_client_;
   const std::string gateway_url_;

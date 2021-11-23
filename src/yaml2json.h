@@ -6,7 +6,7 @@
 
 class Yaml2Json {
  public:
-  Yaml2Json(const std::string& yaml);
+  explicit Yaml2Json(const std::string& yaml);
   Json::Value root_;
 };
 

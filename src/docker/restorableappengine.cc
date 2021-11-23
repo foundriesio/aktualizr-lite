@@ -273,7 +273,7 @@ void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path&
 
   const std::string manifest_str{registry_client_->getAppManifest(uri, Manifest::Format)};
   const Manifest manifest{manifest_str};
-  Docker::Uri archive_uri{uri.createUri(manifest.archiveDigest())};
+  Docker::Uri archive_uri{uri.createUri(HashedDigest(manifest.archiveDigest()))};
   const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
 
   registry_client_->downloadBlob(archive_uri, archive_full_path, manifest.archiveSize());

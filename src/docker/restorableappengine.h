@@ -73,13 +73,11 @@ class RestorableAppEngine : public AppEngine {
  public:
   static const std::string ComposeFile;
 
- public:
   RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                       Docker::RegistryClient::Ptr registry_client, Docker::DockerClient::Ptr docker_client,
                       std::string client = "/sbin/skopeo", std::string docker_host = "unix:///var/run/docker.sock",
                       std::string compose_cmd = "/usr/bin/docker-compose");
 
- public:
   bool fetch(const App& app) override;
   bool verify(const App& app) override;
   bool install(const App& app) override;
@@ -126,7 +124,6 @@ class RestorableAppEngine : public AppEngine {
 
   static void stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir);
 
- private:
   const boost::filesystem::path store_root_;
   const boost::filesystem::path install_root_;
   const std::string client_;
