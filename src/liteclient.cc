@@ -257,8 +257,8 @@ void LiteClient::notifyInstallFinished(const Uptane::Target& t, data::Installati
   }
 
   if (ir.result_code == data::ResultCode::Numeric::kOk) {
-    callback("install-post", t, "OK");
     writeCurrentTarget(t);
+    callback("install-post", t, "OK");
     notify(t, std_::make_unique<DetailedInstallCompletedReport>(primary_ecu.first, t.correlation_id(), true,
                                                                 ir.description));
   } else {
