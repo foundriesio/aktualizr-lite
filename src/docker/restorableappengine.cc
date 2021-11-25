@@ -2,6 +2,7 @@
 
 #include <unordered_set>
 
+#include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/process.hpp>
 
@@ -275,6 +276,21 @@ void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path&
   const Manifest manifest{manifest_str};
   Docker::Uri archive_uri{uri.createUri(HashedDigest(manifest.archiveDigest()))};
   const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
+
+  boost::system::error_code ec;
+  boost::filesystem::space_info fs_storage_info{boost::filesystem::space(app_dir, ec)};
+  if (ec.failed()) {
+    LOG_WARNING << "Failed to get an available storage size: " << ec.message();
+  } else {
+    // assume that an extracted files total size is up to 10x larger than the archive size
+    // 80% is a storage space watermark, we don't want to fill a storage volume above it
+    auto need_storage = manifest.archiveSize() * 10;
+    auto available = static_cast<boost::uintmax_t>(fs_storage_info.available * 0.8);
+    if (need_storage > available) {
+      throw std::runtime_error("There is no sufficient storage space available to download App archive, available: " +
+                               std::to_string(available) + " need: " + std::to_string(need_storage));
+    }
+  }
 
   registry_client_->downloadBlob(archive_uri, archive_full_path, manifest.archiveSize());
   Utils::writeFile(app_dir / Manifest::Filename, manifest_str);
