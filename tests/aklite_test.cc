@@ -30,9 +30,11 @@ class AkliteTest : public fixtures::ClientTest,
       app_engine =
           std::make_shared<Docker::ComposeAppEngine>(apps_root_dir, compose_cmd, docker_client_, registry_client_);
     } else if (app_engine_type == "RestorableAppEngine") {
+      setAvailableStorageSpace(std::numeric_limits<boost::uintmax_t>::max());
       app_engine = std::make_shared<Docker::RestorableAppEngine>(
           fixtures::ClientTest::test_dir_.Path() / "apps-store", apps_root_dir, registry_client_, docker_client_,
-          registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd);
+          registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd,
+          [this](const boost::filesystem::path& path) { return this->available_storage_space_; });
     } else {
       throw std::invalid_argument("Unsupported AppEngine type: " + app_engine_type);
     }
@@ -51,7 +53,10 @@ class AkliteTest : public fixtures::ClientTest,
     }
   }
 
+  void setAvailableStorageSpace(const boost::uintmax_t& space_size) { available_storage_space_ = space_size; }
+
  private:
+  boost::uintmax_t available_storage_space_;
 };
 
 TEST_P(AkliteTest, OstreeUpdate) {
@@ -78,6 +83,29 @@ TEST_P(AkliteTest, OstreeUpdate) {
 
 TEST_P(AkliteTest, AppUpdate) {
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  auto target01 = createAppTarget({app01});
+
+  updateApps(*client, getInitialTarget(), target01);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
+  ASSERT_TRUE(app_engine->isRunning(app01));
+
+  // update app
+  auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02"));
+  auto target02 = createAppTarget({app01_updated});
+  updateApps(*client, target01, target02);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target02));
+  ASSERT_TRUE(app_engine->isRunning(app01_updated));
+}
+
+TEST_P(AkliteTest, AppUpdateWithoutLayerManifest) {
+  // If a manifest with a layer list is not present an update should succeed anyway, so
+  // the "size-aware" aklite can download Targets created before the "size-aware" compose-publish is deployed.
+  auto app01 = registry.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", Json::Value()));
 
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));

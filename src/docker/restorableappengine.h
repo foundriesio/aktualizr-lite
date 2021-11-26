@@ -3,6 +3,8 @@
 
 #include "appengine.h"
 
+#include <functional>
+
 #include "docker/docker.h"
 #include "docker/dockerclient.h"
 
@@ -72,11 +74,15 @@ namespace Docker {
 class RestorableAppEngine : public AppEngine {
  public:
   static const std::string ComposeFile;
+  using StorageSpaceFunc = std::function<boost::uintmax_t(const boost::filesystem::path&)>;
+
+  static StorageSpaceFunc DefStorageSpaceFunc;
 
   RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                       Docker::RegistryClient::Ptr registry_client, Docker::DockerClient::Ptr docker_client,
                       std::string client = "/sbin/skopeo", std::string docker_host = "unix:///var/run/docker.sock",
-                      std::string compose_cmd = "/usr/bin/docker-compose");
+                      std::string compose_cmd = "/usr/bin/docker-compose",
+                      StorageSpaceFunc storage_space_func = RestorableAppEngine::DefStorageSpaceFunc);
 
   bool fetch(const App& app) override;
   bool verify(const App& app) override;
@@ -91,6 +97,7 @@ class RestorableAppEngine : public AppEngine {
  private:
   // pull App&Images
   void pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
+  void checkAppUpdateSize(const Uri& uri, const boost::filesystem::path& app_dir) const;
   void pullAppImages(const boost::filesystem::path& app_compose_file, const boost::filesystem::path& dst_dir);
 
   // install App&Images
@@ -133,6 +140,7 @@ class RestorableAppEngine : public AppEngine {
   const boost::filesystem::path blobs_root_{store_root_ / "blobs"};
   Docker::RegistryClient::Ptr registry_client_;
   Docker::DockerClient::Ptr docker_client_;
+  StorageSpaceFunc storage_space_func_;
 };
 
 }  // namespace Docker

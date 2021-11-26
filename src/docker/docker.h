@@ -36,6 +36,7 @@ struct Uri {
 
 struct Manifest : Json::Value {
   static constexpr const char* const Format{"application/vnd.oci.image.manifest.v1+json"};
+  static constexpr const char* const IndexFormat{"application/vnd.oci.image.index.v1+json"};
   static constexpr const char* const Version{"v1"};
   static constexpr const char* const ArchiveExt{".tgz"};
   static constexpr const char* const Filename{"manifest.json"};
@@ -70,13 +71,31 @@ struct Manifest : Json::Value {
 
     return arch_size;
   }
+
+  Json::Value layersManifest(const std::string& arch) const {
+    const Json::Value manifests{(*this)["manifests"]};
+    if (!manifests.isArray()) {
+      LOG_WARNING << "App manifest doesn't include layers manifests";
+      return Json::Value();
+    }
+
+    for (Json::ValueConstIterator ii = manifests.begin(); ii != manifests.end(); ++ii) {
+      const auto man_arch{(*ii)["platform"]["architecture"].asString()};
+      if (arch == man_arch) {
+        return *ii;
+      }
+    }
+
+    LOG_WARNING << "App manifest doesn't include a layers manifest of a given architecture: " << arch;
+    return Json::Value();
+  }
 };
 
 class RegistryClient {
  public:
   static constexpr const char* const DefAuthCredsEndpoint{"https://ota-lite.foundries.io:8443/hub-creds/"};
   static const int AuthMaterialMaxSize{1024};
-  static const int ManifestMaxSize{2048};
+  static const int ManifestMaxSize{16384};
   static const size_t MaxBlobSize{std::numeric_limits<int>::max()};
 
   static const std::string ManifestEndpoint;
