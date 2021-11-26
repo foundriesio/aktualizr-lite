@@ -3,6 +3,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/process.hpp>
+#include <limits>
 
 #include "crypto/crypto.h"
 #include "logging/logging.h"
@@ -15,13 +16,17 @@
 
 class RestorableAppEngineTest : public fixtures::AppEngineTest {
  protected:
-  RestorableAppEngineTest() : AppEngineTest(), skopeo_store_root_{test_dir_ / "apps-store"} {}
+  RestorableAppEngineTest()
+      : AppEngineTest(),
+        skopeo_store_root_{test_dir_ / "apps-store"},
+        available_storage_space_{std::numeric_limits<boost::uintmax_t>::max()} {}
   void SetUp() override {
     fixtures::AppEngineTest::SetUp();
 
-    app_engine = std::make_shared<Docker::RestorableAppEngine>(skopeo_store_root_, apps_root_dir, registry_client_,
-                                                               docker_client_, registry.getSkopeoClient(),
-                                                               daemon_.getUrl(), compose_cmd);
+    app_engine = std::make_shared<Docker::RestorableAppEngine>(
+        skopeo_store_root_, apps_root_dir, registry_client_, docker_client_, registry.getSkopeoClient(),
+        daemon_.getUrl(), compose_cmd,
+        [this](const boost::filesystem::path& path) { return this->available_storage_space_; });
   }
 
   void removeAppManifest(const AppEngine::App& app) {
@@ -48,8 +53,11 @@ class RestorableAppEngineTest : public fixtures::AppEngineTest {
     Utils::writeFile(archive_full_path, std::string("foo bar"));
   }
 
+  void setAvailableStorageSpace(const boost::uintmax_t& space_size) { available_storage_space_ = space_size; }
+
  private:
   const boost::filesystem::path skopeo_store_root_;
+  boost::uintmax_t available_storage_space_;
 };
 
 TEST_F(RestorableAppEngineTest, InitDeinit) {}
@@ -79,6 +87,65 @@ TEST_F(RestorableAppEngineTest, FetchAndRun) {
   ASSERT_TRUE(app_engine->verify(app));
   ASSERT_TRUE(app_engine->run(app));
   ASSERT_TRUE(app_engine->isRunning(app));
+}
+
+TEST_F(RestorableAppEngineTest, FetchAndCheckSizeNoManifest) {
+  // If a manifest with a layer list is not present an update should succeed anyway, so
+  // the "size-aware" aklite can download Targets created before the "size-aware" compose-publish is deployed.
+  auto app = registry.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", Json::Value()));
+  ASSERT_TRUE(app_engine->fetch(app));
+  ASSERT_TRUE(app_engine->isFetched(app));
+}
+
+TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInsufficientSpace) {
+  setAvailableStorageSpace(1024);
+  auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  ASSERT_FALSE(app_engine->fetch(app));
+  ASSERT_FALSE(app_engine->isFetched(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+}
+
+TEST_F(RestorableAppEngineTest, FetchAndCheckSizeOverflowLayerSize) {
+  // generate a list of layers an overall size of which exceeds std::uint64_t/std::size_t
+  // layer sizes must be correct, i.e. int64, so we need 2 layers with int64::max + 2
+  Json::Value layers;
+  for (int ii = 0; ii < 3; ++ii) {
+    layers["layers"][ii]["digest"] =
+        "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+    layers["layers"][ii]["size"] = std::numeric_limits<std::int64_t>::max();
+  }
+
+  auto app = registry.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers));
+  ASSERT_FALSE(app_engine->fetch(app));
+  ASSERT_FALSE(app_engine->isFetched(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+}
+
+TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInvalidLayerSize) {
+  {
+    // layer sizes must be int64, we set it to uint64::max to check how the given negative case is handled
+    Json::Value layers;
+    layers["layers"][0]["digest"] =
+        "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+    layers["layers"][0]["size"] = std::numeric_limits<std::uint64_t>::max();
+
+    auto app = registry.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers));
+    ASSERT_FALSE(app_engine->fetch(app));
+    ASSERT_FALSE(app_engine->isFetched(app));
+    ASSERT_FALSE(app_engine->isRunning(app));
+  }
+  {
+    // layer size cannot be negative
+    Json::Value layers;
+    layers["layers"][0]["digest"] =
+        "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+    layers["layers"][0]["size"] = -1024;
+
+    auto app = registry.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers));
+    ASSERT_FALSE(app_engine->fetch(app));
+    ASSERT_FALSE(app_engine->isFetched(app));
+    ASSERT_FALSE(app_engine->isRunning(app));
+  }
 }
 
 /**

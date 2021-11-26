@@ -1,3 +1,6 @@
+#include <limits>
+#include <random>
+
 namespace fixtures {
 
 class Image {
@@ -65,18 +68,37 @@ class ComposeApp {
                     const std::string& service = "service-01", const std::string& image = "image-01",
                     const std::string& service_template = ServiceTemplate,
                     const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile,
-                    const std::string& failure = "none") {
+                    const std::string& failure = "none",
+                    const Json::Value& layers = Json::Value()) {
     Ptr app{new ComposeApp(name, compose_file, "factory/" + image)};
-    app->updateService(service, service_template, failure);
+
+    // layers manifest
+    Json::Value layers_json{layers};
+    if (layers_json.isNull()) {
+      std::random_device rand_dev;
+      std::uniform_int_distribution<std::int64_t> dist{1024, std::numeric_limits<std::uint32_t>::max()};
+      for (int ii = 0; ii < 3; ++ii) {
+        layers_json["layers"][ii]["digest"] = "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+        layers_json["layers"][ii]["size"] = dist(rand_dev);
+      }
+    }
+
+    app->updateService(service, service_template, failure, layers_json);
     return app;
   }
 
-  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate, const std::string& failure = "none") {
+  static Ptr createAppWithCustomeLayers(const std::string& name, const Json::Value& layers) {
+    Ptr app{new ComposeApp(name, Docker::ComposeAppEngine::ComposeFile, "factory/image-01")};
+    app->updateService("service-01", ServiceTemplate, "none", layers);
+    return app;
+  }
+
+  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate, const std::string& failure = "none", const Json::Value& layers = Json::Value()) {
     char service_content[1024];
     sprintf(service_content, service_template.c_str(), service.c_str(), image_.uri().c_str());
     auto service_hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(service_content)));
     sprintf(content_, DefaultTemplate, service_content, service_hash.c_str(), failure.c_str());
-    return update();
+    return update(layers);
   }
 
   const std::string& name() const { return name_; }
@@ -85,12 +107,14 @@ class ComposeApp {
   const std::string& archive() const { return arch_; }
   const std::string& manifest() const { return manifest_; }
   const Image& image() const { return image_; }
+  const std::string& layersManifest() const { return layers_manifest_; }
+  const std::string& layersHash() const { return layers_hash_; }
 
 
  private:
   ComposeApp(const std::string& name, const std::string& compose_file, const std::string& image_name):compose_file_{compose_file}, name_{name}, image_{image_name} {}
 
-  const std::string& update() {
+  const std::string& update(const Json::Value& layers = Json::Value()) {
     TemporaryDirectory app_dir;
     TemporaryFile arch_file{"arch.tgz"};
 
@@ -106,6 +130,29 @@ class ComposeApp {
     manifest["annotations"]["compose-app"] = "v1";
     manifest["layers"][0]["digest"] = "sha256:" + arch_hash_;
     manifest["layers"][0]["size"] = arch_.size();
+
+    // layers manifest
+    Json::Value layers_json{layers};
+    if (layers_json.isNull()) {
+      std::random_device rand_dev;
+      std::uniform_int_distribution<std::int64_t> dist{1024, std::numeric_limits<std::uint32_t>::max()};
+      for (int ii = 0; ii < 3; ++ii) {
+        layers_json["layers"][ii]["digest"] = "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+        layers_json["layers"][ii]["size"] = dist(rand_dev);
+      }
+    }
+
+    if (!layers.isNull()) {
+      layers_manifest_ = Utils::jsonToCanonicalStr(layers_json);
+      layers_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(layers_manifest_)));
+
+      // update the App manifest with metadata about the layers' manifest
+      manifest["manifests"][0]["mediaType"] = "application/vnd.docker.distribution.manifest.v2+json";
+      manifest["manifests"][0]["size"] = 1575;
+      manifest["manifests"][0]["digest"] = "sha256:" + layers_hash_;
+      manifest["manifests"][0]["platform"]["architecture"] = "amd64";
+      manifest["manifests"][0]["platform"]["os"] = "linux";
+    }
     // emulate compose-publish work, i.e. calculate hash on a manifest json as it is,
     // no need to normalize it to a canonical representation
     manifest_ = Utils::jsonToStr(manifest);
@@ -123,6 +170,8 @@ class ComposeApp {
   std::string arch_hash_;
   std::string manifest_;
   std::string hash_;
+  std::string layers_manifest_;
+  std::string layers_hash_;
 };
 
 

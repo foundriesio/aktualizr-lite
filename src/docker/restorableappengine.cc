@@ -1,5 +1,6 @@
 #include "restorableappengine.h"
 
+#include <limits>
 #include <unordered_set>
 
 #include <boost/filesystem.hpp>
@@ -17,26 +18,39 @@ const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
 template <typename... Args>
 static void exec(const boost::format& cmd, const std::string& err_msg, Args&&... args);
 
+RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::DefStorageSpaceFunc =
+    [](const boost::filesystem::path& path) {
+      boost::system::error_code ec;
+      const boost::filesystem::space_info store_info{boost::filesystem::space(path, ec)};
+      if (ec.failed()) {
+        throw std::runtime_error("Failed to get an available storage size: " + ec.message());
+      }
+      return store_info.available;
+    };
+
 RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                                          Docker::RegistryClient::Ptr registry_client,
                                          Docker::DockerClient::Ptr docker_client, std::string client,
-                                         std::string docker_host, std::string compose_cmd)
+                                         std::string docker_host, std::string compose_cmd,
+                                         StorageSpaceFunc storage_space_func)
     : store_root_{std::move(store_root)},
       install_root_{std::move(install_root)},
       client_{std::move(client)},
       docker_host_{std::move(docker_host)},
       compose_cmd_{std::move(compose_cmd)},
       registry_client_{std::move(registry_client)},
-      docker_client_{std::move(docker_client)} {
+      docker_client_{std::move(docker_client)},
+      storage_space_func_{std::move(storage_space_func)} {
   boost::filesystem::create_directories(apps_root_);
   boost::filesystem::create_directories(blobs_root_);
 }
 
 bool RestorableAppEngine::fetch(const App& app) {
   bool res{false};
+  boost::filesystem::path app_dir;
   try {
     const Uri uri{Uri::parseUri(app.uri)};
-    const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
+    app_dir = apps_root_ / uri.app / uri.digest.hash();
     const auto app_compose_file{app_dir / ComposeFile};
 
     if (!isAppFetched(app)) {
@@ -46,6 +60,9 @@ bool RestorableAppEngine::fetch(const App& app) {
       LOG_INFO << app.name << ": App already fetched: " << app_dir;
     }
 
+    // check App size
+    checkAppUpdateSize(uri, app_dir);
+
     // Invoke download of App images unconditionally because `skopeo` is supposed
     // to skip already downloaded image blobs internally while performing `copy` command
     const auto images_dir{app_dir / "images"};
@@ -54,6 +71,9 @@ bool RestorableAppEngine::fetch(const App& app) {
     res = true;
   } catch (const std::exception& exc) {
     LOG_ERROR << "failed to fetch App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
+    if (boost::filesystem::exists(app_dir)) {
+      boost::filesystem::remove_all(app_dir);
+    }
   }
 
   return res;
@@ -297,6 +317,86 @@ void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path&
   // extract docker-compose.yml, temporal hack, we don't need to extract it
   exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "failed to extract the compose app archive",
        boost::process::start_dir = app_dir);
+}
+
+void RestorableAppEngine::checkAppUpdateSize(const Uri& uri, const boost::filesystem::path& app_dir) const {
+  const Manifest manifest{Utils::parseJSONFile(app_dir / Manifest::Filename)};
+  const auto arch{docker_client_->arch()};
+  if (arch.empty()) {
+    LOG_WARNING << "Failed to get an info about a system architecture";
+    return;
+  }
+
+  const auto layers_manifest{manifest.layersManifest(arch)};
+  if (!layers_manifest.isObject()) {
+    LOG_WARNING << "App layers' manifest is missing, skip checking an App update size";
+    return;
+  }
+
+  const Docker::Uri layers_manifest_uri{uri.createUri(HashedDigest(layers_manifest["digest"].asString()))};
+  const std::string man_str{registry_client_->getAppManifest(layers_manifest_uri, Manifest::IndexFormat)};
+  const auto man{Utils::parseJSON(man_str)};
+
+  std::unordered_set<std::string> store_blobs;
+  const auto store_blobs_dir{blobs_root_ / "sha256"};
+
+  if (boost::filesystem::exists(store_blobs_dir)) {
+    for (const boost::filesystem::directory_entry& entry : boost::filesystem::directory_iterator(store_blobs_dir)) {
+      store_blobs.emplace(entry.path().filename().string());
+    }
+  }
+
+  std::size_t total_update_size{0};
+  const Json::Value layers{man["layers"]};
+
+  LOG_INFO << "Checking for App's new layers...";
+  for (Json::ValueConstIterator ii = layers.begin(); ii != layers.end(); ++ii) {
+    const HashedDigest digest{(*ii)["digest"].asString()};
+    if (store_blobs.count(digest.hash()) == 0) {
+      // According to the spec the `size` field must be int64
+      // https://github.com/opencontainers/image-spec/blob/main/descriptor.md#properties
+      const auto size_obj{(*ii)["size"]};
+      if (!size_obj.isInt64()) {
+        throw std::range_error("Invalid value of a layer size, must be int64, got: " + size_obj.asString());
+      }
+
+      const std::int64_t size{size_obj.asInt64()};
+      if (size < 0) {
+        throw std::range_error("Invalid value of a layer size, must be > 0, got: " + std::to_string(size));
+      }
+
+      const std::size_t new_total_update_size = total_update_size + size;
+      if (new_total_update_size < total_update_size || new_total_update_size < size) {
+        throw std::overflow_error("Sum of layer sizes exceeded the maximum allowed value: " +
+                                  std::to_string(std::numeric_limits<std::size_t>::max()));
+        break;
+      }
+
+      LOG_INFO << "\t" << digest.hash() << " -> missing; to be downloaded; size: " << size;
+      total_update_size = new_total_update_size;
+    } else {
+      LOG_INFO << "\t" << digest.hash() << " -> exists";
+    }
+  }
+
+  LOG_INFO << uri.app << " -> total update size: " << total_update_size << " bytes";
+
+  const auto available_space{storage_space_func_(store_root_)};
+  // It can happen that one or more currently stored blobs/layers are not needed for the new App
+  // and they will be purged after an update completion therefore we actually will need less than
+  // `total_update_size` additional storage to accomodate a new App. Moreover, a new App even might
+  // occupy even less space than the current App.
+  // But, during an update process there is a moment at which a sum of both the current's and new App's layers
+  // are stored on storage, thus we need to make sure that underlying storage can accomodate the sum of the Apps'
+  // layers set/list.
+
+  // watermark, 80%, make sure that we don't fill more than 80% of all available space
+  auto available = static_cast<boost::uintmax_t>(available_space * 0.8);
+  LOG_INFO << uri.app << " -> avaliable storage space: " << available << " bytes";
+  if (total_update_size > available) {
+    throw std::runtime_error("There is no sufficient storage space available to download App, available: " +
+                             std::to_string(available) + " need: " + std::to_string(total_update_size));
+  }
 }
 
 void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compose_file,

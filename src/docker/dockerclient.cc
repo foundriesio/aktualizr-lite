@@ -10,7 +10,10 @@ DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = []() {
   return std::make_shared<HttpClient>("/var/run/docker.sock");
 };
 
-DockerClient::DockerClient(std::shared_ptr<HttpInterface> http_client) : http_client_{std::move(http_client)} {}
+DockerClient::DockerClient(std::shared_ptr<HttpInterface> http_client)
+    : http_client_{std::move(http_client)},
+      engine_info_{getEngineInfo()},
+      arch_{engine_info_.get("Arch", Json::Value()).asString()} {}
 
 void DockerClient::getContainers(Json::Value& root) {
   std::string cmd;
@@ -48,6 +51,31 @@ std::tuple<bool, std::string> DockerClient::getContainerState(const Json::Value&
     }
   }
   return {false, ""};
+}
+
+Json::Value DockerClient::getEngineInfo() {
+  Json::Value info;
+  std::string cmd;
+  if (!http_client_) {
+    cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/version";
+    std::string data;
+    if (Utils::shell(cmd, &data, false) == EXIT_SUCCESS) {
+      std::istringstream sin(data);
+      sin >> info;
+    }
+  } else {
+    cmd = "http://localhost/version";
+    auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
+    if (resp.isOk()) {
+      info = resp.getJson();
+    }
+  }
+  if (!info) {
+    // check if the `root` json is initialized, not `empty()` since dockerd can return 200/OK with
+    // empty json `[]`, which is not exceptional situation and means zero containers are running
+    throw std::runtime_error("Request to the dockerd's /version endpoint has failed: " + cmd);
+  }
+  return info;
 }
 
 }  // namespace Docker

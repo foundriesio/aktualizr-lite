@@ -27,7 +27,17 @@ class DockerDaemon {
   class HttpClient: public BaseHttpClient {
    public:
     HttpClient(DockerDaemon& daemon):daemon_{daemon} {}
-    HttpResponse get(const std::string &url, int64_t maxsize) override { return HttpResponse(daemon_.getRunningContainers(), 200, CURLE_OK, ""); }
+    HttpResponse get(const std::string &url, int64_t maxsize) override {
+      if (std::string::npos != url.rfind("version")) {
+        Json::Value info;
+        info["Arch"] = "amd64";
+        const auto resp_str{Utils::jsonToStr(info)};
+
+        return HttpResponse(resp_str, 200, CURLE_OK, "");
+      }
+
+      return HttpResponse(daemon_.getRunningContainers(), 200, CURLE_OK, "");
+    }
    private:
     DockerDaemon& daemon_;
   };
