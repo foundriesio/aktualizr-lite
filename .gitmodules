@@ -1,4 +1,4 @@
 [submodule "aktualizr"]
 	path = aktualizr
 	url = https://github.com/foundriesio/aktualizr
-	branch = 2021.11+fio
+	branch = 2022.1+fio
