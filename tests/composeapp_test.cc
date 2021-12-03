@@ -451,7 +451,7 @@ TEST(ComposeApp, fetchNegative) {
   // Manifest size exceeds maximum allowed size (RegistryClient::ManifestMaxSize)
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
                                         [](Json::Value& manifest, std::string&) {
-                                          manifest["layers"][1]["some_value"] = std::string(Docker::RegistryClient::ManifestMaxSize + 1, 'f');
+                                          manifest["layers"][1]["some_value"] = std::string(Docker::RegistryClient::DefManifestMaxSize + 1, 'f');
                                         });
   target = Uptane::Target("pull", target_json);
   result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);

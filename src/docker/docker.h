@@ -4,6 +4,8 @@
 #include <limits>
 #include <string>
 
+#include <boost/optional.hpp>
+
 #include <http/httpinterface.h>
 
 namespace Docker {
@@ -95,7 +97,7 @@ class RegistryClient {
  public:
   static constexpr const char* const DefAuthCredsEndpoint{"https://ota-lite.foundries.io:8443/hub-creds/"};
   static const int AuthMaterialMaxSize{1024};
-  static const int ManifestMaxSize{16384};
+  static const int DefManifestMaxSize{16384};
   static const size_t MaxBlobSize{std::numeric_limits<int>::max()};
 
   static const std::string ManifestEndpoint;
@@ -110,7 +112,8 @@ class RegistryClient {
                           std::string auth_creds_endpoint = DefAuthCredsEndpoint,
                           HttpClientFactory http_client_factory = RegistryClient::DefaultHttpClientFactory);
 
-  std::string getAppManifest(const Uri& uri, const std::string& format) const;
+  std::string getAppManifest(const Uri& uri, const std::string& format,
+                             boost::optional<std::int64_t> manifest_size = boost::none) const;
   void downloadBlob(const Uri& uri, const boost::filesystem::path& filepath, size_t expected_size) const;
 
  private:

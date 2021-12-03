@@ -1,6 +1,9 @@
 #include <limits>
 #include <random>
 
+#include <boost/optional.hpp>
+
+
 namespace fixtures {
 
 class Image {
@@ -87,18 +90,18 @@ class ComposeApp {
     return app;
   }
 
-  static Ptr createAppWithCustomeLayers(const std::string& name, const Json::Value& layers) {
+  static Ptr createAppWithCustomeLayers(const std::string& name, const Json::Value& layers, boost::optional<std::size_t> layer_man_size = boost::none) {
     Ptr app{new ComposeApp(name, Docker::ComposeAppEngine::ComposeFile, "factory/image-01")};
-    app->updateService("service-01", ServiceTemplate, "none", layers);
+    app->updateService("service-01", ServiceTemplate, "none", layers, layer_man_size);
     return app;
   }
 
-  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate, const std::string& failure = "none", const Json::Value& layers = Json::Value()) {
+  const std::string& updateService(const std::string& service, const std::string& service_template = ServiceTemplate, const std::string& failure = "none", const Json::Value& layers = Json::Value(), boost::optional<std::size_t> layer_man_size = boost::none) {
     char service_content[1024];
     sprintf(service_content, service_template.c_str(), service.c_str(), image_.uri().c_str());
     auto service_hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(service_content)));
     sprintf(content_, DefaultTemplate, service_content, service_hash.c_str(), failure.c_str());
-    return update(layers);
+    return update(layers, layer_man_size);
   }
 
   const std::string& name() const { return name_; }
@@ -114,7 +117,7 @@ class ComposeApp {
  private:
   ComposeApp(const std::string& name, const std::string& compose_file, const std::string& image_name):compose_file_{compose_file}, name_{name}, image_{image_name} {}
 
-  const std::string& update(const Json::Value& layers = Json::Value()) {
+  const std::string& update(const Json::Value& layers = Json::Value(), boost::optional<std::size_t> layer_man_size = boost::none) {
     TemporaryDirectory app_dir;
     TemporaryFile arch_file{"arch.tgz"};
 
@@ -148,7 +151,11 @@ class ComposeApp {
 
       // update the App manifest with metadata about the layers' manifest
       manifest["manifests"][0]["mediaType"] = "application/vnd.docker.distribution.manifest.v2+json";
-      manifest["manifests"][0]["size"] = 1575;
+      if (!!layer_man_size) {
+        manifest["manifests"][0]["size"] = *layer_man_size;
+      } else {
+        manifest["manifests"][0]["size"] = layers_manifest_.size();
+      }
       manifest["manifests"][0]["digest"] = "sha256:" + layers_hash_;
       manifest["manifests"][0]["platform"]["architecture"] = "amd64";
       manifest["manifests"][0]["platform"]["os"] = "linux";
