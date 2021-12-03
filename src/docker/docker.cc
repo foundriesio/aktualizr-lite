@@ -65,21 +65,33 @@ RegistryClient::RegistryClient(std::shared_ptr<HttpInterface> ota_lite_client, s
       ota_lite_client_{std::move(ota_lite_client)},
       http_client_factory_{std::move(http_client_factory)} {}
 
-std::string RegistryClient::getAppManifest(const Uri& uri, const std::string& format) const {
+std::string RegistryClient::getAppManifest(const Uri& uri, const std::string& format,
+                                           boost::optional<std::int64_t> manifest_size) const {
   const std::string manifest_url{composeManifestUrl(uri)};
   LOG_DEBUG << "Downloading App manifest: " << manifest_url;
 
   std::vector<std::string> registry_repo_request_headers{getBearerAuthHeader(uri), "accept:" + format};
   auto registry_repo_client{http_client_factory_(&registry_repo_request_headers)};
 
-  auto manifest_resp = registry_repo_client->get(manifest_url, ManifestMaxSize);
+  std::int64_t manifest_max_size{DefManifestMaxSize};
+  if (!!manifest_size) {
+    manifest_max_size = *manifest_size;
+  }
+  auto manifest_resp = registry_repo_client->get(manifest_url, manifest_max_size);
   if (!manifest_resp.isOk()) {
     throw std::runtime_error("Failed to download App manifest: " + manifest_resp.getStatusStr());
   }
 
-  if (manifest_resp.body.size() > ManifestMaxSize) {
-    throw std::runtime_error("Size of received App manifest exceeds the maximum allowed: " +
-                             std::to_string(manifest_resp.body.size()) + " > " + std::to_string(ManifestMaxSize));
+  if (!!manifest_size) {
+    if (manifest_resp.body.size() != *manifest_size) {
+      throw std::runtime_error("Size of received App manifest doesn't match the expected one: " +
+                               std::to_string(manifest_resp.body.size()) + " != " + std::to_string(*manifest_size));
+    }
+  } else {
+    if (manifest_resp.body.size() > manifest_max_size) {
+      throw std::runtime_error("Size of received App manifest exceeds the maximum allowed: " +
+                               std::to_string(manifest_resp.body.size()) + " > " + std::to_string(manifest_max_size));
+    }
   }
 
   auto received_manifest_hash{

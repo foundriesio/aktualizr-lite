@@ -121,6 +121,19 @@ TEST_F(RestorableAppEngineTest, FetchAndCheckSizeOverflowLayerSize) {
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
+TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInvalidLayersManifestSize) {
+  Json::Value layers;
+  layers["layers"][0]["digest"] =
+      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+  layers["layers"][0]["size"] = 1024;
+
+  auto app = registry.addApp(fixtures::ComposeApp::createAppWithCustomeLayers(
+      "app-01", layers, (Utils::jsonToCanonicalStr(layers).size() - 1)));
+  ASSERT_FALSE(app_engine->fetch(app));
+  ASSERT_FALSE(app_engine->isFetched(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+}
+
 TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInvalidLayerSize) {
   {
     // layer sizes must be int64, we set it to uint64::max to check how the given negative case is handled

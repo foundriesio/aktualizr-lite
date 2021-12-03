@@ -333,8 +333,19 @@ void RestorableAppEngine::checkAppUpdateSize(const Uri& uri, const boost::filesy
     return;
   }
 
+  if (!(layers_manifest.isMember("digest") && layers_manifest["digest"].isString())) {
+    throw std::invalid_argument("Got invalid layers manifest, missing or incorrect `digest` field");
+  }
+
+  if (!(layers_manifest.isMember("size") && layers_manifest["size"].isInt64())) {
+    throw std::invalid_argument("Got invalid layers manifest, missing or incorrect `size` field");
+  }
+
   const Docker::Uri layers_manifest_uri{uri.createUri(HashedDigest(layers_manifest["digest"].asString()))};
-  const std::string man_str{registry_client_->getAppManifest(layers_manifest_uri, Manifest::IndexFormat)};
+  const std::int64_t layers_manifest_size{layers_manifest["size"].asInt64()};
+
+  const std::string man_str{
+      registry_client_->getAppManifest(layers_manifest_uri, Manifest::IndexFormat, layers_manifest_size)};
   const auto man{Utils::parseJSON(man_str)};
 
   std::unordered_set<std::string> store_blobs;
