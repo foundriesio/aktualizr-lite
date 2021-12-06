@@ -32,6 +32,7 @@ class ComposeAppManager : public RootfsTreeManager {
     boost::filesystem::path images_data_root{"/var/lib/docker"};
     std::string docker_images_reload_cmd{"systemctl reload docker"};
     std::string hub_auth_creds_endpoint{Docker::RegistryClient::DefAuthCredsEndpoint};
+    bool create_containers_before_reboot{true};
   };
 
   using AppsContainer = std::unordered_map<std::string, std::string>;
