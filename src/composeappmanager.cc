@@ -305,8 +305,16 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     // I have no idea via the package manager interface method install() is const which is not a const
     // method by its definition/nature
     auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
-    auto run_res = just_install ? non_const_app_engine->install({pair.first, pair.second})
-                                : non_const_app_engine->run({pair.first, pair.second});
+    bool run_res{false};
+
+    if (!just_install) {
+      run_res = non_const_app_engine->run({pair.first, pair.second});
+    } else if (cfg_.create_containers_before_reboot) {
+      run_res = non_const_app_engine->install({pair.first, pair.second});
+    } else {
+      run_res = true;
+    }
+
     if (!run_res) {
       res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
     } else {
@@ -341,7 +349,13 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
   if (ir.result_code.num_code == data::ResultCode::Numeric::kOk) {
     // "finalize" (run) Apps that were pulled and created before reboot
     for (const auto& app_pair : getApps(target)) {
-      app_engine_->run({app_pair.first, app_pair.second});
+      if (!app_engine_->run({app_pair.first, app_pair.second})) {
+        LOG_ERROR << "Failed to start App after booting on a new ostree version;"
+                     " app: "
+                  << app_pair.first << "; uri: " << app_pair.second << "; " << target.filename();
+        // Do we need to set some flag for the uboot and trigger a system reboot in order to boot on a previous
+        // ostree version, hence a proper/full rollback happens???
+      }
     }
   }
 
