@@ -37,7 +37,8 @@ class ClientTest :virtual public ::testing::Test {
                                                InitialVersion initial_version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                const std::string& compose_apps_root = "",
-                                               boost::optional<std::vector<std::string>> reset_apps = boost::none) {
+                                               boost::optional<std::vector<std::string>> reset_apps = boost::none,
+                                               bool create_containers_before_reboot = true) {
     Config conf;
     conf.tls.server = device_gateway_.getTlsUri();
     conf.uptane.repo_server = device_gateway_.getTufRepoUri();
@@ -57,6 +58,10 @@ class ClientTest :virtual public ::testing::Test {
     }
     app_shortlist_ = apps;
     conf.pacman.ostree_server = device_gateway_.getOsTreeUri();
+    if (!create_containers_before_reboot) {
+      // by default it set to "1"/true in the composeappmanager's config
+      conf.pacman.extra["create_containers_before_reboot"] = "0";
+    }
 
     conf.bootloader.reboot_command = "/bin/true";
     conf.bootloader.reboot_sentinel_dir = conf.storage.path;

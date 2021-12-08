@@ -66,6 +66,10 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("hub_auth_creds_endpoint") == 1) {
     hub_auth_creds_endpoint = raw.at("hub_auth_creds_endpoint");
   }
+
+  if (raw.count("create_containers_before_reboot") > 0) {
+    create_containers_before_reboot = boost::lexical_cast<bool>(raw.at("create_containers_before_reboot"));
+  }
 }
 
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -295,34 +299,39 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
     LOG_INFO << "Updated docker images has been successfully enabled";
   }
-  // make sure we install what we fecthed
-  if (!cur_apps_to_fetch_and_update_.empty()) {
-    res.description += "\n# Apps installed:";
+
+  bool prune_images{cfg_.docker_prune};
+  const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;  // system update
+
+  if (!just_install || cfg_.create_containers_before_reboot) {
+    // make sure we install what we fecthed
+    if (!cur_apps_to_fetch_and_update_.empty()) {
+      res.description += "\n# Apps installed:";
+    }
+
+    for (const auto& pair : cur_apps_to_fetch_and_update_) {
+      LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
+      // I have no idea via the package manager interface method install() is const which is not a const
+      // method by its definition/nature
+      auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
+      bool run_res = just_install ? non_const_app_engine->install({pair.first, pair.second})
+                                  : non_const_app_engine->run({pair.first, pair.second});
+
+      if (!run_res) {
+        res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
+      } else {
+        res.description += "\n" + pair.second;
+      }
+    }
+  } else {
+    LOG_INFO << "Apps' containers will be re-created and started just after succesfull boot on the new ostree version";
+    res.description += "\n# Fecthed Apps' containers will be created and started after reboot\n";
+    // don't prune Compose Apps' images because new images are not used by any containers and can be removed as a
+    // result of prunning.
+    prune_images = false;
   }
-  for (const auto& pair : cur_apps_to_fetch_and_update_) {
-    LOG_INFO << "Installing " << pair.first << " -> " << pair.second;
-    const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;
-    // I have no idea via the package manager interface method install() is const which is not a const
-    // method by its definition/nature
-    auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
-    bool run_res{false};
 
-    if (!just_install) {
-      run_res = non_const_app_engine->run({pair.first, pair.second});
-    } else if (cfg_.create_containers_before_reboot) {
-      run_res = non_const_app_engine->install({pair.first, pair.second});
-    } else {
-      run_res = true;
-    }
-
-    if (!run_res) {
-      res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
-    } else {
-      res.description += "\n" + pair.second;
-    }
-  };
-
-  if ((cfg_.docker_prune || !!cfg_.reset_apps) && (res.isSuccess() || res.needCompletion())) {
+  if ((prune_images || !!cfg_.reset_apps) && (res.isSuccess() || res.needCompletion())) {
     AppEngine::Apps app_shortlist;
     const auto enabled_apps{getAppsToFetch(target, false)};
 
@@ -356,6 +365,10 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
         // Do we need to set some flag for the uboot and trigger a system reboot in order to boot on a previous
         // ostree version, hence a proper/full rollback happens???
       }
+    }
+    if (!cfg_.create_containers_before_reboot && !cfg_.reset_apps) {
+      // purge images if containers are re-created after reboot and it's not Restorable Apps
+      app_engine_->prune(AppEngine::Apps{});
     }
   }
 

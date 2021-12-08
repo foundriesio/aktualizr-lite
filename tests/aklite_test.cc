@@ -45,18 +45,23 @@ class AkliteTest : public fixtures::ClientTest,
     const auto app_engine_type{GetParam()};
 
     if (app_engine_type == "ComposeAppEngine") {
-      return ClientTest::createLiteClient(app_engine, initial_version, apps, apps_root_dir.string());
+      return ClientTest::createLiteClient(app_engine, initial_version, apps, apps_root_dir.string(), boost::none,
+                                          create_containers_before_reboot_);
     } else if (app_engine_type == "RestorableAppEngine") {
-      return ClientTest::createLiteClient(app_engine, initial_version, apps, apps_root_dir.string(), apps);
+      return ClientTest::createLiteClient(app_engine, initial_version, apps, apps_root_dir.string(),
+                                          !!apps ? apps : std::vector<std::string>{""},
+                                          create_containers_before_reboot_);
     } else {
       throw std::invalid_argument("Unsupported AppEngine type: " + app_engine_type);
     }
   }
 
   void setAvailableStorageSpace(const boost::uintmax_t& space_size) { available_storage_space_ = space_size; }
+  void setCreateContainersBeforeReboot(bool value) { create_containers_before_reboot_ = value; }
 
  private:
   boost::uintmax_t available_storage_space_;
+  bool create_containers_before_reboot_{true};
 };
 
 TEST_P(AkliteTest, OstreeUpdate) {
@@ -178,6 +183,7 @@ TEST_P(AkliteTest, AppInvalidUpdate) {
 }
 
 TEST_P(AkliteTest, OstreeAndAppUpdate) {
+  // App's containers are re-created before reboot
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
 
   auto client = createLiteClient();
@@ -192,6 +198,33 @@ TEST_P(AkliteTest, OstreeAndAppUpdate) {
   // make sure that the installed Target is not "finalized"/applied and Apps are not running
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_TRUE(daemon_.areContainersCreated());
+
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
+  ASSERT_TRUE(app_engine->isRunning(app01));
+  checkEvents(*client, new_target, UpdateType::kOstree);
+}
+
+TEST_P(AkliteTest, OstreeAndAppUpdateIfCreateAfterBoot) {
+  // App's containers are re-created after reboot
+  setCreateContainersBeforeReboot(false);
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  std::vector<AppEngine::App> apps{app01};
+  auto new_target = createTarget(&apps);
+
+  // update to the latest version
+  update(*client, getInitialTarget(), new_target);
+  // make sure that the installed Target is not "finalized"/applied and Apps are not running
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+  ASSERT_FALSE(daemon_.areContainersCreated());
 
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
@@ -265,6 +298,59 @@ TEST_P(AkliteTest, OstreeAndAppUpdateIfRollback) {
   {
     // update to the latest version
     update(*client, getInitialTarget(), target_01);
+    ASSERT_TRUE(daemon_.areContainersCreated());
+  }
+
+  {
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    checkHeaders(*client, target_01);
+    checkEvents(*client, target_01, UpdateType::kOstree);
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+
+  {
+    // update app, change image URL
+    auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02"));
+    std::vector<AppEngine::App> apps{app01_updated};
+    auto target_02 = createTarget(&apps);
+    // update to the latest version
+    update(*client, target_01, target_02);
+    ASSERT_TRUE(daemon_.areContainersCreated());
+    // deploy the previous version/commit to emulate rollback
+    getSysRepo().deploy(target_01.sha256Hash());
+
+    reboot(client);
+    // make sure that a rollback has happened and a client is still running the previous Target
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    // we stopped the original app before update
+    ASSERT_FALSE(app_engine->isRunning(app01));
+    ASSERT_FALSE(app_engine->isRunning(app01_updated));
+    checkHeaders(*client, target_01);
+    checkEvents(*client, target_01, UpdateType::kOstree);
+
+    // emulate do_app_sync
+    updateApps(*client, target_01, client->getCurrent());
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+}
+
+TEST_P(AkliteTest, OstreeAndAppUpdateIfRollbackAndAfterBootRecreation) {
+  setCreateContainersBeforeReboot(false);
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update both rootfs and add new app
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  std::vector<AppEngine::App> apps{app01};
+  auto target_01 = createTarget(&apps);
+
+  {
+    // update to the latest version
+    update(*client, getInitialTarget(), target_01);
+    ASSERT_FALSE(daemon_.areContainersCreated());
   }
 
   {

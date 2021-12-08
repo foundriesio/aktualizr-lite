@@ -11,7 +11,7 @@ class DockerDaemon {
  public:
   DockerDaemon(boost::filesystem::path dir): dir_{std::move(dir)}, port_{TestUtils::getFreePort()}, process_{RunCmd, "--port", port_, "--dir", dir.string()} {
     // zero containers are running in the beginning
-    Utils::writeFile(dir_ / ContainersFile, std::string("[]"), true);
+    Utils::writeFile(dir_ / ContainersFile, none_containers_, true);
     TestUtils::waitForServer("http://localhost:" + port_ + "/");
   }
 
@@ -22,6 +22,11 @@ class DockerDaemon {
   std::shared_ptr<HttpInterface> getClient() { return std::make_shared<DockerDaemon::HttpClient>(*this); }
   const boost::filesystem::path& dir() const { return dir_; }
   std::string getRunningContainers() const { return Utils::readFile(dir_ / ContainersFile); }
+  bool areContainersCreated() const {
+    const std::string cur_containers{Utils::readFile(dir_ / ContainersFile)};
+    return !(cur_containers == none_containers_);
+  }
+
 
  private:
   class HttpClient: public BaseHttpClient {
@@ -43,6 +48,7 @@ class DockerDaemon {
   };
 
  private:
+  const std::string none_containers_{"[]"};
   boost::filesystem::path dir_;
   const std::string port_;
   boost::process::child process_;
