@@ -131,6 +131,7 @@ class RestorableAppEngine : public AppEngine {
                               const std::string& flags = "up --remove-orphans -d");
 
   static void stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir);
+  static std::string getContentHash(const boost::filesystem::path& path);
 
   const boost::filesystem::path store_root_;
   const boost::filesystem::path install_root_;
