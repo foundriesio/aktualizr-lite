@@ -106,6 +106,7 @@ class RestorableAppEngine : public AppEngine {
   void installAppImages(const boost::filesystem::path& app_dir);
 
   bool isAppFetched(const App& app) const;
+  bool areAppImagesFetched(const App& app) const;
   bool isAppInstalled(const App& app) const;
 
   // check if App&Images are running

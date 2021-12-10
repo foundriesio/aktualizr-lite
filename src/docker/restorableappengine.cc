@@ -242,7 +242,14 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
         const auto image_root{app_dir / app_version_dir / "images" / image_uri.registryHostname / image_uri.repo /
                               image_uri.digest.hash()};
 
-        const auto image_manifest_desc{Utils::parseJSONFile(image_root / "index.json")};
+        const auto index_manifest{image_root / "index.json"};
+        if (!boost::filesystem::exists(index_manifest)) {
+          LOG_WARNING << "Failed to find an index manifest of App image: " << image << ", removing its directory";
+          boost::filesystem::remove_all(image_root);
+          continue;
+        }
+
+        const auto image_manifest_desc{Utils::parseJSONFile(index_manifest)};
         HashedDigest image_digest{image_manifest_desc["manifests"][0]["digest"].asString()};
         blob_shortlist.emplace(image_digest.hash());
 
@@ -517,13 +524,87 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
       break;
     }
 
-    // No need to check hashes of a Merkle tree of each App image
-    // since skopeo does it internally within in the `skopeo copy` command
+    // TODO: we actually should extract a compose file from the app archive, otherwise
+    // it won't be merkle tree like verification since this compose file can be hacked
+    // because it doesn't have any hash to be verified for.
+    // As an alternative we might consider adding a new attribute to an App root manifest that denotes a hash of a
+    // compose file. Or, a compose yaml should be excluded from an App's archive and considered as App config that is
+    // referenced by ["config"]["digest"] element of an App manifest. (currently this digest is equal to the hash of
+    // empty string)
+    const auto compose_file{app_dir / ComposeFile};
+    if (!boost::filesystem::exists(compose_file)) {
+      LOG_DEBUG << app.name << ": missing App compose file: " << compose_file;
+      break;
+    }
 
-    res = true;
+    // No need to check hashes of a Merkle tree of each App image since skopeo does it internally within in the `skopeo
+    // copy` command. While the above statement is true there is still a need in traversing App's merkle tree at the
+    // phase of checking whether Apps are in sync with Target because `skopeo copy` is invoked only if the check detects
+    // any missing piece of App. If the given check doesn't detect any missing part of App then the fetch&install phase
+    // never happens and `skopeo copy` is never invoked. So, let's do in areAppImagesFetched() method.
+
+    res = areAppImagesFetched(app);
   } while (false);
 
   return res;
+}
+
+bool RestorableAppEngine::areAppImagesFetched(const App& app) const {
+  const Uri uri{Uri::parseUri(app.uri)};
+  const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
+  const auto compose_file{app_dir / ComposeFile};
+
+  ComposeInfo compose{compose_file.string()};
+  for (const auto& service : compose.getServices()) {
+    const auto image = compose.getImage(service);
+    const Uri image_uri{Uri::parseUri(image)};
+    const auto image_root{app_dir / "images" / image_uri.registryHostname / image_uri.repo / image_uri.digest.hash()};
+
+    const auto index_manifest{image_root / "index.json"};
+    if (!boost::filesystem::exists(index_manifest)) {
+      LOG_DEBUG << app.name << ": missing index manifest of App image; image: " << image
+                << "; index: " << index_manifest;
+      return false;
+    }
+
+    const auto manifest_desc{Utils::parseJSONFile(index_manifest)};
+    HashedDigest manifest_digest{manifest_desc["manifests"][0]["digest"].asString()};
+
+    const auto manifest_file{blobs_root_ / "sha256" / manifest_digest.hash()};
+    if (!boost::filesystem::exists(manifest_file)) {
+      LOG_DEBUG << app.name << ": missing App image manifest; image: " << image << "; manifest: " << manifest_file;
+      return false;
+    }
+
+    const auto manifest{Utils::parseJSONFile(blobs_root_ / "sha256" / manifest_digest.hash())};
+
+    std::unordered_set<std::string> image_blobs;
+
+    // add config blob
+    image_blobs.emplace(HashedDigest(manifest["config"]["digest"].asString()).hash());
+
+    // add layer blobs
+    const auto layers{manifest["layers"]};
+    for (Json::ValueConstIterator ii = layers.begin(); ii != layers.end(); ++ii) {
+      if ((*ii).isObject() && (*ii).isMember("digest")) {
+        const auto layer_digest{HashedDigest{(*ii)["digest"].asString()}};
+        image_blobs.emplace(layer_digest.hash());
+      } else {
+        LOG_ERROR << app.name << ": invalid image manifest: " << ii.key().asString() << " -> " << *ii;
+        return false;
+      }
+    }
+
+    for (const auto& blob : image_blobs) {
+      const auto blob_path{blobs_root_ / "sha256" / blob};
+      if (!boost::filesystem::exists(blob_path)) {
+        LOG_DEBUG << app.name << ": missing App image blob; image: " << image << "; blob: " << blob_path;
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 bool RestorableAppEngine::isAppInstalled(const App& app) const {
