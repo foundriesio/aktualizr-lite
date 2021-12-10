@@ -10,6 +10,7 @@
 #include "test_utils.h"
 
 #include "docker/composeappengine.h"
+#include "docker/composeinfo.h"
 #include "docker/restorableappengine.h"
 
 #include "fixtures/composeappenginetest.cc"
@@ -54,6 +55,7 @@ class RestorableAppEngineTest : public fixtures::AppEngineTest {
   }
 
   void setAvailableStorageSpace(const boost::uintmax_t& space_size) { available_storage_space_ = space_size; }
+  const boost::filesystem::path& storeRoot() const { return skopeo_store_root_; }
 
  private:
   const boost::filesystem::path skopeo_store_root_;
@@ -68,6 +70,153 @@ TEST_F(RestorableAppEngineTest, Fetch) {
   ASSERT_TRUE(app_engine->isFetched(app));
   ASSERT_TRUE(app_engine->verify(app));
   ASSERT_FALSE(app_engine->isRunning(app));
+}
+
+TEST_F(RestorableAppEngineTest, FetchCheckAndRefetch) {
+  auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  ASSERT_TRUE(app_engine->fetch(app));
+  ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+
+  const Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
+  const auto app_dir{storeRoot() / "apps" / uri.app / uri.digest.hash()};
+
+  {
+    // remove App dir
+    boost::filesystem::remove_all(app_dir);
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  {
+    // remove App manifest
+    boost::filesystem::remove(app_dir / Docker::Manifest::Filename);
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  {
+    // alter App manifest
+    Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("foo bar"));
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  const Docker::Manifest manifest{Utils::parseJSONFile(app_dir / Docker::Manifest::Filename)};
+  {
+    // remove App archive/blob
+    boost::filesystem::remove(app_dir /
+                              (Docker::HashedDigest(manifest.archiveDigest()).hash() + Docker::Manifest::ArchiveExt));
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  {
+    // alter App archive/blob
+    Utils::writeFile(app_dir / (Docker::HashedDigest(manifest.archiveDigest()).hash() + Docker::Manifest::ArchiveExt),
+                     std::string("foo bar"));
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  {
+    // remove App images dir
+    boost::filesystem::remove_all(app_dir / "images");
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+
+  const auto compose_file{app_dir / Docker::RestorableAppEngine::ComposeFile};
+  Docker::ComposeInfo compose{compose_file.string()};
+  const auto image = compose.getImage(compose.getServices()[0]);
+  const Docker::Uri image_uri{Docker::Uri::parseUri(image)};
+  const auto image_root{app_dir / "images" / image_uri.registryHostname / image_uri.repo / image_uri.digest.hash()};
+  const auto index_manifest{image_root / "index.json"};
+
+  {
+    // remove App image dir
+    boost::filesystem::remove_all(image_root);
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  {
+    // remove App image index manifest
+    boost::filesystem::remove(index_manifest);
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+
+  const auto manifest_desc{Utils::parseJSONFile(index_manifest)};
+  Docker::HashedDigest manifest_digest{manifest_desc["manifests"][0]["digest"].asString()};
+  const auto blob_dir{storeRoot() / "blobs" / "sha256"};
+  const auto manifest_file{blob_dir / manifest_digest.hash()};
+
+  {
+    // remove App blobs dir
+    boost::filesystem::remove_all(blob_dir);
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  {
+    // remove App image manifest
+    boost::filesystem::remove(manifest_file);
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  {
+    // alter App image manifest
+    Utils::writeFile(manifest_file, std::string("foo bar"));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  const auto image_manifest{Utils::parseJSONFile(manifest_file)};
+  const auto blob_digest{Docker::HashedDigest(image_manifest["layers"][0]["digest"].asString())};
+  {
+    // remove App image blob
+    boost::filesystem::remove(blob_dir / blob_digest.hash());
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+  {
+    // alter App image blob
+    Utils::writeFile(blob_dir / blob_digest.hash(), std::string("foo bar"));
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
 }
 
 TEST_F(RestorableAppEngineTest, FetchAndInstall) {

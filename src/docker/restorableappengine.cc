@@ -494,17 +494,14 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
       break;
     }
 
-    const auto manifest_str{Utils::readFile(manifest_file)};
-    const auto manifest_hash =
-        boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(manifest_str)));
-
+    const auto manifest_hash{getContentHash(manifest_file)};
     if (manifest_hash != uri.digest.hash()) {
       LOG_DEBUG << app.name << ": App manifest hash mismatch; actual: " << manifest_hash
                 << "; expected: " << uri.digest.hash();
       break;
     }
 
-    const Manifest manifest{Utils::parseJSON(manifest_str)};
+    const Manifest manifest{Utils::parseJSONFile(manifest_file)};
 
     // verify App archive/blob hash
     const auto archive_manifest_hash{HashedDigest(manifest.archiveDigest()).hash()};
@@ -515,11 +512,9 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
     }
 
     // we assume that a compose App blob is relatively small so we can just read it all into RAM
-    const auto app_arch_str = Utils::readFile(archive_full_path);
-    const auto app_arch_hash =
-        boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(app_arch_str)));
+    const auto app_arch_hash{getContentHash(archive_full_path)};
     if (app_arch_hash != archive_manifest_hash) {
-      LOG_DEBUG << app.name << ": App archive hash mismatch; actual: " << app_arch_str
+      LOG_DEBUG << app.name << ": App archive hash mismatch; actual: " << app_arch_hash
                 << "; defined in manifest: " << archive_manifest_hash;
       break;
     }
@@ -567,6 +562,11 @@ bool RestorableAppEngine::areAppImagesFetched(const App& app) const {
       return false;
     }
 
+    // Unfortunately `skopeo` trims an index/list image manifest by removing from it each image manifests that
+    // doesn't match the current architecture. Therefore, it's not possible or doesn't make sense to compare
+    // the image digest (image_uri.digest.hash()) with a hash of actuall content of index.json.
+    // TODO: consider patching skopeo or adding cli param to make it store an intact image index manifest.
+
     const auto manifest_desc{Utils::parseJSONFile(index_manifest)};
     HashedDigest manifest_digest{manifest_desc["manifests"][0]["digest"].asString()};
 
@@ -576,29 +576,56 @@ bool RestorableAppEngine::areAppImagesFetched(const App& app) const {
       return false;
     }
 
-    const auto manifest{Utils::parseJSONFile(blobs_root_ / "sha256" / manifest_digest.hash())};
-
-    std::unordered_set<std::string> image_blobs;
-
-    // add config blob
-    image_blobs.emplace(HashedDigest(manifest["config"]["digest"].asString()).hash());
-
-    // add layer blobs
-    const auto layers{manifest["layers"]};
-    for (Json::ValueConstIterator ii = layers.begin(); ii != layers.end(); ++ii) {
-      if ((*ii).isObject() && (*ii).isMember("digest")) {
-        const auto layer_digest{HashedDigest{(*ii)["digest"].asString()}};
-        image_blobs.emplace(layer_digest.hash());
-      } else {
-        LOG_ERROR << app.name << ": invalid image manifest: " << ii.key().asString() << " -> " << *ii;
-        return false;
-      }
+    const auto manifest_hash{getContentHash(manifest_file)};
+    if (manifest_hash != manifest_digest.hash()) {
+      LOG_DEBUG << app.name << ": App image manifest hash mismatch; actual: " << manifest_hash
+                << "; expected: " << manifest_digest.hash();
+      return false;
     }
 
-    for (const auto& blob : image_blobs) {
-      const auto blob_path{blobs_root_ / "sha256" / blob};
-      if (!boost::filesystem::exists(blob_path)) {
-        LOG_DEBUG << app.name << ": missing App image blob; image: " << image << "; blob: " << blob_path;
+    const auto manifest{Utils::parseJSONFile(blobs_root_ / "sha256" / manifest_digest.hash())};
+
+    // check image config file/blob
+    const auto config_digest{HashedDigest(manifest["config"]["digest"].asString())};
+    const auto config_file{blobs_root_ / "sha256" / config_digest.hash()};
+
+    if (!boost::filesystem::exists(config_file)) {
+      LOG_DEBUG << app.name << ": missing App image config file; image: " << image << "; manifest: " << config_file;
+      return false;
+    }
+
+    const auto config_hash{getContentHash(config_file)};
+    if (config_hash != config_digest.hash()) {
+      LOG_DEBUG << app.name << ": App image config hash mismatch; actual: " << config_hash
+                << "; expected: " << config_digest.hash();
+      return false;
+    }
+
+    // check layers, just check blobs' size since generation of their hashes might consumes
+    // too much CPU for a given device ???
+    const auto layers{manifest["layers"]};
+    for (Json::ValueConstIterator ii = layers.begin(); ii != layers.end(); ++ii) {
+      if ((*ii).isObject() && (*ii).isMember("digest") && (*ii).isMember("size")) {
+        const auto layer_digest{HashedDigest{(*ii)["digest"].asString()}};
+        const auto layer_size{(*ii)["size"].asInt64()};
+        const auto blob_path{blobs_root_ / "sha256" / layer_digest.hash()};
+        if (!boost::filesystem::exists(blob_path)) {
+          LOG_DEBUG << app.name << ": missing App image blob; image: " << image << "; blob: " << blob_path;
+          return false;
+        }
+        const auto blob_size{boost::filesystem::file_size(blob_path)};
+        if (blob_size != layer_size) {
+          LOG_DEBUG << app.name << ": App image blob size mismatch; blob: " << blob_path << "; actual: " << blob_size
+                    << "; expected: " << layer_size;
+          // `skopeo copy` gets crazy if one or more blobs are invalid/altered/broken, it just simply fails
+          // instead of refetching it (another candidate for patching),
+          // so, we just remove the broken blob.
+          boost::filesystem::remove(blob_path);
+          return false;
+        }
+
+      } else {
+        LOG_ERROR << app.name << ": invalid image manifest: " << ii.key().asString() << " -> " << *ii;
         return false;
       }
     }
@@ -720,6 +747,11 @@ void exec(const boost::format& cmd, const std::string& err_msg, Args&&... args) 
   if (EXIT_SUCCESS != boost::process::system(cmd.str(), std::forward<Args>(args)...)) {
     throw std::runtime_error(err_msg + "; cmd: " + cmd.str());
   }
+}
+
+std::string RestorableAppEngine::getContentHash(const boost::filesystem::path& path) {
+  const auto content{Utils::readFile(path)};
+  return boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(content)));
 }
 
 }  // namespace Docker
