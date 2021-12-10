@@ -171,6 +171,13 @@ class AkliteClient {
    */
   explicit AkliteClient(std::shared_ptr<LiteClient> client) : client_(std::move(client)) {}
 
+  ~AkliteClient();
+
+  AkliteClient(const AkliteClient &) = delete;
+  AkliteClient(AkliteClient &&) = delete;
+  AkliteClient &operator=(const AkliteClient &) = delete;
+  AkliteClient &operator=(AkliteClient &&) = delete;
+
   /**
    * This method can be run at start up to ensure the correct compose apps
    * are running in the event the device's configured list of apps has

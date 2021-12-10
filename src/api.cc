@@ -1,6 +1,7 @@
 #include "aktualizr-lite/api.h"
 
 #include <sys/file.h>
+#include <unistd.h>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
@@ -87,6 +88,11 @@ AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_
   read_only_ = read_only;
   Config config(cmdline_args);
   Init(config);
+}
+
+AkliteClient::~AkliteClient() {
+  // Release the lock to allow reobtaining with another instance.
+  unlink("/var/lock/aklite.lock");
 }
 
 static bool compareTargets(const TufTarget& a, const TufTarget& b) { return a.Version() < b.Version(); }
