@@ -4,6 +4,7 @@
 
 #include <boost/container/flat_map.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/format.hpp>
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/program_options.hpp>
 
@@ -126,15 +127,16 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
-static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::HardwareIdentifier& hwid,
-                                                   const std::vector<std::string>& tags, const std::string& version) {
+static std::pair<bool, std::unique_ptr<Uptane::Target>> find_target(LiteClient& client,
+                                                                    Uptane::HardwareIdentifier& hwid,
+                                                                    const std::vector<std::string>& tags,
+                                                                    const std::string& version) {
   std::unique_ptr<Uptane::Target> rv;
   const auto rc = client.updateImageMeta();
   if (!std::get<0>(rc)) {
     LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
     if (!client.checkImageMetaOffline()) {
-      LOG_ERROR << "Unable to use local copy of TUF data";
-      throw std::runtime_error("Unable to find update");
+      throw std::runtime_error("Failed to use local copy of TUF data");
     }
   }
 
@@ -161,15 +163,16 @@ static std::unique_ptr<Uptane::Target> find_target(LiteClient& client, Uptane::H
             latest = std_::make_unique<Uptane::Target>(t);
           }
         } else if (version == t.filename() || version == t.custom_version()) {
-          return std_::make_unique<Uptane::Target>(t);
+          return {true, std_::make_unique<Uptane::Target>(t)};
         }
       }
     }
   }
   if (find_latest && latest != nullptr) {
-    return latest;
+    return {true, std::move(latest)};
   }
-  throw std::runtime_error("Unable to find update");
+
+  return {false, std_::make_unique<Uptane::Target>(Uptane::Target::Unknown())};
 }
 
 static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target target, const std::string& reason) {
@@ -232,13 +235,18 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   }
 
   LOG_INFO << "Finding " << version << " to update to...";
-  auto target_to_install = find_target(client, hwid, client.tags, version);
+  auto find_target_res = find_target(client, hwid, client.tags, version);
+  if (find_target_res.first) {
+    std::string reason = "Manual update to " + version;
+    data::ResultCode::Numeric rc = do_update(client, *find_target_res.second, reason);
 
-  std::string reason = "Manual update to " + version;
-  data::ResultCode::Numeric rc = do_update(client, *target_to_install, reason);
-
-  return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
-                                                                                                    : EXIT_FAILURE;
+    return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
+                                                                                                      : EXIT_FAILURE;
+  } else {
+    LOG_INFO << "No Target found to update to; hw ID: " << hwid.ToString()
+             << "; tags: " << boost::algorithm::join(client.tags, ",");
+    return EXIT_SUCCESS;
+  }
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
@@ -278,25 +286,47 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     client.reportNetworkInfo();
     client.reportHwInfo();
 
+    std::string exc_msg;
     try {
-      // target cannot be nullptr, an exception will be yielded if no target
-      auto found_latest_target = find_target(client, hwid, client.tags, "latest");
+      // try to find the latest Target for a given device
+      std::pair<bool, std::unique_ptr<Uptane::Target>> find_target_res;
+      try {
+        find_target_res = find_target(client, hwid, client.tags, "latest");
+      } catch (const std::exception& exc) {
+        LOG_ERROR << "Failed to check for a new Target: " << exc.what();
+        exc_msg = exc.what();
+      }
+
+      if (!find_target_res.first) {
+        // TODO: consider reporting about it to the backend to make it easier to figure out
+        // why specific devices are not picking up a new Target
+        const auto log_msg{boost::str(boost::format("No Target found for the device; hw ID: %s; tags: %s") % hwid %
+                                      boost::algorithm::join(client.tags, ","))};
+        LOG_WARNING << log_msg << "; going to sleep for " << interval << " seconds before starting a new update cycle";
+        // The both cases, "an exception occurs" and "no exception, but Target is not found for a device"
+        // are considered as a failure for the "check-for-update-post" callback.
+        client.checkForUpdatesEndWithFailure(exc_msg.empty() ? log_msg : exc_msg);
+        std::this_thread::sleep_for(std::chrono::seconds(interval));
+        continue;
+      }
+
+      Uptane::Target& found_latest_target{*(find_target_res.second)};
 
       // This is a workaround for finding and avoiding bad updates after a rollback.
       // Rollback sets the installed version state to none instead of broken, so there is no
       // easy way to find just the bad versions without api/storage changes. As a workaround we
       // just check if the version is not current nor pending nor known (old hash) and never been succesfully installed,
       // if so then skip an update to the such version/Target
-      bool is_rollback_target = client.isRollback(*found_latest_target);
+      bool is_rollback_target = client.isRollback(found_latest_target);
 
-      LOG_INFO << "Latest Target: " << found_latest_target->filename();
-      if (!is_rollback_target && !client.isTargetActive(*found_latest_target)) {
-        client.checkForUpdatesEnd(*found_latest_target);
+      LOG_INFO << "Latest Target: " << found_latest_target.filename();
+      if (!is_rollback_target && !client.isTargetActive(found_latest_target)) {
+        client.checkForUpdatesEnd(found_latest_target);
         // New Target is available, try to update a device with it
-        std::string reason = "Updating from " + current.filename() + " to " + found_latest_target->filename();
-        data::ResultCode::Numeric rc = do_update(client, *found_latest_target, reason);
+        std::string reason = "Updating from " + current.filename() + " to " + found_latest_target.filename();
+        data::ResultCode::Numeric rc = do_update(client, found_latest_target, reason);
         if (rc == data::ResultCode::Numeric::kOk) {
-          current = *found_latest_target;
+          current = found_latest_target;
           LiteClient::update_request_headers(client.http_client, current, client.config.pacman);
           // Start the loop over to call updateImagesMeta which will update this
           // device's target name on the server.
@@ -315,7 +345,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
       } else {
         if (!client.appsInSync()) {
-          client.checkForUpdatesEnd(client.getCurrent());
+          client.checkForUpdatesEnd(found_latest_target);
           do_app_sync(client);
         } else {
           client.checkForUpdatesEnd(Uptane::Target::Unknown());
@@ -324,7 +354,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       }
 
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to find or update Target: " << exc.what();
+      LOG_ERROR << "Failed to update Target: " << exc.what();
     }
 
     client.setAppsNotChecked();
