@@ -200,6 +200,9 @@ bool LiteClient::checkForUpdatesBegin() {
 }
 
 void LiteClient::checkForUpdatesEnd(const Uptane::Target& target) { callback("check-for-update-post", target, "OK"); }
+void LiteClient::checkForUpdatesEndWithFailure(const std::string& err) {
+  callback("check-for-update-post", Uptane::Target::Unknown(), "FAILED: " + err);
+}
 
 void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const {
   if (!config.tls.server.empty()) {
