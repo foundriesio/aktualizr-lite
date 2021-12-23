@@ -94,13 +94,6 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
           std::make_shared<Docker::ComposeAppEngine>(cfg_.apps_root, compose_cmd, docker_client, registry_client);
     }
   }
-
-  try {
-    app_tree_ = std::make_unique<ComposeAppTree>(cfg_.apps_tree.string(), cfg_.apps_root.string(),
-                                                 cfg_.images_data_root.string(), cfg_.create_apps_tree);
-  } catch (const std::exception& exc) {
-    LOG_DEBUG << "Failed to initialize Compose App Tree (ostree) at " << cfg_.apps_tree << ". Error: " << exc.what();
-  }
 }
 
 // Returns an intersection of apps specified in Target and the configuration
@@ -207,29 +200,17 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
   bool passed = true;
-  const auto& apps_uri = Target::ostreeURI(target);
-  if (app_tree_ && !apps_uri.empty()) {
-    LOG_INFO << "Fetching Apps Tree -> " << apps_uri;
+  AppsContainer all_apps_to_fetch;
+  all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
+  all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
 
-    try {
-      app_tree_->pull(config.ostree_server, keys, apps_uri);
-    } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to pull Apps Tree; uri: " << apps_uri << ", err: " << exc.what();
+  for (const auto& pair : all_apps_to_fetch) {
+    LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
+    if (!app_engine_->fetch({pair.first, pair.second})) {
       passed = false;
     }
-
-  } else {
-    AppsContainer all_apps_to_fetch;
-    all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
-    all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
-
-    for (const auto& pair : all_apps_to_fetch) {
-      LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
-      if (!app_engine_->fetch({pair.first, pair.second})) {
-        passed = false;
-      }
-    }
   }
+
   are_apps_checked_ = false;
   return passed;
 }
@@ -273,32 +254,6 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   }
 
   handleRemovedApps(target);
-
-  const auto& apps_uri = Target::ostreeURI(target);
-  if (app_tree_ && !apps_uri.empty()) {
-    LOG_INFO << "Checking out updated Apps: " << apps_uri;
-    try {
-      const_cast<ComposeAppManager*>(this)->app_tree_->checkout(apps_uri);
-    } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to checkout Apps from the ostree repo; uri: " << apps_uri << ", err: " << exc.what();
-      return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed,
-                                      "Could not checkout Apps from the ostree repo");
-    }
-
-    LOG_INFO << "Reloading the docker image and layer store to enable the update... ";
-    {
-      const auto& cmd = cfg_.docker_images_reload_cmd;
-      std::string out_str;
-      int exit_code = Utils::shell(cmd, &out_str, true);
-      LOG_TRACE << "Command: " << cmd << "\n" << out_str;
-
-      if (exit_code != EXIT_SUCCESS) {
-        LOG_ERROR << "Failed to reload the docker image and layer store, command failed: " << out_str;
-        return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not reload docker store");
-      }
-    }
-    LOG_INFO << "Updated docker images has been successfully enabled";
-  }
 
   bool prune_images{cfg_.docker_prune};
   const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;  // system update
