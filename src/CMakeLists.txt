@@ -7,7 +7,6 @@ set(SRC helpers.cc
         rootfstreemanager.cc
         docker/restorableappengine.cc
         docker/composeappengine.cc
-        docker/composeapptree.cc
         docker/composeinfo.cc
         ostree/sysroot.cc
         ostree/repo.cc
@@ -24,7 +23,6 @@ set(HEADERS helpers.h
         rootfstreemanager.h
         docker/restorableappengine.h
         docker/composeappengine.h
-        docker/composeapptree.h
         docker/composeinfo.h
         appengine.h
         ostree/sysroot.h

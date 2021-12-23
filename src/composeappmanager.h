@@ -6,7 +6,6 @@
 #include <unordered_map>
 
 #include "docker/composeappengine.h"
-#include "docker/composeapptree.h"
 #include "docker/docker.h"
 #include "ostree/sysroot.h"
 #include "rootfstreemanager.h"
@@ -69,7 +68,6 @@ class ComposeAppManager : public RootfsTreeManager {
   mutable AppsContainer cur_apps_to_fetch_;
   bool are_apps_checked_{false};
   AppEngine::Ptr app_engine_;
-  std::unique_ptr<ComposeAppTree> app_tree_;
 };
 
 #endif  // AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_
