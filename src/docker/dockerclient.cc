@@ -16,20 +16,11 @@ DockerClient::DockerClient(std::shared_ptr<HttpInterface> http_client)
       arch_{engine_info_.get("Arch", Json::Value()).asString()} {}
 
 void DockerClient::getContainers(Json::Value& root) {
-  std::string cmd;
-  if (!http_client_) {
-    cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/containers/json?all=1";
-    std::string data;
-    if (Utils::shell(cmd, &data, false) == EXIT_SUCCESS) {
-      std::istringstream sin(data);
-      sin >> root;
-    }
-  } else {
-    cmd = "http://localhost/containers/json?all=1";
-    auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
-    if (resp.isOk()) {
-      root = resp.getJson();
-    }
+  // curl --unix-socket /var/run/docker.sock http://localhost/containers/json?all=1
+  const std::string cmd{"http://localhost/containers/json?all=1"};
+  auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
+  if (resp.isOk()) {
+    root = resp.getJson();
   }
   if (!root) {
     // check if the `root` json is initialized, not `empty()` since dockerd can return 200/OK with
@@ -55,20 +46,10 @@ std::tuple<bool, std::string> DockerClient::getContainerState(const Json::Value&
 
 Json::Value DockerClient::getEngineInfo() {
   Json::Value info;
-  std::string cmd;
-  if (!http_client_) {
-    cmd = "/usr/bin/curl --unix-socket /var/run/docker.sock http://localhost/version";
-    std::string data;
-    if (Utils::shell(cmd, &data, false) == EXIT_SUCCESS) {
-      std::istringstream sin(data);
-      sin >> info;
-    }
-  } else {
-    cmd = "http://localhost/version";
-    auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
-    if (resp.isOk()) {
-      info = resp.getJson();
-    }
+  const std::string cmd{"http://localhost/version"};
+  auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
+  if (resp.isOk()) {
+    info = resp.getJson();
   }
   if (!info) {
     // check if the `root` json is initialized, not `empty()` since dockerd can return 200/OK with
