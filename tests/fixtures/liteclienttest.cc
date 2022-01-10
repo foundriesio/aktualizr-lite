@@ -124,6 +124,10 @@ class ClientTest :virtual public ::testing::Test {
        * name as a parameter
        */
       initial_target_ = Uptane::Target{hw_id + "-" + os + "-" + "1", installed_version};
+      // emulate Foundries real Target, add custom.uri attribute
+      Json::Value custom_value;
+      custom_value["uri"] = "https://ci.foundries.io/projects/factory/lmp/builds/1097";
+      initial_target_.updateCustom(custom_value);
 
       Json::Value ins_ver;
       // set the root node name

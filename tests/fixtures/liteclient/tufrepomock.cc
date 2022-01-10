@@ -19,6 +19,8 @@ class TufRepoMock {
     Json::Value custom_json;
     custom_json["targetFormat"] = "OSTREE";
     custom_json["version"] = version;
+    custom_json["uri"] = "https://ci.foundries.io/projects/factory/lmp/builds/1097";
+
     custom_json[Target::ComposeAppField] = apps_json;
     repo_.addCustomImage(name, hash_obj, 0, hardware_id, "", 0, null_delegation, custom_json);
 
