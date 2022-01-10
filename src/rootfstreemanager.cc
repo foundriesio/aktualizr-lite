@@ -1,19 +1,20 @@
 #include "rootfstreemanager.h"
 #include "ostree/repo.h"
 
-bool RootfsTreeManager::fetchTarget(const Uptane::Target &target, Uptane::Fetcher &fetcher, const KeyManager &keys,
-                                    const FetcherProgressCb &progress_cb, const api::FlowControlToken *token) {
+bool RootfsTreeManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
+                                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
   (void)fetcher;
 
-  std::vector<Remote> remotes = {{remote, config.ostree_server, {{"X-Correlation-ID", target.filename()}}, false}};
+  std::vector<Remote> remotes = {
+      {remote, config.ostree_server, {{"X-Correlation-ID", target.filename()}}, &keys, false}};
 
   getAdditionalRemotes(remotes, target.filename());
 
   data::InstallationResult pull_err{data::ResultCode::Numeric::kUnknown, ""};
-  for (const auto &remote : remotes) {
+  for (const auto& remote : remotes) {
     LOG_INFO << "Fetchig ostree commit " + target.sha256Hash() + " from " + remote.baseUrl;
     if (!remote.isRemoteSet) {
-      setRemote(remote.name, remote.baseUrl);
+      setRemote(remote.name, remote.baseUrl, remote.keys);
     }
     pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys, target, token, progress_cb,
                                    remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
@@ -30,7 +31,7 @@ bool RootfsTreeManager::fetchTarget(const Uptane::Target &target, Uptane::Fetche
   return pull_err.isSuccess();
 }
 
-void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote> &remotes, const std::string &target_name) {
+void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const std::string& target_name) {
   const auto resp = http_client_->post(gateway_url_ + "/download-urls", Json::Value::null);
 
   if (!resp.isOk()) {
@@ -47,14 +48,20 @@ void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote> &remotes, const
                                 {
                                     {"X-Correlation-ID", target_name},
                                     {"Authorization", std::string("Bearer ") + (*it)["access_token"].asString()},
-                                }}
+                                },
+                                boost::none}
 
     );
   }
 }
 
-void RootfsTreeManager::setRemote(const std::string &name, const std::string &url) {
+void RootfsTreeManager::setRemote(const std::string& name, const std::string& url,
+                                  const boost::optional<const KeyManager*>& keys) {
   OSTree::Repo repo{sysroot_->path() + "/ostree/repo"};
 
-  repo.addRemote(name, url, "", "", "");
+  if (!!keys) {
+    repo.addRemote(name, url, (*keys)->getCaFile(), (*keys)->getCertFile(), (*keys)->getPkeyFile());
+  } else {
+    repo.addRemote(name, url, "", "", "");
+  }
 }
