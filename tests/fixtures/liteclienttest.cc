@@ -18,8 +18,8 @@ class ClientTest :virtual public ::testing::Test {
         tuf_repo_{test_dir_.Path() / "repo"},
         ostree_repo_{(test_dir_.Path() / "treehub").string(), true},
         device_gateway_{ostree_repo_, tuf_repo_, certs_dir},
-        initial_target_{Uptane::Target::Unknown()},
-        sysroot_hash_{sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch)} {
+        sysroot_hash_{sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch)},
+        initial_target_{"unknown", Uptane::EcuMap(), {Hash(Hash::Type::kSha256, sysroot_hash_)}, 0, "", "OSTREE"} {
     sys_repo_.deploy(sysroot_hash_);
   }
 
@@ -283,6 +283,8 @@ class ClientTest :virtual public ::testing::Test {
    * method targetsMatch
    */
   bool targetsMatch(const Uptane::Target& lhs, const Uptane::Target& rhs) {
+
+
     if ((lhs.sha256Hash() != rhs.sha256Hash()) || (lhs.filename() != rhs.filename())) {
       return false;
     }
@@ -396,8 +398,8 @@ class ClientTest :virtual public ::testing::Test {
   TufRepoMock tuf_repo_;
   OSTreeRepoMock ostree_repo_;
   DeviceGatewayMock device_gateway_;
-  Uptane::Target initial_target_;
   const std::string sysroot_hash_;
+  Uptane::Target initial_target_;
 
   boost::optional<std::vector<std::string>> app_shortlist_;
 };

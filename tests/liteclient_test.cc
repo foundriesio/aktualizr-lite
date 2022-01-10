@@ -93,9 +93,9 @@ TEST_F(LiteClientTest, OstreeUpdateWhenNoInstalledVersions) {
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
 
   // verify the install
-  ASSERT_TRUE(client->getCurrent().MatchTarget(Uptane::Target::Unknown()));
+  ASSERT_TRUE(client->getCurrent().MatchTarget(getInitialTarget()));
   reboot(client);
-  ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
+  ASSERT_FALSE(new_target.MatchTarget(getInitialTarget()));
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
 }
@@ -106,18 +106,17 @@ TEST_F(LiteClientTest, OstreeUpdateInstalledVersionsCorrupted1) {
 
   // verify that the initial version was corrupted
   ASSERT_FALSE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  setInitialTarget(Uptane::Target::Unknown());
 
   // Create a new Target: update rootfs and commit it into Treehub's repo
   auto new_target = createTarget();
-  update(*client, getInitialTarget(), new_target);
+  update(*client, client->getCurrent(), new_target);
 
   auto req_headers = getDeviceGateway().getReqHeaders();
   ASSERT_EQ(req_headers["x-ats-target"], Uptane::Target::Unknown().filename());
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
 
   // verify the install
-  ASSERT_TRUE(client->getCurrent().MatchTarget(Uptane::Target::Unknown()));
+  ASSERT_FALSE(targetsMatch(client->getCurrent(), getInitialTarget()));
   reboot(client);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
@@ -130,18 +129,17 @@ TEST_F(LiteClientTest, OstreeUpdateInstalledVersionsCorrupted2) {
 
   // verify that the initial version was corrupted
   ASSERT_FALSE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  setInitialTarget(Uptane::Target::Unknown());
 
   // Create a new Target: update rootfs and commit it into Treehub's repo
   auto new_target = createTarget();
-  update(*client, getInitialTarget(), new_target);
+  update(*client, client->getCurrent(), new_target);
 
   auto req_headers = getDeviceGateway().getReqHeaders();
   ASSERT_EQ(req_headers["x-ats-target"], Uptane::Target::Unknown().filename());
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
 
   // verify the install
-  ASSERT_TRUE(client->getCurrent().MatchTarget(Uptane::Target::Unknown()));
+  ASSERT_FALSE(targetsMatch(client->getCurrent(), getInitialTarget()));
   reboot(client);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
