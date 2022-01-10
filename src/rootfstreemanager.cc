@@ -5,7 +5,7 @@ bool RootfsTreeManager::fetchTarget(const Uptane::Target &target, Uptane::Fetche
                                     const FetcherProgressCb &progress_cb, const api::FlowControlToken *token) {
   (void)fetcher;
 
-  std::vector<Remote> remotes = {{remote, config.ostree_server, {{"X-Correlation-ID", target.filename()}}, true}};
+  std::vector<Remote> remotes = {{remote, config.ostree_server, {{"X-Correlation-ID", target.filename()}}, false}};
 
   getAdditionalRemotes(remotes, target.filename());
 
