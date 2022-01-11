@@ -32,8 +32,8 @@ class AkliteTest : public fixtures::ClientTest,
     } else if (app_engine_type == "RestorableAppEngine") {
       setAvailableStorageSpace(std::numeric_limits<boost::uintmax_t>::max());
       app_engine = std::make_shared<Docker::RestorableAppEngine>(
-          fixtures::ClientTest::test_dir_.Path() / "apps-store", apps_root_dir, registry_client_, docker_client_,
-          registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd,
+          fixtures::ClientTest::test_dir_.Path() / "apps-store", apps_root_dir, daemon_.dataRoot(), registry_client_,
+          docker_client_, registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd,
           [this](const boost::filesystem::path& path) { return this->available_storage_space_; });
     } else {
       throw std::invalid_argument("Unsupported AppEngine type: " + app_engine_type);

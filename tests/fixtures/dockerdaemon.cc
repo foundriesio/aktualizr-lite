@@ -15,6 +15,8 @@ class DockerDaemon {
     TestUtils::waitForServer("http://localhost:" + port_ + "/");
   }
 
+  const std::string& dataRoot() const { return dir_.string(); }
+
   std::string getUrl() const {
     return "http://localhost:" + port_;
   }

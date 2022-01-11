@@ -1,5 +1,6 @@
 #include "restorableappengine.h"
 
+#include <sys/statvfs.h>
 #include <limits>
 #include <unordered_set>
 
@@ -29,12 +30,15 @@ RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::DefStorageSpaceFunc =
     };
 
 RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
+                                         boost::filesystem::path docker_root,
                                          Docker::RegistryClient::Ptr registry_client,
                                          Docker::DockerClient::Ptr docker_client, std::string client,
                                          std::string docker_host, std::string compose_cmd,
                                          StorageSpaceFunc storage_space_func)
     : store_root_{std::move(store_root)},
       install_root_{std::move(install_root)},
+      docker_root_{std::move(docker_root)},
+      docker_and_skopeo_same_volume_{areDockerAndSkopeoOnTheSameVolume(store_root_, docker_root_)},
       client_{std::move(client)},
       docker_host_{std::move(docker_host)},
       compose_cmd_{std::move(compose_cmd)},
@@ -355,66 +359,14 @@ void RestorableAppEngine::checkAppUpdateSize(const Uri& uri, const boost::filesy
       registry_client_->getAppManifest(layers_manifest_uri, Manifest::IndexFormat, layers_manifest_size)};
   const auto man{Utils::parseJSON(man_str)};
 
-  std::unordered_set<std::string> store_blobs;
-  const auto store_blobs_dir{blobs_root_ / "sha256"};
-
-  if (boost::filesystem::exists(store_blobs_dir)) {
-    for (const boost::filesystem::directory_entry& entry : boost::filesystem::directory_iterator(store_blobs_dir)) {
-      store_blobs.emplace(entry.path().filename().string());
-    }
-  }
-
-  std::size_t total_update_size{0};
-  const Json::Value layers{man["layers"]};
-
   LOG_INFO << "Checking for App's new layers...";
-  for (Json::ValueConstIterator ii = layers.begin(); ii != layers.end(); ++ii) {
-    const HashedDigest digest{(*ii)["digest"].asString()};
-    if (store_blobs.count(digest.hash()) == 0) {
-      // According to the spec the `size` field must be int64
-      // https://github.com/opencontainers/image-spec/blob/main/descriptor.md#properties
-      const auto size_obj{(*ii)["size"]};
-      if (!size_obj.isInt64()) {
-        throw std::range_error("Invalid value of a layer size, must be int64, got: " + size_obj.asString());
-      }
+  uint64_t skopeo_total_update_size{getAppUpdateSize(man["layers"], blobs_root_ / "sha256")};
+  const uint32_t average_compression_ratio{5} /* gzip layer compression ratio */;
+  uint64_t docker_total_update_size{
+      getDockerStoreSizeForAppUpdate(skopeo_total_update_size, average_compression_ratio)};
 
-      const std::int64_t size{size_obj.asInt64()};
-      if (size < 0) {
-        throw std::range_error("Invalid value of a layer size, must be > 0, got: " + std::to_string(size));
-      }
-
-      const std::size_t new_total_update_size = total_update_size + size;
-      if (new_total_update_size < total_update_size || new_total_update_size < size) {
-        throw std::overflow_error("Sum of layer sizes exceeded the maximum allowed value: " +
-                                  std::to_string(std::numeric_limits<std::size_t>::max()));
-        break;
-      }
-
-      LOG_INFO << "\t" << digest.hash() << " -> missing; to be downloaded; size: " << size;
-      total_update_size = new_total_update_size;
-    } else {
-      LOG_INFO << "\t" << digest.hash() << " -> exists";
-    }
-  }
-
-  LOG_INFO << uri.app << " -> total update size: " << total_update_size << " bytes";
-
-  const auto available_space{storage_space_func_(store_root_)};
-  // It can happen that one or more currently stored blobs/layers are not needed for the new App
-  // and they will be purged after an update completion therefore we actually will need less than
-  // `total_update_size` additional storage to accomodate a new App. Moreover, a new App even might
-  // occupy even less space than the current App.
-  // But, during an update process there is a moment at which a sum of both the current's and new App's layers
-  // are stored on storage, thus we need to make sure that underlying storage can accomodate the sum of the Apps'
-  // layers set/list.
-
-  // watermark, 80%, make sure that we don't fill more than 80% of all available space
-  auto available = static_cast<boost::uintmax_t>(available_space * 0.8);
-  LOG_INFO << uri.app << " -> avaliable storage space: " << available << " bytes";
-  if (total_update_size > available) {
-    throw std::runtime_error("There is no sufficient storage space available to download App, available: " +
-                             std::to_string(available) + " need: " + std::to_string(total_update_size));
-  }
+  LOG_INFO << "Checking if there is sufficient amount of storage available for App update...";
+  checkAvailableStorageInStores(uri.app, skopeo_total_update_size, docker_total_update_size, 0.8 /* watermark */);
 }
 
 void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compose_file,
@@ -752,6 +704,125 @@ void exec(const boost::format& cmd, const std::string& err_msg, Args&&... args) 
 std::string RestorableAppEngine::getContentHash(const boost::filesystem::path& path) {
   const auto content{Utils::readFile(path)};
   return boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(content)));
+}
+
+uint64_t RestorableAppEngine::getAppUpdateSize(const Json::Value& app_layers, const boost::filesystem::path& blob_dir) {
+  std::unordered_set<std::string> store_blobs;
+
+  if (boost::filesystem::exists(blob_dir)) {
+    for (const boost::filesystem::directory_entry& entry : boost::filesystem::directory_iterator(blob_dir)) {
+      store_blobs.emplace(entry.path().filename().string());
+    }
+  }
+
+  // It can happen that one or more currently stored blobs/layers are not needed for the new App
+  // and they will be purged after an update completion therefore we actually will need less than
+  // `total_update_size` additional storage to accomodate a new App. Moreover, a new App even might
+  // occupy even less space than the current App.
+  // But, during an update process there is a moment at which a sum of both the current's and new App's layers
+  // are stored on storage, thus we need to make sure that underlying storage can accomodate the sum of the Apps'
+  // layers set/list.
+
+  uint64_t skopeo_total_update_size{0};
+
+  for (Json::ValueConstIterator ii = app_layers.begin(); ii != app_layers.end(); ++ii) {
+    const HashedDigest digest{(*ii)["digest"].asString()};
+    if (store_blobs.count(digest.hash()) == 0) {
+      // According to the spec the `size` field must be int64
+      // https://github.com/opencontainers/image-spec/blob/main/descriptor.md#properties
+      const auto size_obj{(*ii)["size"]};
+      if (!size_obj.isInt64()) {
+        throw std::range_error("Invalid value of a layer size, must be int64, got: " + size_obj.asString());
+      }
+
+      const std::int64_t size{size_obj.asInt64()};
+      if (size < 0) {
+        throw std::range_error("Invalid value of a layer size, must be > 0, got: " + std::to_string(size));
+      }
+
+      const uint64_t new_total_update_size = skopeo_total_update_size + size;
+      if (new_total_update_size < skopeo_total_update_size || new_total_update_size < size) {
+        throw std::overflow_error("Sum of layer sizes exceeded the maximum allowed value: " +
+                                  std::to_string(std::numeric_limits<uint64_t>::max()));
+      }
+
+      LOG_INFO << "\t" << digest.hash() << " -> missing; to be downloaded; size: " << size;
+      skopeo_total_update_size = new_total_update_size;
+    } else {
+      LOG_INFO << "\t" << digest.hash() << " -> exists";
+    }
+  }
+  return skopeo_total_update_size;
+}
+
+uint64_t RestorableAppEngine::getDockerStoreSizeForAppUpdate(const uint64_t& compressed_update_size,
+                                                             uint32_t average_compression_ratio) {
+  // approximate an amount of storage required to accomodate the App update in the docker store
+  uint64_t docker_total_update_size{0};
+  // update size in uncompressed format (docker data root), skopeo_total_update_size * average_compression_ratio
+  if (__builtin_umull_overflow(compressed_update_size, average_compression_ratio, &docker_total_update_size)) {
+    throw std::overflow_error("Docker total update size exceeds the maximum allowed value: " +
+                              std::to_string(std::numeric_limits<uint64_t>::max()));
+  }
+  return docker_total_update_size;
+}
+
+void RestorableAppEngine::checkAvailableStorageInStores(const std::string& app_name,
+                                                        const uint64_t& skopeo_required_storage,
+                                                        const uint64_t& docker_required_storage,
+                                                        float watermark) const {
+  auto checkRoomInStore = [&](const std::string& store_name, const uint64_t& required_storage,
+                              const boost::filesystem::path& store_path) {
+    const auto available_space{storage_space_func_(store_path)};
+    auto available = static_cast<uint64_t>(available_space * watermark);
+    LOG_INFO << app_name << " -> " << store_name << " store total update size: " << required_storage
+             << " bytes; available: " << available << ", path: " << store_path.string();
+    if (required_storage > available) {
+      throw std::runtime_error("Insufficient storage available; store: " + store_name +
+                               ", path: " + store_path.string() + ", required: " + std::to_string(required_storage) +
+                               ", available: " + std::to_string(available));
+    }
+  };
+
+  checkRoomInStore("skopeo", skopeo_required_storage, store_root_);
+  checkRoomInStore("docker", docker_required_storage, docker_root_);
+
+  if (docker_and_skopeo_same_volume_) {
+    const uint64_t combined_total_required_size{skopeo_required_storage + docker_required_storage};
+    if (combined_total_required_size < skopeo_required_storage ||
+        combined_total_required_size < docker_required_storage) {
+      throw std::overflow_error("Sum of skopeo and docker update sizes exceeds the maximum allowed value: " +
+                                std::to_string(std::numeric_limits<uint64_t>::max()));
+    }
+    checkRoomInStore("skopeo & docker", combined_total_required_size, store_root_);
+  }
+}
+
+bool RestorableAppEngine::areDockerAndSkopeoOnTheSameVolume(const boost::filesystem::path& skopeo_path,
+                                                            const boost::filesystem::path& docker_path) {
+  const auto skopeoVolumeID{getPathVolumeID(skopeo_path.parent_path())};
+  if (!std::get<1>(skopeoVolumeID)) {
+    LOG_WARNING << "Failed to obtain an ID of a skopeo store volume; path: " << skopeo_path
+                << ", err: " << strerror(errno);
+  }
+  const auto dockerVolumeID{getPathVolumeID(docker_path.parent_path())};
+  if (!std::get<1>(dockerVolumeID)) {
+    LOG_WARNING << "Failed to obtain an ID of a docker store volume; path: " << docker_path
+                << ", err: " << strerror(errno);
+  }
+  // we assume that a docker data root and a skopeo store are located on the same volume in case of a failure to obtain
+  // a volume ID
+  return std::get<0>(skopeoVolumeID) == std::get<0>(dockerVolumeID);
+}
+
+std::tuple<uint64_t, bool> RestorableAppEngine::getPathVolumeID(const boost::filesystem::path& path) {
+  struct statvfs stvfsbuf {};
+  const int stat_res = statvfs(path.c_str(), &stvfsbuf);
+  if (stat_res < 0) {
+    return {0, false};
+  } else {
+    return {stvfsbuf.f_fsid, true};
+  }
 }
 
 }  // namespace Docker

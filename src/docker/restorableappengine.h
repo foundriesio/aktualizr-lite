@@ -79,8 +79,9 @@ class RestorableAppEngine : public AppEngine {
   static StorageSpaceFunc DefStorageSpaceFunc;
 
   RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
-                      Docker::RegistryClient::Ptr registry_client, Docker::DockerClient::Ptr docker_client,
-                      std::string client = "/sbin/skopeo", std::string docker_host = "unix:///var/run/docker.sock",
+                      boost::filesystem::path docker_root, Docker::RegistryClient::Ptr registry_client,
+                      Docker::DockerClient::Ptr docker_client, std::string client = "/sbin/skopeo",
+                      std::string docker_host = "unix:///var/run/docker.sock",
                       std::string compose_cmd = "/usr/bin/docker-compose",
                       StorageSpaceFunc storage_space_func = RestorableAppEngine::DefStorageSpaceFunc);
 
@@ -133,8 +134,21 @@ class RestorableAppEngine : public AppEngine {
   static void stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir);
   static std::string getContentHash(const boost::filesystem::path& path);
 
+  static uint64_t getAppUpdateSize(const Json::Value& app_layers, const boost::filesystem::path& blob_dir);
+  static uint64_t getDockerStoreSizeForAppUpdate(const uint64_t& compressed_update_size,
+                                                 uint32_t average_compression_ratio);
+
+  void checkAvailableStorageInStores(const std::string& app_name, const uint64_t& skopeo_required_storage,
+                                     const uint64_t& docker_required_storage, float watermark) const;
+
+  static bool areDockerAndSkopeoOnTheSameVolume(const boost::filesystem::path& skopeo_path,
+                                                const boost::filesystem::path& docker_path);
+  static std::tuple<uint64_t, bool> getPathVolumeID(const boost::filesystem::path& path);
+
   const boost::filesystem::path store_root_;
   const boost::filesystem::path install_root_;
+  const boost::filesystem::path docker_root_;
+  const bool docker_and_skopeo_same_volume_{true};
   const std::string client_;
   const std::string docker_host_;
   const std::string compose_cmd_;
