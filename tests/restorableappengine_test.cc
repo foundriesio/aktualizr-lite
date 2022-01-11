@@ -25,8 +25,8 @@ class RestorableAppEngineTest : public fixtures::AppEngineTest {
     fixtures::AppEngineTest::SetUp();
 
     app_engine = std::make_shared<Docker::RestorableAppEngine>(
-        skopeo_store_root_, apps_root_dir, registry_client_, docker_client_, registry.getSkopeoClient(),
-        daemon_.getUrl(), compose_cmd,
+        skopeo_store_root_, apps_root_dir, daemon_.dataRoot(), registry_client_, docker_client_,
+        registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd,
         [this](const boost::filesystem::path& path) { return this->available_storage_space_; });
   }
 
@@ -57,9 +57,23 @@ class RestorableAppEngineTest : public fixtures::AppEngineTest {
   void setAvailableStorageSpace(const boost::uintmax_t& space_size) { available_storage_space_ = space_size; }
   const boost::filesystem::path& storeRoot() const { return skopeo_store_root_; }
 
- private:
+ protected:
   const boost::filesystem::path skopeo_store_root_;
   boost::uintmax_t available_storage_space_;
+};
+
+class RestorableAppEngineTestParameterized : public RestorableAppEngineTest,
+                                             public ::testing::WithParamInterface<std::string> {
+ protected:
+  void SetUp() override {
+    fixtures::AppEngineTest::SetUp();
+    const auto docker_data_root_path{GetParam()};
+
+    app_engine = std::make_shared<Docker::RestorableAppEngine>(
+        skopeo_store_root_, apps_root_dir, docker_data_root_path.empty() ? daemon_.dataRoot() : docker_data_root_path,
+        registry_client_, docker_client_, registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd,
+        [this](const boost::filesystem::path& path) { return this->available_storage_space_; });
+  }
 };
 
 TEST_F(RestorableAppEngineTest, InitDeinit) {}
@@ -253,6 +267,29 @@ TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInsufficientSpace) {
   ASSERT_FALSE(app_engine->isFetched(app));
   ASSERT_FALSE(app_engine->isRunning(app));
 }
+
+TEST_P(RestorableAppEngineTestParameterized, FetchAndCheckSizeInsufficientSpace) {
+  const auto layer_size{1024};
+  Json::Value layers;
+  layers["layers"][0]["digest"] =
+      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+  layers["layers"][0]["size"] = layer_size;
+
+  const auto compose_app{fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers)};
+  // storage size sufficient to accomodate a layer in the skopeo store
+  // but not sufficient to accomodate an uncompressed layer in the docker data root (store)
+  setAvailableStorageSpace(layer_size * 1.5);
+  auto app = registry.addApp(compose_app);
+  ASSERT_FALSE(app_engine->fetch(app));
+  ASSERT_FALSE(app_engine->isFetched(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+}
+
+// Run FetchAndCheckSizeInsufficientSpace test for two use-cases:
+// 1. The skopeo and docker store are located on the same volume.
+// 2. The skopeo and docker store are located on different volumes.
+INSTANTIATE_TEST_SUITE_P(CheckSizeTests, RestorableAppEngineTestParameterized,
+                         ::testing::Values("", "/var/non-existing-dir/docker"));
 
 TEST_F(RestorableAppEngineTest, FetchAndCheckSizeOverflowLayerSize) {
   // generate a list of layers an overall size of which exceeds std::uint64_t/std::size_t

@@ -87,8 +87,9 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     const std::string docker_host{"unix:///var/run/docker.sock"};
 
     if (!!cfg_.reset_apps) {
-      app_engine_ = std::make_shared<Docker::RestorableAppEngine>(cfg_.reset_apps_root, cfg_.apps_root, registry_client,
-                                                                  docker_client, skopeo_cmd, docker_host, compose_cmd);
+      app_engine_ = std::make_shared<Docker::RestorableAppEngine>(cfg_.reset_apps_root, cfg_.apps_root,
+                                                                  cfg_.images_data_root, registry_client, docker_client,
+                                                                  skopeo_cmd, docker_host, compose_cmd);
     } else {
       app_engine_ =
           std::make_shared<Docker::ComposeAppEngine>(cfg_.apps_root, compose_cmd, docker_client, registry_client);
