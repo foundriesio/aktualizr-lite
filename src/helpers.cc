@@ -92,7 +92,6 @@ bool known_local_target(LiteClient& client, const Uptane::Target& t,
         if ((pending != boost::none) && (it->sha256Hash() == pending->sha256Hash())) {
           continue;
         }
-        LOG_INFO << "Target sha256Hash " << t.sha256Hash() << " known locally (rollback?), skipping";
         known_target = true;
         break;
       }

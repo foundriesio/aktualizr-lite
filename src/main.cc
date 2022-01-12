@@ -319,8 +319,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // if so then skip an update to the such version/Target
       bool is_rollback_target = client.isRollback(found_latest_target);
 
-      LOG_INFO << "Latest Target: " << found_latest_target.filename();
       if (!is_rollback_target && !client.isTargetActive(found_latest_target)) {
+        LOG_INFO << "Latest Target: " << found_latest_target.filename();
         client.checkForUpdatesEnd(found_latest_target);
         // New Target is available, try to update a device with it
         std::string reason = "Updating from " + current.filename() + " to " + found_latest_target.filename();
@@ -344,6 +344,10 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         }
 
       } else {
+        if (is_rollback_target) {
+          LOG_INFO << "Latest Target: " << found_latest_target.filename() << " is a failing Target (aka known locally)."
+                   << " Skipping its installation.";
+        }
         if (!client.appsInSync()) {
           client.checkForUpdatesEnd(found_latest_target);
           do_app_sync(client);
