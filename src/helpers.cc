@@ -84,10 +84,10 @@ bool known_local_target(LiteClient& client, const Uptane::Target& t,
   boost::optional<Uptane::Target> pending;
   client.storage->loadPrimaryInstalledVersions(nullptr, &pending);
 
-  if (t.sha256Hash() != current.sha256Hash()) {
+  if (current.filename() != t.filename()) /* make sure that a specified target is not current */ {
     std::vector<Uptane::Target>::reverse_iterator it;
     for (it = known_but_not_installed_versions.rbegin(); it != known_but_not_installed_versions.rend(); it++) {
-      if (it->sha256Hash() == t.sha256Hash()) {
+      if (it->filename() == t.filename()) {
         // Make sure installed version is not what is currently pending
         if ((pending != boost::none) && (it->sha256Hash() == pending->sha256Hash())) {
           continue;
