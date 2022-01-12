@@ -452,7 +452,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
   } else {
     LOG_ERROR << "Unable to install update: " << iresult.description;
-    LOG_ERROR << "Marking " << target.filename() << " as a bad/rollback version";
+    LOG_ERROR << "Marking " << target.filename() << " as a failing Target";
     storage->saveInstalledVersion("", target, InstalledVersionUpdateMode::kNone);
     // let go of the lock since we couldn't update
   }
