@@ -760,7 +760,7 @@ uint64_t RestorableAppEngine::getDockerStoreSizeForAppUpdate(const uint64_t& com
   // approximate an amount of storage required to accomodate the App update in the docker store
   uint64_t docker_total_update_size{0};
   // update size in uncompressed format (docker data root), skopeo_total_update_size * average_compression_ratio
-  if (__builtin_umull_overflow(compressed_update_size, average_compression_ratio, &docker_total_update_size)) {
+  if (__builtin_mul_overflow(compressed_update_size, average_compression_ratio, &docker_total_update_size)) {
     throw std::overflow_error("Docker total update size exceeds the maximum allowed value: " +
                               std::to_string(std::numeric_limits<uint64_t>::max()));
   }
