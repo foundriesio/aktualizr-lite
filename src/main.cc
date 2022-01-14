@@ -310,23 +310,51 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         continue;
       }
 
-      Uptane::Target& found_latest_target{*(find_target_res.second)};
+      // Handle the case when Apps failed to start on boot just after an update
+      bool rollback{false};
+      Uptane::Target target_to_install{*(find_target_res.second)};
+      if (client.isRollback(target_to_install) && (target_to_install.filename() == current.filename())) {
+        LOG_INFO << "The currently booted Target is a failing Target, finding Target to rollback to...";
+        const Uptane::Target rollback_target = client.getRollbackTarget();
+        if (rollback_target.MatchTarget(Uptane::Target::Unknown())) {
+          const auto log_msg{boost::str(boost::format("Failed to find Target to rollback to after a failure to start "
+                                                      "Apps at boot on a new version of sysroot;"
+                                                      " failing current Target: %s, hash: %s") %
+                                        current.filename() % current.sha256Hash())};
+
+          LOG_ERROR << log_msg;
+          LOG_ERROR << "Going to sleep for " << interval << " seconds before starting a new update cycle";
+          client.checkForUpdatesEndWithFailure(log_msg);
+          std::this_thread::sleep_for(std::chrono::seconds(interval));
+          continue;
+        }
+
+        LOG_INFO << "Found Target to rollback to: " << rollback_target.filename()
+                 << ", hash: " << rollback_target.sha256Hash();
+        target_to_install = rollback_target;
+        rollback = true;
+      }
 
       // This is a workaround for finding and avoiding bad updates after a rollback.
       // Rollback sets the installed version state to none instead of broken, so there is no
       // easy way to find just the bad versions without api/storage changes. As a workaround we
       // just check if the version is not current nor pending nor known (old hash) and never been succesfully installed,
       // if so then skip an update to the such version/Target
-      bool is_rollback_target = client.isRollback(found_latest_target);
+      bool is_rollback_target = client.isRollback(target_to_install);
 
-      if (!is_rollback_target && !client.isTargetActive(found_latest_target)) {
-        LOG_INFO << "Latest Target: " << found_latest_target.filename();
-        client.checkForUpdatesEnd(found_latest_target);
+      if (!is_rollback_target && !client.isTargetActive(target_to_install)) {
+        if (!rollback) {
+          LOG_INFO << "Found new and valid Target to update to: " << target_to_install.filename();
+        }
+
+        client.checkForUpdatesEnd(target_to_install);
         // New Target is available, try to update a device with it
-        std::string reason = "Updating from " + current.filename() + " to " + found_latest_target.filename();
-        data::ResultCode::Numeric rc = do_update(client, found_latest_target, reason);
+        std::string reason = std::string(rollback ? "Rolling back" : "Updating") + " from " + current.filename() +
+                             " to " + target_to_install.filename();
+
+        data::ResultCode::Numeric rc = do_update(client, target_to_install, reason);
         if (rc == data::ResultCode::Numeric::kOk) {
-          current = found_latest_target;
+          current = target_to_install;
           LiteClient::update_request_headers(client.http_client, current, client.config.pacman);
           // Start the loop over to call updateImagesMeta which will update this
           // device's target name on the server.
@@ -345,11 +373,11 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
       } else {
         if (is_rollback_target) {
-          LOG_INFO << "Latest Target: " << found_latest_target.filename() << " is a failing Target (aka known locally)."
+          LOG_INFO << "Latest Target: " << target_to_install.filename() << " is a failing Target (aka known locally)."
                    << " Skipping its installation.";
         }
         if (!client.appsInSync()) {
-          client.checkForUpdatesEnd(found_latest_target);
+          client.checkForUpdatesEnd(target_to_install);
           do_app_sync(client);
         } else {
           client.checkForUpdatesEnd(Uptane::Target::Unknown());

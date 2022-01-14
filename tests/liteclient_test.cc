@@ -63,9 +63,10 @@ class MockAppEngine : public AppEngine {
 class LiteClientTest : public fixtures::ClientTest {
  protected:
   std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
-                                               boost::optional<std::vector<std::string>> apps = boost::none) override {
+                                               boost::optional<std::vector<std::string>> apps = boost::none,
+                                               bool finalize = true) override {
     app_engine_mock_ = std::make_shared<NiceMock<MockAppEngine>>();
-    return ClientTest::createLiteClient(app_engine_mock_, initial_version, apps);
+    return ClientTest::createLiteClient(app_engine_mock_, initial_version, apps, "", boost::none, true, finalize);
   }
 
   std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }

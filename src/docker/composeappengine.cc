@@ -142,7 +142,7 @@ bool ComposeAppEngine::isFetched(const App& app) const {
   bool res{false};
   try {
     AppState state(app, appRoot(app));
-    res = state() == AppState::State::kPulled;
+    res = ((state() == AppState::State::kPulled) || (state() >= AppState::State::kInstalled));
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get/set App state: " << exc.what();
   }
@@ -319,7 +319,7 @@ bool ComposeAppEngine::installApp(const App& app) {
 }
 
 bool ComposeAppEngine::start(const App& app) {
-  LOG_INFO << "Starting App";
+  LOG_INFO << "Starting App: " << app.name << " -> " << app.uri;
   const auto result = cmd_streaming(compose_ + "up --remove-orphans -d", app);
   return result;
 }

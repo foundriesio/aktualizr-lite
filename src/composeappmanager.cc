@@ -254,8 +254,6 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     res = data::InstallationResult(data::ResultCode::Numeric::kOk, "OSTree hash already installed, same as current");
   }
 
-  handleRemovedApps(target);
-
   bool prune_images{cfg_.docker_prune};
   const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;  // system update
 
@@ -279,6 +277,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
         res.description += "\n" + pair.second;
       }
     }
+
   } else {
     LOG_INFO << "Apps' containers will be re-created and started just after succesfull boot on the new ostree version";
     res.description += "\n# Fecthed Apps' containers will be created and started after reboot\n";
@@ -287,16 +286,22 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     prune_images = false;
   }
 
-  if ((prune_images || !!cfg_.reset_apps) && (res.isSuccess() || res.needCompletion())) {
-    AppEngine::Apps app_shortlist;
-    const auto enabled_apps{getAppsToFetch(target, false)};
+  if (res.isSuccess()) {
+    // if App successfully started then clean uninstalled/disabled Apps,
+    // otherwise do it just after successfull finalization
+    handleRemovedApps(target);
 
-    std::for_each(enabled_apps.cbegin(), enabled_apps.cend(),
-                  [&app_shortlist](const std::pair<std::string, std::string>& val) {
-                    app_shortlist.emplace_back(AppEngine::App{val.first, val.second});
-                  });
+    if (prune_images) {
+      AppEngine::Apps app_shortlist;
+      const auto enabled_apps{getAppsToFetch(target, false)};
 
-    app_engine_->prune(app_shortlist);
+      std::for_each(enabled_apps.cbegin(), enabled_apps.cend(),
+                    [&app_shortlist](const std::pair<std::string, std::string>& val) {
+                      app_shortlist.emplace_back(AppEngine::App{val.first, val.second});
+                    });
+
+      app_engine_->prune(app_shortlist);
+    }
   }
 
   // there is no much reason in re-trying to install app if its installation has failed for the first time
@@ -312,19 +317,35 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
   auto ir = OstreeManager::finalizeInstall(target);
 
   if (ir.result_code.num_code == data::ResultCode::Numeric::kOk) {
+    LOG_INFO << "Starting Apps after successful boot on a new version of OSTree-based sysroot...";
     // "finalize" (run) Apps that were pulled and created before reboot
     for (const auto& app_pair : getApps(target)) {
       if (!app_engine_->run({app_pair.first, app_pair.second})) {
-        LOG_ERROR << "Failed to start App after booting on a new ostree version;"
+        LOG_ERROR << "Failed to start App after booting on a new version of OSTree-based sysroot;"
                      " app: "
                   << app_pair.first << "; uri: " << app_pair.second << "; " << target.filename();
         // Do we need to set some flag for the uboot and trigger a system reboot in order to boot on a previous
         // ostree version, hence a proper/full rollback happens???
+        ir.description += "\n# Failed to start App after booting on a new sysroot version: " + app_pair.first +
+                          "; uri: " + app_pair.second;
+        ir.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
+        // this is a hack to distinguish between ostree install (rollback) and App start failures.
+        // data::ResultCode::Numeric::kInstallFailed - boot on a new ostree version failed (rollback at boot)
+        // data::ResultCode::Numeric::kCustomError - boot on a new version was successful but new App failed to start
+        return data::InstallationResult(data::ResultCode::Numeric::kCustomError, ir.description);
       }
     }
-    if (!cfg_.create_containers_before_reboot && !cfg_.reset_apps) {
-      // purge images if containers are re-created after reboot and it's not Restorable Apps
-      app_engine_->prune(AppEngine::Apps{});
+    handleRemovedApps(target);
+    if (cfg_.docker_prune) {
+      AppEngine::Apps app_shortlist;
+      const auto enabled_apps{getAppsToFetch(target, false)};
+
+      std::for_each(enabled_apps.cbegin(), enabled_apps.cend(),
+                    [&app_shortlist](const std::pair<std::string, std::string>& val) {
+                      app_shortlist.emplace_back(AppEngine::App{val.first, val.second});
+                    });
+
+      app_engine_->prune(app_shortlist);
     }
   }
 

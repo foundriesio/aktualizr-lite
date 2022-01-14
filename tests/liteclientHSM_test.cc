@@ -63,7 +63,8 @@ class MockAppEngine : public AppEngine {
 class LiteClientHSMTest : public fixtures::ClientHSMTest {
  protected:
   std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
-                                               boost::optional<std::vector<std::string>> apps = boost::none) override {
+                                               boost::optional<std::vector<std::string>> apps = boost::none,
+                                               bool finalize = true) override {
     app_engine_mock_ = std::make_shared<NiceMock<MockAppEngine>>();
     return ClientHSMTest::createLiteClient(app_engine_mock_, initial_version, apps);
   }

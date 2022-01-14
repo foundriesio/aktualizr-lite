@@ -80,21 +80,19 @@ bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& co
 bool known_local_target(LiteClient& client, const Uptane::Target& t,
                         std::vector<Uptane::Target>& known_but_not_installed_versions) {
   bool known_target = false;
-  auto current = client.getCurrent();
   boost::optional<Uptane::Target> pending;
   client.storage->loadPrimaryInstalledVersions(nullptr, &pending);
 
-  if (current.filename() != t.filename()) /* make sure that a specified target is not current */ {
-    std::vector<Uptane::Target>::reverse_iterator it;
-    for (it = known_but_not_installed_versions.rbegin(); it != known_but_not_installed_versions.rend(); it++) {
-      if (it->filename() == t.filename()) {
-        // Make sure installed version is not what is currently pending
-        if ((pending != boost::none) && (it->sha256Hash() == pending->sha256Hash())) {
-          continue;
-        }
-        known_target = true;
-        break;
+  // current Target can be "known"/failing Target too
+  std::vector<Uptane::Target>::reverse_iterator it;
+  for (it = known_but_not_installed_versions.rbegin(); it != known_but_not_installed_versions.rend(); it++) {
+    if (it->filename() == t.filename()) {
+      // Make sure installed version is not what is currently pending
+      if ((pending != boost::none) && (it->sha256Hash() == pending->sha256Hash())) {
+        continue;
       }
+      known_target = true;
+      break;
     }
   }
   return known_target;
