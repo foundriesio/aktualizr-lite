@@ -28,7 +28,8 @@ class ClientTest :virtual public ::testing::Test {
 
 
   virtual std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
-                                                       boost::optional<std::vector<std::string>> apps = boost::none) = 0;
+                                                       boost::optional<std::vector<std::string>> apps = boost::none,
+                                                       bool finalize = true) = 0;
 
   /**
    * method createLiteClient
@@ -38,7 +39,7 @@ class ClientTest :virtual public ::testing::Test {
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                const std::string& compose_apps_root = "",
                                                boost::optional<std::vector<std::string>> reset_apps = boost::none,
-                                               bool create_containers_before_reboot = true) {
+                                               bool create_containers_before_reboot = true, bool finalize = true) {
     Config conf;
     conf.tls.server = device_gateway_.getTlsUri();
     conf.uptane.repo_server = device_gateway_.getTufRepoUri();
@@ -142,7 +143,9 @@ class ClientTest :virtual public ::testing::Test {
     }
 
     auto client = std::make_shared<LiteClient>(conf, app_engine);
-    client->finalizeInstall();
+    if (finalize) {
+      client->finalizeInstall();
+    }
     return client;
   }
 

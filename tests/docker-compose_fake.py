@@ -21,6 +21,10 @@ def up(out_dir, app_name, compose, flags):
     if compose["x-fault-injection"]["failure-type"] == "container-failure":
         exit(0)
 
+    if compose["x-fault-injection"]["failure-type"] == "compose-start-failure" and "-d" in flags:
+        logger.info("Failed to start container: {}".format(app_name))
+        exit(1)
+
     logger.info("Run services...")
     with open(os.path.join(out_dir, "containers.json"), "r") as f:
         containers = json.load(f)

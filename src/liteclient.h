@@ -4,6 +4,7 @@
 #include "gtest/gtest_prod.h"
 #include "libaktualizr/config.h"
 #include "libaktualizr/packagemanagerinterface.h"
+#include "ostree/sysroot.h"
 #include "uptane/imagerepository.h"
 
 class AppEngine;
@@ -35,6 +36,7 @@ class LiteClient {
   void checkForUpdatesEnd(const Uptane::Target& target);
   void checkForUpdatesEndWithFailure(const std::string& err);
   bool finalizeInstall();
+  Uptane::Target getRollbackTarget();
   data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
@@ -90,6 +92,8 @@ class LiteClient {
   Json::Value last_network_info_reported_;
   bool hwinfo_reported_{false};
   bool is_reboot_required_{false};
+
+  std::shared_ptr<OSTree::Sysroot> sysroot_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

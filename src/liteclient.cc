@@ -12,7 +12,6 @@
 #include "crypto/p11engine.h"
 #include "helpers.h"
 #include "http/httpclient.h"
-#include "ostree/sysroot.h"
 #include "primary/reportqueue.h"
 #include "rootfstreemanager.h"
 #include "storage/invstorage.h"
@@ -71,8 +70,9 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
 
   std::vector<std::string> headers;
 
-  auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), config.pacman.booted);
-  auto cur_hash = ostree_sysroot->getCurDeploymentHash();
+  auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), config.pacman.booted,
+                                                          config.pacman.os.empty() ? "lmp" : config.pacman.os);
+  auto cur_hash = ostree_sysroot->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent);
 
   std::string header("x-ats-ostreehash: ");
   if (!cur_hash.empty()) {
@@ -110,6 +110,7 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
+  sysroot_ = ostree_sysroot;
 }
 
 LiteClient::~LiteClient() {}  // NOLINT(modernize-use-equals-default, hicpp-use-equals-default)
@@ -117,29 +118,39 @@ LiteClient::~LiteClient() {}  // NOLINT(modernize-use-equals-default, hicpp-use-
 data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptane::Target>& target) {
   data::InstallationResult ret{data::ResultCode::Numeric::kNeedCompletion, ""};
   InstalledVersionUpdateMode mode = InstalledVersionUpdateMode::kPending;
-  bool rollback = false;
-  LOG_INFO << "Finalize Pending, Target: " << target->filename() << ", hash: " << target->sha256Hash();
+  bool rollback{false};
+  bool app_start_failed{false};
+  LOG_INFO << "Finalizing pending installation; Target: " << target->filename() << ", hash: " << target->sha256Hash();
 
   ret = package_manager_->finalizeInstall(*target);
   if (ret.isSuccess()) {
-    LOG_INFO << "Finalize Complete, Target: " << target->filename();
+    LOG_INFO << "Finalization has been completed successfully; Target: " << target->filename();
     mode = InstalledVersionUpdateMode::kCurrent;
   } else {
     rollback = data::ResultCode::Numeric::kInstallFailed == ret.result_code.num_code;
+    app_start_failed = data::ResultCode::Numeric::kCustomError == ret.result_code.num_code;
     // update dB Target record clearing flags (is_pending, was_installed)
     if (rollback) {
-      LOG_ERROR << "Finalize Failed (rollback happened), Target: " << target->filename();
+      const auto current{getCurrent()};
+      LOG_ERROR << "Finalization has failed; reason: sysroot rollback at boot time, to: " << current.filename()
+                << ", hash: " << current.sha256Hash();
+      mode = InstalledVersionUpdateMode::kNone;
+    }
+    if (app_start_failed) {
+      LOG_ERROR << "Finalization has failed; reason: apps start failure, currently booted on Target: "
+                << target->filename() << ", hash: " << target->sha256Hash();
       mode = InstalledVersionUpdateMode::kNone;
     }
   }
-  if (ret.isSuccess() || rollback) {
+  if (ret.isSuccess() || rollback || app_start_failed) {
+    // mark the given Target as "known" Target which indicates that this is a failing/bad Target.
     storage->saveInstalledVersion("", *target, mode);
   }
   return ret;
 }
 
 bool LiteClient::finalizeInstall() {
-  data::InstallationResult ret{data::ResultCode::Numeric::kNeedCompletion, ""};
+  data::InstallationResult ret{data::ResultCode::Numeric::kOk, ""};
   boost::optional<Uptane::Target> pending;
 
   // finalize pending installs
@@ -155,12 +166,32 @@ bool LiteClient::finalizeInstall() {
   update_request_headers(http_client, current, config.pacman);
   writeCurrentTarget(current);
 
-  // notify the backend
-  if (!ret.needCompletion()) {
+  // notify the backend about pending Target installation
+  if (!!pending && !ret.needCompletion()) {
     notifyInstallFinished(*pending, ret);
   }
 
-  return ret.isSuccess();
+  return ret.result_code.num_code == data::ResultCode::Numeric::kOk;
+}
+
+Uptane::Target LiteClient::getRollbackTarget() {
+  const auto rollback_hash{sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kRollback)};
+
+  Uptane::Target rollback_target{Uptane::Target::Unknown()};
+  {
+    std::vector<Uptane::Target> installed_versions;
+    storage->loadPrimaryInstallationLog(&installed_versions,
+                                        true /* make sure that Target has been successfully installed */);
+
+    std::vector<Uptane::Target>::reverse_iterator it;
+    for (it = installed_versions.rbegin(); it != installed_versions.rend(); it++) {
+      if (it->sha256Hash() == rollback_hash) {
+        rollback_target = *it;
+        break;
+      }
+    }
+  }
+  return rollback_target;
 }
 
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {

@@ -29,7 +29,9 @@ class RootfsTreeManager : public OstreeManager {
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
  private:
-  std::string getCurrentHash() const override { return sysroot_->getCurDeploymentHash(); }
+  std::string getCurrentHash() const override {
+    return sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent);
+  }
   void getAdditionalRemotes(std::vector<Remote>& remotes, const std::string& target_name);
 
   void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys);
