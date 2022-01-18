@@ -28,6 +28,10 @@ class RootfsTreeManager : public OstreeManager {
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
+ protected:
+  void installNotify(const Uptane::Target& target) override;
+  const std::shared_ptr<OSTree::Sysroot>& sysroot() const { return sysroot_; }
+
  private:
   std::string getCurrentHash() const override {
     return sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent);

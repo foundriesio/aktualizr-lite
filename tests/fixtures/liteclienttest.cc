@@ -192,9 +192,13 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method createAppTarget
    */
-  Uptane::Target createAppTarget(const std::vector<AppEngine::App>& apps) {
-    const auto& latest{getTufRepo().getLatest()};
-    const std::string version = std::to_string(std::stoi(latest.custom_version()) + 1);
+  Uptane::Target createAppTarget(const std::vector<AppEngine::App>& apps, const Uptane::Target& base_target = Uptane::Target::Unknown()) {
+    Uptane::Target base{base_target};
+    if (targetsMatch(base, Uptane::Target::Unknown())) {
+      base = getTufRepo().getLatest();
+    }
+
+    const std::string version = std::to_string(std::stoi(base.custom_version()) + 1);
     Json::Value apps_json;
     for (const auto& app : apps) {
       apps_json[app.name]["uri"] = app.uri;
@@ -202,7 +206,7 @@ class ClientTest :virtual public ::testing::Test {
 
     // add new target to TUF repo
     const std::string name = hw_id + "-" + os + "-" + version;
-    return getTufRepo().addTarget(name, latest.sha256Hash(), hw_id, version, apps_json);
+    return getTufRepo().addTarget(name, base.sha256Hash(), hw_id, version, apps_json);
   }
 
   /**

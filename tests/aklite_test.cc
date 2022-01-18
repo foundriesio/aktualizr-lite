@@ -526,6 +526,43 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
 
     // try to update to the latest version, it must fail because App is invalid
     update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed);
+    // since new sysroot (target_02) was installed (deployed) succeesfully then we expect that
+    // there is a corresponding pending deployment
+    ASSERT_EQ(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending), target_02.sha256Hash());
+
+    // emulate daemon_main's logic in the case of kInstallFailed
+    client->setAppsNotChecked();
+    // emulate next iteration/update cycle of daemon_main
+    client->checkForUpdatesBegin();
+    ASSERT_TRUE(client->isRollback(target_02));
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    ASSERT_FALSE(client->appsInSync());
+    // sync target_01 apps
+    updateApps(*client, client->getCurrent(), client->getCurrent());
+    client->checkForUpdatesEnd(target_01);
+
+    // make sure the initial target_01 is running
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    // ASSERT_TRUE(app_engine->isRunning(app01));
+    // make sure that target_02 is not pending anymore
+    ASSERT_NE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending), target_02.sha256Hash());
+    // and there is no any pending deployment at all
+    ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
+  }
+
+  {
+    // create a new "bad" Target, it includes just app update, App is invalid
+    auto app01_updated = registry.addApp(
+        fixtures::ComposeApp::create("app-01", "service-01", "image-03", fixtures::ComposeApp::ServiceTemplate,
+                                     Docker::ComposeAppEngine::ComposeFile, "compose-failure"));
+    std::vector<AppEngine::App> apps{app01_updated};
+    auto target_02 = createAppTarget(apps, target_01);
+
+    // try to update to the latest version, it must fail because App is invalid
+    ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
+    updateApps(*client, target_01, target_02, data::ResultCode::Numeric::kOk,
+               data::ResultCode::Numeric::kInstallFailed);
+    ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
@@ -541,28 +578,88 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
   }
 
   {
-    // create a new "bad" Target, it includes just app update, App is invalid
+    // finally do a valid App update
+    auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-04"));
+    std::vector<AppEngine::App> apps{app01_updated};
+    auto target_03 = createAppTarget(apps, target_01);
+    updateApps(*client, target_01, target_03);
+
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_03));
+    ASSERT_TRUE(app_engine->isRunning(app01_updated));
+    ASSERT_TRUE(client->appsInSync());
+    ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
+  }
+}
+
+TEST_P(AkliteTest, RollbackIfAppsInstallFailsAndPowerCut) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update both rootfs and add new app
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  std::vector<AppEngine::App> apps{app01};
+  auto target_01 = createTarget(&apps);
+
+  {
+    // update to the latest version
+    update(*client, getInitialTarget(), target_01);
+  }
+
+  {
+    // reboot and make sure that the update succeeded
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    checkHeaders(*client, target_01);
+    checkEvents(*client, target_01, UpdateType::kOstree);
+    ASSERT_TRUE(app_engine->isRunning(app01));
+  }
+
+  {
+    // create a new "bad" Target, it includes both ostree and app update, App is invalid
     auto app01_updated = registry.addApp(
-        fixtures::ComposeApp::create("app-01", "service-01", "image-03", fixtures::ComposeApp::ServiceTemplate,
+        fixtures::ComposeApp::create("app-01", "service-01", "image-02", fixtures::ComposeApp::ServiceTemplate,
                                      Docker::ComposeAppEngine::ComposeFile, "compose-failure"));
     std::vector<AppEngine::App> apps{app01_updated};
-    auto target_02 = createAppTarget(apps);
+    auto target_02 = createTarget(&apps);
 
     // try to update to the latest version, it must fail because App is invalid
-    updateApps(*client, target_01, target_02, data::ResultCode::Numeric::kOk,
-               data::ResultCode::Numeric::kInstallFailed);
+    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed);
+    // since new sysroot (target_02) was installed (deployed) succeesfully then we expect that
+    // there is a corresponding pending deployment
+    ASSERT_EQ(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending), target_02.sha256Hash());
 
-    // emulate next iteration/update cycle of daemon_main
-    client->checkForUpdatesBegin();
+    // emulate power cut
+    reboot(client);
+    // getCurrent() "thinks" that target_02 is current beacuse a device is booted on it.
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_02));
+    // but it's also a failing Target since its installation had failed before the power cut occured
+    ASSERT_TRUE(client->isRollback(client->getCurrent()));
     ASSERT_TRUE(client->isRollback(target_02));
-    ASSERT_FALSE(client->appsInSync());
-    // sync target_01 apps
-    updateApps(*client, client->getCurrent(), client->getCurrent());
-    client->checkForUpdatesEnd(target_01);
+    // emulate rollback triggered by daemon_main
+    ASSERT_TRUE(targetsMatch(client->getRollbackTarget(), target_01));
+    update(*client, target_02, target_01, data::ResultCode::Numeric::kNeedCompletion);
+    ASSERT_EQ(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending), target_01.sha256Hash());
+  }
 
-    // make sure the initial target_01 is running
+  {
+    reboot(client);
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
     ASSERT_TRUE(app_engine->isRunning(app01));
+    ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
+  }
+
+  {
+    // finally do a valid App update
+    auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-04"));
+    std::vector<AppEngine::App> apps{app01_updated};
+    auto target_03 = createAppTarget(apps, target_01);
+    updateApps(*client, target_01, target_03);
+
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_03));
+    ASSERT_TRUE(app_engine->isRunning(app01_updated));
+    ASSERT_TRUE(client->appsInSync());
+    ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
   }
 }
 
