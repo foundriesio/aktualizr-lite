@@ -10,13 +10,14 @@ namespace OSTree {
 
 class Sysroot {
  public:
-  enum class Deployment { kCurrent = 0, kRollback = 1 };
+  enum class Deployment { kCurrent = 0, kPending, kRollback };
 
   explicit Sysroot(std::string sysroot_path, BootedType booted = BootedType::kBooted, std::string os_name = "lmp");
 
   const std::string& path() const { return path_; }
 
   virtual std::string getDeploymentHash(Deployment deployment_type) const;
+  bool reload();
 
  private:
   static OstreeDeployment* getDeploymentIfBooted(OstreeSysroot* sysroot, const char* os_name,

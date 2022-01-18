@@ -7,6 +7,16 @@ Sysroot::Sysroot(std::string sysroot_path, BootedType booted, std::string os_nam
   sysroot_ = OstreeManager::LoadSysroot(path_);
 }
 
+bool Sysroot::reload() {
+  // Just reload for the booted env. In non-booted env "pending" deployment becomes "current" just after installation
+  // without a need to reboot. It in turns invalidates "getCurrent" value for tests at the stage after installation and
+  // before reboot.
+  if (booted_ == BootedType::kBooted) {
+    return static_cast<bool>(ostree_sysroot_load_if_changed(sysroot_.get(), nullptr, nullptr, nullptr));
+  }
+  return true;
+}
+
 std::string Sysroot::getDeploymentHash(Deployment deployment_type) const {
   std::string deployment_hash;
   g_autoptr(GPtrArray) deployments = nullptr;
@@ -17,7 +27,20 @@ std::string Sysroot::getDeploymentHash(Deployment deployment_type) const {
       deployment = getDeploymentIfBooted(sysroot_.get(), os_name_.c_str(), deployment_type);
       break;
     case BootedType::kStaged:
-      deployment = getDeploymentIfStaged(sysroot_.get(), os_name_.c_str(), deployment_type);
+      if (deployment_type == Deployment::kPending) {
+        OstreeDeployment* cur_deployment = getDeploymentIfStaged(sysroot_.get(), os_name_.c_str(), deployment_type);
+        // Load the sysroot to make sure we get its latest state, so we can get real "pending" deployment caused by
+        // successful installation
+        GObjectUniquePtr<OstreeSysroot> changed_sysroot = OstreeManager::LoadSysroot(path_);
+        OstreeDeployment* pend_deployment =
+            getDeploymentIfStaged(changed_sysroot.get(), os_name_.c_str(), deployment_type);
+        deployment =
+            (strcmp(ostree_deployment_get_csum(pend_deployment), ostree_deployment_get_csum(cur_deployment)) == 0)
+                ? nullptr
+                : pend_deployment;
+      } else {
+        deployment = getDeploymentIfStaged(sysroot_.get(), os_name_.c_str(), deployment_type);
+      }
       break;
     default:
       throw std::runtime_error("Invalid boot type: " + std::to_string(static_cast<int>(booted_)));
@@ -37,6 +60,9 @@ OstreeDeployment* Sysroot::getDeploymentIfBooted(OstreeSysroot* sysroot, const c
     case Deployment::kCurrent:
       deployment = ostree_sysroot_get_booted_deployment(sysroot);
       break;
+    case Deployment::kPending:
+      ostree_sysroot_query_deployments_for(sysroot, os_name, &deployment, nullptr);
+      break;
     case Deployment::kRollback:
       ostree_sysroot_query_deployments_for(sysroot, os_name, nullptr, &deployment);
       break;
@@ -54,6 +80,8 @@ OstreeDeployment* Sysroot::getDeploymentIfStaged(OstreeSysroot* sysroot, const c
 
   switch (deployment_type) {
     case Deployment::kCurrent:
+    case Deployment::kPending:
+      // if non-booted env then "current" and "pending" deployment are actually the same
       ostree_sysroot_query_deployments_for(sysroot, os_name, &deployment, nullptr);
       break;
     case Deployment::kRollback:

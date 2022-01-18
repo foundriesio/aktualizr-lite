@@ -365,8 +365,9 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
           break;
         } else if (rc == data::ResultCode::Numeric::kInstallFailed) {
           // If installation of the new Target has failed then do not wait `interval` time for the next update cycle,
-          // just do it immediately in order to sync Apps for the current Target, what effectively leads to Apps'
-          // rollback.
+          // just do it immediately in order to sync current installation with the current Target.
+          // It effectively leads to either just Apps' rollback or both sysroot and Apps' rollback depending on
+          // changes in the latest failing Target.
           client.setAppsNotChecked();
           continue;
         }

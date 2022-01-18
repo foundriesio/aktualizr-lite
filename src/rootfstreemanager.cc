@@ -31,6 +31,20 @@ bool RootfsTreeManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   return pull_err.isSuccess();
 }
 
+void RootfsTreeManager::installNotify(const Uptane::Target& target) {
+  if (sysroot_->reload()) {
+    LOG_DEBUG << "Change in the ostree-based sysroot has been detected after installation;"
+              << " booted on: " << sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent)
+              << " pending: " << sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending);
+
+  } else {
+    LOG_WARNING << "Change in the ostree-based sysroot has NOT been detected after installation;"
+                << " booted on: " << sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent)
+                << " pending: " << sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending);
+  }
+  OstreeManager::installNotify(target);
+}
+
 void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const std::string& target_name) {
   const auto resp = http_client_->post(gateway_url_ + "/download-urls", Json::Value::null);
 
