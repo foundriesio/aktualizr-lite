@@ -396,6 +396,27 @@ TEST_F(LiteClientTest, OstreeAndAppUpdateIfRollback) {
   }
 }
 
+TEST_F(LiteClientTest, CheckEmptyTargets) {
+  // boot device with no installed versions
+  auto client = createLiteClient(InitialVersion::kOff);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // make sure getting targets doesn't crash if called before updating metadata
+  ASSERT_EQ(client->allTargets().size(), 0);
+
+  createTarget();
+
+  LOG_INFO << "Refreshing Targets metadata";
+  const auto rc = client->updateImageMeta();
+  if (!std::get<0>(rc)) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
+    if (!client->checkImageMetaOffline()) {
+      LOG_ERROR << "Unable to use local copy of TUF data";
+    }
+  }
+  ASSERT_GT(client->allTargets().size(), 0);
+}
+
 /*
  * main
  */

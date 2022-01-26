@@ -48,7 +48,7 @@ class LiteClient {
   Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
   std::tuple<bool, std::string> updateImageMeta();
   bool checkImageMetaOffline();
-  const std::vector<Uptane::Target>& allTargets() const { return image_repo_.getTargets()->targets; }
+  const std::vector<Uptane::Target>& allTargets() const;
   TargetStatus VerifyTarget(const Uptane::Target& target) const { return package_manager_->verifyTarget(target); }
   void reportAktualizrConfiguration();
   void reportNetworkInfo();
@@ -96,6 +96,7 @@ class LiteClient {
   bool is_reboot_required_{false};
 
   std::shared_ptr<OSTree::Sysroot> sysroot_;
+  std::vector<Uptane::Target> no_targets_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_
