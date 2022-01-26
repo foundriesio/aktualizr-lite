@@ -355,6 +355,15 @@ std::tuple<bool, std::string> LiteClient::updateImageMeta() {
   return {true, ""};
 }
 
+const std::vector<Uptane::Target>& LiteClient::allTargets() const {
+  std::shared_ptr<const Uptane::Targets> targets{image_repo_.getTargets()};
+  if (targets) {
+    return image_repo_.getTargets()->targets;
+  } else {
+    return no_targets_;
+  }
+}
+
 bool LiteClient::checkImageMetaOffline() {
   try {
     image_repo_.checkMetaOffline(*storage);
