@@ -1,15 +1,20 @@
 class TufRepoMock {
  public:
   TufRepoMock(const boost::filesystem::path& _root, std::string expires = "",
-              std::string correlation_id = "corellatio-id")
+              std::string correlation_id = "corellation-id", bool generate_keys = true)
       : root_{_root.string()}, repo_{_root, expires, correlation_id}, latest_{Uptane::Target::Unknown()}
   {
-    repo_.generateRepo(KeyType::kED25519);
+    if (generate_keys) {
+      repo_.generateRepo(KeyType::kED25519);
+    }
   }
 
+  ~TufRepoMock() { boost::filesystem::remove_all(root_);}
+
  public:
-  const std::string& getPath() const { return root_; }
+  const std::string& getPath() const { return root_.string(); }
   const Uptane::Target& getLatest() const { return latest_; }
+  void setLatest(const Uptane::Target& latest) { latest_ = latest; }
 
   Uptane::Target addTarget(const std::string& name, const std::string& hash, const std::string& hardware_id,
                            const std::string& version, const Json::Value& apps_json = Json::Value()) {
@@ -33,7 +38,7 @@ class TufRepoMock {
   }
 
  private:
-  const std::string root_;
+  const boost::filesystem::path root_;
   ImageRepo repo_;
   Uptane::Target latest_;
 };
