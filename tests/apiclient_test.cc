@@ -206,6 +206,93 @@ TEST_F(ApiClientTest, Secondaries) {
   ASSERT_EQ(secondary_target.filename(), result.GetLatest("riscv").Name());
 }
 
+TEST_F(ApiClientTest, SwitchTag) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  const auto tagged_repo_path{test_dir_ / "tagged_repo"};
+  // copy TUF repo
+  Utils::copyDir(getTufRepo().getPath(), tagged_repo_path);
+  fixtures::TufRepoMock tag_repo{tagged_repo_path, "", "corellation-id", false};
+  tag_repo.setLatest(getTufRepo().getLatest());
+
+  const auto master_target{createTarget()};
+  const auto tag_target{createTarget(nullptr, "", "", tag_repo)};
+  // now both repo have the same root.json but different timestamp, snapshot and targets metadata,
+  // and their versions are the same (metadata's version = 3, Target custom version 2)
+
+  {
+    AkliteClient client(liteclient);
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+    auto latest = result.GetLatest();
+
+    auto installer = client.Installer(latest);
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+  }
+
+  // reboot
+  {
+    reboot(liteclient);
+    AkliteClient client(liteclient);
+
+    // make sure the update to master_target was successful
+    ASSERT_EQ(client.GetCurrent().Name(), master_target.filename());
+    ASSERT_EQ(client.GetCurrent().Sha256Hash(), master_target.sha256Hash());
+  }
+
+  // switch tag and restart
+  {
+    // switch to the tag repo
+    // for some reason Utils::copyDir fails time to time if a destination is not empty
+    // even though it calls remove_all internally, so just remove by invoking a shell cmd
+    std::string rm_out;
+    ASSERT_EQ(Utils::shell("rm -r " + getTufRepo().getPath(), &rm_out, true), 0) << rm_out;
+    Utils::copyDir(tagged_repo_path, getTufRepo().getPath());
+
+    restart(liteclient);
+    AkliteClient client(liteclient);
+
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+    auto latest = result.GetLatest();
+    // make sure the latest matches the latest from the tag repo, i.e. the tag target
+    ASSERT_EQ(latest.Name(), tag_target.filename());
+    ASSERT_EQ(latest.Sha256Hash(), tag_target.sha256Hash());
+    // make sure that the current and latest versions are the same but their content is different
+    ASSERT_EQ(latest.Version(), client.GetCurrent().Version());
+    ASSERT_NE(latest.Sha256Hash(), client.GetCurrent().Sha256Hash());
+
+    // do install
+    auto installer = client.Installer(latest);
+    // if metadata update was incorrect and currently stored metadata are not consistent then
+    // this check fails because AkliteClient::Installer does check "offline"/stored metadata
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+  }
+
+  // reboot
+  {
+    reboot(liteclient);
+    AkliteClient client(liteclient);
+
+    // make sure the update to tag_target was successful
+    ASSERT_EQ(client.GetCurrent().Name(), tag_target.filename());
+    ASSERT_EQ(client.GetCurrent().Sha256Hash(), tag_target.sha256Hash());
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";

@@ -153,8 +153,9 @@ class ClientTest :virtual public ::testing::Test {
    * method createTarget
    */
   Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid = "",
-                              const std::string& rootfs_path = "") {
-    const auto& latest_target{getTufRepo().getLatest()};
+                              const std::string& rootfs_path = "", boost::optional<TufRepoMock&> tuf_repo = boost::none) {
+    auto& repo{!!tuf_repo?*tuf_repo:getTufRepo()};
+    const auto& latest_target{repo.getLatest()};
     std::string version;
     try {
       version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
@@ -186,7 +187,7 @@ class ClientTest :virtual public ::testing::Test {
 
     // add new target to TUF repo
     const std::string name = hwid + "-" + os + "-" + version;
-    return getTufRepo().addTarget(name, hash, hwid, version, apps_json);
+    return repo.addTarget(name, hash, hwid, version, apps_json);
   }
 
   /**
