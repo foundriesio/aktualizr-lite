@@ -71,6 +71,11 @@ int main(int argc, char **argv) {
       if (latest.Name() != current.Name() && !client.IsRollback(latest)) {
         std::string reason = "Updating from " + current.Name() + " to " + latest.Name();
         auto installer = client.Installer(latest, reason);
+        if (!installer) {
+          LOG_ERROR << "Found latest Target but failed to retrieve its metadata from DB, skipping update";
+          std::this_thread::sleep_for(std::chrono::seconds(interval));
+          continue;
+        }
         auto dres = installer->Download();
         if (dres.status != DownloadResult::Status::Ok) {
           LOG_ERROR << "Unable to download target: " << dres;
