@@ -417,6 +417,33 @@ TEST_F(LiteClientTest, CheckEmptyTargets) {
   ASSERT_GT(client->allTargets().size(), 0);
 }
 
+TEST_F(LiteClientTest, OstreeUpdateIfSameVersion) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  auto target_01 = createTarget();
+  {
+    update(*client, getInitialTarget(), target_01);
+
+    // reboot device
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
+    checkHeaders(*client, target_01);
+  }
+
+  {
+    // create new Target that has the same version (custom.version) but different hash
+    auto target_01_1 = createTarget(nullptr, "", "", boost::none, "2");
+    ASSERT_FALSE(client->isTargetActive(target_01_1));
+    update(*client, target_01, target_01_1);
+    // reboot device
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01_1));
+    checkHeaders(*client, target_01_1);
+  }
+}
+
 /*
  * main
  */

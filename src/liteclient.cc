@@ -501,7 +501,8 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
 }
 
 bool LiteClient::isTargetActive(const Uptane::Target& target) const {
-  return target.filename() == getCurrent().filename();
+  const auto current{getCurrent()};
+  return target.filename() == current.filename() && target.sha256Hash() == current.sha256Hash();
 }
 
 bool LiteClient::appsInSync() const {
