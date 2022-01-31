@@ -344,7 +344,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
       if (!is_rollback_target && !client.isTargetActive(target_to_install)) {
         if (!rollback) {
-          LOG_INFO << "Found new and valid Target to update to: " << target_to_install.filename();
+          LOG_INFO << "Found new and valid Target to update to: " << target_to_install.filename()
+                   << ", sha256: " << target_to_install.sha256Hash();
         }
 
         client.checkForUpdatesEnd(target_to_install);

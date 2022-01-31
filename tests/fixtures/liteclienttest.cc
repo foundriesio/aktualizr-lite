@@ -153,15 +153,18 @@ class ClientTest :virtual public ::testing::Test {
    * method createTarget
    */
   Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid = "",
-                              const std::string& rootfs_path = "", boost::optional<TufRepoMock&> tuf_repo = boost::none) {
+                              const std::string& rootfs_path = "", boost::optional<TufRepoMock&> tuf_repo = boost::none,
+                              const std::string& ver = "") {
     auto& repo{!!tuf_repo?*tuf_repo:getTufRepo()};
     const auto& latest_target{repo.getLatest()};
-    std::string version;
-    try {
-      version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
-    } catch (...) {
-      LOG_INFO << "No target available, preparing the first version";
-      version = "1";
+    std::string version{ver};
+    if (version.size() == 0) {
+      try {
+        version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
+      } catch (...) {
+        LOG_INFO << "No target available, preparing the first version";
+        version = "1";
+      }
     }
 
     // update rootfs and commit it into Treehub's repo
