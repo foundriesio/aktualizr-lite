@@ -101,6 +101,9 @@ class DownloadResult {
   };
   Status status;
   std::string description;
+
+  // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
+  operator bool() const { return status == Status::Ok; }
 };
 
 std::ostream &operator<<(std::ostream &os, const InstallResult &res);

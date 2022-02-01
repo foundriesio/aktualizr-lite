@@ -1,23 +1,25 @@
 #include "rootfstreemanager.h"
 #include "ostree/repo.h"
+#include "target.h"
 
-bool RootfsTreeManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
-                                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
-  (void)fetcher;
+DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
+  auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
+    // report_progress_cb(events_channel.get(), t, description, progress);
+    // TODO: consider make use of it for download progress reporting
+  };
 
-  std::vector<Remote> remotes = {
-      {remote, config.ostree_server, {{"X-Correlation-ID", target.filename()}}, &keys, false}};
+  std::vector<Remote> remotes = {{remote, config.ostree_server, {{"X-Correlation-ID", target.Name()}}, &keys_, false}};
 
-  getAdditionalRemotes(remotes, target.filename());
+  getAdditionalRemotes(remotes, target.Name());
 
   data::InstallationResult pull_err{data::ResultCode::Numeric::kUnknown, ""};
   for (const auto& remote : remotes) {
-    LOG_INFO << "Fetchig ostree commit " + target.sha256Hash() + " from " + remote.baseUrl;
+    LOG_INFO << "Fetchig ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
     if (!remote.isRemoteSet) {
       setRemote(remote.name, remote.baseUrl, remote.keys);
     }
-    pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys, target, token, progress_cb,
-                                   remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
+    pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
+                                   prog_cb, remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
     if (pull_err.isSuccess()) {
       break;
     }
@@ -25,10 +27,21 @@ bool RootfsTreeManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   }
 
   if (!pull_err.isSuccess()) {
-    LOG_ERROR << "Failed to fetch ostree commit " + target.sha256Hash() + ", err: " + pull_err.description;
+    LOG_ERROR << "Failed to fetch ostree commit " + target.Sha256Hash() + ", err: " + pull_err.description;
   }
 
-  return pull_err.isSuccess();
+  return DownloadResult{pull_err.isSuccess() ? DownloadResult::Status::Ok : DownloadResult::Status::DownloadFailed,
+                        pull_err.description};
+}
+
+bool RootfsTreeManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
+                                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
+  (void)fetcher;
+  (void)token;
+  (void)progress_cb;
+  (void)keys;
+
+  return Download(Target::toTufTarget(target));
 }
 
 void RootfsTreeManager::installNotify(const Uptane::Target& target) {

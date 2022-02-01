@@ -4,6 +4,7 @@
 #include <boost/optional.hpp>
 #include "logging/logging.h"
 
+#include "aktualizr-lite/api.h"
 #include "uptane/tuf.h"
 
 class Target {
@@ -27,6 +28,9 @@ class Target {
                              const boost::optional<std::vector<std::string>>& app_shortlist = boost::none);
   static void log(const std::string& prefix, const Uptane::Target& target,
                   boost::optional<std::vector<std::string>> app_shortlist = boost::none);
+
+  static Uptane::Target fromTufTarget(const TufTarget& target);
+  static TufTarget toTufTarget(const Uptane::Target& target);
 
   class Apps {
    public:

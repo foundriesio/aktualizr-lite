@@ -38,9 +38,11 @@ class ComposeAppManager : public RootfsTreeManager {
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
-                    std::shared_ptr<OSTree::Sysroot> sysroot, AppEngine::Ptr app_engine = nullptr);
+                    std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys,
+                    AppEngine::Ptr app_engine = nullptr);
 
   std::string name() const override { return Name; }
+  DownloadResult Download(const TufTarget& target) override;
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 

@@ -103,10 +103,10 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
 
   if (config.pacman.type == ComposeAppManager::Name) {
     package_manager_ = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
-                                                           ostree_sysroot, app_engine);
+                                                           ostree_sysroot, *key_manager_, app_engine);
   } else if (config.pacman.type == RootfsTreeManager::Name) {
-    package_manager_ =
-        std::make_shared<RootfsTreeManager>(config.pacman, config.bootloader, storage, http_client, ostree_sysroot);
+    package_manager_ = std::make_shared<RootfsTreeManager>(config.pacman, config.bootloader, storage, http_client,
+                                                           ostree_sysroot, *key_manager_);
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }

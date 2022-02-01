@@ -75,8 +75,9 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
-                                     std::shared_ptr<OSTree::Sysroot> sysroot, AppEngine::Ptr app_engine)
-    : RootfsTreeManager(pconfig, bconfig, storage, http, std::move(sysroot)),
+                                     std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys,
+                                     AppEngine::Ptr app_engine)
+    : RootfsTreeManager(pconfig, bconfig, storage, http, std::move(sysroot), keys),
       cfg_{pconfig},
       app_engine_{std::move(app_engine)} {
   if (!app_engine_) {
@@ -182,25 +183,27 @@ bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
   return cur_apps_to_fetch_and_update_.empty() && cur_apps_to_fetch_.empty();
 }
 
-bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
-                                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
-  if (!RootfsTreeManager::fetchTarget(target, fetcher, keys, progress_cb, token)) {
-    return false;
+DownloadResult ComposeAppManager::Download(const TufTarget& target) {
+  auto ostree_download_res{RootfsTreeManager::Download(target)};
+  if (!ostree_download_res) {
+    return ostree_download_res;
   }
+
+  DownloadResult res{DownloadResult::Status::Ok, ""};
+  const Uptane::Target uptane_target{Target::fromTufTarget(target)};
 
   if (cfg_.force_update) {
     LOG_INFO << "All Apps are forced to be updated...";
-    cur_apps_to_fetch_and_update_ = getApps(target);
+    cur_apps_to_fetch_and_update_ = getApps(uptane_target);
   } else if (!are_apps_checked_) {
     // non-daemon mode (force check) or a new Target to be applied in daemon mode,
     // then do full check if Target Apps are installed and running
     LOG_INFO << "Checking for Apps to be installed or updated...";
-    checkForAppsToUpdate(target);
+    checkForAppsToUpdate(uptane_target);
   }
 
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
-  bool passed = true;
   AppsContainer all_apps_to_fetch;
   all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
   all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
@@ -208,12 +211,22 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   for (const auto& pair : all_apps_to_fetch) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
     if (!app_engine_->fetch({pair.first, pair.second})) {
-      passed = false;
+      res = {DownloadResult::Status::DownloadFailed, "Download failed TODO"};
     }
   }
 
   are_apps_checked_ = false;
-  return passed;
+  return res;
+}
+
+bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
+                                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
+  (void)fetcher;
+  (void)token;
+  (void)progress_cb;
+  (void)keys;
+
+  return Download(Target::toTufTarget(target));
 }
 
 TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const {
