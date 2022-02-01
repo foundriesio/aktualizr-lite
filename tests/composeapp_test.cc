@@ -225,7 +225,7 @@ struct TestClient {
                                                            boost::filesystem::canonical(pacman_cfg.compose_bin).string() + " ",
                                                            std::make_shared<Docker::DockerClient>(),
                                                            std::make_shared<Docker::RegistryClient>(http_client, pacman_cfg.hub_auth_creds_endpoint, registry_http_client_factory));
-    pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, sysroot, app_engine_);
+    pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, sysroot, *keys, app_engine_);
   }
 
   const boost::filesystem::path getRebootSentinel() const {
@@ -234,7 +234,7 @@ struct TestClient {
 
   void fakeReboot() {
     boost::filesystem::remove(getRebootSentinel());
-    pacman.reset(new ComposeAppManager(config.pacman, config.bootloader, storage, http_client, sysroot, app_engine_));
+    pacman.reset(new ComposeAppManager(config.pacman, config.bootloader, storage, http_client, sysroot, *keys, app_engine_));
   }
 
   Config config;

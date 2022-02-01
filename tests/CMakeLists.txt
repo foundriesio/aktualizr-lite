@@ -18,6 +18,7 @@ set(TEST_DEFS BOOST_LOG_DYN_LINK)
 set(TEST_INCS
   ${AKLITE_DIR}/src/compose
   ${AKLITE_DIR}/src/
+  ${AKLITE_DIR}/include/
   ${AKTUALIZR_DIR}/include
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include

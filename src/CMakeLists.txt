@@ -38,7 +38,8 @@ set(HEADERS helpers.h
         bootloader/rollbacks/rollback.h
         liteclient.h
         yaml2json.h
-        target.h)
+        target.h
+        downloader.h)
 
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
@@ -52,8 +53,9 @@ target_compile_definitions(${TARGET} PRIVATE BOOST_LOG_DYN_LINK)
 target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 
 set(INCS
-  ${AKLITE_DIR}/src/compose
   ${AKLITE_DIR}/src/
+  ${AKLITE_DIR}/src/compose
+  ${AKLITE_DIR}/include/
   ${AKTUALIZR_DIR}/include
   ${AKTUALIZR_DIR}/src/libaktualizr
   ${AKTUALIZR_DIR}/third_party/jsoncpp/include

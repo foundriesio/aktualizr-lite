@@ -75,3 +75,22 @@ void Target::log(const std::string& prefix, const Uptane::Target& target,
     LOG_INFO << "\t" << app_status << ": " << app.name << " -> " << app.uri;
   }
 }
+
+Uptane::Target Target::fromTufTarget(const TufTarget& target) {
+  Json::Value target_json;
+  target_json["hashes"]["sha256"] = target.Sha256Hash();
+  target_json["length"] = 0;
+  target_json["custom"] = target.Custom();
+  return Uptane::Target{target.Name(), target_json};
+}
+
+TufTarget Target::toTufTarget(const Uptane::Target& target) {
+  int ver = -1;
+  try {
+    ver = std::stoi(target.custom_version(), nullptr, 0);
+  } catch (const std::invalid_argument& exc) {
+    LOG_ERROR << "Invalid version number format: " << exc.what();
+  }
+
+  return TufTarget{target.filename(), target.sha256Hash(), ver, target.custom_data()};
+}
