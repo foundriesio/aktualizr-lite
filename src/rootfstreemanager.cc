@@ -36,12 +36,13 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
 
 bool RootfsTreeManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                                     const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
+  (void)target;
   (void)fetcher;
   (void)token;
   (void)progress_cb;
   (void)keys;
 
-  return Download(Target::toTufTarget(target));
+  throw std::runtime_error("Using obsolete method of package manager: fetchTarget()");
 }
 
 void RootfsTreeManager::installNotify(const Uptane::Target& target) {

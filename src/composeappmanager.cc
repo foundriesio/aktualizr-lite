@@ -2,6 +2,8 @@
 
 #include <set>
 
+#include <boost/format.hpp>
+
 #include "bootloader/bootloaderlite.h"
 #include "docker/restorableappengine.h"
 #include "target.h"
@@ -210,8 +212,12 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
 
   for (const auto& pair : all_apps_to_fetch) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
-    if (!app_engine_->fetch({pair.first, pair.second})) {
-      res = {DownloadResult::Status::DownloadFailed, "Download failed TODO"};
+    const auto fetch_res{app_engine_->fetch({pair.first, pair.second})};
+    if (!fetch_res) {
+      const std::string errDesc{boost::str(boost::format("failed to fetch App; app: %s; uri: %s; err: %s") %
+                                           pair.first % pair.second % fetch_res.err)};
+      res = {DownloadResult::Status::DownloadFailed, errDesc};
+      break;
     }
   }
 
@@ -221,12 +227,13 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
 
 bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                                     const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) {
+  (void)target;
   (void)fetcher;
   (void)token;
   (void)progress_cb;
   (void)keys;
 
-  return Download(Target::toTufTarget(target));
+  throw std::runtime_error("Using obsolete method of package manager: fetchTarget()");
 }
 
 TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const {

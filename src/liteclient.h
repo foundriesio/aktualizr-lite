@@ -14,6 +14,8 @@ class KeyManager;
 class P11EngineGuard;
 class ReportEvent;
 class ReportQueue;
+class DownloadResult;
+class Downloader;
 
 class LiteClient {
  public:
@@ -73,14 +75,13 @@ class LiteClient {
 
   void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const;
   void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
-  void notifyDownloadFinished(const Uptane::Target& t, bool success);
+  void notifyDownloadFinished(const Uptane::Target& t, bool success, const std::string& err_msg = "");
   void notifyInstallStarted(const Uptane::Target& t);
 
   void writeCurrentTarget(const Uptane::Target& t) const;
 
   data::InstallationResult installPackage(const Uptane::Target& target);
-  std::pair<bool, Uptane::Target> downloadImage(const Uptane::Target& target,
-                                                const api::FlowControlToken* token = nullptr);
+  DownloadResult downloadImage(const Uptane::Target& target, const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
 
@@ -97,6 +98,8 @@ class LiteClient {
 
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   std::vector<Uptane::Target> no_targets_;
+
+  std::shared_ptr<Downloader> downloader_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

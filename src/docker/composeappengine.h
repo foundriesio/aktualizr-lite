@@ -19,7 +19,7 @@ class ComposeAppEngine : public AppEngine {
   ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin, Docker::DockerClient::Ptr docker_client,
                    Docker::RegistryClient::Ptr registry_client);
 
-  bool fetch(const App& app) override;
+  Result fetch(const App& app) override;
   bool verify(const App& app) override;
   bool install(const App& app) override;
   bool run(const App& app) override;
