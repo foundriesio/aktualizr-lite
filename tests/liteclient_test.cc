@@ -328,7 +328,7 @@ TEST_F(LiteClientTest, AppUpdateDownloadFailure) {
   EXPECT_CALL(*getAppEngine(), install).Times(0);
   EXPECT_CALL(*getAppEngine(), run).Times(0);
 
-  updateApps(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed);
+  updateApps(*client, getInitialTarget(), new_target, DownloadResult::Status::DownloadFailed);
 }
 
 TEST_F(LiteClientTest, AppUpdateInstallFailure) {
@@ -348,7 +348,7 @@ TEST_F(LiteClientTest, AppUpdateInstallFailure) {
   EXPECT_CALL(*getAppEngine(), install).Times(0);
   EXPECT_CALL(*getAppEngine(), run).Times(1);
 
-  updateApps(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kOk,
+  updateApps(*client, getInitialTarget(), new_target, DownloadResult::Status::Ok,
              data::ResultCode::Numeric::kInstallFailed);
 }
 

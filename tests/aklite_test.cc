@@ -176,7 +176,7 @@ TEST_P(AkliteTest, AppInvalidUpdate) {
   auto app01_updated = registry.addApp(fixtures::ComposeApp::create(
       "app-01", "service-01", "image-02", fixtures::ComposeApp::ServiceTemplate, "incorrect-compose-file.yml"));
   auto target02 = createAppTarget({app01_updated});
-  updateApps(*client, target01, target02, data::ResultCode::Numeric::kDownloadFailed);
+  updateApps(*client, target01, target02, DownloadResult::Status::DownloadFailed);
   ASSERT_FALSE(targetsMatch(client->getCurrent(), target02));
 
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
@@ -415,11 +415,11 @@ TEST_P(AkliteTest, InvalidAppComposeUpdate) {
   const auto app_engine_type{GetParam()};
 
   // in the case of Restorable App we expect that download/fetch is successfull
-  data::ResultCode::Numeric expected_download_res{data::ResultCode::Numeric::kOk};
+  DownloadResult::Status expected_download_res{DownloadResult::Status::Ok};
   if (app_engine_type == "ComposeAppEngine") {
     // App is verified (docker-compose config) at the "fetch" phase for ComposeAppEngine
     // this is a bug that became a feature bug, so let's adjust to it
-    expected_download_res = data::ResultCode::Numeric::kDownloadFailed;
+    expected_download_res = DownloadResult::Status::DownloadFailed;
   }
   // updateApps() emulates LiteClient's client which invokes the fecthed Target verification.
   // the verification is supposed to fail and the installation process is never invoked
@@ -560,8 +560,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
 
     // try to update to the latest version, it must fail because App is invalid
     ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
-    updateApps(*client, target_01, target_02, data::ResultCode::Numeric::kOk,
-               data::ResultCode::Numeric::kInstallFailed);
+    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, data::ResultCode::Numeric::kInstallFailed);
     ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
 
     // emulate next iteration/update cycle of daemon_main
@@ -720,8 +719,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsNoContainer) {
     auto target_02 = createAppTarget(apps);
 
     // try to update to the latest version, it must fail because App is invalid
-    updateApps(*client, target_01, target_02, data::ResultCode::Numeric::kOk,
-               data::ResultCode::Numeric::kInstallFailed);
+    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, data::ResultCode::Numeric::kInstallFailed);
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
@@ -771,8 +769,7 @@ TEST_P(AkliteTest, AppRollbackIfAppsInstallFails) {
     auto target_02 = createAppTarget(apps);
 
     // try to update to the latest version, it must fail because App is invalid
-    updateApps(*client, target_01, target_02, data::ResultCode::Numeric::kOk,
-               data::ResultCode::Numeric::kInstallFailed);
+    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, data::ResultCode::Numeric::kInstallFailed);
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();

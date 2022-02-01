@@ -482,15 +482,11 @@ void LiteClient::reportHwInfo() {
   }
 }
 
-data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target, const std::string& reason) {
+DownloadResult LiteClient::download(const Uptane::Target& target, const std::string& reason) {
   notifyDownloadStarted(target, reason);
-  const auto download_result{downloadImage(target)};
-  if (!download_result) {
-    notifyDownloadFinished(target, false, download_result.description);
-    return data::ResultCode::Numeric::kDownloadFailed;
-  }
-  notifyDownloadFinished(target, true);
-  return data::ResultCode::Numeric::kOk;
+  auto download_result{downloadImage(target)};
+  notifyDownloadFinished(target, download_result, download_result.description);
+  return download_result;
 }
 
 data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {

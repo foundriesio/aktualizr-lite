@@ -181,9 +181,9 @@ static data::ResultCode::Numeric do_update(LiteClient& client, Uptane::Target ta
 
   generate_correlation_id(target);
 
-  data::ResultCode::Numeric rc = client.download(target, reason);
-  if (rc != data::ResultCode::Numeric::kOk) {
-    return rc;
+  const auto download_res{client.download(target, reason)};
+  if (!download_res) {
+    return data::ResultCode::Numeric::kDownloadFailed;
   }
 
   if (client.VerifyTarget(target) != TargetStatus::kGood) {
@@ -202,9 +202,9 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
 
   generate_correlation_id(target);
 
-  data::ResultCode::Numeric rc = client.download(target, "Sync active Target Apps");
-  if (rc != data::ResultCode::Numeric::kOk) {
-    return rc;
+  const auto download_res{client.download(target, "Sync active Target Apps")};
+  if (!download_res) {
+    return data::ResultCode::Numeric::kDownloadFailed;
   }
 
   if (client.VerifyTarget(target) != TargetStatus::kGood) {

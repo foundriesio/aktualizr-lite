@@ -234,7 +234,7 @@ class ClientTest :virtual public ::testing::Test {
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
     // TODO: call client->getTarget() once the method is moved to LiteClient
-    ASSERT_EQ(client.download(to, ""), data::ResultCode::Numeric::kOk);
+    ASSERT_TRUE(client.download(to, ""));
     ASSERT_EQ(client.install(to), expected_install_code);
 
     // make sure that the new Target hasn't been applied/finalized before reboot
@@ -248,16 +248,16 @@ class ClientTest :virtual public ::testing::Test {
    * method updateApps
    */
   void updateApps(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
-                  data::ResultCode::Numeric expected_download_code = data::ResultCode::Numeric::kOk,
+                  DownloadResult::Status expected_download_code = DownloadResult::Status::Ok,
                   data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kOk) {
     device_gateway_.resetEvents();
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
     // TODO: call client->getTarget() once the method is moved to LiteClient
-    ASSERT_EQ(client.download(to, ""), expected_download_code);
+    ASSERT_EQ(client.download(to, "").status, expected_download_code);
 
-    if (expected_download_code != data::ResultCode::Numeric::kOk) {
+    if (expected_download_code != DownloadResult::Status::Ok) {
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
       checkHeaders(client, from);

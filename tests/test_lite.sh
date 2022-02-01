@@ -27,14 +27,15 @@ uptane_gen() {
 
 add_target() {
     custom_json="${dest_dir}/custom.json"
-    name=$1
-    if [ -n "$2" ] ; then
-        sha=$2
+    version=$1
+    name=$2
+    if [ -n "$3" ] ; then
+        sha=$3
     else
         sha=$(echo $name | sha256sum | cut -f1 -d\  )
     fi
-    if [ -n "$3" ] ; then
-        tag="\"$3\""
+    if [ -n "$4" ] ; then
+        tag="\"$4\""
     fi
     cat >$custom_json <<EOF
 {
@@ -51,8 +52,8 @@ EOF
 }
 
 uptane_gen --command generate --expires 2041-07-04T16:33:27Z
-add_target foo1
-add_target foo2
+add_target 1000 foo1
+add_target 1001 foo2
 uptane_gen --command signtargets
 
 pushd $dest_dir
@@ -103,29 +104,30 @@ $valgrind $aklite -h | grep "daemon"
 
 ## Check that we can do the list command
 out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml list)
-if [[ ! "$out" =~ "foo1" ]] ; then
+if [[ ! "$out" =~ "1000" ]] ; then
     echo "ERROR: foo1 update missing"
     exit 1
 fi
-if [[ ! "$out" =~ "foo2" ]] ; then
+if [[ ! "$out" =~ "1001" ]] ; then
     echo "ERROR: foo2 update missing"
     exit 1
 fi
 
 ## Check that we can do the update command
 update=$(ostree admin status | head -n 1)
+version=1002
 name="zlast"  # give a name that will cause the custom version to be the latest
 sha=$(echo $update | cut -d\  -f2 | sed 's/\.0$//')
-echo "Adding new target: $name / $sha"
-add_target $name $sha
+echo "Adding new target: $version $name / $sha"
+add_target $version $name $sha
 
 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update --update-name $name
 ostree admin status
 
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: zlast"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: $version"
 
 out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml status)
-if [[ ! "$out" =~ "Active image is: zlast	sha256:$sha" ]] ; then
+if [[ ! "$out" =~ "Active image is: $version	sha256:$sha" ]] ; then
     echo "ERROR: status incorrect:"
     echo $out
     exit 1
@@ -135,7 +137,8 @@ source ${sota_dir}/current-target
 [ "$CONTAINERS_SHA" = "deadbeef" ] || (echo current-target wrong: $CONTAINERS_SHA != deadbeef; exit 1)
 
 ## Make sure we obey tags and notify the callback program
-add_target promoted-$name $sha promoted
+promoted_version=1003
+add_target $promoted_version promoted-$name $sha promoted
 echo 'tags = "promoted"' >> $sota_dir/sota.toml
 echo "callback_program = \"${sota_dir}/callback.sh\"" >> $sota_dir/sota.toml
 cat >$sota_dir/callback.sh <<EOF
@@ -143,7 +146,7 @@ cat >$sota_dir/callback.sh <<EOF
 env >> ${sota_dir}/\$MESSAGE.log
 EOF
 chmod +x $sota_dir/callback.sh
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: promoted-zlast"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: $promoted_version"
 for callback in download-pre download-post install-pre ; do
   if [ -f ${sota_dir}/${callback}.log ] ; then
     grep "INSTALL_TARGET_NAME=promoted-zlast" ${sota_dir}/${callback}.log
