@@ -110,6 +110,11 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
+
+  downloader_ = std::dynamic_pointer_cast<Downloader>(package_manager_);
+  if (!downloader_) {
+    throw std::runtime_error("Invalid package manager: cannot cast to Downloader type");
+  }
   sysroot_ = ostree_sysroot;
 }
 
@@ -251,14 +256,24 @@ class DetailedDownloadReport : public EcuDownloadStartedReport {
   }
 };
 
+class DetailedDownloadCompletedReport : public EcuDownloadCompletedReport {
+ public:
+  DetailedDownloadCompletedReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, bool success,
+                                  const std::string& details)
+      : EcuDownloadCompletedReport(ecu, correlation_id, success) {
+    custom["details"] = details;
+  }
+};
+
 void LiteClient::notifyDownloadStarted(const Uptane::Target& t, const std::string& reason) {
   callback("download-pre", t);
   notify(t, std_::make_unique<DetailedDownloadReport>(primary_ecu.first, t.correlation_id(), reason));
 }
 
-void LiteClient::notifyDownloadFinished(const Uptane::Target& t, bool success) {
+void LiteClient::notifyDownloadFinished(const Uptane::Target& t, bool success, const std::string& err_msg) {
   callback("download-post", t, success ? "OK" : "FAILED");
-  notify(t, std_::make_unique<EcuDownloadCompletedReport>(primary_ecu.first, t.correlation_id(), success));
+  notify(t,
+         std_::make_unique<DetailedDownloadCompletedReport>(primary_ecu.first, t.correlation_id(), success, err_msg));
 }
 
 void LiteClient::notifyInstallStarted(const Uptane::Target& t) {
@@ -374,22 +389,19 @@ bool LiteClient::checkImageMetaOffline() {
   return true;
 }
 
-std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& target,
-                                                          const api::FlowControlToken* token) {
+DownloadResult LiteClient::downloadImage(const Uptane::Target& target, const api::FlowControlToken* token) {
   key_manager_->loadKeys();
-  auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
-    // report_progress_cb(events_channel.get(), t, description, progress);
-    // TODO: consider make use of it for download progress reporting
-  };
 
-  bool success = false;
+  DownloadResult success{DownloadResult::Status::DownloadFailed, ""};
   {
     const int max_tries = 3;
     int tries = 0;
     std::chrono::milliseconds wait(500);
 
     for (; tries < max_tries; tries++) {
-      success = package_manager_->fetchTarget(target, *uptane_fetcher_, *key_manager_, prog_cb, token);
+      success = downloader_->Download(Target::toTufTarget(target));
+      // success = package_manager_->fetchTarget(target, *uptane_fetcher_, *key_manager_, prog_cb, token);
+
       // Skip trying to fetch the 'target' if control flow token transaction
       // was set to the 'abort' or 'pause' state, see the CommandQueue and FlowControlToken.
       if (success || (token != nullptr && !token->canContinue(false))) {
@@ -404,7 +416,7 @@ std::pair<bool, Uptane::Target> LiteClient::downloadImage(const Uptane::Target& 
     }
   }
 
-  return {success, target};
+  return success;
 }
 
 void LiteClient::reportAktualizrConfiguration() {
@@ -472,8 +484,9 @@ void LiteClient::reportHwInfo() {
 
 data::ResultCode::Numeric LiteClient::download(const Uptane::Target& target, const std::string& reason) {
   notifyDownloadStarted(target, reason);
-  if (!downloadImage(target).first) {
-    notifyDownloadFinished(target, false);
+  const auto download_result{downloadImage(target)};
+  if (!download_result) {
+    notifyDownloadFinished(target, false, download_result.description);
     return data::ResultCode::Numeric::kDownloadFailed;
   }
   notifyDownloadFinished(target, true);

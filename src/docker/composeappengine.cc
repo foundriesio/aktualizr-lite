@@ -14,10 +14,10 @@ ComposeAppEngine::ComposeAppEngine(boost::filesystem::path root_dir, std::string
       docker_client_{std::move(docker_client)},
       registry_client_{std::move(registry_client)} {}
 
-bool ComposeAppEngine::fetch(const App& app) {
+AppEngine::Result ComposeAppEngine::fetch(const App& app) {
   boost::filesystem::create_directories(appRoot(app) / MetaDir);
 
-  bool result = false;
+  Result result{false};
 
   try {
     AppState state(app, appRoot(app), true);
@@ -42,11 +42,7 @@ bool ComposeAppEngine::fetch(const App& app) {
 
     result = true;
   } catch (const std::exception& exc) {
-    LOG_WARNING << "Failed to get/set App state, fallback to forced fetch: " << exc.what();
-
-    if (download(app) && verify(app) && pullImages(app)) {
-      result = true;
-    }
+    result = {false, exc.what()};
   }
 
   return result;
@@ -295,6 +291,7 @@ bool ComposeAppEngine::download(const App& app) {
     LOG_DEBUG << app.name << ": App has been downloaded";
   } catch (const std::exception& exc) {
     LOG_ERROR << app.name << ": failed to download App from Registry: " << exc.what();
+    throw;
   }
 
   return result;
@@ -427,8 +424,12 @@ bool ComposeAppEngine::AppState::exists(const boost::filesystem::path& root) {
 }
 
 void ComposeAppEngine::AppState::setState(const State& state) {
-  state_file_.write(static_cast<int>(state));
-  state_ = state;
+  try {
+    state_file_.write(static_cast<int>(state));
+    state_ = state;
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to set App state: " << exc.what();
+  }
 }
 
 void ComposeAppEngine::AppState::File::write(int val) { write(&val, sizeof(val)); }

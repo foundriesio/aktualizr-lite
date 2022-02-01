@@ -47,7 +47,7 @@ class MockAppEngine : public AppEngine {
   }
 
  public:
-  MOCK_METHOD(bool, fetch, (const App& app), (override));
+  MOCK_METHOD(AppEngine::Result, fetch, (const App& app), (override));
   MOCK_METHOD(bool, verify, (const App& app), (override));
   MOCK_METHOD(bool, install, (const App& app), (override));
   MOCK_METHOD(bool, run, (const App& app), (override));

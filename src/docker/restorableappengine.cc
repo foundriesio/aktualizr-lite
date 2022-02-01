@@ -49,8 +49,8 @@ RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boo
   boost::filesystem::create_directories(blobs_root_);
 }
 
-bool RestorableAppEngine::fetch(const App& app) {
-  bool res{false};
+AppEngine::Result RestorableAppEngine::fetch(const App& app) {
+  Result res{false};
   boost::filesystem::path app_dir;
   try {
     const Uri uri{Uri::parseUri(app.uri)};
@@ -78,6 +78,7 @@ bool RestorableAppEngine::fetch(const App& app) {
     if (boost::filesystem::exists(app_dir)) {
       boost::filesystem::remove_all(app_dir);
     }
+    res = Result{false, exc.what()};
   }
 
   return res;

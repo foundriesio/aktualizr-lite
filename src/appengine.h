@@ -14,10 +14,20 @@ class AppEngine {
     std::string uri;
   };
 
+  struct Result {
+    // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
+    Result(bool var, std::string errMsg = "") : status{var}, err{std::move(errMsg)} {}
+    // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
+    operator bool() const { return status; }
+
+    bool status;
+    std::string err;
+  };
+
   using Apps = std::vector<App>;
   using Ptr = std::shared_ptr<AppEngine>;
 
-  virtual bool fetch(const App& app) = 0;
+  virtual Result fetch(const App& app) = 0;
   virtual bool verify(const App& app) = 0;
   virtual bool install(const App& app) = 0;
   virtual bool run(const App& app) = 0;

@@ -85,7 +85,7 @@ class RestorableAppEngine : public AppEngine {
                       std::string compose_cmd = "/usr/bin/docker-compose",
                       StorageSpaceFunc storage_space_func = RestorableAppEngine::DefStorageSpaceFunc);
 
-  bool fetch(const App& app) override;
+  Result fetch(const App& app) override;
   bool verify(const App& app) override;
   bool install(const App& app) override;
   bool run(const App& app) override;
