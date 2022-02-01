@@ -39,7 +39,7 @@ class LiteClient {
   void checkForUpdatesEndWithFailure(const std::string& err);
   bool finalizeInstall();
   Uptane::Target getRollbackTarget();
-  data::ResultCode::Numeric download(const Uptane::Target& target, const std::string& reason);
+  DownloadResult download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
   std::pair<bool, std::string> isRebootRequired() const {

@@ -12,6 +12,7 @@
 
 #include "composeappmanager.h"
 #include "docker/composeappengine.h"
+#include "target.h"
 
 
 class FakeRegistry {
@@ -226,6 +227,9 @@ struct TestClient {
                                                            std::make_shared<Docker::DockerClient>(),
                                                            std::make_shared<Docker::RegistryClient>(http_client, pacman_cfg.hub_auth_creds_endpoint, registry_http_client_factory));
     pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, sysroot, *keys, app_engine_);
+
+    downloader = std::dynamic_pointer_cast<Downloader>(pacman);
+    assert(downloader);
   }
 
   const boost::filesystem::path getRebootSentinel() const {
@@ -241,6 +245,7 @@ struct TestClient {
   std::unique_ptr<TemporaryDirectory> tempdir;
   std::shared_ptr<INvStorage> storage;
   std::shared_ptr<ComposeAppManager> pacman;
+  std::shared_ptr<Downloader> downloader;
   std::unique_ptr<KeyManager> keys;
   std::unique_ptr<Uptane::Fetcher> fetcher;
   boost::filesystem::path apps_root;
@@ -344,7 +349,7 @@ TEST(ComposeApp, fetch) {
   Uptane::Target target("pull", target_json);
 
   TestClient client("app2 doesnotexist", nullptr, &registry);  // only app2 can be fetched
-  bool result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  const auto result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_TRUE(result);
   const std::string expected_file = (client.apps_root / "app2"/ app_file_name).string();
   ASSERT_TRUE(boost::filesystem::exists(expected_file));
@@ -376,13 +381,13 @@ TEST(ComposeApp, fetchNegative) {
   // Now do a quick check that we can handle a simple download failure
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "FAILTEST";
   target = Uptane::Target("pull", target_json);
-  bool result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  auto result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Invalid App URI
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "hub.io/test_repo/app2sha256:712329f5d298ccc144f2d1c8b071cc277dcbe77796d8d3a805b69dd09aa486dc";
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Invalid App Manifest: no version
@@ -391,7 +396,7 @@ TEST(ComposeApp, fetchNegative) {
                                                     manifest["annotations"].clear();
                                                   });
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Invalid App Manifest: unsupported version
@@ -401,7 +406,7 @@ TEST(ComposeApp, fetchNegative) {
                                                           });
   registry.manifest()["annotations"]["compose-app"] = "v0";
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Invalid App Manifest: no archive/blob layer
@@ -410,14 +415,14 @@ TEST(ComposeApp, fetchNegative) {
                                                             manifest["layers"].clear();
                                                           });
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Invalid App Manifest: invalid hash caused by manifest altering
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2");
   registry.manifest()["custom"]["some_filed"] = "some_value";
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Invalid archive hash
@@ -426,7 +431,7 @@ TEST(ComposeApp, fetchNegative) {
                                         manifest["layers"][0]["digest"] = "sha256:" + hash.replace(2, 3, "123");
                                       });
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Invalid archive size: received more data than specified in the manifest
@@ -435,7 +440,7 @@ TEST(ComposeApp, fetchNegative) {
                                         manifest["layers"][0]["size"] = manifest["layers"][0]["size"].asUInt() - 1;
                                       });
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Invalid archive size: received less data than specified in the manifest
@@ -444,7 +449,7 @@ TEST(ComposeApp, fetchNegative) {
                                           manifest["layers"][0]["size"] = manifest["layers"][0]["size"].asUInt() + 1;
                                         });
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
 
@@ -454,7 +459,7 @@ TEST(ComposeApp, fetchNegative) {
                                           manifest["layers"][1]["some_value"] = std::string(Docker::RegistryClient::DefManifestMaxSize + 1, 'f');
                                         });
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
   // Archive size exceeds maximum available storage space
@@ -463,7 +468,7 @@ TEST(ComposeApp, fetchNegative) {
                                           manifest["layers"][0]["size"] = std::numeric_limits<size_t>::max();
                                         });
   target = Uptane::Target("pull", target_json);
-  result = client.pacman->fetchTarget(target, *(client.fetcher), *(client.keys), progress_cb, nullptr);
+  result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 }
 

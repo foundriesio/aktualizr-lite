@@ -196,9 +196,9 @@ class LiteInstall : public InstallContext {
 
     client_->logTarget("Downloading: ", *target_);
 
-    data::ResultCode::Numeric rc = client_->download(*target_, reason);
-    if (rc != data::ResultCode::Numeric::kOk) {
-      return DownloadResult{DownloadResult::Status::DownloadFailed, "Unable to download target"};
+    auto download_res{client_->download(*target_, reason)};
+    if (!download_res) {
+      return download_res;
     }
 
     if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {
