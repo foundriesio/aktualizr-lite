@@ -28,7 +28,7 @@ class AppEngine {
   using Ptr = std::shared_ptr<AppEngine>;
 
   virtual Result fetch(const App& app) = 0;
-  virtual bool verify(const App& app) = 0;
+  virtual Result verify(const App& app) = 0;
   virtual bool install(const App& app) = 0;
   virtual bool run(const App& app) = 0;
   virtual void remove(const App& app) = 0;

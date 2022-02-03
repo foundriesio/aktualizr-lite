@@ -11,13 +11,11 @@
 #include "crypto/crypto.h"
 #include "docker/composeappengine.h"
 #include "docker/composeinfo.h"
+#include "exec.h"
 
 namespace Docker {
 
 const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
-
-template <typename... Args>
-static void exec(const boost::format& cmd, const std::string& err_msg, Args&&... args);
 
 RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::DefStorageSpaceFunc =
     [](const boost::filesystem::path& path) {
@@ -74,28 +72,28 @@ AppEngine::Result RestorableAppEngine::fetch(const App& app) {
     pullAppImages(app_compose_file, images_dir);
     res = true;
   } catch (const std::exception& exc) {
-    LOG_ERROR << "failed to fetch App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
     if (boost::filesystem::exists(app_dir)) {
       boost::filesystem::remove_all(app_dir);
     }
-    res = Result{false, exc.what()};
+    res = {false, exc.what()};
   }
 
   return res;
 }
 
-bool RestorableAppEngine::verify(const App& app) {
-  bool res{false};
+AppEngine::Result RestorableAppEngine::verify(const App& app) {
+  Result res{true};
   try {
     const Uri uri{Uri::parseUri(app.uri)};
     const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
     TemporaryDirectory app_tmp_dir;
     installApp(app_dir, app_tmp_dir.Path());
     LOG_DEBUG << app.name << ": verifying App: " << app_dir << " --> " << app_tmp_dir.Path();
-    res = EXIT_SUCCESS ==
-          boost::process::system(compose_cmd_ + " config -q", boost::process::start_dir = app_tmp_dir.Path());
+    exec(boost::format("%s config %s") % compose_cmd_ % "-q", "compose file verification failed",
+         boost::process::start_dir = app_tmp_dir.Path());
   } catch (const std::exception& exc) {
     LOG_ERROR << "failed to verify App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
+    res = {false, exc.what()};
   }
   return res;
 }
@@ -693,13 +691,6 @@ void RestorableAppEngine::startComposeApp(const std::string& compose_cmd, const 
 
 void RestorableAppEngine::stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
   exec(boost::format{"%s down"} % compose_cmd, "failed to bring Compose App down", boost::process::start_dir = app_dir);
-}
-
-template <typename... Args>
-void exec(const boost::format& cmd, const std::string& err_msg, Args&&... args) {
-  if (EXIT_SUCCESS != boost::process::system(cmd.str(), std::forward<Args>(args)...)) {
-    throw std::runtime_error(err_msg + "; cmd: " + cmd.str());
-  }
 }
 
 std::string RestorableAppEngine::getContentHash(const boost::filesystem::path& path) {

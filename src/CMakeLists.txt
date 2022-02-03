@@ -39,7 +39,8 @@ set(HEADERS helpers.h
         liteclient.h
         yaml2json.h
         target.h
-        downloader.h)
+        downloader.h
+        exec.h)
 
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})

@@ -20,7 +20,7 @@ class ComposeAppEngine : public AppEngine {
                    Docker::RegistryClient::Ptr registry_client);
 
   Result fetch(const App& app) override;
-  bool verify(const App& app) override;
+  Result verify(const App& app) override;
   bool install(const App& app) override;
   bool run(const App& app) override;
   void remove(const App& app) override;
@@ -94,12 +94,12 @@ class ComposeAppEngine : public AppEngine {
       static std::map<State, std::string> state2Str = {
           {State::kUnknown, "Unknown"},
           {State::kDownloaded, "Downloaded"},
-          {State::kDownloadFailed, "Download failed"},
           {State::kVerified, "Compose file verified"},
-          {State::kVerifyFailed, "Compose file verification failure"},
           {State::kPulled, "Images are pulled"},
-          {State::kPullFailed, "Image pull failed"},
           {State::kInstalled, "Created"},
+          // TODO: kInstallFail and kStartFailed will/should be removed once we make install/run return Result
+          // and refactor underlying functions (e.g. areContainersCreated) so they catch stderr correctly and throw
+          // exception
           {State::kInstallFail, "Creation failed"},
           {State::kStarted, "Started"},
           {State::kStartFailed, "Start failed"},
@@ -116,13 +116,12 @@ class ComposeAppEngine : public AppEngine {
     File state_file_;
   };
 
-  bool cmd_streaming(const std::string& cmd, const App& app);
   static std::pair<bool, std::string> cmd(const std::string& cmd);
 
-  bool download(const App& app);
-  bool pullImages(const App& app);
-  bool installApp(const App& app);
-  bool start(const App& app);
+  void download(const App& app);
+  void pullImages(const App& app);
+  void installApp(const App& app);
+  void start(const App& app);
   bool areContainersCreated(const App& app);
 
   static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);

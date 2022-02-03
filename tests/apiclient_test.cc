@@ -48,7 +48,7 @@ class MockAppEngine : public AppEngine {
 
  public:
   MOCK_METHOD(AppEngine::Result, fetch, (const App& app), (override));
-  MOCK_METHOD(bool, verify, (const App& app), (override));
+  MOCK_METHOD(AppEngine::Result, verify, (const App& app), (override));
   MOCK_METHOD(bool, install, (const App& app), (override));
   MOCK_METHOD(bool, run, (const App& app), (override));
   MOCK_METHOD(void, remove, (const App& app), (override));
@@ -253,7 +253,7 @@ TEST_F(ApiClientTest, SwitchTag) {
     // for some reason Utils::copyDir fails time to time if a destination is not empty
     // even though it calls remove_all internally, so just remove by invoking a shell cmd
     std::string rm_out;
-    ASSERT_EQ(Utils::shell("rm -r " + getTufRepo().getPath(), &rm_out, true), 0) << rm_out;
+    ASSERT_EQ(Utils::shell("rm -rf " + getTufRepo().getPath(), &rm_out, true), 0) << rm_out;
     Utils::copyDir(tagged_repo_path, getTufRepo().getPath());
 
     restart(liteclient);
