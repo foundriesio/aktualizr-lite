@@ -86,7 +86,7 @@ class RestorableAppEngine : public AppEngine {
                       StorageSpaceFunc storage_space_func = RestorableAppEngine::DefStorageSpaceFunc);
 
   Result fetch(const App& app) override;
-  bool verify(const App& app) override;
+  Result verify(const App& app) override;
   bool install(const App& app) override;
   bool run(const App& app) override;
   void remove(const App& app) override;

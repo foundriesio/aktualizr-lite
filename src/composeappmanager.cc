@@ -214,9 +214,10 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
     const auto fetch_res{app_engine_->fetch({pair.first, pair.second})};
     if (!fetch_res) {
-      const std::string errDesc{boost::str(boost::format("failed to fetch App; app: %s; uri: %s; err: %s") %
-                                           pair.first % pair.second % fetch_res.err)};
-      res = {DownloadResult::Status::DownloadFailed, errDesc};
+      const std::string err_desc{boost::str(boost::format("failed to fetch App; app: %s; uri: %s; err: %s") %
+                                            pair.first % pair.second % fetch_res.err)};
+      LOG_ERROR << err_desc;
+      res = {DownloadResult::Status::DownloadFailed, err_desc};
       break;
     }
   }

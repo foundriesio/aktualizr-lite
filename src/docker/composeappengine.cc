@@ -5,6 +5,8 @@
 #include <sys/statvfs.h>
 #include <boost/process.hpp>
 
+#include "exec.h"
+
 namespace Docker {
 
 ComposeAppEngine::ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin,
@@ -22,22 +24,13 @@ AppEngine::Result ComposeAppEngine::fetch(const App& app) {
   try {
     AppState state(app, appRoot(app), true);
 
-    if (!download(app)) {
-      state.setState(AppState::State::kDownloadFailed);
-      return result;
-    }
+    download(app);
     state.setState(AppState::State::kDownloaded);
 
-    if (!verify(app)) {
-      state.setState(AppState::State::kVerifyFailed);
-      return result;
-    }
+    exec(compose_ + "config", "compose App validation failed", boost::process::start_dir = appRoot(app));
     state.setState(AppState::State::kVerified);
 
-    if (!pullImages(app)) {
-      state.setState(AppState::State::kPullFailed);
-      return result;
-    }
+    pullImages(app);
     state.setState(AppState::State::kPulled);
 
     result = true;
@@ -62,7 +55,8 @@ bool ComposeAppEngine::install(const App& app) {
     switch (state()) {
       case AppState::State::kPulled:
       case AppState::State::kInstallFail: {
-        if (!installApp(app) || !areContainersCreated(app)) {
+        installApp(app);
+        if (!areContainersCreated(app)) {
           state.setState(AppState::State::kInstallFail);
           break;
         }
@@ -77,10 +71,6 @@ bool ComposeAppEngine::install(const App& app) {
     }
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get/set App state, fallback to forced install: " << exc.what();
-
-    if (installApp(app) && areContainersCreated(app)) {
-      result = true;
-    }
   }
   return result;
 }
@@ -101,7 +91,8 @@ bool ComposeAppEngine::run(const App& app) {
       case AppState::State::kInstalled:
       case AppState::State::kInstallFail:
       case AppState::State::kStartFailed: {
-        if (!start(app) || !areContainersCreated(app)) {
+        start(app);
+        if (!areContainersCreated(app)) {
           state.setState(AppState::State::kStartFailed);
           break;
         }
@@ -114,20 +105,18 @@ bool ComposeAppEngine::run(const App& app) {
         LOG_ERROR << "Cannot start App that hasn't been fetched";
     }
   } catch (const std::exception& exc) {
-    LOG_WARNING << "Failed to get/set App state, fallback to forced run: " << exc.what();
-
-    if (start(app) && areContainersCreated(app)) {
-      result = true;
-    }
+    LOG_ERROR << "Cannot start App that hasn't been fetched: " << exc.what();
   }
   return result;
 }
 
 void ComposeAppEngine::remove(const App& app) {
-  if (cmd_streaming(compose_ + "down", app)) {
-    boost::filesystem::remove_all(appRoot(app));
-  } else {
-    LOG_ERROR << "docker-compose was unable to bring down: " << appRoot(app);
+  try {
+    const auto root_dir{appRoot(app)};
+    exec(compose_ + "down", "failed to bring App down", boost::process::start_dir = root_dir);
+    boost::filesystem::remove_all(root_dir);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "docker-compose was unable to bring down: " << exc.what();
   }
 }
 
@@ -241,14 +230,6 @@ Json::Value ComposeAppEngine::getRunningAppsInfo() const {
 
 // Private implementation
 
-// Utils::shell isn't interactive. The compose commands can take a few
-// seconds to run, so we use boost::process:system to stream it to stdout/sterr
-bool ComposeAppEngine::cmd_streaming(const std::string& cmd, const App& app) {
-  LOG_DEBUG << "Running: " << cmd;
-  int exit_code = boost::process::system(cmd, boost::process::start_dir = appRoot(app));
-  return exit_code == 0;
-}
-
 std::pair<bool, std::string> ComposeAppEngine::cmd(const std::string& cmd) {
   std::string out_str;
   int exit_code = Utils::shell(cmd, &out_str, true);
@@ -257,68 +238,60 @@ std::pair<bool, std::string> ComposeAppEngine::cmd(const std::string& cmd) {
   return {(exit_code == EXIT_SUCCESS), out_str};
 }
 
-bool ComposeAppEngine::download(const App& app) {
-  bool result = false;
+void ComposeAppEngine::download(const App& app) {
+  LOG_DEBUG << app.name << ": downloading App from Registry: " << app.uri;
 
-  try {
-    LOG_DEBUG << app.name << ": downloading App from Registry: " << app.uri;
+  Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
+  Manifest manifest{registry_client_->getAppManifest(uri, Manifest::Format)};
 
-    Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
-    Manifest manifest{registry_client_->getAppManifest(uri, Manifest::Format)};
+  const std::string archive_file_name{uri.digest.shortHash() + '.' + app.name + ArchiveExt};
+  Docker::Uri archive_uri{uri.createUri(Docker::HashedDigest(manifest.archiveDigest()))};
 
-    const std::string archive_file_name{uri.digest.shortHash() + '.' + app.name + ArchiveExt};
-    Docker::Uri archive_uri{uri.createUri(Docker::HashedDigest(manifest.archiveDigest()))};
-
-    uint64_t available_storage;
-    if (checkAvailableStorageSpace(appRoot(app), available_storage)) {
-      // assume that an extracted files total size is up to 10x larger than the archive size
-      // 80% is a storage space watermark, we don't want to fill a storage volume above it
-      auto need_storage = manifest.archiveSize() * 10;
-      auto available_for_apps = static_cast<uint64_t>(available_storage * 0.8);
-      if (need_storage > available_for_apps) {
-        throw std::runtime_error("There is no sufficient storage space available to download App archive, available: " +
-                                 std::to_string(available_for_apps) + " need: " + std::to_string(need_storage));
-      }
-    } else {
-      LOG_WARNING << "Failed to get an available storage space, continuing with App archive download";
+  uint64_t available_storage;
+  if (checkAvailableStorageSpace(appRoot(app), available_storage)) {
+    // assume that an extracted files total size is up to 10x larger than the archive size
+    // 80% is a storage space watermark, we don't want to fill a storage volume above it
+    auto need_storage = manifest.archiveSize() * 10;
+    auto available_for_apps = static_cast<uint64_t>(available_storage * 0.8);
+    if (need_storage > available_for_apps) {
+      throw std::runtime_error("There is no sufficient storage space available to download App archive, available: " +
+                               std::to_string(available_for_apps) + " need: " + std::to_string(need_storage));
     }
-
-    registry_client_->downloadBlob(archive_uri, appRoot(app) / archive_file_name, manifest.archiveSize());
-    verifyAppArchive(app, archive_file_name);
-    extractAppArchive(app, archive_file_name);
-
-    result = true;
-    LOG_DEBUG << app.name << ": App has been downloaded";
-  } catch (const std::exception& exc) {
-    LOG_ERROR << app.name << ": failed to download App from Registry: " << exc.what();
-    throw;
+  } else {
+    LOG_WARNING << "Failed to get an available storage space, continuing with App archive download";
   }
 
+  registry_client_->downloadBlob(archive_uri, appRoot(app) / archive_file_name, manifest.archiveSize());
+  verifyAppArchive(app, archive_file_name);
+  extractAppArchive(app, archive_file_name);
+
+  LOG_DEBUG << app.name << ": App has been downloaded";
+}
+
+AppEngine::Result ComposeAppEngine::verify(const App& app) {
+  Result result{true};
+  try {
+    LOG_INFO << "Validating compose file";
+    exec(compose_ + "config", "compose file validation failed", boost::process::start_dir = appRoot(app));
+  } catch (const std::exception& exc) {
+    result = {false, exc.what()};
+  }
   return result;
 }
 
-bool ComposeAppEngine::verify(const App& app) {
-  LOG_INFO << "Validating compose file";
-  const auto result = cmd_streaming(compose_ + "config", app);
-  return result;
-}
-
-bool ComposeAppEngine::pullImages(const App& app) {
+void ComposeAppEngine::pullImages(const App& app) {
   LOG_INFO << "Pulling containers";
-  const auto result = cmd_streaming(compose_ + "pull --no-parallel", app);
-  return result;
+  exec(compose_ + "pull --no-parallel", "failed to pull App images", boost::process::start_dir = appRoot(app));
 }
 
-bool ComposeAppEngine::installApp(const App& app) {
+void ComposeAppEngine::installApp(const App& app) {
   LOG_INFO << "Installing App";
-  const auto result = cmd_streaming(compose_ + "up --remove-orphans --no-start", app);
-  return result;
+  exec(compose_ + "up --remove-orphans --no-start", "failed to install App", boost::process::start_dir = appRoot(app));
 }
 
-bool ComposeAppEngine::start(const App& app) {
+void ComposeAppEngine::start(const App& app) {
   LOG_INFO << "Starting App: " << app.name << " -> " << app.uri;
-  const auto result = cmd_streaming(compose_ + "up --remove-orphans -d", app);
-  return result;
+  exec(compose_ + "up --remove-orphans -d", "failed to start App", boost::process::start_dir = appRoot(app));
 }
 
 bool ComposeAppEngine::areContainersCreated(const App& app) {
@@ -370,21 +343,20 @@ bool ComposeAppEngine::checkAvailableStorageSpace(const boost::filesystem::path&
 }
 
 void ComposeAppEngine::verifyAppArchive(const App& app, const std::string& archive_file_name) {
-  if (!cmd_streaming("tar -tf " + archive_file_name + " " + ComposeFile, app) &&
-      !cmd_streaming("tar -tf " + archive_file_name + " ./" + ComposeFile, app)) {
-    throw std::runtime_error(std::string("Received an invalid App, a compose file is missing: ") + ComposeFile);
+  try {
+    exec("tar -tf " + archive_file_name + " " + ComposeFile, "no compose file found in archive",
+         boost::process::start_dir = appRoot(app));
+  } catch (const std::exception&) {
+    exec("tar -tf " + archive_file_name + " ./" + ComposeFile, "no compose file found in archive",
+         boost::process::start_dir = appRoot(app));
   }
 }
 
 void ComposeAppEngine::extractAppArchive(const App& app, const std::string& archive_file_name,
                                          bool delete_after_extraction) {
-  if (!cmd_streaming("tar -xzf " + archive_file_name, app)) {
-    throw std::runtime_error("Failed to extract the compose app archive: " + archive_file_name);
-  }
+  exec("tar -xzf " + archive_file_name, "failed to extract App archive", boost::process::start_dir = appRoot(app));
   if (delete_after_extraction) {
-    if (!cmd_streaming("rm -f " + archive_file_name, app)) {
-      throw std::runtime_error("Failed to remove the compose app archive: " + archive_file_name);
-    }
+    exec("rm -f " + archive_file_name, "failed to delete App archive", boost::process::start_dir = appRoot(app));
   }
 }
 
