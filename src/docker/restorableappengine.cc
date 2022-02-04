@@ -325,7 +325,7 @@ void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path&
   registry_client_->downloadBlob(archive_uri, archive_full_path, manifest.archiveSize());
   Utils::writeFile(app_dir / Manifest::Filename, manifest_str);
   // extract docker-compose.yml, temporal hack, we don't need to extract it
-  exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "failed to extract the compose app archive",
+  exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "no compose file found in archive",
        boost::process::start_dir = app_dir);
 }
 

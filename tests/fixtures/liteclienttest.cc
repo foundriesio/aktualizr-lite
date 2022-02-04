@@ -228,20 +228,24 @@ class ClientTest :virtual public ::testing::Test {
    * mehod update
    */
   void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
-              data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kNeedCompletion) {
+              data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kNeedCompletion,
+              DownloadResult expected_download_result = {DownloadResult::Status::Ok, ""}) {
     device_gateway_.resetEvents();
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
     // TODO: call client->getTarget() once the method is moved to LiteClient
-    ASSERT_TRUE(client.download(to, ""));
-    ASSERT_EQ(client.install(to), expected_install_code);
-
-    // make sure that the new Target hasn't been applied/finalized before reboot
-    ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
-    ASSERT_EQ(client.getCurrent().filename(), from.filename());
+    const auto download_result{client.download(to, "")};
+    ASSERT_EQ(download_result.status, expected_download_result.status);
+    ASSERT_TRUE(download_result.description.find(expected_download_result.description) != std::string::npos) << "Actuall error message: " << download_result.description;
+    if (download_result) {
+      ASSERT_EQ(client.install(to), expected_install_code);
+      // make sure that the new Target hasn't been applied/finalized before reboot
+      ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
+      ASSERT_EQ(client.getCurrent().filename(), from.filename());
+    }
     checkHeaders(client, from);
-    checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed);
+    checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description);
   }
 
   /**
@@ -249,19 +253,22 @@ class ClientTest :virtual public ::testing::Test {
    */
   void updateApps(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
                   DownloadResult::Status expected_download_code = DownloadResult::Status::Ok,
+                  const std::string& download_err_msg = "",
                   data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kOk) {
     device_gateway_.resetEvents();
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
     // TODO: call client->getTarget() once the method is moved to LiteClient
-    ASSERT_EQ(client.download(to, "").status, expected_download_code);
+    const DownloadResult dr{client.download(to, "")};
+    ASSERT_EQ(dr.status, expected_download_code);
+    ASSERT_NE(dr.description.find(download_err_msg), std::string::npos) << "Actuall error message: " << dr.description;
 
     if (expected_download_code != DownloadResult::Status::Ok) {
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
       checkHeaders(client, from);
-      checkEvents(client, from, UpdateType::kApp);
+      checkEvents(client, from, UpdateType::kApp, download_err_msg);
       return;
     }
 
@@ -363,7 +370,7 @@ class ClientTest :virtual public ::testing::Test {
     ASSERT_EQ(req_headers.get("x-ats-dockerapps", ""), Target::appsStr(target, app_shortlist_));
   }
 
-  void checkEvents(LiteClient& client, const Uptane::Target& target, UpdateType update_type) {
+  void checkEvents(LiteClient& client, const Uptane::Target& target, UpdateType update_type, const std::string& download_failure_err_msg = "") {
     const std::unordered_map<UpdateType, std::vector<std::string>> updateToevents = {
         { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},
         { UpdateType::kApp, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},
@@ -384,6 +391,10 @@ class ClientTest :virtual public ::testing::Test {
         // makes sense to represent it as a json string
         const auto event_details = rec_event_json["event"]["details"].asString();
         ASSERT_TRUE(event_details.find("Apps running:") != std::string::npos);
+      }
+      if (event_type == "EcuDownloadCompleted") {
+        const auto event_details = rec_event_json["event"]["details"].asString();
+        ASSERT_TRUE(event_details.find(download_failure_err_msg) != std::string::npos);
       }
     }
   }

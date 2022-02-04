@@ -183,6 +183,41 @@ TEST_P(AkliteTest, AppInvalidUpdate) {
   ASSERT_TRUE(app_engine->isRunning(app01));
 }
 
+TEST_P(AkliteTest, AppDownloadFailure) {
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  auto target01 = createAppTarget({app01});
+  auto invalid_custom_target{target01.custom_data()};
+  invalid_custom_target["docker_compose_apps"]["app-01"]["uri"] =
+      "hub.foundries.io/factory/app-01@sha256:badhash5501792d4eeb043b728c9a0c8417fbe9f62146625610377e11bcf572d";
+  target01.updateCustom(invalid_custom_target);
+
+  updateApps(*client, getInitialTarget(), target01, DownloadResult::Status::DownloadFailed, "Not Found");
+}
+
+TEST_P(AkliteTest, OstreeDownloadFailure) {
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  auto new_target = createTarget();
+  const Uptane::Target invalid_target{
+      new_target.filename(), new_target.ecus(), {Hash{Hash::Type::kSha256, "foobarhash"}}, 0, "", "OSTREE"};
+
+  // update to the latest version
+  update(*client, getInitialTarget(), invalid_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed, "HTTP 404"});
+  // make sure that the installed Target is not "finalized"/applied and Apps are not running
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+}
+
 TEST_P(AkliteTest, OstreeAndAppUpdate) {
   // App's containers are re-created before reboot
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
@@ -423,7 +458,7 @@ TEST_P(AkliteTest, InvalidAppComposeUpdate) {
   }
   // updateApps() emulates LiteClient's client which invokes the fecthed Target verification.
   // the verification is supposed to fail and the installation process is never invoked
-  updateApps(*client, target01, target02, expected_download_res, data::ResultCode::Numeric::kVerificationFailed);
+  updateApps(*client, target01, target02, expected_download_res, "", data::ResultCode::Numeric::kVerificationFailed);
   ASSERT_FALSE(targetsMatch(client->getCurrent(), target02));
 
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
@@ -469,7 +504,7 @@ TEST_P(AkliteTest, RollbackIfOstreeInstallFails) {
     auto target_02 = createTarget(&apps, "", broken_rootfs_dir.PathString());
 
     // try to update to the latest version, it must fail because the target's rootfs is invalid (no kernel)
-    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed);
+    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed, {DownloadResult::Status::Ok, ""});
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
@@ -560,7 +595,8 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
 
     // try to update to the latest version, it must fail because App is invalid
     ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
-    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, data::ResultCode::Numeric::kInstallFailed);
+    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, "",
+               data::ResultCode::Numeric::kInstallFailed);
     ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
 
     // emulate next iteration/update cycle of daemon_main
@@ -719,7 +755,8 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsNoContainer) {
     auto target_02 = createAppTarget(apps);
 
     // try to update to the latest version, it must fail because App is invalid
-    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, data::ResultCode::Numeric::kInstallFailed);
+    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, "",
+               data::ResultCode::Numeric::kInstallFailed);
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
@@ -769,7 +806,8 @@ TEST_P(AkliteTest, AppRollbackIfAppsInstallFails) {
     auto target_02 = createAppTarget(apps);
 
     // try to update to the latest version, it must fail because App is invalid
-    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, data::ResultCode::Numeric::kInstallFailed);
+    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, "",
+               data::ResultCode::Numeric::kInstallFailed);
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
