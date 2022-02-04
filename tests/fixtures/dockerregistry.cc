@@ -88,6 +88,10 @@ class DockerRegistry {
       } else if (std::string::npos != url.find(registry_.base_url_ + "/v2/")) {
         // request for manifest
         resp = registry_.getAppManifest(url);
+        if (resp.size() == 0) {
+          // manifest hasn't been found
+          return HttpResponse(resp, 404, CURLE_OK, "Not Found");
+        }
       } else if (url == registry_.auth_url_) {
         // request for a basic auth to Device Gateway
         resp = "{\"Secret\":\"secret\",\"Username\":\"test-user\"}";

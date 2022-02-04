@@ -165,3 +165,10 @@ target_link_libraries(t_apiclient aktualizr_lite ${TEST_LIBS} uptane_generator_l
 add_dependencies(t_apiclient make_ostree_sysroot)
 set_tests_properties(test_apiclient PROPERTIES LABELS "aklite:apiclient")
 
+add_aktualizr_test(NAME exec
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> exec_test.cc
+  PROJECT_WORKING_DIRECTORY
+)
+aktualizr_source_file_checks(exec_test.cc)
+target_include_directories(t_exec PRIVATE ${TEST_INCS})
+set_tests_properties(test_apiclient PROPERTIES LABELS "aklite:exec")
