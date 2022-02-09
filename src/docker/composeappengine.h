@@ -67,15 +67,10 @@ class ComposeAppEngine : public AppEngine {
     enum class State {
       kUnknown = 0,
       kDownloaded = 0x10,
-      kDownloadFailed,
       kVerified = 0x20,
-      kVerifyFailed,
       kPulled = 0x30,
-      kPullFailed,
       kInstalled = 0x40,
-      kInstallFail,
-      kStarted = 0x50,
-      kStartFailed
+      kStarted = 0x50
     };
 
     AppState(const App& app, const boost::filesystem::path& root, bool set_version = false);
@@ -91,19 +86,12 @@ class ComposeAppEngine : public AppEngine {
     const State& operator()() const { return state_; }
     const std::string& version() const { return version_; }
     std::string toStr() const {
-      static std::map<State, std::string> state2Str = {
-          {State::kUnknown, "Unknown"},
-          {State::kDownloaded, "Downloaded"},
-          {State::kVerified, "Compose file verified"},
-          {State::kPulled, "Images are pulled"},
-          {State::kInstalled, "Created"},
-          // TODO: kInstallFail and kStartFailed will/should be removed once we make install/run return Result
-          // and refactor underlying functions (e.g. areContainersCreated) so they catch stderr correctly and throw
-          // exception
-          {State::kInstallFail, "Creation failed"},
-          {State::kStarted, "Started"},
-          {State::kStartFailed, "Start failed"},
-      };
+      static std::map<State, std::string> state2Str = {{State::kUnknown, "Unknown"},
+                                                       {State::kDownloaded, "Downloaded"},
+                                                       {State::kVerified, "Compose file verified"},
+                                                       {State::kPulled, "Images are pulled"},
+                                                       {State::kInstalled, "Created"},
+                                                       {State::kStarted, "Started"}};
 
       return state2Str[state_];
     }
