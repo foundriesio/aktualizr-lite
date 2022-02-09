@@ -244,6 +244,13 @@ void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> ev
   if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
     event->custom["version"] = t.custom_version();
+    if (event->custom.isMember("details")) {
+      static const size_t max_details_size{2048};
+      const auto detail_str{event->custom["details"].asString()};
+      if (detail_str.size() > max_details_size) {
+        event->custom["details"] = detail_str.substr(0, max_details_size);
+      }
+    }
     report_queue->enqueue(std::move(event));
   }
 }
