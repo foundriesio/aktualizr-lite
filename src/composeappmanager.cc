@@ -300,11 +300,15 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
       // I have no idea via the package manager interface method install() is const which is not a const
       // method by its definition/nature
       auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
-      bool run_res = just_install ? non_const_app_engine->install({pair.first, pair.second})
-                                  : non_const_app_engine->run({pair.first, pair.second});
+      const AppEngine::Result run_res = just_install ? non_const_app_engine->install({pair.first, pair.second})
+                                                     : non_const_app_engine->run({pair.first, pair.second});
 
       if (!run_res) {
-        res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, "Could not install app");
+        const std::string err_desc{boost::str(boost::format("failed to install App; app: %s; uri: %s; err: %s") %
+                                              pair.first % pair.second % run_res.err)};
+        LOG_ERROR << err_desc;
+
+        res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, err_desc);
       } else {
         res.description += "\n" + pair.second;
       }
@@ -352,14 +356,16 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
     LOG_INFO << "Starting Apps after successful boot on a new version of OSTree-based sysroot...";
     // "finalize" (run) Apps that were pulled and created before reboot
     for (const auto& app_pair : getApps(target)) {
-      if (!app_engine_->run({app_pair.first, app_pair.second})) {
-        LOG_ERROR << "Failed to start App after booting on a new version of OSTree-based sysroot;"
-                     " app: "
-                  << app_pair.first << "; uri: " << app_pair.second << "; " << target.filename();
+      const AppEngine::Result run_res = app_engine_->run({app_pair.first, app_pair.second});
+      if (!run_res) {
+        const std::string err_desc{boost::str(
+            boost::format("failed to start App after booting on a new sysroot version; app: %s; uri: %s; err: %s") %
+            app_pair.first % app_pair.second % run_res.err)};
+
+        LOG_ERROR << err_desc;
         // Do we need to set some flag for the uboot and trigger a system reboot in order to boot on a previous
         // ostree version, hence a proper/full rollback happens???
-        ir.description += "\n# Failed to start App after booting on a new sysroot version: " + app_pair.first +
-                          "; uri: " + app_pair.second;
+        ir.description += ", however " + err_desc;
         ir.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
         // this is a hack to distinguish between ostree install (rollback) and App start failures.
         // data::ResultCode::Numeric::kInstallFailed - boot on a new ostree version failed (rollback at boot)

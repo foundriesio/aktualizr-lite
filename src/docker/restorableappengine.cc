@@ -98,33 +98,59 @@ AppEngine::Result RestorableAppEngine::verify(const App& app) {
   return res;
 }
 
-bool RestorableAppEngine::install(const App& app) {
-  bool res{false};
+AppEngine::Result RestorableAppEngine::install(const App& app) {
+  Result res{false};
   try {
     const auto app_install_root{installAppAndImages(app)};
     startComposeApp(compose_cmd_, app_install_root, "--remove-orphans --no-start");
-    if (!areContainersCreated(app, (install_root_ / app.name / ComposeFile).string(), docker_client_)) {
-      throw std::runtime_error("failed to create App containers");
-    }
     res = true;
   } catch (const std::exception& exc) {
-    LOG_ERROR << "failed to install App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
+    res = {false, exc.what()};
   }
+
+  if (!res) {
+    return res;
+  }
+
+  try {
+    if (!areContainersCreated(app, (install_root_ / app.name / ComposeFile).string(), docker_client_)) {
+      res = {false, "App containers haven't been created"};
+    }
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "failed to check whether containers have been created: " << exc.what();
+    // if we fail (exception) to check whether containers have been created is doesn't mean
+    // that installation was not succesful, just assume that the App creation succeeded if
+    // `docker-compose up` returns EXIT_SUCCESS
+  }
+
   return res;
 }
 
-bool RestorableAppEngine::run(const App& app) {
-  bool res{false};
+AppEngine::Result RestorableAppEngine::run(const App& app) {
+  Result res{false};
   try {
     const auto app_install_root{installAppAndImages(app)};
     startComposeApp(compose_cmd_, app_install_root, "--remove-orphans -d");
-    if (!areContainersCreated(app, (install_root_ / app.name / ComposeFile).string(), docker_client_)) {
-      throw std::runtime_error("failed to create App containers");
-    }
     res = true;
   } catch (const std::exception& exc) {
-    LOG_ERROR << "failed to start App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
+    res = {false, exc.what()};
   }
+
+  if (!res) {
+    return res;
+  }
+
+  try {
+    if (!areContainersCreated(app, (install_root_ / app.name / ComposeFile).string(), docker_client_)) {
+      res = {false, "failed to create App containers"};
+    }
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "failed to check whether containers have been created: " << exc.what();
+    // if we fail (exception) to check whether containers have been created is doesn't mean
+    // that installation was not succesful, just assume that the App creation succeeded if
+    // `docker-compose up` returns EXIT_SUCCESS
+  }
+
   return res;
 }
 
@@ -633,12 +659,12 @@ bool RestorableAppEngine::areContainersCreated(const App& app, const std::string
 
 bool RestorableAppEngine::checkAppContainers(const App& app, const std::string& compose_file,
                                              const Docker::DockerClient::Ptr& docker_client, bool check_state) {
+  bool result{true};
   ComposeInfo compose{compose_file};
   std::vector<Json::Value> services = compose.getServices();
 
   if (services.empty()) {
-    LOG_WARNING << "App: " << app.name << ", no services in App's compose file: " << compose_file;
-    return false;
+    throw std::runtime_error("No services found in App's compose file");
   }
 
   Json::Value containers;
@@ -653,10 +679,11 @@ bool RestorableAppEngine::checkAppContainers(const App& app, const std::string& 
       continue;
     }
     LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
-    return false;
+    result = false;
+    break;
   }
 
-  return true;
+  return result;
 }
 
 // static methods to manage image data and Compose App

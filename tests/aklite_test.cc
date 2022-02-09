@@ -731,7 +731,8 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsNoContainer) {
     auto target_02 = createTarget(&apps);
 
     // try to update to the latest version, it must fail because App is invalid
-    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed);
+    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed, {DownloadResult::Status::Ok, ""},
+           "App containers haven't been created");
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
@@ -806,8 +807,8 @@ TEST_P(AkliteTest, AppRollbackIfAppsInstallFails) {
     auto target_02 = createAppTarget(apps);
 
     // try to update to the latest version, it must fail because App is invalid
-    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, "",
-               data::ResultCode::Numeric::kInstallFailed);
+    updateApps(*client, target_01, target_02, DownloadResult::Status::Ok, "", data::ResultCode::Numeric::kInstallFailed,
+               "failed to bring Compose App up");
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
@@ -890,8 +891,12 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFails) {
 
   {
     boost::filesystem::remove(fixtures::ClientTest::test_dir_.Path() / "need_reboot");
+    device_gateway_.resetEvents();
     client = createLiteClient(InitialVersion::kOff, boost::none, false);
+
     ASSERT_FALSE(client->finalizeInstall());
+    // make sure that report events have been sent and EcuInstallationCompleted contains the error message
+    checkEvents(*client, target_01, UpdateType::kFinalized, "", "failed to bring Compose App up");
 
     // for some reason ostreemanager::getCurrent() is driven by currently booted ostree hash,
     // so it thinks that current version is target_02

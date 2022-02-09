@@ -87,8 +87,8 @@ class RestorableAppEngine : public AppEngine {
 
   Result fetch(const App& app) override;
   Result verify(const App& app) override;
-  bool install(const App& app) override;
-  bool run(const App& app) override;
+  Result install(const App& app) override;
+  Result run(const App& app) override;
   void remove(const App& app) override;
   bool isFetched(const App& app) const override;
   bool isRunning(const App& app) const override;
