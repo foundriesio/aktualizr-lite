@@ -41,72 +41,113 @@ AppEngine::Result ComposeAppEngine::fetch(const App& app) {
   return result;
 }
 
-bool ComposeAppEngine::install(const App& app) {
-  bool result = false;
+AppEngine::Result ComposeAppEngine::install(const App& app) {
+  Result result{false};
 
+  // check if App dir exists
   if (!boost::filesystem::exists(appRoot(app))) {
-    LOG_ERROR << "App dir doesn't exist, cannot install App that hasn't been fetched";
+    return {false, "App dir doesn't exist, cannot install App that hasn't been fetched"};
+  }
+
+  AppState state(app, appRoot(app));
+
+  // do App install if not installed yet
+  switch (state()) {
+    case AppState::State::kInstalled:
+    case AppState::State::kStarted:
+      LOG_DEBUG << app.name << " has been already installed/started";
+      result = true;
+      break;
+    case AppState::State::kPulled: {
+      try {
+        installApp(app);
+        result = true;
+      } catch (const std::exception& exc) {
+        result = {false, exc.what()};
+      }
+      break;
+    }
+    default:
+      result = {false, "Cannot install App that hasn't been fetched"};
+      break;
+  }
+
+  if (!result) {
     return result;
   }
 
+  // check whether App's containers have been actually created, if possible
   try {
-    AppState state(app, appRoot(app));
-
-    switch (state()) {
-      case AppState::State::kPulled:
-      case AppState::State::kInstallFail: {
-        installApp(app);
-        if (!areContainersCreated(app)) {
-          state.setState(AppState::State::kInstallFail);
-          break;
-        }
-        state.setState(AppState::State::kInstalled);
-      }
-      case AppState::State::kInstalled:
-      case AppState::State::kStarted:
-        result = true;
-        break;
-      default:
-        LOG_ERROR << "Cannot install App that hasn't been fetched";
+    if (!areContainersCreated(app)) {
+      result = {false, "App containers haven't been created"};
     }
   } catch (const std::exception& exc) {
-    LOG_WARNING << "Failed to get/set App state, fallback to forced install: " << exc.what();
+    LOG_WARNING << "Failed to check whether containers have been created: " << exc.what();
+    // if we fail (exception) to check whether containers have been created is doesn't mean
+    // that installation was not succesful, just assume that the App creation succeeded if
+    // `docker-compose up` returns EXIT_SUCCESS
   }
+
+  // If installation was successful and App containers have been created then set the installed state
+  if (result) {
+    state.setState(AppState::State::kInstalled);
+  }
+
   return result;
 }
 
-bool ComposeAppEngine::run(const App& app) {
-  bool result = false;
+AppEngine::Result ComposeAppEngine::run(const App& app) {
+  Result result{false};
 
+  // check if App dir exists
   if (!boost::filesystem::exists(appRoot(app))) {
-    LOG_ERROR << "App dir doesn't exist, cannot start App that hasn't been fetched";
+    return {false, "App dir doesn't exist, cannot install App that hasn't been fetched"};
+  }
+
+  AppState state(app, appRoot(app));
+
+  // do App start if not started yet
+  switch (state()) {
+    case AppState::State::kStarted:
+      LOG_DEBUG << app.name << " has been already started";
+      result = true;
+      break;
+    case AppState::State::kPulled:
+    case AppState::State::kInstalled: {
+      try {
+        start(app);
+        result = true;
+      } catch (const std::exception& exc) {
+        result = {false, exc.what()};
+      }
+      break;
+    }
+    default:
+      result = {false, "Cannot start App that hasn't been fetched"};
+      break;
+  }
+
+  if (!result) {
     return result;
   }
 
+  // check whether App's containers have been actually created, if possible
   try {
-    AppState state(app, appRoot(app));
-
-    switch (state()) {
-      case AppState::State::kPulled:
-      case AppState::State::kInstalled:
-      case AppState::State::kInstallFail:
-      case AppState::State::kStartFailed: {
-        start(app);
-        if (!areContainersCreated(app)) {
-          state.setState(AppState::State::kStartFailed);
-          break;
-        }
-        state.setState(AppState::State::kStarted);
-      }
-      case AppState::State::kStarted:
-        result = true;
-        break;
-      default:
-        LOG_ERROR << "Cannot start App that hasn't been fetched";
+    if (!areContainersCreated(app)) {
+      result = {false, "App containers haven't been created"};
     }
   } catch (const std::exception& exc) {
-    LOG_ERROR << "Cannot start App that hasn't been fetched: " << exc.what();
+    LOG_WARNING << "Failed to check whether containers have been created: " << exc.what();
+    // if we fail (exception) to check whether containers have been created is doesn't mean
+    // that start was not succesful, just assume that the App creation succeeded if
+    // `docker-compose up` returns EXIT_SUCCESS
   }
+
+  // If installation was successful and App containers have been created then set the installed state
+  if (result) {
+    state.setState(AppState::State::kStarted);
+  }
+
   return result;
 }
 
@@ -291,37 +332,32 @@ void ComposeAppEngine::installApp(const App& app) {
 
 void ComposeAppEngine::start(const App& app) {
   LOG_INFO << "Starting App: " << app.name << " -> " << app.uri;
-  exec(compose_ + "up --remove-orphans -d", "failed to start App", boost::process::start_dir = appRoot(app));
+  exec(compose_ + "up --remove-orphans -d", "failed to bring Compose App up", boost::process::start_dir = appRoot(app));
 }
 
 bool ComposeAppEngine::areContainersCreated(const App& app) {
-  bool result{false};
-  try {
-    ComposeInfo info((appRoot(app) / ComposeFile).string());
-    std::vector<Json::Value> services = info.getServices();
-    if (services.empty()) {
-      LOG_ERROR << "App: " << app.name << ", no services in docker file!";
-      return false;
-    }
-
-    Json::Value containers;
-    docker_client_->getContainers(containers);
-
-    for (std::size_t i = 0; i < services.size(); i++) {
-      std::string service = services[i].asString();
-      std::string hash = info.getHash(services[i]);
-      const auto container_state{docker_client_->getContainerState(containers, app.name, service, hash)};
-      if (std::get<0>(container_state) /* container exists */) {
-        continue;
-      }
-      LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
-      return false;
-    }
-
-    result = true;
-  } catch (...) {
-    LOG_WARNING << "App: " << app.name << ", cant check if it is running!";
+  bool result{true};
+  ComposeInfo info((appRoot(app) / ComposeFile).string());
+  std::vector<Json::Value> services = info.getServices();
+  if (services.empty()) {
+    throw std::runtime_error("No services found in App's compose file");
   }
+
+  Json::Value containers;
+  docker_client_->getContainers(containers);
+
+  for (std::size_t i = 0; i < services.size(); i++) {
+    std::string service = services[i].asString();
+    std::string hash = info.getHash(services[i]);
+    const auto container_state{docker_client_->getContainerState(containers, app.name, service, hash)};
+    if (std::get<0>(container_state) /* container exists */) {
+      continue;
+    }
+    LOG_WARNING << "App: " << app.name << ", service: " << service << ", hash: " << hash << ", not running!";
+    result = false;
+    break;
+  }
+
   return result;
 }
 
