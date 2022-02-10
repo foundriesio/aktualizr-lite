@@ -1,3 +1,5 @@
+#include "primary/reportqueue.h"
+
 namespace fixtures {
 
 #include "liteclient/executecmd.cc"
@@ -24,7 +26,7 @@ class ClientTest :virtual public ::testing::Test {
   }
 
   enum class InitialVersion { kOff, kOn, kCorrupted1, kCorrupted2 };
-  enum class UpdateType { kOstree, kApp,  kOstreeApply, kFailed, kFinalized };
+  enum class UpdateType { kOstree, kApp, kDownloadFailed, kOstreeApply, kFailed, kFinalized };
 
 
   virtual std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
@@ -243,9 +245,12 @@ class ClientTest :virtual public ::testing::Test {
       // make sure that the new Target hasn't been applied/finalized before reboot
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
+
+      checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
+    } else {
+      checkEvents(client, from, UpdateType::kDownloadFailed, expected_download_result.description);
     }
     checkHeaders(client, from);
-    checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
   }
 
   /**
@@ -269,7 +274,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
       checkHeaders(client, from);
-      checkEvents(client, from, UpdateType::kApp, download_err_msg);
+      checkEvents(client, from, UpdateType::kDownloadFailed, download_err_msg);
       return;
     }
 
@@ -278,7 +283,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
       checkHeaders(client, from);
-      checkEvents(client, from, UpdateType::kApp);
+      checkEvents(client, from, UpdateType::kDownloadFailed);
       return;
     }
 
@@ -372,9 +377,22 @@ class ClientTest :virtual public ::testing::Test {
   }
 
   void checkEvents(LiteClient& client, const Uptane::Target& target, UpdateType update_type, const std::string& download_failure_err_msg = "", const std::string& install_failure_err_msg = "") {
+    // Before checking events we need to make sure that the ReportQueue actually has drained all events.
+    // Unfortunatelly, it doesn't expose any public method to do it, so we need either `sleep()` here
+    // or re-create the report queueu instance. Sleeping tests running time longer and it's not reliable
+    // since we don't know how much time we really need to sleep in order to drain all events.
+    // Therefore, let's re-create the queue instance. Unfortunatelly, it uncovers the sync issue in ReportQueue.
+    // Specifically, it may cause sending of the same event(s) twice because the `ReportQueue::flushQueue()`
+    // invocations in the dtor and the ReportQueue::run() are not synced or/and deleting events from the DB.
+    // So, if we do the event draining by the queue instance re-creation then we need to fix/improve
+    // the Device Gateway mock so it removes even duplicates.
+    // sleep(2);
+    client.report_queue = std_::make_unique<ReportQueue>(client.config, client.http_client, client.storage);
+
     const std::unordered_map<UpdateType, std::vector<std::string>> updateToevents = {
         { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},
         { UpdateType::kApp, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},
+        { UpdateType::kDownloadFailed, { "EcuDownloadStarted", "EcuDownloadCompleted" }},
         { UpdateType::kOstreeApply, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied" }},
         { UpdateType::kFailed, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},
         { UpdateType::kFinalized, { "EcuInstallationCompleted" }},
@@ -382,6 +400,7 @@ class ClientTest :virtual public ::testing::Test {
     const std::vector<std::string>& expected_events{updateToevents.at(update_type)};
     auto expected_event_it = expected_events.begin();
     auto events = getDeviceGateway().getEvents();
+    ASSERT_EQ(expected_events.size(), events.size());
     for (auto rec_event_it = events.begin(); rec_event_it != events.end(); ++rec_event_it) {
       const auto& rec_event_json = *rec_event_it;
       const auto event_type = rec_event_json["eventType"]["id"].asString();

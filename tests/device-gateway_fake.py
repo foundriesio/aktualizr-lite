@@ -151,12 +151,18 @@ class Handler(SimpleHTTPRequestHandler):
         else:
             cur_events = []
 
+        event_ids = set()
+        for e in cur_events:
+            event_ids.add(e["id"])
+
         data_len = int(self.headers.get('content-length', 0))
         body = self.rfile.read(data_len)
         with open(self.server.events_file, "w+") as f:
             events = json.loads(body.decode('utf-8'))
             for e in events:
-                cur_events.append(e)
+                if e["id"] not in event_ids:
+                    cur_events.append(e)
+                    event_ids.add(e["id"])
             json.dump(cur_events, f)
 
 
