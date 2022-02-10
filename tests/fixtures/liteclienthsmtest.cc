@@ -16,7 +16,7 @@ class ClientHSMTest : public ClientTest {
     conf.tls.pkey_source = CryptoSource::kPkcs11;
     conf.tls.cert_source = CryptoSource::kPkcs11;
     conf.tls.ca_source = CryptoSource::kFile;
-    conf.tls.server = device_gateway_.getTreeUri();
+    conf.tls.server = device_gateway_.getTlsUri();
 
     conf.import.base_path = hsm_->path_;
     conf.import.tls_cacert_path = { "ca.crt" };
