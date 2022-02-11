@@ -27,14 +27,16 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        path_elements = self.path.split('/')
+        # /v2/<name>/manifests/<digest>
+        # /v2/<name>/blobs/<digest>
+        # <digest> = sha256:<hash>
+        digest_indx = self.path.find('sha256')
+        if digest_indx == -1:
+            self.send_response(404)
+            self.end_headers()
+            return
 
-        factory = path_elements[2]
-        image = path_elements[3]
-        artifact_type = path_elements[4]
-        digest = path_elements[5]
-        logger.info(">>> Factory: {}; Image: {}; Element: {}; Digest: {}".format(factory, image, artifact_type, digest))
-
+        digest = self.path[digest_indx:]
         if not digest.startswith('sha256:'):
             self.send_response(400)
             self.send_header('Content-type', 'application/json')
@@ -43,7 +45,17 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         hash = digest[len('sha256:'):]
-        full_path = os.path.join(self.server.root_dir, factory, image, artifact_type, hash)
+        path = self.path[len('/v2/'):digest_indx - 1]
+
+        # path_elements = self.path[:digest_indx - 1].split('/')
+        #
+        # factory = path_elements[2]
+        # image = path_elements[3]
+        # artifact_type = path_elements[4]
+        # digest = path_elements[5]
+        logger.info(">>> Path: {}; Digest: {}".format(path, digest))
+
+        full_path = os.path.join(self.server.root_dir, path, hash)
         if not os.path.exists(full_path):
             self.send_response(404)
             self.end_headers()

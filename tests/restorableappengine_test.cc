@@ -157,7 +157,7 @@ TEST_F(RestorableAppEngineTest, FetchCheckAndRefetch) {
   const auto compose_file{app_dir / Docker::RestorableAppEngine::ComposeFile};
   Docker::ComposeInfo compose{compose_file.string()};
   const auto image = compose.getImage(compose.getServices()[0]);
-  const Docker::Uri image_uri{Docker::Uri::parseUri(image)};
+  const Docker::Uri image_uri{Docker::Uri::parseUri(image, false)};
   const auto image_root{app_dir / "images" / image_uri.registryHostname / image_uri.repo / image_uri.digest.hash()};
   const auto index_manifest{image_root / "index.json"};
 

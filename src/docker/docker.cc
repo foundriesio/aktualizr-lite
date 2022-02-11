@@ -7,30 +7,43 @@
 
 namespace Docker {
 
-Uri Uri::parseUri(const std::string& uri) {
+Uri Uri::parseUri(const std::string& uri, bool factory_app) {
+  // check whether uri is pinned
   auto split_pos = uri.find('@');
   if (split_pos == std::string::npos) {
-    throw std::invalid_argument("Invalid App URI: '@' not found in " + uri);
+    throw std::invalid_argument("Invalid URI: digest/'@' not found in " + uri);
   }
 
-  auto app_name_pos = uri.rfind('/', split_pos);
-  if (app_name_pos == std::string::npos) {
-    throw std::invalid_argument("Invalid App URI: the app name not found in " + uri);
-  }
-
-  auto app = uri.substr(app_name_pos + 1, split_pos - app_name_pos - 1);
   auto digest = uri.substr(split_pos + 1);
 
-  auto factory_name_pos = uri.rfind('/', app_name_pos - 1);
-  if (factory_name_pos == std::string::npos) {
-    throw std::invalid_argument("Invalid App URI; the app factory name not found in " + uri);
+  // find start of <name> (aka path) position
+  auto name_pos_start = uri.find('/', 0);
+  if (name_pos_start == std::string::npos) {
+    throw std::invalid_argument("Invalid URI: image name/path is not found in " + uri);
   }
 
-  auto factory = uri.substr(factory_name_pos + 1, app_name_pos - factory_name_pos - 1);
-  auto repo = uri.substr(factory_name_pos + 1, split_pos - factory_name_pos - 1);
-  auto registry_hostname = uri.substr(0, factory_name_pos);
+  if (split_pos <= (name_pos_start + 1)) {
+    throw std::invalid_argument("Invalid URI: image name/path is not present before digest; uri: " + uri);
+  }
 
-  return Uri{HashedDigest{digest}, app, factory, repo, registry_hostname};
+  auto registry_hostname = uri.substr(0, name_pos_start);
+  auto name = uri.substr(name_pos_start + 1, split_pos - name_pos_start - 1);
+
+  auto app_pos_start = name.rfind('/');
+  std::string factory;
+  if (app_pos_start != std::string::npos) {
+    factory = name.substr(0, app_pos_start);
+  } else {
+    app_pos_start = -1;
+  }
+  auto app = name.substr(app_pos_start + 1, name.size() - app_pos_start - 1);
+
+  if (factory_app && (factory.empty() || factory.find('/') != std::string::npos)) {
+    throw std::invalid_argument("Invalid URI: invalid name format of a factory image, must be <factory>/<repo>; uri: " +
+                                uri);
+  }
+
+  return Uri{HashedDigest{digest}, app, factory, name, registry_hostname};
 }
 
 Uri Uri::createUri(const HashedDigest& digest_in) const {

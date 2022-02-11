@@ -68,12 +68,12 @@ class ComposeApp {
 
  public:
   static Ptr create(const std::string& name,
-                    const std::string& service = "service-01", const std::string& image = "image-01",
+                    const std::string& service = "service-01", const std::string& image_name = "factory/image-01",
                     const std::string& service_template = ServiceTemplate,
                     const std::string& compose_file = Docker::ComposeAppEngine::ComposeFile,
                     const std::string& failure = "none",
                     const Json::Value& layers = Json::Value()) {
-    Ptr app{new ComposeApp(name, compose_file, "factory/" + image)};
+    Ptr app{new ComposeApp(name, compose_file, image_name)};
 
     // layers manifest
     Json::Value layers_json{layers};
