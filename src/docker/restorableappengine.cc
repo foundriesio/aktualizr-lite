@@ -267,7 +267,7 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
       ComposeInfo compose{(entry.path() / ComposeFile).string()};
       for (const auto& service : compose.getServices()) {
         const auto image = compose.getImage(service);
-        const Uri image_uri{Uri::parseUri(image)};
+        const Uri image_uri{Uri::parseUri(image, false)};
         const auto image_root{app_dir / app_version_dir / "images" / image_uri.registryHostname / image_uri.repo /
                               image_uri.digest.hash()};
 
@@ -413,10 +413,10 @@ void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compo
   for (const auto& service : compose.getServices()) {
     const auto image_uri = compose.getImage(service);
 
-    const Uri uri{Uri::parseUri(image_uri)};
+    const Uri uri{Uri::parseUri(image_uri, false)};
     const auto image_dir{dst_dir / uri.registryHostname / uri.repo / uri.digest.hash()};
 
-    LOG_INFO << uri.app << ": downloading image from Registry if missing: " << image_uri << " --> " << dst_dir;
+    LOG_INFO << uri.app << ": downloading image from Registry if missing: " << image_uri << " --> " << image_dir;
     pullImage(client_, image_uri, image_dir, blobs_root_);
   }
 }
@@ -447,7 +447,7 @@ void RestorableAppEngine::installAppImages(const boost::filesystem::path& app_di
   const auto compose{ComposeInfo((app_dir / ComposeFile).string())};
   for (const auto& service : compose.getServices()) {
     const auto image_uri = compose.getImage(service);
-    const Uri uri{Uri::parseUri(image_uri)};
+    const Uri uri{Uri::parseUri(image_uri, false)};
     const std::string tag{uri.registryHostname + '/' + uri.repo + ':' + uri.digest.shortHash()};
     const auto image_dir{app_dir / "images" / uri.registryHostname / uri.repo / uri.digest.hash()};
     installImage(client_, image_dir, blobs_root_, docker_host_, tag);
@@ -529,7 +529,7 @@ bool RestorableAppEngine::areAppImagesFetched(const App& app) const {
   ComposeInfo compose{compose_file.string()};
   for (const auto& service : compose.getServices()) {
     const auto image = compose.getImage(service);
-    const Uri image_uri{Uri::parseUri(image)};
+    const Uri image_uri{Uri::parseUri(image, false)};
     const auto image_root{app_dir / "images" / image_uri.registryHostname / image_uri.repo / image_uri.digest.hash()};
 
     const auto index_manifest{image_root / "index.json"};
