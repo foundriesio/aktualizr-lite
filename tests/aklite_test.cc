@@ -100,9 +100,11 @@ TEST_P(AkliteTest, AppUpdate) {
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
   ASSERT_TRUE(app_engine->isRunning(app01));
 
-  // update app
+  // update app and add new one
   auto app01_updated = registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02"));
-  auto target02 = createAppTarget({app01_updated});
+  auto app02 = registry.addApp(fixtures::ComposeApp::create("app-02", "service-01", "factory/image-01"));
+  auto app03 = registry.addApp(fixtures::ComposeApp::create("app-03", "service-01", "foo/bar/wierd/image-01"));
+  auto target02 = createAppTarget({app01_updated, app02, app03});
   updateApps(*client, target01, target02);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target02));
   ASSERT_TRUE(app_engine->isRunning(app01_updated));

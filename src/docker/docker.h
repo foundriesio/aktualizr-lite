@@ -26,13 +26,18 @@ struct HashedDigest {
 };
 
 struct Uri {
-  static Uri parseUri(const std::string& uri);
+  static Uri parseUri(const std::string& uri, bool factory_app = true);
   Uri createUri(const HashedDigest& digest_in) const;
 
   const HashedDigest digest;
   const std::string app;
   const std::string factory;
-  const std::string repo;
+  // This is the <name> field as described in the OCI distribution spec
+  // https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pulling-manifests
+  // <registryHostname>[:port]/<name>@<digest>
+  // <name> == <factory>/<app> in the case of Compose App stored in Fio Registry
+  // <name> == <foo> | <foo>/<bar> | <foo>/<bar>/<whatever> - in the case of third party registries
+  const std::string repo;  // repo == name
   const std::string registryHostname;
 };
 

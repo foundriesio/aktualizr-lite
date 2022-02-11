@@ -171,4 +171,12 @@ add_aktualizr_test(NAME exec
 )
 aktualizr_source_file_checks(exec_test.cc)
 target_include_directories(t_exec PRIVATE ${TEST_INCS})
-set_tests_properties(test_apiclient PROPERTIES LABELS "aklite:exec")
+set_tests_properties(test_exec PROPERTIES LABELS "aklite:exec")
+
+add_aktualizr_test(NAME docker
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> docker_test.cc
+  PROJECT_WORKING_DIRECTORY
+)
+aktualizr_source_file_checks(docker_test.cc)
+target_include_directories(t_docker PRIVATE ${TEST_INCS})
+set_tests_properties(test_docker PROPERTIES LABELS "aklite:docker")
