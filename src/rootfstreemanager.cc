@@ -60,7 +60,7 @@ void RootfsTreeManager::installNotify(const Uptane::Target& target) {
 }
 
 void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const std::string& target_name) {
-  const auto resp = http_client_->post(gateway_url_ + "/download-urls", Json::Value::null);
+  const auto resp = http_client_->post(gateway_url_ + "/download-urls", Json::Value::null, true);
 
   if (!resp.isOk()) {
     LOG_WARNING << "Failed to obtain download URLs from Gateway, fallback to dowload via gateway/proxy server: "

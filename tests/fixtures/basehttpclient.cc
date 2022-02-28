@@ -3,8 +3,8 @@ namespace fixtures {
 class BaseHttpClient: public HttpInterface {
  public:
   HttpResponse get(const std::string &url, int64_t maxsize) override { return HttpResponse("", 500, CURLE_OK, "not supported"); }
-  HttpResponse post(const std::string&, const std::string&, const std::string&) override { return HttpResponse("", 500, CURLE_OK, "not supported"); }
-  HttpResponse post(const std::string&, const Json::Value&) override { return HttpResponse("", 500, CURLE_OK, "not supported"); }
+  HttpResponse post(const std::string&, const std::string&, const std::string&, bool follow_redirect = false) override { return HttpResponse("", 500, CURLE_OK, "not supported"); }
+  HttpResponse post(const std::string&, const Json::Value&, bool follow_redirect = false) override { return HttpResponse("", 500, CURLE_OK, "not supported"); }
   HttpResponse put(const std::string&, const std::string&, const std::string&) override { return HttpResponse("", 500, CURLE_OK, "not supported"); }
   HttpResponse put(const std::string&, const Json::Value&) override { return HttpResponse("", 500, CURLE_OK, "not supported"); }
 

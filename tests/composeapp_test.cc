@@ -110,8 +110,8 @@ class FakeOtaClient: public HttpInterface {
       resp_promise.set_value(HttpResponse("", 500, CURLE_OK, ""));
       return resp_promise.get_future();
     }
-    HttpResponse post(const std::string&, const std::string&, const std::string&) override { return HttpResponse("", 500, CURLE_OK, ""); }
-    HttpResponse post(const std::string&, const Json::Value&) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    HttpResponse post(const std::string&, const std::string&, const std::string&, bool follow_redirect = false) override { return HttpResponse("", 500, CURLE_OK, ""); }
+    HttpResponse post(const std::string&, const Json::Value&, bool follow_redirect = false) override { return HttpResponse("", 500, CURLE_OK, ""); }
     HttpResponse put(const std::string&, const std::string&, const std::string&) override { return HttpResponse("", 500, CURLE_OK, ""); }
     HttpResponse put(const std::string&, const Json::Value&) override { return HttpResponse("", 500, CURLE_OK, ""); }
     void setCerts(const std::string&, CryptoSource, const std::string&, CryptoSource, const std::string&, CryptoSource) override {}
