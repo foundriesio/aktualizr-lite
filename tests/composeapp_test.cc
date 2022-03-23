@@ -152,6 +152,16 @@ TEST(ComposeApp, Config) {
   config.pacman.extra["docker_prune"] = "FALSE";
   cfg = ComposeAppManager::Config(config.pacman);
   ASSERT_FALSE(cfg.docker_prune);
+
+  config.pacman.extra["storage_watermark"] = "foobar";
+  EXPECT_THROW(ComposeAppManager::Config(config.pacman), std::invalid_argument);
+
+  config.pacman.extra["storage_watermark"] = "9999999999999999999999999999999999999999999999999999999999999999999";
+  EXPECT_THROW(ComposeAppManager::Config(config.pacman), std::out_of_range);
+
+  config.pacman.extra["storage_watermark"] = "50";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.storage_watermark, 50);
 }
 
 class TestSysroot: public OSTree::Sysroot {
