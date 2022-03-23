@@ -74,16 +74,19 @@ namespace Docker {
 class RestorableAppEngine : public AppEngine {
  public:
   static const std::string ComposeFile;
-  using StorageSpaceFunc = std::function<boost::uintmax_t(const boost::filesystem::path&)>;
+  using StorageSpaceFunc =
+      std::function<std::tuple<boost::uintmax_t, boost::uintmax_t>(const boost::filesystem::path&)>;
 
-  static StorageSpaceFunc DefStorageSpaceFunc;
+  static const int LowWatermarkLimit{20};
+  static const int HighWatermarkLimit{95};
+  static StorageSpaceFunc GetDefStorageSpaceFunc(int watermark = 80);
 
   RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                       boost::filesystem::path docker_root, Docker::RegistryClient::Ptr registry_client,
                       Docker::DockerClient::Ptr docker_client, std::string client = "/sbin/skopeo",
                       std::string docker_host = "unix:///var/run/docker.sock",
                       std::string compose_cmd = "/usr/bin/docker-compose",
-                      StorageSpaceFunc storage_space_func = RestorableAppEngine::DefStorageSpaceFunc);
+                      StorageSpaceFunc storage_space_func = RestorableAppEngine::GetDefStorageSpaceFunc());
 
   Result fetch(const App& app) override;
   Result verify(const App& app) override;
@@ -139,7 +142,7 @@ class RestorableAppEngine : public AppEngine {
                                                  uint32_t average_compression_ratio);
 
   void checkAvailableStorageInStores(const std::string& app_name, const uint64_t& skopeo_required_storage,
-                                     const uint64_t& docker_required_storage, float watermark) const;
+                                     const uint64_t& docker_required_storage) const;
 
   static bool areDockerAndSkopeoOnTheSameVolume(const boost::filesystem::path& skopeo_path,
                                                 const boost::filesystem::path& docker_path);

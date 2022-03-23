@@ -72,6 +72,27 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("create_containers_before_reboot") > 0) {
     create_containers_before_reboot = boost::lexical_cast<bool>(raw.at("create_containers_before_reboot"));
   }
+
+  if (raw.count("storage_watermark") > 0) {
+    const std::string storage_watermark_str{raw.at("storage_watermark")};
+
+    try {
+      storage_watermark = std::stoi(storage_watermark_str);
+    } catch (const std::invalid_argument&) {
+      LOG_ERROR << "Invalid sota.toml:pacman:storage_watermark value, should be an integer, got "
+                << storage_watermark_str;
+      throw;
+    } catch (const std::out_of_range&) {
+      LOG_ERROR << "Invalid sota.toml:pacman:storage_watermark value, the specified value is out the integer range: "
+                << storage_watermark_str;
+      throw;
+    } catch (const std::exception& exc) {
+      LOG_ERROR
+          << "Unexpected error while processing sota.toml:pacman:storage_watermark value, should be an integer got "
+          << storage_watermark_str << ", err: " << exc.what();
+      throw;
+    }
+  }
 }
 
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -90,9 +111,9 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     const std::string docker_host{"unix:///var/run/docker.sock"};
 
     if (!!cfg_.reset_apps) {
-      app_engine_ = std::make_shared<Docker::RestorableAppEngine>(cfg_.reset_apps_root, cfg_.apps_root,
-                                                                  cfg_.images_data_root, registry_client, docker_client,
-                                                                  skopeo_cmd, docker_host, compose_cmd);
+      app_engine_ = std::make_shared<Docker::RestorableAppEngine>(
+          cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client, docker_client, skopeo_cmd,
+          docker_host, compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
     } else {
       app_engine_ =
           std::make_shared<Docker::ComposeAppEngine>(cfg_.apps_root, compose_cmd, docker_client, registry_client);

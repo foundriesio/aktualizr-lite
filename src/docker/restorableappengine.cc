@@ -17,15 +17,30 @@ namespace Docker {
 
 const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
 
-RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::DefStorageSpaceFunc =
-    [](const boost::filesystem::path& path) {
-      boost::system::error_code ec;
-      const boost::filesystem::space_info store_info{boost::filesystem::space(path, ec)};
-      if (ec.failed()) {
-        throw std::runtime_error("Failed to get an available storage size: " + ec.message());
-      }
-      return store_info.available;
-    };
+RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::GetDefStorageSpaceFunc(int watermark) {
+  const int low_watermark_limit{LowWatermarkLimit};
+  const int high_watermark_limit{HighWatermarkLimit};
+
+  if (watermark < low_watermark_limit || watermark > high_watermark_limit) {
+    throw std::invalid_argument(
+        "Unsupported value of a storage watermark (sota.toml:pacman:storage_watermark); should be within [" +
+        std::to_string(low_watermark_limit) + "," + std::to_string(high_watermark_limit) + "] range, got " +
+        std::to_string(watermark));
+  }
+
+  return [watermark](const boost::filesystem::path& path) {
+    boost::system::error_code ec;
+    const boost::filesystem::space_info store_info{boost::filesystem::space(path, ec)};
+    if (ec.failed()) {
+      throw std::runtime_error("Failed to get an available storage size: " + ec.message());
+    }
+
+    boost::uintmax_t allowed_for_usage{static_cast<boost::uintmax_t>((float(watermark) / 100) * store_info.available)};
+    return std::tuple<boost::uintmax_t, boost::uintmax_t>(
+        store_info.available /* overall available */,
+        allowed_for_usage /* available for usage taking into account a highe level watermark*/);
+  };
+}
 
 RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
                                          boost::filesystem::path docker_root,
@@ -391,7 +406,7 @@ void RestorableAppEngine::checkAppUpdateSize(const Uri& uri, const boost::filesy
       getDockerStoreSizeForAppUpdate(skopeo_total_update_size, average_compression_ratio)};
 
   LOG_INFO << "Checking if there is sufficient amount of storage available for App update...";
-  checkAvailableStorageInStores(uri.app, skopeo_total_update_size, docker_total_update_size, 0.8 /* watermark */);
+  checkAvailableStorageInStores(uri.app, skopeo_total_update_size, docker_total_update_size);
 }
 
 void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compose_file,
@@ -788,14 +803,16 @@ uint64_t RestorableAppEngine::getDockerStoreSizeForAppUpdate(const uint64_t& com
 
 void RestorableAppEngine::checkAvailableStorageInStores(const std::string& app_name,
                                                         const uint64_t& skopeo_required_storage,
-                                                        const uint64_t& docker_required_storage,
-                                                        float watermark) const {
+                                                        const uint64_t& docker_required_storage) const {
   auto checkRoomInStore = [&](const std::string& store_name, const uint64_t& required_storage,
                               const boost::filesystem::path& store_path) {
-    const auto available_space{storage_space_func_(store_path)};
-    auto available = static_cast<uint64_t>(available_space * watermark);
+    boost::uintmax_t capacity;
+    boost::uintmax_t available;
+
+    std::tie(capacity, available) = storage_space_func_(store_path);
     LOG_INFO << app_name << " -> " << store_name << " store total update size: " << required_storage
-             << " bytes; available: " << available << ", path: " << store_path.string();
+             << " bytes; available: " << available << " (out of " << capacity << ") "
+             << ", path: " << store_path.string();
     if (required_storage > available) {
       throw std::runtime_error("Insufficient storage available; store: " + store_name +
                                ", path: " + store_path.string() + ", required: " + std::to_string(required_storage) +

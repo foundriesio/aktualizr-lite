@@ -26,8 +26,10 @@ class RestorableAppEngineTest : public fixtures::AppEngineTest {
 
     app_engine = std::make_shared<Docker::RestorableAppEngine>(
         skopeo_store_root_, apps_root_dir, daemon_.dataRoot(), registry_client_, docker_client_,
-        registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd,
-        [this](const boost::filesystem::path& path) { return this->available_storage_space_; });
+        registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd, [this](const boost::filesystem::path& path) {
+          return std::tuple<boost::uintmax_t, boost::uintmax_t>{this->available_storage_space_,
+                                                                (this->watermark_ * this->available_storage_space_)};
+        });
   }
 
   void removeAppManifest(const AppEngine::App& app) {
@@ -54,12 +56,18 @@ class RestorableAppEngineTest : public fixtures::AppEngineTest {
     Utils::writeFile(archive_full_path, std::string("foo bar"));
   }
 
-  void setAvailableStorageSpace(const boost::uintmax_t& space_size) { available_storage_space_ = space_size; }
+  void setAvailableStorageSpace(const boost::uintmax_t& space_size) {
+    available_storage_space_ = space_size / watermark_;
+  }
+  void setAvailableStorageSpaceWithoutWatermark(const boost::uintmax_t& space_size) {
+    available_storage_space_ = space_size;
+  }
   const boost::filesystem::path& storeRoot() const { return skopeo_store_root_; }
 
  protected:
   const boost::filesystem::path skopeo_store_root_;
   boost::uintmax_t available_storage_space_;
+  float watermark_{0.8};
 };
 
 class RestorableAppEngineTestParameterized : public RestorableAppEngineTest,
@@ -72,7 +80,10 @@ class RestorableAppEngineTestParameterized : public RestorableAppEngineTest,
     app_engine = std::make_shared<Docker::RestorableAppEngine>(
         skopeo_store_root_, apps_root_dir, docker_data_root_path.empty() ? daemon_.dataRoot() : docker_data_root_path,
         registry_client_, docker_client_, registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd,
-        [this](const boost::filesystem::path& path) { return this->available_storage_space_; });
+        [this](const boost::filesystem::path& path) {
+          return std::tuple<boost::uintmax_t, boost::uintmax_t>{this->available_storage_space_,
+                                                                (this->watermark_ * this->available_storage_space_)};
+        });
   }
 };
 
@@ -260,12 +271,42 @@ TEST_F(RestorableAppEngineTest, FetchAndCheckSizeNoManifest) {
   ASSERT_TRUE(app_engine->isFetched(app));
 }
 
+TEST_F(RestorableAppEngineTest, CheckStorageWatermarkLimits) {
+  EXPECT_THROW(Docker::RestorableAppEngine::GetDefStorageSpaceFunc(Docker::RestorableAppEngine::HighWatermarkLimit + 1),
+               std::invalid_argument);
+  EXPECT_THROW(Docker::RestorableAppEngine::GetDefStorageSpaceFunc(Docker::RestorableAppEngine::LowWatermarkLimit - 1),
+               std::invalid_argument);
+}
+
 TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInsufficientSpace) {
   setAvailableStorageSpace(1024);
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_FALSE(app_engine->fetch(app));
   ASSERT_FALSE(app_engine->isFetched(app));
   ASSERT_FALSE(app_engine->isRunning(app));
+}
+
+TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInsufficientSpaceIfWatermark) {
+  const auto layer_size{1024};
+  Json::Value layers;
+  layers["layers"][0]["digest"] =
+      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+  layers["layers"][0]["size"] = layer_size;
+
+  {
+    const auto compose_app{fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers)};
+    setAvailableStorageSpace(6144);
+    auto app = registry.addApp(compose_app);
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+  }
+  {
+    const auto compose_app{fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers)};
+    setAvailableStorageSpaceWithoutWatermark(6144);
+    auto app = registry.addApp(compose_app);
+    ASSERT_FALSE(app_engine->fetch(app));
+    ASSERT_FALSE(app_engine->isFetched(app));
+  }
 }
 
 TEST_P(RestorableAppEngineTestParameterized, FetchAndCheckSizeInsufficientSpace) {
