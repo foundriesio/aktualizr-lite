@@ -22,7 +22,7 @@ class ComposeAppManager : public RootfsTreeManager {
     boost::optional<std::vector<std::string>> reset_apps;
     boost::filesystem::path apps_root{"/var/sota/compose-apps"};
     boost::filesystem::path reset_apps_root{"/var/sota/reset-apps"};
-    boost::filesystem::path compose_bin{"/usr/bin/docker-compose"};
+    boost::filesystem::path compose_bin{"/usr/bin/docker"};
     boost::filesystem::path skopeo_bin{"/sbin/skopeo"};
     bool docker_prune{true};
     bool force_update{false};
