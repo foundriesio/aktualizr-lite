@@ -106,7 +106,10 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
   if (!app_engine_) {
     auto docker_client{std::make_shared<Docker::DockerClient>()};
     auto registry_client{std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint)};
-    const auto compose_cmd{boost::filesystem::canonical(cfg_.compose_bin).string() + " "};
+    std::string compose_cmd{boost::filesystem::canonical(cfg_.compose_bin).string() + " "};
+    if (cfg_.compose_bin.filename().compare("docker") == 0) {
+      compose_cmd += "compose ";  // "make it `docker compose` command
+    }
     const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
     const std::string docker_host{"unix:///var/run/docker.sock"};
 
