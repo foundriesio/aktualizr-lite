@@ -74,7 +74,8 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   wget \
   xsltproc \
   zip \
-  docker-compose
+  docker-compose \
+  sudo
 
 RUN ln -s clang-10 /usr/bin/clang && \
     ln -s clang++-10 /usr/bin/clang++
@@ -111,6 +112,6 @@ RUN apt-get update && apt-get -y install skopeo && ln -s /usr/bin/skopeo /sbin/s
 # Install specific version of docker-compose
 RUN pip3 install docker==4.2.1 && pip3 install docker-compose==1.26
 
-RUN useradd testuser
+RUN useradd -m testuser && usermod -aG docker testuser
 
 WORKDIR /
