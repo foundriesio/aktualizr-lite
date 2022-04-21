@@ -218,7 +218,7 @@ TEST_P(AkliteTest, OstreeDownloadFailure) {
 
   // update to the latest version
   update(*client, getInitialTarget(), invalid_target, data::ResultCode::Numeric::kDownloadFailed,
-         {DownloadResult::Status::DownloadFailed, "HTTP 404"});
+         {DownloadResult::Status::DownloadFailed, "404"});
   // make sure that the installed Target is not "finalized"/applied and Apps are not running
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   ASSERT_FALSE(app_engine->isRunning(app01));
