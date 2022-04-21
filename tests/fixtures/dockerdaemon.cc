@@ -9,7 +9,7 @@ class DockerDaemon {
   // tests/docker-compose_fake.py fills/populates this file with "running" containers
   static constexpr const char* const ContainersFile{"containers.json"};
  public:
-  DockerDaemon(boost::filesystem::path dir): dir_{std::move(dir)}, port_{TestUtils::getFreePort()}, process_{RunCmd, "--port", port_, "--dir", dir.string()} {
+  DockerDaemon(boost::filesystem::path dir): dir_{std::move(dir)}, port_{TestUtils::getFreePort()}, process_{RunCmd, "--port", port_, "--dir", dir_.string()} {
     // zero containers are running in the beginning
     Utils::writeFile(dir_ / ContainersFile, none_containers_, true);
     TestUtils::waitForServer("http://localhost:" + port_ + "/");
