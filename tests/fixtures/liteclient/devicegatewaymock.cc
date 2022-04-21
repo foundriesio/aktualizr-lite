@@ -3,6 +3,15 @@ class DeviceGatewayMock {
   static std::string RunCmd;
 
  public:
+ static std::vector<std::string> getDeviceGatewayArgs(std::vector<std::string>&& args, const std::string& certDir) {
+    std::vector<std::string> args_out{args};
+    if (!certDir.empty()) {
+      args_out.emplace_back("--mtls");
+      args_out.emplace_back(certDir);
+    }
+    return args_out;
+ }
+ public:
   DeviceGatewayMock(const OSTreeRepoMock& ostree, const TufRepoMock& tuf, std::string certDir = "")
       : ostree_{ostree},
         tuf_{tuf},
@@ -11,8 +20,15 @@ class DeviceGatewayMock {
         req_headers_file_{tuf_.getPath() + "/headers.json"},
         events_file_{tuf_.getPath() + "/events.json"},
         sota_toml_file_{tuf_.getPath() + "/sota.toml"},
-        process_{RunCmd,           "--port",         port_, "--ostree", ostree_.getPath(), "--tuf-repo", tuf_.getPath(),
-    "--headers-file", req_headers_file_, "--events-file", events_file_,"--mtls", certDir, "--sota-toml", sota_toml_file_}
+        process_{
+          getDeviceGatewayArgs({RunCmd,
+                                "--port", port_,
+                                "--ostree", ostree_.getPath(),
+                                "--tuf-repo", tuf_.getPath(),
+                                "--headers-file", req_headers_file_,
+                                "--events-file", events_file_,
+                                "--sota-toml", sota_toml_file_}
+                                , certDir)}
   {
     if (certDir.empty()) {
       TestUtils::waitForServer(url_ + "/");
