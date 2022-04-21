@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <boost/filesystem.hpp>
 #include <boost/process.hpp>
 
@@ -352,6 +353,7 @@ TEST(ComposeApp, fetch) {
   target_json["custom"]["targetFormat"] = "OSTREE";
   target_json["length"] = 0;
   target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "n/a";
+  target_json["custom"]["version"] = 1;
   const std::string app_file_name = "docker-compose.yml";
   const std::string app_content = "lajdalsjdlasjflkjasldjaldlasdl89749823748jsdhfjshdfjk89273498273jsdkjkdfjkdsfj928";
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = registry.addApp("test_repo", "app2",
@@ -359,6 +361,7 @@ TEST(ComposeApp, fetch) {
   Uptane::Target target("pull", target_json);
 
   TestClient client("app2 doesnotexist", nullptr, &registry);  // only app2 can be fetched
+  LOG_ERROR << target_json;
   const auto result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_TRUE(result);
   const std::string expected_file = (client.apps_root / "app2"/ app_file_name).string();
@@ -384,6 +387,7 @@ TEST(ComposeApp, fetchNegative) {
   target_json["custom"]["targetFormat"] = "OSTREE";
   target_json["length"] = 0;
   target_json["custom"]["docker_compose_apps"]["app1"]["uri"] = "n/a";
+  target_json["custom"]["version"] = 1;
 
   Uptane::Target target("pull", target_json);
   TestClient client("app2", nullptr, &registry);
