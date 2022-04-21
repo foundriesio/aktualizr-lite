@@ -153,7 +153,8 @@ class Handler(SimpleHTTPRequestHandler):
 
         event_ids = set()
         for e in cur_events:
-            event_ids.add(e["id"])
+            if "id" in e:
+                event_ids.add(e["id"])
 
         data_len = int(self.headers.get('content-length', 0))
         body = self.rfile.read(data_len)
