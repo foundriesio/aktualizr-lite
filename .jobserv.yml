@@ -9,6 +9,12 @@ triggers:
         host-tag: amd64
         script: unit-test
 
+      - name: dev-flow
+        privileged: true
+        container: foundries/aklite-dev
+        host-tag: amd64
+        script: dev-flow
+
 scripts:
 
   unit-test: |
@@ -16,3 +22,9 @@ scripts:
     export CCACHE_DIR=/tmp/ccache
     wrapdocker
     ./unit-test no-docker
+
+  dev-flow: |
+    #!/bin/bash -ex
+    wrapdocker &
+    chown -R testuser:testuser .
+    sudo -u testuser CCACHE_DIR=/tmp/ccache make -f dev-flow.mk config build format tidy test
