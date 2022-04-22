@@ -7,7 +7,7 @@ C++ implementation of [TUF](https://theupdateframework.io/) OTA update client ba
 ## Getting Started
 
 ### Dependencies
-List of aktualizr-lite dependencies can be found [here](https://github.com/advancedtelematic/aktualizr#dependencies)
+List of aktualizr-lite dependencies can be found [here](https://github.com/advancedtelematic/aktualizr#dependencies) or in the [Dockerfile](./docker/Dockerfile) that defines a docker container which includes the all dependencies required for aktualizr-lite building and unit testing.
 
 ### Build
 
@@ -19,42 +19,29 @@ or if you cloned the repo without `--recursive` flag
 ```
 git submodule update --init --recursive
 ```
-Initialize a build directory
+Run `make` to build and/or apply `clang-format` or `clang-tidy` utilities. Use the environment variables to amend the `make` commands behavior.
 ```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-```
-if you prefer Ninja backend
-```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -GNinja
-```
-turn on clang-tidy
-```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -GNinja  -DCLANG_TIDY=ON
-```
-Build aktualizr-lite
-```
-cmake --build build --target aklite -- -j6
-or if Ninja is used just
-cmake --build build --target aklite
-```
+[<MAKE ENV VARS>] make [-f dev-flow.mk] <config | build | format | tidy >
 
-Build tests
 ```
-cmake --build build --target aklite-tests -- -j6
-or if Ninja is used just
-cmake --build build --target aklite-tests
-```
+The make environment variables are:
+*  `BUILD_DIR` - a build directory, `./build` by default;
+*  `CCACHE_DIR` - a ccache directory, `./ccache` by default;
+*  `TARGET` - a target to build, `aklite-test` by default. Could be `aktualizr-lite` if no need to build tests;
+*  `CXX` - a compiler to use, `clang++` or the compiler specified in a host's `env` by default.
+
+If `-f dev-flow.mk` is specified then the `make` command is executed on a host, otherwise - in the `foundries/aklite-dev` container.
+A user can specify their own container to run the commands in by overriding `CONTAINER` environment variable.
 
 ### Test
 ```
-cd build
-ctest -L aklite
+[<MAKE ENV VARS>] make [-f dev-flow.mk] test
 ```
 
-#### Build and test in a docker container
-```
-./unit-test
-```
+The make environment variables are:
+*  `TEST_LABEL` - a label (regexp) of the target tests. For example, `aklite:compose-apps`, by default, is set to `aklite` - run all `aktualizr-lite tests`;
+*  `CTEST_ARGS` - additional `ctest` parameters, by default is set to `--output-on-failure`.
+
 
 ### Usage
 [Run aktualizr-lite locally against your Foundries Factory](./how-to-run-locally.md)
