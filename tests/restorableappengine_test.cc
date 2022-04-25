@@ -281,7 +281,7 @@ TEST_F(RestorableAppEngineTest, CheckStorageWatermarkLimits) {
 TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInsufficientSpace) {
   setAvailableStorageSpace(1024);
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
-  ASSERT_FALSE(app_engine->fetch(app));
+  ASSERT_TRUE(app_engine->fetch(app).noSpace());
   ASSERT_FALSE(app_engine->isFetched(app));
   ASSERT_FALSE(app_engine->isRunning(app));
 }
@@ -304,7 +304,7 @@ TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInsufficientSpaceIfWatermark) {
     const auto compose_app{fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers)};
     setAvailableStorageSpaceWithoutWatermark(6144);
     auto app = registry.addApp(compose_app);
-    ASSERT_FALSE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->fetch(app).noSpace());
     ASSERT_FALSE(app_engine->isFetched(app));
   }
 }
@@ -321,7 +321,7 @@ TEST_P(RestorableAppEngineTestParameterized, FetchAndCheckSizeInsufficientSpace)
   // but not sufficient to accomodate an uncompressed layer in the docker data root (store)
   setAvailableStorageSpace(layer_size * 1.5);
   auto app = registry.addApp(compose_app);
-  ASSERT_FALSE(app_engine->fetch(app));
+  ASSERT_TRUE(app_engine->fetch(app).noSpace());
   ASSERT_FALSE(app_engine->isFetched(app));
   ASSERT_FALSE(app_engine->isRunning(app));
 }

@@ -399,31 +399,31 @@ bool LiteClient::checkImageMetaOffline() {
 DownloadResult LiteClient::downloadImage(const Uptane::Target& target, const api::FlowControlToken* token) {
   key_manager_->loadKeys();
 
-  DownloadResult success{DownloadResult::Status::DownloadFailed, ""};
+  DownloadResult download_result{DownloadResult::Status::DownloadFailed, ""};
   {
     const int max_tries = 3;
     int tries = 0;
     std::chrono::milliseconds wait(500);
 
     for (; tries < max_tries; tries++) {
-      success = downloader_->Download(Target::toTufTarget(target));
+      download_result = downloader_->Download(Target::toTufTarget(target));
       // success = package_manager_->fetchTarget(target, *uptane_fetcher_, *key_manager_, prog_cb, token);
 
       // Skip trying to fetch the 'target' if control flow token transaction
       // was set to the 'abort' or 'pause' state, see the CommandQueue and FlowControlToken.
-      if (success || (token != nullptr && !token->canContinue(false))) {
+      if (download_result || download_result.noSpace() || (token != nullptr && !token->canContinue(false))) {
         break;
       } else if (tries < max_tries - 1) {
         std::this_thread::sleep_for(wait);
         wait *= 2;
       }
     }
-    if (!success) {
-      LOG_ERROR << "Download unsuccessful after " << tries << " attempts.";
+    if (!download_result) {
+      LOG_ERROR << "Download unsuccessful after " << tries << " attempts; err: " << download_result.description;
     }
   }
 
-  return success;
+  return download_result;
 }
 
 void LiteClient::reportAktualizrConfiguration() {
