@@ -378,13 +378,19 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
           LOG_INFO << "Latest Target: " << target_to_install.filename() << " is a failing Target (aka known locally)."
                    << " Skipping its installation.";
         }
+        data::ResultCode::Numeric rc{data::ResultCode::Numeric::kOk};
         if (!client.appsInSync()) {
           client.checkForUpdatesEnd(target_to_install);
-          do_app_sync(client);
+          rc = do_app_sync(client);
+          if (rc == data::ResultCode::Numeric::kOk) {
+            LOG_INFO << "Device is up-to-date";
+          } else {
+            LOG_ERROR << "Failed to sync the current Target: " << target_to_install.filename();
+          }
         } else {
+          LOG_INFO << "Device is up-to-date";
           client.checkForUpdatesEnd(Uptane::Target::Unknown());
         }
-        LOG_INFO << "Device is up-to-date";
       }
 
     } catch (const std::exception& exc) {
