@@ -419,7 +419,7 @@ DownloadResult LiteClient::downloadImage(const Uptane::Target& target, const api
       }
     }
     if (!download_result) {
-      LOG_ERROR << "Download unsuccessful after " << tries << " attempts; err: " << download_result.description;
+      LOG_ERROR << "Download unsuccessful after " << tries + 1 << " attempts; err: " << download_result.description;
     }
   }
 

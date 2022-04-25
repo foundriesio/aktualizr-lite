@@ -12,7 +12,9 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
 
   getAdditionalRemotes(remotes, target.Name());
 
+  DownloadResult res{DownloadResult::Status::Ok, ""};
   data::InstallationResult pull_err{data::ResultCode::Numeric::kUnknown, ""};
+  std::string error_desc;
   for (const auto& remote : remotes) {
     LOG_INFO << "Fetchig ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
     if (!remote.isRemoteSet) {
@@ -21,17 +23,24 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
     pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
                                    prog_cb, remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
     if (pull_err.isSuccess()) {
+      res = {DownloadResult::Status::Ok, ""};
       break;
     }
-    LOG_INFO << "Failed to fetch from " + remote.baseUrl + ", err: " + pull_err.description;
+
+    LOG_ERROR << "Failed to fetch from " + remote.baseUrl + ", err: " + pull_err.description;
+
+    if (pull_err.description.find("would be exceeded, at least") != std::string::npos &&
+        (pull_err.description.find("min-free-space-size") != std::string::npos ||
+         pull_err.description.find("min-free-space-percent") != std::string::npos)) {
+      res = {DownloadResult::Status::DownloadFailed_NoSpace,
+             "Insufficient storage available; path: " + config.sysroot.string() + "; err: " + pull_err.description};
+      break;
+    }
+    error_desc += pull_err.description + "\n";
+    res = {DownloadResult::Status::DownloadFailed, error_desc};
   }
 
-  if (!pull_err.isSuccess()) {
-    LOG_ERROR << "Failed to fetch ostree commit " + target.Sha256Hash() + ", err: " + pull_err.description;
-  }
-
-  return DownloadResult{pull_err.isSuccess() ? DownloadResult::Status::Ok : DownloadResult::Status::DownloadFailed,
-                        pull_err.description};
+  return res;
 }
 
 bool RootfsTreeManager::fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,

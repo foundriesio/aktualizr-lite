@@ -162,6 +162,24 @@ TEST_F(LiteClientTest, OstreeUpdate) {
   checkHeaders(*client, new_target);
 }
 
+TEST_F(LiteClientTest, OstreeUpdateNoSpace) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  sys_repo_.setMinFreeSpace("1TB");
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createTarget();
+  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // reboot device
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  checkHeaders(*client, getInitialTarget());
+}
+
 TEST_F(LiteClientTest, OstreeUpdateRollback) {
   // boot device
   auto client = createLiteClient();
