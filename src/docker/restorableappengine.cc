@@ -15,6 +15,14 @@
 
 namespace Docker {
 
+class InsufficientSpaceError : public std::runtime_error {
+ public:
+  InsufficientSpaceError(const std::string& store, const std::string& path, const uint64_t& required,
+                         const uint64_t& available)
+      : std::runtime_error("Insufficient storage available; store: " + store + ", path: " + path +
+                           ", required: " + std::to_string(required) + ", available: " + std::to_string(available)) {}
+};
+
 const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
 
 RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::GetDefStorageSpaceFunc(int watermark) {
@@ -86,13 +94,17 @@ AppEngine::Result RestorableAppEngine::fetch(const App& app) {
     LOG_DEBUG << app.name << ": downloading App images from Registry(ies): " << app.uri << " --> " << images_dir;
     pullAppImages(app_compose_file, images_dir);
     res = true;
+  } catch (const InsufficientSpaceError& exc) {
+    res = {Result::ID::InsufficientSpace, exc.what()};
   } catch (const std::exception& exc) {
-    if (boost::filesystem::exists(app_dir)) {
-      boost::filesystem::remove_all(app_dir);
-    }
     res = {false, exc.what()};
   }
 
+  if (!res) {
+    if (boost::filesystem::exists(app_dir)) {
+      boost::filesystem::remove_all(app_dir);
+    }
+  }
   return res;
 }
 
@@ -814,9 +826,7 @@ void RestorableAppEngine::checkAvailableStorageInStores(const std::string& app_n
              << " bytes; available: " << available << " (out of " << capacity << ") "
              << ", path: " << store_path.string();
     if (required_storage > available) {
-      throw std::runtime_error("Insufficient storage available; store: " + store_name +
-                               ", path: " + store_path.string() + ", required: " + std::to_string(required_storage) +
-                               ", available: " + std::to_string(available));
+      throw InsufficientSpaceError(store_name, store_path.string(), required_storage, available);
     }
   };
 

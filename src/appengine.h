@@ -15,12 +15,19 @@ class AppEngine {
   };
 
   struct Result {
+    enum class ID {
+      OK = 0,
+      Failed,
+      InsufficientSpace,
+    };
     // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
-    Result(bool var, std::string errMsg = "") : status{var}, err{std::move(errMsg)} {}
+    Result(bool var, std::string errMsg = "") : status{var ? ID::OK : ID::Failed}, err{std::move(errMsg)} {}
+    Result(Result::ID id, std::string errMsg) : status{id}, err{std::move(errMsg)} {}
     // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
-    operator bool() const { return status; }
+    operator bool() const { return status == ID::OK; }
+    bool noSpace() const { return status == ID::InsufficientSpace; }
 
-    bool status;
+    ID status;
     std::string err;
   };
 

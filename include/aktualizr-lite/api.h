@@ -98,12 +98,14 @@ class DownloadResult {
     Ok = 0,
     DownloadFailed,
     VerificationFailed,
+    DownloadFailed_NoSpace,
   };
   Status status;
   std::string description;
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const { return status == Status::Ok; }
+  bool noSpace() const { return status == Status::DownloadFailed_NoSpace; }
 };
 
 std::ostream &operator<<(std::ostream &os, const InstallResult &res);
