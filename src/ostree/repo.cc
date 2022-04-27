@@ -146,4 +146,53 @@ void Repo::checkout(const std::string& commit_hash, const std::string& src_dir, 
   }
 }
 
+void Repo::setConfigItem(const std::string& section, const std::string& key, const std::string& value) {
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GKeyFile) config = nullptr;
+
+  config = ostree_repo_copy_config(repo_);
+  if (config == nullptr) {
+    throw std::runtime_error("Failed to read a repo config file: " + path_);
+  }
+  g_key_file_set_string(config, section.c_str(), key.c_str(), value.c_str());
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
+  if (0 == ostree_repo_write_config(repo_, config, &error)) {
+    throw std::runtime_error("Failed to write to a repo config file; repo:  " + path_ + ", section: " + section +
+                             ", key: " + key + ", value: " + value + ", err: " + error->message);
+  }
+}
+
+std::string Repo::getConfigItem(const std::string& section, const std::string& key) {
+  g_autoptr(GError) error = nullptr;
+  GKeyFile* readonly_config = nullptr;
+  g_autofree char* read_value = nullptr;
+
+  readonly_config = ostree_repo_get_config(repo_);
+  read_value = g_key_file_get_string(readonly_config, section.c_str(), key.c_str(), &error);
+  if (read_value == nullptr) {
+    return "";
+  }
+  return read_value;
+}
+
+void Repo::unsetConfigItem(const std::string& section, const std::string& key) {
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GError) local_error = nullptr;
+  g_autoptr(GKeyFile) config = nullptr;
+
+  config = ostree_repo_copy_config(repo_);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
+  if (0 == g_key_file_remove_key(config, section.c_str(), key.c_str(), &local_error)) {
+    if (0 == g_error_matches(local_error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND) &&
+        0 == g_error_matches(local_error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_GROUP_NOT_FOUND)) {
+      throw std::runtime_error("Failed to unset a repo config item; section: " + section + ", key: " + key +
+                               ", err: " + local_error->message);
+    }
+  }
+  if (local_error == nullptr && 0 == ostree_repo_write_config(repo_, config, &error)) {
+    throw std::runtime_error("Failed to unset a repo config item; section: " + section + ", key: " + key +
+                             ", err: " + error->message);
+  }
+}
+
 }  // namespace OSTree
