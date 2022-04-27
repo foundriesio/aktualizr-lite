@@ -20,6 +20,10 @@ class SysOSTreeRepoMock {
     executeCmd("ostree", { "--repo=" + path_ + "/ostree/repo", "config", "set", "core.min-free-space-size", size }, "set config " + size);
   }
 
+  void unsetMinFreeSpace() {
+    executeCmd("ostree", { "--repo=" + path_ + "/ostree/repo", "config", "unset", "core.min-free-space-size"}, "unset config");
+  }
+
  private:
   const std::string path_;
   const std::string os_;

@@ -43,6 +43,9 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   void getAdditionalRemotes(std::vector<Remote>& remotes, const std::string& target_name);
 
   void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys);
+  void setTargetInsufficientStorageLevel(const std::string& target_name);
+  bool checkTargetInsufficientStorageLevelIfSet(const std::string& target_name);
+  void unsetTargetInsufficientStorageLevel(const std::string& target_name);
 
   const KeyManager& keys_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;

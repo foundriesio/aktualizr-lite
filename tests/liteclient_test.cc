@@ -180,6 +180,64 @@ TEST_F(LiteClientTest, OstreeUpdateNoSpace) {
   checkHeaders(*client, getInitialTarget());
 }
 
+TEST_F(LiteClientTest, DISABLED_OstreeUpdateNoSpaceRetryIfStorageChanged) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  Utils::writeFile(sys_repo_.getPath() + "/garbage-file", std::string(2000000, 'f'));
+  sys_repo_.setMinFreeSpace("1TB");
+
+  auto new_target = createTarget();
+  // update should fail because not enough space detected during ostree download
+  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed_NoSpace, "would be exceeded, at least"});
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // update should fail because download has been skipped since storage has not been increased since the last update try
+  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed_NoSpace, "Skip Target download"});
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  boost::filesystem::remove(sys_repo_.getPath() + "/garbage-file");
+  sys_repo_.unsetMinFreeSpace();
+  // Now, we have enough storage, let's update again and check if it is succeeds
+  update(*client, getInitialTarget(), new_target);
+
+  // reboot device
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
+}
+
+TEST_F(LiteClientTest, OstreeUpdateNoSpaceRetryIfNewTarget) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  sys_repo_.setMinFreeSpace("1TB");
+  auto target01 = createTarget();
+  // update should fail since lots of min free space is required
+  update(*client, getInitialTarget(), target01, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // update should fail because download has been skipped since storage has not been increased since the last update try
+  update(*client, getInitialTarget(), target01, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed_NoSpace, "Skip Target download"});
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  sys_repo_.unsetMinFreeSpace();
+  auto target02 = createTarget();
+  // aklite should allow download retry since we've got new Target
+  update(*client, getInitialTarget(), target02);
+
+  // reboot device
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), target02));
+  checkHeaders(*client, target02);
+}
+
 TEST_F(LiteClientTest, OstreeUpdateRollback) {
   // boot device
   auto client = createLiteClient();
