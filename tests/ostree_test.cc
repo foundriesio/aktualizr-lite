@@ -48,6 +48,26 @@ TEST_F(OSTreeTest, AddRemote) {
   repo_->addRemote("treehub", "http://localhost", "", "", "");
 }
 
+TEST_F(OSTreeTest, Config) {
+  ASSERT_TRUE(isRepoInited());
+  {
+    repo_->setConfigItem("min-free-size-required", "target-001", "1024");
+    ASSERT_EQ(repo_->getConfigItem("min-free-size-required", "target-001"), "1024");
+    repo_->unsetConfigItem("min-free-size-required", "target-001");
+    ASSERT_EQ(repo_->getConfigItem("min-free-size-required", "target-001"), "");
+  }
+  {
+    ASSERT_EQ(repo_->getConfigItem("foo", "bar"), "");
+    ASSERT_NO_THROW(repo_->unsetConfigItem("foo1", "bar"));
+  }
+  {
+    repo_->setConfigItem("core", "min-free-size-required", "100");
+    ASSERT_EQ(repo_->getConfigItem("core", "min-free-size-required"), "100");
+    repo_->setConfigItem("core", "min-free-size-required", "200");
+    ASSERT_EQ(repo_->getConfigItem("core", "min-free-size-required"), "200");
+  }
+}
+
 // TODO: Add Treehub mock and uncomment the following tests
 //TEST_F(OSTreeTest, Pull) {
 //  ASSERT_TRUE(isRepoInited());
