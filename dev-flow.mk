@@ -7,6 +7,7 @@ TEST_LABEL ?= aklite
 CTEST_ARGS ?= --output-on-failure
 CXX ?= clang++
 CC ?= clang
+GTEST_FILTER ?= "*"
 
 all: config build
 
@@ -24,4 +25,4 @@ tidy:
 
 
 test:
-	cd ${BUILD_DIR} && ctest -L ${TEST_LABEL} -j $(shell nproc) ${CTEST_ARGS}
+	cd ${BUILD_DIR} && GTEST_FILTER=${GTEST_FILTER} ctest -L ${TEST_LABEL} -j $(shell nproc) ${CTEST_ARGS}

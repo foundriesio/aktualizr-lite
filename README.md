@@ -41,6 +41,7 @@ A user can specify their own container to run the commands in by overriding `CON
 The make environment variables are:
 *  `TEST_LABEL` - a label (regexp) of the target tests. For example, `aklite:compose-apps`, by default, is set to `aklite` - run all `aktualizr-lite tests`;
 *  `CTEST_ARGS` - additional `ctest` parameters, by default is set to `--output-on-failure`.
+*  `GTEST_FILTER` - a regexp to filter tests within gtest suits, e.g. `GTEST_FILTER="*OstreeUpdateNoSpaceRetry*" TEST_LABEL="aklite:liteclient" make`.
 
 
 ### Usage
