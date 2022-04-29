@@ -240,6 +240,9 @@ class ClientTest :virtual public ::testing::Test {
     const auto download_result{client.download(to, "")};
     ASSERT_EQ(download_result.status, expected_download_result.status);
     ASSERT_TRUE(download_result.description.find(expected_download_result.description) != std::string::npos) << "Actuall error message: " << download_result.description;
+    if (expected_download_result.noSpace()) {
+      ASSERT_EQ(download_result.destination_path, sys_repo_.getPath());
+    }
     if (download_result) {
       ASSERT_EQ(client.install(to), expected_install_code);
       // make sure that the new Target hasn't been applied/finalized before reboot

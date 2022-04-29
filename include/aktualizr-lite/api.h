@@ -102,6 +102,7 @@ class DownloadResult {
   };
   Status status;
   std::string description;
+  std::string destination_path;
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const { return status == Status::Ok; }
