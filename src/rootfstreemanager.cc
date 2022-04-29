@@ -33,7 +33,8 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
         (pull_err.description.find("min-free-space-size") != std::string::npos ||
          pull_err.description.find("min-free-space-percent") != std::string::npos)) {
       res = {DownloadResult::Status::DownloadFailed_NoSpace,
-             "Insufficient storage available; path: " + config.sysroot.string() + "; err: " + pull_err.description};
+             "Insufficient storage available; path: " + config.sysroot.string() + "; err: " + pull_err.description,
+             sysroot_->path()};
       break;
     }
     error_desc += pull_err.description + "\n";
