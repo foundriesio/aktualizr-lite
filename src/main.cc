@@ -16,6 +16,15 @@
 #include "target.h"
 #include "utilities/aktualizr_version.h"
 
+
+
+#ifdef OFFLINE_UPDATE
+#include "offline/fetcher.h"
+#include "offline/apps_puller.h"
+#include "composeappmanager.h"
+#endif // OFFLINE_UPDATE
+
+
 namespace bpo = boost::program_options;
 
 static const char* const AkliteSystemLock{"/var/lock/aklite.lock"};
@@ -130,9 +139,10 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
 static std::pair<bool, std::unique_ptr<Uptane::Target>> find_target(LiteClient& client,
                                                                     Uptane::HardwareIdentifier& hwid,
                                                                     const std::vector<std::string>& tags,
-                                                                    const std::string& version) {
+                                                                    const std::string& version,
+                                                                    const Uptane::IMetadataFetcher* metadata_fetcher = nullptr) {
   std::unique_ptr<Uptane::Target> rv;
-  const auto rc = client.updateImageMeta();
+  const auto rc = client.updateImageMeta(metadata_fetcher);
   if (!std::get<0>(rc)) {
     LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
     if (!client.checkImageMetaOffline()) {
@@ -405,9 +415,98 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   return EXIT_SUCCESS;
 }
 
+
+#ifdef OFFLINE_UPDATE
+
+#include "offline/ostree_puller.h"
+
+
+static int update_offline(LiteClient& client, const bpo::variables_map& variables_map) {
+  FileLock lock;
+  client.finalizeInstall();
+  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
+
+  std::string version("latest");
+
+  if (variables_map.count("update-name") > 0) {
+    version = variables_map["update-name"].as<std::string>();
+  }
+
+  // This is only available if -DALLOW_MANUAL_ROLLBACK is set in the CLI args below.
+  if (variables_map.count("clear-installed-versions") > 0) {
+    LOG_WARNING << "Clearing installed version history!!!";
+    client.storage->clearInstalledVersions();
+  }
+
+  offline::Fetcher offline_fetcher = offline::Fetcher();
+  LOG_INFO << "Finding " << version << " to update to...";
+  auto find_target_res = find_target(client, hwid, client.tags, version, &offline_fetcher);
+  if (!find_target_res.first) {
+    LOG_INFO << "No Target found to update to; hw ID: " << hwid.ToString()
+             << "; tags: " << boost::algorithm::join(client.tags, ",");
+    return EXIT_SUCCESS;
+  }
+
+  std::string reason = "Manual offline update to " + version;
+
+  const auto target{Target::toTufTarget(*find_target_res.second)};
+
+  LOG_INFO << ">>>>> Found Target: " << target.Name() << ", hash: " << target.Sha256Hash();
+
+  if (client.getCurrent().filename() == (*find_target_res.second).filename()) {
+    LOG_INFO << "The found latest Target is already installed";
+    return EXIT_SUCCESS;
+  }
+
+  {
+    // Download ostree
+    auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(client.config.pacman.sysroot.string(),
+                                                            client.config.pacman.booted,
+                                                            client.config.pacman.os.empty() ? "lmp" : client.config.pacman.os);
+
+    OSTree::offline::OstreePuller ostree_puller{ostree_sysroot, "/work/fio/factories/msul-dev01/TUF/ostree_repo"};
+    const auto dr{ostree_puller.Download(target)};
+    if (!dr) {
+      LOG_ERROR << "Failed to do offline update: " << dr.description;
+      return EXIT_FAILURE;
+    }
+  }
+
+  {
+      ComposeAppManager::Config cfg{client.config.pacman};
+      Docker::offline::AppsPuller apps_puller{"/work/fio/factories/msul-dev01/TUF/apps", cfg.reset_apps_root};
+      const auto dr{apps_puller.Download(target)};
+      if (!dr) {
+        LOG_ERROR << "Failed to do offline update: " << dr.description;
+        return EXIT_FAILURE;
+      }
+  }
+
+  {
+    // Verify
+    if (client.VerifyTarget(*find_target_res.second) != TargetStatus::kGood) {
+      data::InstallationResult res{data::ResultCode::Numeric::kVerificationFailed, "Downloaded target is invalid"};
+      client.notifyInstallFinished(*find_target_res.second, res);
+      LOG_ERROR << "Downloaded target is invalid";
+      return EXIT_FAILURE;
+    }
+  }
+
+  // Install
+  client.checkForAppsToUpdate(*find_target_res.second);
+  data::ResultCode::Numeric rc = client.install(*find_target_res.second);
+
+  return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
+                                                                                                   : EXIT_FAILURE;
+}
+#endif // OFFLINE_UPDATE
+
 static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
     {"daemon", daemon_main},
     {"update", update_main},
+#ifdef OFFLINE_UPDATE
+    {"offline-update", update_offline},
+#endif // OFFLINE_UPDATE
     {"list", list_main},
     {"status", status_main},
     {"finalize", status_finalize}};

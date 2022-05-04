@@ -739,8 +739,9 @@ void RestorableAppEngine::verifyComposeApp(const std::string& compose_cmd, const
 
 void RestorableAppEngine::startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
                                           const std::string& flags) {
-  exec(boost::format{"%s up %s"} % compose_cmd % flags, "failed to bring Compose App up",
-       boost::process::start_dir = app_dir);
+  LOG_ERROR << "Starting compose Apps";
+//  exec(boost::format{"%s up %s"} % compose_cmd % flags, "failed to bring Compose App up",
+//       boost::process::start_dir = app_dir);
 }
 
 void RestorableAppEngine::stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {

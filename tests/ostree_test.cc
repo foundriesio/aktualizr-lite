@@ -1,8 +1,15 @@
 #include <gtest/gtest.h>
 #include <boost/filesystem.hpp>
-#include "utilities/utils.h"
+#include <boost/algorithm/string/trim.hpp>
 
+#include "logging/logging.h"
+#include "utilities/utils.h"
 #include "ostree/repo.h"
+
+#include "test_utils.h"
+#include "fixtures/liteclient/executecmd.cc"
+#include "fixtures/liteclient/ostreerepomock.cc"
+
 
 class OSTreeTest : public ::testing::Test {
  protected:
@@ -60,6 +67,33 @@ TEST_F(OSTreeTest, Config) {
     ASSERT_EQ(repo_->getConfigItem("foo", "bar"), "");
     ASSERT_NO_THROW(repo_->unsetConfigItem("foo1", "bar"));
   }
+}
+
+TEST_F(OSTreeTest, PullLocal) {
+  ASSERT_TRUE(isRepoInited());
+
+  TemporaryDirectory test_dir;
+  boost::filesystem::path src_repo_path{test_dir.Path() / "repo"};
+  boost::filesystem::path src_repo_fs{test_dir.Path() / "repo_fs"};
+  boost::filesystem::path test_file_01{"foo.bar"};
+  const std::string test_file_content_01{"some dummy content"};
+  boost::filesystem::path test_file_02{"file02.txt"};
+  const std::string test_file_content_02{"another dummy content"};
+  boost::filesystem::path dst_repo_fs{test_dir.Path() / "dst_fs"};
+  OSTreeRepoMock src_repo{src_repo_path.string(), true};
+
+
+
+  Utils::writeFile(src_repo_fs / test_file_01, test_file_content_01);
+  Utils::writeFile(src_repo_fs / test_file_02, test_file_content_02);
+
+  const auto commit_hash{src_repo.commit(src_repo_fs.string(), "lmp")};
+  ASSERT_NO_THROW(repo_->pullLocal(src_repo.getPath(), commit_hash));
+  ASSERT_NO_THROW(repo_->checkout(commit_hash, "/", dst_repo_fs.string()));
+  ASSERT_TRUE(boost::filesystem::exists( dst_repo_fs / test_file_01));
+  ASSERT_TRUE(boost::filesystem::exists( dst_repo_fs / test_file_02));
+  ASSERT_EQ(Utils::readFile(dst_repo_fs / test_file_01), test_file_content_01);
+  ASSERT_EQ(Utils::readFile(dst_repo_fs / test_file_02), test_file_content_02);
 }
 
 // TODO: Add Treehub mock and uncomment the following tests

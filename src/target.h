@@ -49,6 +49,7 @@ class Target {
     };
 
     explicit Apps(const Uptane::Target& target) : target_apps_json_{Target::appsJson(target)} {}
+    explicit Apps(const TufTarget& target) : target_apps_json_{target.Custom().get(Target::ComposeAppField, Json::Value(Json::nullValue))} {}
 
     class Iterator {
      public:

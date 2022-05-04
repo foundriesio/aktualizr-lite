@@ -42,6 +42,12 @@ set(HEADERS helpers.h
         downloader.h
         exec.h)
 
+
+if(OFFLINE_UPDATE)
+  add_definitions(-DOFFLINE_UPDATE)
+  add_subdirectory(offline)
+endif(OFFLINE_UPDATE)
+
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
 add_library(${TARGET_LIB} SHARED ${SRC} api.cc)
@@ -71,6 +77,9 @@ target_include_directories(${TARGET_LIB} PRIVATE ${AKLITE_DIR}/include ${INCS})
 
 target_link_libraries(${TARGET} aktualizr_lib)
 target_link_libraries(${TARGET_LIB} aktualizr_lib)
+if(OFFLINE_UPDATE)
+  target_link_libraries(${TARGET} aklite_offline)
+endif(OFFLINE_UPDATE)
 target_link_libraries(${TARGET_EXE} ${TARGET})
 
 # TODO: consider cleaning up the overall "install" elements as it includes
@@ -78,6 +87,7 @@ target_link_libraries(${TARGET_EXE} ${TARGET})
 install(TARGETS ${TARGET_EXE} RUNTIME DESTINATION bin COMPONENT ${TARGET_EXE})
 install(TARGETS ${TARGET_LIB} LIBRARY DESTINATION lib COMPONENT ${TARGET_LIB})
 install(DIRECTORY ../include/aktualizr-lite DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
 aktualizr_source_file_checks(main.cc api.cc ../include/aktualizr-lite/api.h ${SRC} ${HEADERS})

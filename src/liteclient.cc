@@ -366,9 +366,13 @@ data::InstallationResult LiteClient::installPackage(const Uptane::Target& target
   }
 }
 
-std::tuple<bool, std::string> LiteClient::updateImageMeta() {
+std::tuple<bool, std::string> LiteClient::updateImageMeta(const Uptane::IMetadataFetcher* metadata_fetcher) {
   try {
-    image_repo_.updateMeta(*storage, *uptane_fetcher_);
+    if (metadata_fetcher) {
+      image_repo_.updateMeta(*storage, *metadata_fetcher);
+    } else {
+      image_repo_.updateMeta(*storage, *uptane_fetcher_);
+      }
   } catch (const std::exception& e) {
     LOG_ERROR << "Failed to update Image repo metadata: " << e.what();
     return {false, e.what()};
@@ -548,6 +552,18 @@ void LiteClient::setAppsNotChecked() {
       compose_pacman->setAppsNotChecked();
     }
   }
+}
+
+bool LiteClient::checkForAppsToUpdate(const Uptane::Target& target) {
+  if (package_manager_->name() == ComposeAppManager::Name) {
+    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    if (compose_pacman == nullptr) {
+      LOG_ERROR << "Cannot downcast the package manager to a specific type";
+    } else {
+      return compose_pacman->checkForAppsToUpdate(target);
+    }
+  }
+  return true;
 }
 
 std::string LiteClient::getDeviceID() const { return key_manager_->getCN(); }

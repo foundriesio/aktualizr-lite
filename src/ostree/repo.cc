@@ -107,6 +107,32 @@ void Repo::pull(const std::string& remote_name, const std::string& branch, const
   }
 }
 
+void Repo::pullLocal(const std::string& src_repo_path, const std::string& commit_hash) {
+  OstreeAsyncProgress* progress =
+      ostree_async_progress_new_and_connect(ostree_repo_pull_default_console_progress_changed, nullptr);
+
+  const std::string src_repo_uri{"file://" + src_repo_path};
+
+  std::array<char*, 2> ref_to_fetch{const_cast<char*>(commit_hash.c_str()), nullptr};
+
+  GVariantBuilder builder;
+  g_autoptr(GVariant) pull_options = nullptr;
+  g_autoptr(GError) error = nullptr;
+
+  g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
+
+  g_variant_builder_add(
+      &builder, "{s@v}", "refs",
+      g_variant_new_variant(g_variant_new_strv(reinterpret_cast<const char* const*>(&ref_to_fetch), -1)));
+
+  pull_options = g_variant_ref_sink(g_variant_builder_end(&builder));
+
+  gboolean pull_result = ostree_repo_pull_with_options (repo_, src_repo_uri.c_str(), pull_options, progress, nullptr, &error);
+  if (0 == pull_result) {
+    throw std::runtime_error("Failed to pull " + commit_hash + ": " + error->message);
+  }
+}
+
 void Repo::checkout(const std::string& commit_hash, const std::string& src_dir, const std::string& dst_dir) {
   const char* const OSTREE_GIO_FAST_QUERYINFO =
       "standard::name,standard::type,standard::size,standard::is-symlink,standard::symlink-target,unix::device,unix::"

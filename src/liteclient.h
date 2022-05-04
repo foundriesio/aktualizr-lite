@@ -48,7 +48,7 @@ class LiteClient {
 
   bool composeAppsChanged() const;
   Uptane::Target getCurrent() const { return package_manager_->getCurrent(); }
-  std::tuple<bool, std::string> updateImageMeta();
+  std::tuple<bool, std::string> updateImageMeta(const Uptane::IMetadataFetcher* metadata_fetcher = nullptr);
   bool checkImageMetaOffline();
   const std::vector<Uptane::Target>& allTargets() const;
   TargetStatus VerifyTarget(const Uptane::Target& target) const { return package_manager_->verifyTarget(target); }
@@ -58,6 +58,7 @@ class LiteClient {
   bool isTargetActive(const Uptane::Target& target) const;
   bool appsInSync() const;
   void setAppsNotChecked();
+  bool checkForAppsToUpdate(const Uptane::Target& target);
   std::string getDeviceID() const;
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
                                      PackageConfig& config);

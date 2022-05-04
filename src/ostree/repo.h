@@ -22,6 +22,7 @@ class Repo {
                  const std::string& key);
 
   void pull(const std::string& remote_name, const std::string& branch, const std::string& commit_hash);
+  void pullLocal(const std::string& src_repo_path, const std::string& commit_hash);
   void checkout(const std::string& commit_hash, const std::string& src_dir, const std::string& dst_dir);
   void setConfigItem(const std::string& section, const std::string& key, const std::string& value);
   std::string getConfigItem(const std::string& section, const std::string& key);
