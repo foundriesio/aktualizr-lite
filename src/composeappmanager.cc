@@ -107,9 +107,23 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     auto docker_client{std::make_shared<Docker::DockerClient>()};
     auto registry_client{std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint)};
     std::string compose_cmd{boost::filesystem::canonical(cfg_.compose_bin).string() + " "};
+
     if (cfg_.compose_bin.filename().compare("docker") == 0) {
-      compose_cmd += "compose ";  // "make it `docker compose` command
+      // if it is a `docker` binary then turn it into ` the  `docker compose` command
+      // and make sure that the `compose` is actually supported by a given `docker` utility.
+      compose_cmd += "compose ";
+
+      // To be removed once LmP/meta-lmp moves to `docker compose` by default
+      std::string out;
+      if (Utils::shell(compose_cmd, &out) != EXIT_SUCCESS) {
+        LOG_WARNING << "The docker utility specified in the config does not support `compose` mode: " << compose_cmd;
+
+        compose_cmd = boost::filesystem::canonical("/usr/bin/docker-compose").string() + " ";
+        LOG_WARNING << "Falling back to the python docker-compose: " << compose_cmd;
+      }
     }
+    LOG_DEBUG << "Compose utility: `" << compose_cmd << "`";
+
     const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
     const std::string docker_host{"unix:///var/run/docker.sock"};
 
