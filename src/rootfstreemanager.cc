@@ -16,7 +16,7 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
   data::InstallationResult pull_err{data::ResultCode::Numeric::kUnknown, ""};
   std::string error_desc;
   for (const auto& remote : remotes) {
-    LOG_INFO << "Fetchig ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
+    LOG_INFO << "Fetching ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
     if (!remote.isRemoteSet) {
       setRemote(remote.name, remote.baseUrl, remote.keys);
     }
