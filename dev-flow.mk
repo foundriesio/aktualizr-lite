@@ -8,11 +8,12 @@ CTEST_ARGS ?= --output-on-failure
 CXX ?= clang++
 CC ?= clang
 GTEST_FILTER ?= "*"
+EXTRA_CMAKE_CONFIG_ARGS ?=
 
 all: config build
 
 config:
-	cmake -S . -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DBUILD_P11=ON -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DPKCS11_ENGINE_PATH=${PKCS11_ENGINE_PATH}
+	cmake -S . -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DBUILD_P11=ON -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} ${EXTRA_CMAKE_CONFIG_ARGS}
 
 build:
 	cmake --build ${BUILD_DIR} --target ${TARGET}
