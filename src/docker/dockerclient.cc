@@ -1,13 +1,26 @@
 #include "dockerclient.h"
 #include <boost/format.hpp>
+#include <boost/process.hpp>
 #include "http/httpclient.h"
 #include "logging/logging.h"
 #include "utilities/utils.h"
 
 namespace Docker {
 
-DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = []() {
-  return std::make_shared<HttpClient>("/var/run/docker.sock");
+DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = [](const std::string& docker_host_in) {
+  std::string docker_host{docker_host_in};
+  auto env{boost::this_process::environment()};
+  if (env.end() != env.find("DOCKER_HOST")) {
+    docker_host = env.get("DOCKER_HOST");
+  }
+  static const std::string docker_host_prefix{"unix://"};
+  const auto find_res = docker_host.find_first_of(docker_host_prefix);
+  if (find_res != 0) {
+    throw std::invalid_argument("Invalid docker host value, must start with unix:// : " + docker_host);
+  }
+
+  const auto socket{docker_host.substr(docker_host_prefix.size())};
+  return std::make_shared<HttpClient>(socket);
 };
 
 DockerClient::DockerClient(std::shared_ptr<HttpInterface> http_client)

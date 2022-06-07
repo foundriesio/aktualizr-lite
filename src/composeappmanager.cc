@@ -3,6 +3,7 @@
 #include <set>
 
 #include <boost/format.hpp>
+#include <boost/process.hpp>
 
 #include "bootloader/bootloaderlite.h"
 #include "docker/restorableappengine.h"
@@ -125,9 +126,13 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     LOG_DEBUG << "Compose utility: `" << compose_cmd << "`";
 
     const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
-    const std::string docker_host{"unix:///var/run/docker.sock"};
+    std::string docker_host{"unix:///var/run/docker.sock"};
 
     if (!!cfg_.reset_apps) {
+      auto env{boost::this_process::environment()};
+      if (env.end() != env.find("DOCKER_HOST")) {
+        docker_host = env.get("DOCKER_HOST");
+      }
       app_engine_ = std::make_shared<Docker::RestorableAppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client, docker_client, skopeo_cmd,
           docker_host, compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
