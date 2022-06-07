@@ -11,10 +11,11 @@ namespace Docker {
 class DockerClient {
  public:
   using Ptr = std::shared_ptr<DockerClient>;
-  using HttpClientFactory = std::function<std::shared_ptr<HttpInterface>()>;
+  using HttpClientFactory = std::function<std::shared_ptr<HttpInterface>(const std::string& docker_host)>;
   static HttpClientFactory DefaultHttpClientFactory;
 
-  explicit DockerClient(std::shared_ptr<HttpInterface> http_client = DefaultHttpClientFactory());
+  explicit DockerClient(
+      std::shared_ptr<HttpInterface> http_client = DefaultHttpClientFactory("unix:///var/run/docker.sock"));
   void getContainers(Json::Value& root);
 
   static std::tuple<bool, std::string> getContainerState(const Json::Value& root, const std::string& app,
