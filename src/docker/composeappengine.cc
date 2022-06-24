@@ -151,6 +151,15 @@ AppEngine::Result ComposeAppEngine::run(const App& app) {
   return result;
 }
 
+void ComposeAppEngine::stop(const App& app) {
+  try {
+    const auto root_dir{appRoot(app)};
+    exec(compose_ + "down", "failed to bring App down", boost::process::start_dir = root_dir);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "docker-compose was unable to bring down: " << exc.what();
+  }
+}
+
 void ComposeAppEngine::remove(const App& app) {
   try {
     const auto root_dir{appRoot(app)};

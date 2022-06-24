@@ -335,6 +335,9 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;  // system update
 
   if (!just_install || cfg_.create_containers_before_reboot) {
+    // Stop disabled Apps before creating or starting new Apps since they may interfere with each other (e.g. the same
+    // port is used).
+    stopDisabledComposeApps(target);
     // make sure we install what we fecthed
     if (!cur_apps_to_fetch_and_update_.empty()) {
       res.description += "\n# Apps installed:";
@@ -398,6 +401,9 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
   auto ir = OstreeManager::finalizeInstall(target);
 
   if (ir.result_code.num_code == data::ResultCode::Numeric::kOk) {
+    // Stop disabled Apps before creating or starting new Apps since they may interfere with each other (e.g. the same
+    // port is used).
+    stopDisabledComposeApps(target);
     LOG_INFO << "Starting Apps after successful boot on a new version of OSTree-based sysroot...";
     // "finalize" (run) Apps that were pulled and created before reboot
     for (const auto& app_pair : getApps(target)) {
@@ -456,12 +462,35 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
   }
 }
 
+void ComposeAppManager::stopDisabledComposeApps(const Uptane::Target& target) const {
+  forEachRemovedApp(target, [](AppEngine::Ptr& app_engine, const std::string& app_name) {
+    LOG_WARNING << "Docker Compose App(" << app_name
+                << ") installed, "
+                   "but is either removed from configuration or not defined in current Target. "
+                   "Stopping "
+                << app_name;
+    app_engine->stop({app_name, ""});
+  });
+}
+
 // Handle the case like:
 //  1) sota.toml is configured with 2 compose apps: "app1, app2"
 //  2) update is applied, so we are now running both app1 and app2
 //  3) sota.toml is updated with 1 docker app: "app1"
 // At this point we should stop app2 and remove it.
 void ComposeAppManager::removeDisabledComposeApps(const Uptane::Target& target) const {
+  forEachRemovedApp(target, [](AppEngine::Ptr& app_engine, const std::string& app_name) {
+    LOG_WARNING << "Docker Compose App(" << app_name
+                << ") installed, "
+                   "but is either removed from configuration or not defined in current Target. "
+                   "Removing from system";
+    app_engine->remove({app_name, ""});
+  });
+}
+
+void ComposeAppManager::forEachRemovedApp(
+    const Uptane::Target& target,
+    const std::function<void(AppEngine::Ptr& app_engine, const std::string& app_name)>& action) const {
   if (!boost::filesystem::is_directory(cfg_.apps_root)) {
     LOG_DEBUG << "cfg_.apps_root does not exist";
     return;
@@ -475,15 +504,8 @@ void ComposeAppManager::removeDisabledComposeApps(const Uptane::Target& target) 
     if (boost::filesystem::is_directory(entry)) {
       std::string name = entry.path().filename().native();
       if (current_apps.find(name) == current_apps.end()) {
-        LOG_WARNING << "Docker Compose App(" << name
-                    << ") installed, "
-                       "but is either removed from configuration or not defined in current Target. "
-                       "Removing from system";
-
-        // I have no idea via the package manager interface method install() is const which is not a const
-        // method by its definition/nature
         auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
-        non_const_app_engine->remove({name, ""});
+        action(non_const_app_engine, name);
       }
     }
   }
