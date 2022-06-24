@@ -269,6 +269,9 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;  // system update
 
   if (!just_install || cfg_.create_containers_before_reboot) {
+    // Stop disabled Apps before creating or starting new Apps since they may interfere with each other (e.g. the same
+    // port is used).
+    stopDisabledComposeApps(target);
     // make sure we install what we fecthed
     if (!cur_apps_to_fetch_and_update_.empty()) {
       res.description += "\n# Apps installed:";
@@ -328,6 +331,9 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
   auto ir = OstreeManager::finalizeInstall(target);
 
   if (ir.result_code.num_code == data::ResultCode::Numeric::kOk) {
+    // Stop disabled Apps before creating or starting new Apps since they may interfere with each other (e.g. the same
+    // port is used).
+    stopDisabledComposeApps(target);
     LOG_INFO << "Starting Apps after successful boot on a new version of OSTree-based sysroot...";
     // "finalize" (run) Apps that were pulled and created before reboot
     for (const auto& app_pair : getApps(target)) {
@@ -381,6 +387,34 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
                     app_shortlist.emplace_back(AppEngine::App{val.first, val.second});
                   });
     app_engine_->prune(app_shortlist);
+  }
+}
+
+void ComposeAppManager::stopDisabledComposeApps(const Uptane::Target& target) const {
+  if (!boost::filesystem::is_directory(cfg_.apps_root)) {
+    LOG_DEBUG << "cfg_.apps_root does not exist";
+    return;
+  }
+
+  // an intersection of apps specified in Target and the configuration
+  // i.e. the apps that are supposed to be installed and running
+  const auto& current_apps = getApps(target);
+
+  for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(cfg_.apps_root), {})) {
+    if (boost::filesystem::is_directory(entry)) {
+      std::string name = entry.path().filename().native();
+      if (current_apps.find(name) == current_apps.end()) {
+        LOG_WARNING << "Docker Compose App(" << name
+                    << ") installed, "
+                       "but is either removed from configuration or not defined in current Target. "
+                       "Stopping it";
+
+        // I have no idea via the package manager interface method install() is const which is not a const
+        // method by its definition/nature
+        auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
+        non_const_app_engine->stop({name, ""});
+      }
+    }
   }
 }
 
