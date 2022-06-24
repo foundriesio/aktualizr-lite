@@ -61,6 +61,7 @@ class ComposeAppManager : public RootfsTreeManager {
   std::string getRunningAppsInfoForReport() const;
 
   AppsContainer getAppsToFetch(const Uptane::Target& target, bool check_store = true) const;
+  void stopDisabledComposeApps(const Uptane::Target& target) const;
   void removeDisabledComposeApps(const Uptane::Target& target) const;
 
   Config cfg_;

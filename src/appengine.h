@@ -21,6 +21,7 @@ class AppEngine {
   virtual bool verify(const App& app) = 0;
   virtual bool install(const App& app) = 0;
   virtual bool run(const App& app) = 0;
+  virtual void stop(const App& app) = 0;
   virtual void remove(const App& app) = 0;
   virtual bool isFetched(const App& app) const = 0;
   virtual bool isRunning(const App& app) const = 0;

@@ -127,6 +127,12 @@ bool ComposeAppEngine::run(const App& app) {
   return result;
 }
 
+void ComposeAppEngine::stop(const App& app) {
+  if (!cmd_streaming(compose_ + "down", app)) {
+    LOG_ERROR << "docker-compose was unable to bring down: " << appRoot(app);
+  }
+}
+
 void ComposeAppEngine::remove(const App& app) {
   if (cmd_streaming(compose_ + "down", app)) {
     boost::filesystem::remove_all(appRoot(app));

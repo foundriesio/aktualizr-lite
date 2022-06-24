@@ -89,6 +89,7 @@ class RestorableAppEngine : public AppEngine {
   bool verify(const App& app) override;
   bool install(const App& app) override;
   bool run(const App& app) override;
+  void stop(const App& app) override;
   void remove(const App& app) override;
   bool isFetched(const App& app) const override;
   bool isRunning(const App& app) const override;
