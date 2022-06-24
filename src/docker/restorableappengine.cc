@@ -181,6 +181,17 @@ AppEngine::Result RestorableAppEngine::run(const App& app) {
   return res;
 }
 
+void RestorableAppEngine::stop(const App& app) {
+  try {
+    const auto app_install_dir{install_root_ / app.name};
+
+    // just installed app are removed, the restorable store Apps will be removed by means of prune() call
+    stopComposeApp(compose_cmd_, app_install_dir);
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "App: " << app.name << ", failed to remove: " << exc.what();
+  }
+}
+
 void RestorableAppEngine::remove(const App& app) {
   try {
     const auto app_install_dir{install_root_ / app.name};
