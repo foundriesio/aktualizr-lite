@@ -30,12 +30,12 @@ set(TEST_LIBS
   aktualizr_lib
   ${Boost_LIBRARIES}
   gtest
-	gmock
+  gmock
 )
 
 add_aktualizr_test(NAME yaml2json
-	SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> yaml2json_test.cc
-	PROJECT_WORKING_DIRECTORY
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> yaml2json_test.cc
+  PROJECT_WORKING_DIRECTORY
 )
 
 target_compile_definitions(t_yaml2json PRIVATE ${TEST_DEFS})
@@ -196,3 +196,14 @@ add_aktualizr_test(NAME docker
 aktualizr_source_file_checks(docker_test.cc)
 target_include_directories(t_docker PRIVATE ${TEST_INCS})
 set_tests_properties(test_docker PROPERTIES LABELS "aklite:docker")
+
+add_aktualizr_test(NAME aklite_offline
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> aklite_offline_test.cc
+  PROJECT_WORKING_DIRECTORY
+  ARGS
+  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+)
+aktualizr_source_file_checks(aklite_offline_test.cc)
+target_include_directories(t_aklite_offline PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_aklite_offline aktualizr_lite ${TEST_LIBS} testutilities uptane_generator_lib)
+set_tests_properties(test_aklite_offline PROPERTIES LABELS "aklite:offline")
