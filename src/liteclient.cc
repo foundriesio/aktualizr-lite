@@ -16,9 +16,13 @@
 #include "rootfstreemanager.h"
 #include "storage/invstorage.h"
 #include "target.h"
+#include "uptane/fetcher.h"
 
-LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11)
-    : config{std::move(config_in)}, primary_ecu{Uptane::EcuSerial::Unknown(), ""} {
+LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11,
+                       std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher)
+    : config{std::move(config_in)},
+      primary_ecu{Uptane::EcuSerial::Unknown(), ""},
+      uptane_fetcher_{std::move(meta_fetcher)} {
   storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
   storage->importData(config.import);
 
@@ -98,7 +102,9 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   key_manager_->loadKeys();
   key_manager_->copyCertsToCurl(*http_client);
 
-  uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
+  if (!uptane_fetcher_) {
+    uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
+  }
   report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
 
   if (config.pacman.type == ComposeAppManager::Name) {

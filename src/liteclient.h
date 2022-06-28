@@ -5,6 +5,7 @@
 #include "libaktualizr/config.h"
 #include "libaktualizr/packagemanagerinterface.h"
 #include "ostree/sysroot.h"
+#include "uptane/fetcher.h"
 #include "uptane/imagerepository.h"
 
 class AppEngine;
@@ -20,7 +21,8 @@ class Downloader;
 class LiteClient {
  public:
   explicit LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
-                      const std::shared_ptr<P11EngineGuard>& p11 = nullptr);
+                      const std::shared_ptr<P11EngineGuard>& p11 = nullptr,
+                      std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher = nullptr);
   ~LiteClient();
   LiteClient(const LiteClient&) = delete;
   LiteClient& operator=(const LiteClient&) = delete;
@@ -90,7 +92,7 @@ class LiteClient {
   std::shared_ptr<PackageManagerInterface> package_manager_;
 
   Uptane::ImageRepository image_repo_;
-  std::shared_ptr<Uptane::Fetcher> uptane_fetcher_;
+  std::shared_ptr<Uptane::IMetadataFetcher> uptane_fetcher_;
 
   Json::Value last_network_info_reported_;
   bool hwinfo_reported_{false};
