@@ -54,6 +54,14 @@ class AkliteOffline : public ::testing::Test {
     cfg_.pacman.sysroot = sys_repo_.getPath();
     cfg_.pacman.os = os;
     cfg_.pacman.booted = BootedType::kStaged;
+
+    // configure bootloader/booting related functionality
+    cfg_.bootloader.reboot_command = "/bin/true";
+    cfg_.bootloader.reboot_sentinel_dir = test_dir_.Path();
+
+    // add an initial rootfs to the ostree-based sysroot that liteclient manages and deploy it
+    const auto hash = sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch);
+    sys_repo_.deploy(hash);
   }
 
   Uptane::Target addTarget(const std::vector<AppEngine::App>* apps = nullptr) {
@@ -72,7 +80,7 @@ class AkliteOffline : public ::testing::Test {
     const std::string unique_content = Utils::randomUuid();
     const std::string unique_file = Utils::randomUuid();
     Utils::writeFile(sys_rootfs_.path + "/" + unique_file, unique_content, true);
-    auto hash = ostree_repo_.commit(sys_rootfs_.path, "lmp");
+    auto hash = ostree_repo_.commit(sys_rootfs_.path, os);
 
     Json::Value apps_json;
     if (apps) {
@@ -86,6 +94,12 @@ class AkliteOffline : public ::testing::Test {
     return tuf_repo_.addTarget(name, hash, hw_id, version, apps_json);
   }
 
+  const std::string getSentinelFilePath() const {
+    return (cfg_.bootloader.reboot_sentinel_dir / "need_reboot").string();
+  }
+
+  void reboot() { boost::filesystem::remove(getSentinelFilePath()); }
+
  protected:
   static const std::string branch;
   static const std::string hw_id;
@@ -94,9 +108,9 @@ class AkliteOffline : public ::testing::Test {
  protected:
   TemporaryDirectory test_dir_;  // must be the first element in the class
   Config cfg_;
-  SysRootFS sys_rootfs_;
-  SysOSTreeRepoMock sys_repo_;
-  OSTreeRepoMock ostree_repo_;
+  SysRootFS sys_rootfs_;        // a sysroot that is bitbaked and added to the ostree repo that liteclient fetches from
+  SysOSTreeRepoMock sys_repo_;  // an ostree-based sysroot that liteclient manages
+  OSTreeRepoMock ostree_repo_;  // a source ostree repo to fetch update from
   TufRepoMock tuf_repo_;
 
   std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher_;
@@ -115,6 +129,43 @@ TEST_F(AkliteOffline, FetchMeta) {
   ASSERT_GE(targets.size(), 1);
   ASSERT_EQ(targets[0].filename(), target.filename());
   ASSERT_NO_THROW(client.checkForUpdatesEnd(targets[0]));
+}
+
+TEST_F(AkliteOffline, FetchAndInstallOstree) {
+  // use the ostree package manager to avoid fetching Apps in this test
+  cfg_.pacman.type = "ostree";
+  // instruct the lite client (ostree pac manager) to fetch an ostree commit from a local repo
+  cfg_.pacman.ostree_server = "file://" + ostree_repo_.getPath();
+
+  Uptane::Target target{Uptane::Target::Unknown()};
+  {
+    // somehow liteclient/aktualizr modifies an input config so we have to make a copy of it
+    // to avoid modification of the original configuration.
+    Config cfg{cfg_};
+    LiteClient client(cfg, nullptr, nullptr, meta_fetcher_);
+    target = addTarget();
+
+    // pull TUF metadata
+    ASSERT_TRUE(client.checkForUpdatesBegin());
+    const auto targets{client.allTargets()};
+    ASSERT_GE(targets.size(), 1);
+    ASSERT_EQ(targets[0].filename(), target.filename());
+    ASSERT_NO_THROW(client.checkForUpdatesEnd(targets[0]));
+
+    // pull and install an ostree commit that Target refers to
+    ASSERT_TRUE(client.download(target, ""));
+    ASSERT_EQ(client.install(target), data::ResultCode::Numeric::kNeedCompletion);
+  }
+
+  reboot();
+
+  {
+    Config cfg{cfg_};
+    LiteClient client(cfg, nullptr, nullptr, meta_fetcher_);
+    ASSERT_TRUE(client.finalizeInstall());
+    ASSERT_EQ(client.getCurrent().filename(), target.filename());
+    ASSERT_EQ(client.getCurrent().sha256Hash(), target.sha256Hash());
+  }
 }
 
 int main(int argc, char** argv) {
