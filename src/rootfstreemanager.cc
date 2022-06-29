@@ -10,7 +10,13 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
 
   std::vector<Remote> remotes = {{remote, config.ostree_server, {{"X-Correlation-ID", target.Name()}}, &keys_, false}};
 
-  getAdditionalRemotes(remotes, target.Name());
+  // Try to get additional remotes/origins to fetch an ostree commit from, unless
+  // the base ostree server URL specified in a config refers not to http(s) server.
+  // It helps to skip getting additional remotes if `ostree_server` refers to a local
+  // ostree repo, i.e. file://<path to repo>
+  if (!config.ostree_server.empty() && boost::starts_with(config.ostree_server, "http")) {
+    getAdditionalRemotes(remotes, target.Name());
+  }
 
   DownloadResult res{DownloadResult::Status::Ok, ""};
   data::InstallationResult pull_err{data::ResultCode::Numeric::kUnknown, ""};
