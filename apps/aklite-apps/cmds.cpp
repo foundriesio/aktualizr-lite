@@ -106,8 +106,8 @@ int ListCmd::listApps(const std::string& store_root, bool wide) {
   return EXIT_SUCCESS;
 }
 
-int HackCmd::hackDockerStore(const std::vector<std::string>& shortlist, const std::string& store_root,
-                             const std::string& docker_root) {
+int RegisterCmd::hackDockerStore(const std::vector<std::string>& shortlist, const std::string& store_root,
+                                 const std::string& docker_root) {
   LOG_INFO << "Registering the preloaded Apps at the docker store repository;"
            << "\n\tshortlist: " << boost::algorithm::join(shortlist, ",") << "\n\tstore-root: " << store_root
            << "\n\tdocker-root: " << docker_root;
