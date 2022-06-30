@@ -76,17 +76,21 @@ class RestorableAppEngine : public AppEngine {
   static const std::string ComposeFile;
   using StorageSpaceFunc =
       std::function<std::tuple<boost::uintmax_t, boost::uintmax_t>(const boost::filesystem::path&)>;
+  using ClientImageSrcFunc = std::function<std::string(const Docker::Uri&, const std::string&)>;
 
   static const int LowWatermarkLimit{20};
   static const int HighWatermarkLimit{95};
   static StorageSpaceFunc GetDefStorageSpaceFunc(int watermark = 80);
 
-  RestorableAppEngine(boost::filesystem::path store_root, boost::filesystem::path install_root,
-                      boost::filesystem::path docker_root, Docker::RegistryClient::Ptr registry_client,
-                      Docker::DockerClient::Ptr docker_client, std::string client = "/sbin/skopeo",
-                      std::string docker_host = "unix:///var/run/docker.sock",
-                      std::string compose_cmd = "/usr/bin/docker-compose",
-                      StorageSpaceFunc storage_space_func = RestorableAppEngine::GetDefStorageSpaceFunc());
+  RestorableAppEngine(
+      boost::filesystem::path store_root, boost::filesystem::path install_root, boost::filesystem::path docker_root,
+      Docker::RegistryClient::Ptr registry_client, Docker::DockerClient::Ptr docker_client,
+      std::string client = "/sbin/skopeo", std::string docker_host = "unix:///var/run/docker.sock",
+      std::string compose_cmd = "/usr/bin/docker-compose",
+      StorageSpaceFunc storage_space_func = RestorableAppEngine::GetDefStorageSpaceFunc(),
+      ClientImageSrcFunc client_image_src_func = [](const Docker::Uri& app_uri,
+                                                    const std::string& image_uri) { return "docker://" + image_uri; },
+      bool create_containers_if_install = true);
 
   Result fetch(const App& app) override;
   Result verify(const App& app) override;
@@ -103,9 +107,12 @@ class RestorableAppEngine : public AppEngine {
   // pull App&Images
   void pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
   void checkAppUpdateSize(const Uri& uri, const boost::filesystem::path& app_dir) const;
-  void pullAppImages(const boost::filesystem::path& app_compose_file, const boost::filesystem::path& dst_dir);
+  void pullAppImages(const Uri& app_uri, const boost::filesystem::path& app_compose_file,
+                     const boost::filesystem::path& dst_dir);
 
   // install App&Images
+  Result installAndCreateContainers(const App& app);
+  Result installContainerless(const App& app);
   boost::filesystem::path installAppAndImages(const App& app);
   static void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);
   void installAppImages(const boost::filesystem::path& app_dir);
@@ -124,7 +131,7 @@ class RestorableAppEngine : public AppEngine {
                                  const Docker::DockerClient::Ptr& docker_client, bool check_state = true);
 
   // functions specific to an image tranfer utility
-  static void pullImage(const std::string& client, const std::string& uri, const boost::filesystem::path& dst_dir,
+  static void pullImage(const std::string& client, const std::string& src, const boost::filesystem::path& dst_dir,
                         const boost::filesystem::path& shared_blob_dir, const std::string& format = "v2s2");
 
   static void installImage(const std::string& client, const boost::filesystem::path& image_dir,
@@ -161,6 +168,8 @@ class RestorableAppEngine : public AppEngine {
   Docker::RegistryClient::Ptr registry_client_;
   Docker::DockerClient::Ptr docker_client_;
   StorageSpaceFunc storage_space_func_;
+  ClientImageSrcFunc client_image_src_func_;
+  bool create_containers_if_install_;
 };
 
 }  // namespace Docker

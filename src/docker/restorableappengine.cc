@@ -55,7 +55,8 @@ RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boo
                                          Docker::RegistryClient::Ptr registry_client,
                                          Docker::DockerClient::Ptr docker_client, std::string client,
                                          std::string docker_host, std::string compose_cmd,
-                                         StorageSpaceFunc storage_space_func)
+                                         StorageSpaceFunc storage_space_func, ClientImageSrcFunc client_image_src_func,
+                                         bool create_containers_if_install)
     : store_root_{std::move(store_root)},
       install_root_{std::move(install_root)},
       docker_root_{std::move(docker_root)},
@@ -65,7 +66,9 @@ RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boo
       compose_cmd_{std::move(compose_cmd)},
       registry_client_{std::move(registry_client)},
       docker_client_{std::move(docker_client)},
-      storage_space_func_{std::move(storage_space_func)} {
+      storage_space_func_{std::move(storage_space_func)},
+      client_image_src_func_{std::move(client_image_src_func)},
+      create_containers_if_install_{create_containers_if_install} {
   boost::filesystem::create_directories(apps_root_);
   boost::filesystem::create_directories(blobs_root_);
 }
@@ -92,7 +95,7 @@ AppEngine::Result RestorableAppEngine::fetch(const App& app) {
     // to skip already downloaded image blobs internally while performing `copy` command
     const auto images_dir{app_dir / "images"};
     LOG_DEBUG << app.name << ": downloading App images from Registry(ies): " << app.uri << " --> " << images_dir;
-    pullAppImages(app_compose_file, images_dir);
+    pullAppImages(uri, app_compose_file, images_dir);
     res = true;
   } catch (const InsufficientSpaceError& exc) {
     res = {Result::ID::InsufficientSpace, exc.what()};
@@ -126,6 +129,24 @@ AppEngine::Result RestorableAppEngine::verify(const App& app) {
 }
 
 AppEngine::Result RestorableAppEngine::install(const App& app) {
+  if (!create_containers_if_install_) {
+    return installContainerless(app);
+  }
+  return installAndCreateContainers(app);
+}
+
+AppEngine::Result RestorableAppEngine::installContainerless(const App& app) {
+  Result res{false};
+  try {
+    installAppAndImages(app);
+    res = true;
+  } catch (const std::exception& exc) {
+    res = {false, exc.what()};
+  }
+  return res;
+}
+
+AppEngine::Result RestorableAppEngine::installAndCreateContainers(const App& app) {
   Result res{false};
   try {
     const auto app_install_root{installAppAndImages(app)};
@@ -433,7 +454,7 @@ void RestorableAppEngine::checkAppUpdateSize(const Uri& uri, const boost::filesy
   checkAvailableStorageInStores(uri.app, skopeo_total_update_size, docker_total_update_size);
 }
 
-void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compose_file,
+void RestorableAppEngine::pullAppImages(const Uri& app_uri, const boost::filesystem::path& app_compose_file,
                                         const boost::filesystem::path& dst_dir) {
   // REGISTRY_AUTH_FILE env. var. must be set and point to the docker's `config.json` (e.g.
   // /usr/lib/docker/config.json)`
@@ -456,7 +477,8 @@ void RestorableAppEngine::pullAppImages(const boost::filesystem::path& app_compo
     const auto image_dir{dst_dir / uri.registryHostname / uri.repo / uri.digest.hash()};
 
     LOG_INFO << uri.app << ": downloading image from Registry if missing: " << image_uri << " --> " << image_dir;
-    pullImage(client_, image_uri, image_dir, blobs_root_);
+    const std::string image_src{client_image_src_func_(app_uri, image_uri)};
+    pullImage(client_, image_src, image_dir, blobs_root_);
   }
 }
 
@@ -727,12 +749,12 @@ bool RestorableAppEngine::checkAppContainers(const App& app, const std::string& 
 
 // static methods to manage image data and Compose App
 
-void RestorableAppEngine::pullImage(const std::string& client, const std::string& uri,
+void RestorableAppEngine::pullImage(const std::string& client, const std::string& src,
                                     const boost::filesystem::path& dst_dir,
                                     const boost::filesystem::path& shared_blob_dir, const std::string& format) {
   boost::filesystem::create_directories(dst_dir);
-  exec(boost::format{"%s copy -f %s --dest-shared-blob-dir %s docker://%s oci:%s"} % client % format %
-           shared_blob_dir.string() % uri % dst_dir.string(),
+  exec(boost::format{"%s copy -f %s --dest-shared-blob-dir %s %s oci:%s"} % client % format % shared_blob_dir.string() %
+           src % dst_dir.string(),
        "failed to pull image", boost::this_process::environment());
 }
 
