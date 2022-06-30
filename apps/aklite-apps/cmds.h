@@ -53,9 +53,9 @@ class ListCmd : public Cmd {
   po::options_description _options;
 };
 
-class HackCmd : public Cmd {
+class RegisterCmd : public Cmd {
  public:
-  HackCmd() : Cmd("hack", _options) {
+  RegisterCmd() : Cmd("register", _options) {
     _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
                                                     "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
         "apps", po::value<std::string>()->default_value(""),
