@@ -194,7 +194,7 @@ TEST_F(AkliteOffline, OfflineClient) {
 
   reboot();
 
-  ASSERT_NO_THROW(offline::client::run(cfg_, src, daemon_.getClient()));
+  ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
 }
 
 int main(int argc, char** argv) {

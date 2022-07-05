@@ -18,6 +18,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
 
 option(ALLOW_MANUAL_ROLLBACK "Set to ON to build with support of manual rollbacks" OFF)
+option(BUILD_AKLITE_OFFLINE "Set to ON to build cli command for an offline update" OFF)
 
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
@@ -53,6 +54,9 @@ if(BUILD_AKLITE)
   add_subdirectory(tests EXCLUDE_FROM_ALL)
 
   add_subdirectory(apps/aklite-apps)
+  if(BUILD_AKLITE_OFFLINE)
+    add_subdirectory(apps/aklite-offline)
+  endif(BUILD_AKLITE_OFFLINE)
 
 endif(BUILD_AKLITE)
 
@@ -61,3 +65,4 @@ message(STATUS "BUILD_AKLITE: ${BUILD_AKLITE}")
 message(STATUS "BUILD_OSTREE: ${BUILD_OSTREE}")
 message(STATUS "BUILD_SOTA_TOOLS: ${BUILD_SOTA_TOOLS}")
 message(STATUS "ALLOW_MANUAL_ROLLBACK: ${ALLOW_MANUAL_ROLLBACK}")
+message(STATUS "BUILD_AKLITE_OFFLINE: ${BUILD_AKLITE_OFFLINE}")

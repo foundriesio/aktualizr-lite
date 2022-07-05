@@ -20,13 +20,14 @@ struct UpdateSrc {
 };
 
 enum class PostInstallAction { Undefined = -1, NeedReboot, NeedDockerRestart };
+enum class PostRunAction { Undefined = -1, Ok, RollbackNeedReboot };
 
 namespace client {
 
 PostInstallAction install(const Config& cfg_in, const UpdateSrc& src);
-void run(const Config& cfg_in, const UpdateSrc& src,
-         std::shared_ptr<HttpInterface> docker_client_http_client =
-             Docker::DockerClient::DefaultHttpClientFactory("unix:///var/run/docker.sock"));
+PostRunAction run(const Config& cfg_in,
+                  std::shared_ptr<HttpInterface> docker_client_http_client =
+                      Docker::DockerClient::DefaultHttpClientFactory("unix:///var/run/docker.sock"));
 
 }  // namespace client
 }  // namespace offline
