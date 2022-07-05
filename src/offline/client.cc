@@ -9,6 +9,7 @@
 #include "docker/docker.h"
 #include "docker/restorableappengine.h"
 #include "ostree/repo.h"
+#include "storage/invstorage.h"
 #include "target.h"
 
 namespace offline {
@@ -346,52 +347,97 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src) {
     throw std::runtime_error("Failed to download Target; err: " + download_res.description);
   }
 
+  PostInstallAction post_install_action{PostInstallAction::Undefined};
+  if (client->getCurrent().sha256Hash() != target.sha256Hash()) {
+    const auto install_res = client->install(target);
+    if (install_res != data::ResultCode::Numeric::kNeedCompletion) {
+      throw std::runtime_error("Failed to install Target");
+    }
+    post_install_action = PostInstallAction::NeedReboot;
+  } else {
+    // don't `install` since it will create/run containers and we don't want to do it
+    // before we register images and restart dockerd
+    client->storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
+    post_install_action = PostInstallAction::NeedDockerRestart;
+  }
+
   const auto pacman_cfg{ComposeAppManager::Config(cfg_in.pacman)};
   registerApps(target, pacman_cfg.reset_apps_root, pacman_cfg.images_data_root);
 
-  if (client->getCurrent().sha256Hash() == target.sha256Hash()) {
-    // run apps after dockerd reload
-    return PostInstallAction::NeedDockerRestart;
-  };
-  const auto install_res = client->install(target);
-  if (install_res != data::ResultCode::Numeric::kNeedCompletion) {
-    throw std::runtime_error("Failed to install Target");
-  }
-
-  return PostInstallAction::NeedReboot;
+  return post_install_action;
 }
 
-void run(const Config& cfg_in, const UpdateSrc& src, std::shared_ptr<HttpInterface> docker_client_http_client) {
-  auto client{createOfflineClient(cfg_in, src, docker_client_http_client)};
+PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_client_http_client) {
+  auto client{createOfflineClient(cfg_in,
+                                  /* src dir is not needed in the case of run command */
+                                  {
+                                      "unknown-tuf-dir",
+                                      "unknown-ostree-dir",
+                                      "unknown-apps-dir",
+                                  },
+                                  docker_client_http_client)};
 
   if (!client->checkImageMetaOffline()) {
     throw std::runtime_error("Invalid local TUF metadata");
   }
 
-  auto target{getTarget(*client, src)};
-  if (!target.IsValid()) {
-    throw std::invalid_argument("Target to run has not been found");
+  boost::optional<Uptane::Target> pending;
+  client->storage->loadInstalledVersions("", nullptr, &pending);
+  if (!pending) {
+    LOG_INFO << "No any pending installations found";
+    return PostRunAction::Ok;
   }
 
-  const auto current_target{client->getCurrent()};
+  data::ResultCode::Numeric install_res{data::ResultCode::Numeric::kUnknown};
+  const auto target{*pending};                     /* target to be applied and started */
+  const auto current_target{client->getCurrent()}; /* current target */
+
   if (current_target.sha256Hash() != target.sha256Hash()) {
     // apply ostree installation and run Apps
-    if (!client->finalizeInstall()) {
-      throw std::runtime_error("Failed to run Target");
+    if (client->finalizeInstall()) {
+      install_res = data::ResultCode::Numeric::kOk;
+    } else {
+      LOG_ERROR << "Failed to boot on the updated ostree-based rootfs or start updated Apps";
     }
   } else {
-    // just run Apps, we need to "download" them again because of the composeappmanager f*ing state
-    const auto download_res = client->download(target, "offline update of " + target.filename());
-    if (!download_res) {
-      throw std::runtime_error("Failed to download Target; err: " + download_res.description);
+    // just run Apps of the new Target
+    client->appsInSync(target);
+    if ((install_res = client->install(target)) != data::ResultCode::Numeric::kOk) {
+      LOG_ERROR << "Failed to start the updated Apps";
     }
-    client->install(target);
   }
 
-  // TODO: Apps rollback
-  if (!client->isTargetActive(target)) {
-    throw std::runtime_error("The installed Target is not running: " + target.filename());
+  if (install_res == data::ResultCode::Numeric::kOk && client->isTargetActive(target)) {
+    LOG_INFO << "Update has been successfully applied and Apps started: " << target.filename();
+    return PostRunAction::Ok;
   }
+
+  // Rollback
+  data::ResultCode::Numeric rollback_install_res{data::ResultCode::Numeric::kUnknown};
+
+  // If a device successfully booted to the new ostree version then there must be so-called rollback version of ostree.
+  // if both ostree and Apps were updated but Apps failed to start after successfull boot then the rollback target
+  // should be available.
+  Uptane::Target rollback_target = client->getRollbackTarget();
+  if (!rollback_target.IsValid()) {
+    // If either a device failed to boot on a new device or ostree hasn't changed but new version Apps failed to start,
+    // then the current version is actually "rollback" Target we need to switch to, which is effectivelly syncing Apps
+    rollback_target = current_target;
+  }
+
+  LOG_INFO << "Rollback to " << rollback_target.filename();
+
+  client->appsInSync(rollback_target);
+  rollback_install_res = client->install(rollback_target);
+
+  if (rollback_install_res != data::ResultCode::Numeric::kNeedCompletion &&
+      rollback_install_res != data::ResultCode::Numeric::kOk) {
+    LOG_ERROR << "Failed to rollback to: " << rollback_target.filename();
+    LOG_ERROR << "Try to reboot and re-run";
+    // we really don't know what to do in this case, just let user to reboot a device and let re-run again.
+  }
+  return (data::ResultCode::Numeric::kOk == rollback_install_res) ? PostRunAction::Ok
+                                                                  : PostRunAction::RollbackNeedReboot;
 }
 
 }  // namespace client
