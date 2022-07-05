@@ -427,7 +427,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
                    << " Skipping its installation.";
         }
         data::ResultCode::Numeric rc{data::ResultCode::Numeric::kOk};
-        if (!client.appsInSync()) {
+        if (!client.appsInSync(current)) {
           client.checkForUpdatesEnd(target_to_install);
           rc = do_app_sync(client);
           if (rc == data::ResultCode::Numeric::kOk) {

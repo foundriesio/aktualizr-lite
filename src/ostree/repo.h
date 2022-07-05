@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include <ostree.h>
 
@@ -23,6 +24,7 @@ class Repo {
 
   void pull(const std::string& remote_name, const std::string& branch, const std::string& commit_hash);
   void checkout(const std::string& commit_hash, const std::string& src_dir, const std::string& dst_dir);
+  std::unordered_map<std::string, std::string> getRefs() const;
 
  private:
   void init(bool create);

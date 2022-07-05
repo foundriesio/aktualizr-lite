@@ -250,8 +250,8 @@ class LiteInstall : public InstallContext {
 
 std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
   std::unique_ptr<InstallContext> installer = nullptr;
-  if (!client_->appsInSync()) {
-    auto target = std::make_unique<Uptane::Target>(client_->getCurrent());
+  auto target = std::make_unique<Uptane::Target>(client_->getCurrent());
+  if (!client_->appsInSync(*target)) {
     boost::uuids::uuid tmp = boost::uuids::random_generator()();
     auto correlation_id = target->custom_version() + "-" + boost::uuids::to_string(tmp);
     target->setCorrelationId(correlation_id);

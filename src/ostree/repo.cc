@@ -146,4 +146,24 @@ void Repo::checkout(const std::string& commit_hash, const std::string& src_dir, 
   }
 }
 
+static void addRefInfo(gpointer key, gpointer value, gpointer user_data) {
+  auto* const refs = reinterpret_cast<std::unordered_map<std::string, std::string>*>(user_data);
+  refs->emplace(
+      std::pair<std::string, std::string>{reinterpret_cast<const char*>(key), reinterpret_cast<const char*>(value)});
+}
+
+std::unordered_map<std::string, std::string> Repo::getRefs() const {
+  g_autoptr(GHashTable) refs = nullptr;
+  g_autoptr(GError) error = nullptr;
+
+  if (0 == ostree_repo_list_refs(repo_, nullptr, &refs, nullptr, &error)) {
+    throw std::runtime_error("Failed to list repo refs: " + std::string(error->message));
+  }
+
+  std::unordered_map<std::string, std::string> found_refs;
+
+  g_hash_table_foreach(refs, addRefInfo, &found_refs);
+  return found_refs;
+}
+
 }  // namespace OSTree
