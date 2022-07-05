@@ -13,6 +13,7 @@ class TufRepoMock {
 
  public:
   const std::string& getPath() const { return root_.string(); }
+  std::string getRepoPath() const { return (root_ / ImageRepo::dir).string(); }
   const Uptane::Target& getLatest() const { return latest_; }
   void setLatest(const Uptane::Target& latest) { latest_ = latest; }
 

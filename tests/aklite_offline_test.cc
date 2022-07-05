@@ -10,6 +10,7 @@
 #include "composeappmanager.h"
 #include "docker/restorableappengine.h"
 #include "liteclient.h"
+#include "offline/client.h"
 #include "target.h"
 
 // include test fixtures
@@ -21,104 +22,10 @@
 #include "fixtures/liteclient/sysrootfs.cc"
 #include "fixtures/liteclient/tufrepomock.cc"
 
-class OfflineMetaFetcher : public Uptane::IMetadataFetcher {
+class AppStore {
  public:
-  OfflineMetaFetcher(const boost::filesystem::path& tuf_repo_path) : tuf_repo_path_{tuf_repo_path / "repo" / "repo"} {}
-
-  void fetchRole(std::string* result, int64_t maxsize, Uptane::RepositoryType repo, const Uptane::Role& role,
-                 Uptane::Version version) const override {
-    const boost::filesystem::path meta_file_path{tuf_repo_path_ / version.RoleFileName(role)};
-    if (!boost::filesystem::exists(meta_file_path)) {
-      throw Uptane::MetadataFetchFailure(repo.ToString(), role.ToString());
-    }
-    std::ifstream meta_file_stream(meta_file_path.string());
-    *result = {std::istreambuf_iterator<char>(meta_file_stream), std::istreambuf_iterator<char>()};
-  }
-
-  void fetchLatestRole(std::string* result, int64_t maxsize, Uptane::RepositoryType repo,
-                       const Uptane::Role& role) const override {
-    fetchRole(result, maxsize, repo, role, Uptane::Version());
-  }
-
- private:
-  const boost::filesystem::path tuf_repo_path_;
-};
-
-class BaseHttpClient : public HttpInterface {
- public:
-  HttpResponse post(const std::string&, const std::string&, const std::string&) override {
-    return HttpResponse("", 501, CURLE_OK, "");
-  }
-  HttpResponse post(const std::string&, const Json::Value&) override { return HttpResponse("", 501, CURLE_OK, ""); }
-  HttpResponse put(const std::string&, const std::string&, const std::string&) override {
-    return HttpResponse("", 501, CURLE_OK, "");
-  }
-  HttpResponse put(const std::string&, const Json::Value&) override { return HttpResponse("", 501, CURLE_OK, ""); }
-  HttpResponse download(const std::string& url, curl_write_callback write_cb, curl_xferinfo_callback progress_cb,
-                        void* userp, curl_off_t from) override {
-    return HttpResponse("", 501, CURLE_OK, "");
-  }
-  std::future<HttpResponse> downloadAsync(const std::string& url, curl_write_callback write_cb,
-                                          curl_xferinfo_callback progress_cb, void* userp, curl_off_t from,
-                                          CurlHandler* easyp) override {
-    std::promise<HttpResponse> resp_promise;
-    resp_promise.set_value(HttpResponse("", 501, CURLE_OK, ""));
-    return resp_promise.get_future();
-  }
-  void setCerts(const std::string&, CryptoSource, const std::string&, CryptoSource, const std::string&,
-                CryptoSource) override {}
-};
-
-class RegistryBasicAuthClient : public BaseHttpClient {
- public:
-  HttpResponse get(const std::string& url, int64_t maxsize) override {
-    return HttpResponse("{\"Secret\":\"secret\",\"Username\":\"test-user\"}", 200, CURLE_OK, "");
-  }
-};
-
-class OfflineRegistry : public BaseHttpClient {
- public:
-  OfflineRegistry(const boost::filesystem::path& root_dir, const std::string& hostname = "hub.foundries.io")
-      : hostname_{hostname}, root_dir_{root_dir} {}
-
-  HttpResponse get(const std::string& url, int64_t maxsize) override {
-    if (boost::starts_with(url, auth_endpoint_)) {
-      return HttpResponse("{\"token\":\"token\"}", 200, CURLE_OK, "");
-    }
-    return getAppItem(url);
-  }
-
-  HttpResponse download(const std::string& url, curl_write_callback write_cb, curl_xferinfo_callback progress_cb,
-                        void* userp, curl_off_t from) override {
-    const std::string hash_prefix{"sha256:"};
-    const auto digest_pos{url.rfind(hash_prefix)};
-    if (digest_pos == std::string::npos) {
-      return HttpResponse("Invalid URL", 400, CURLE_OK, "");
-    }
-    const auto hash_pos{digest_pos + hash_prefix.size()};
-    const auto hash{url.substr(hash_pos)};
-
-    char buf[1024 * 4];
-    std::ifstream blob_file{(blobs_dir_ / hash).string()};
-
-    std::streamsize read_byte_numb;
-    while ((read_byte_numb = blob_file.readsome(buf, sizeof(buf))) > 0) {
-      write_cb(buf, read_byte_numb, 1, userp);
-    }
-    blob_file.close();
-    return HttpResponse("", 200, CURLE_OK, "");
-  }
-
-  HttpResponse getAppItem(const std::string& url) const {
-    const std::string hash_prefix{"sha256:"};
-    const auto digest_pos{url.rfind(hash_prefix)};
-    if (digest_pos == std::string::npos) {
-      return HttpResponse("Invalid URL", 400, CURLE_OK, "");
-    }
-    const auto hash_pos{digest_pos + hash_prefix.size()};
-    const auto hash{url.substr(hash_pos)};
-    return HttpResponse(Utils::readFile(blobs_dir_ / hash), 200, CURLE_OK, "");
-  }
+  AppStore(const boost::filesystem::path& root_dir, const std::string& hostname = "hub.foundries.io")
+      : root_dir_{root_dir}, hostname_{hostname} {}
 
   AppEngine::App addApp(const fixtures::ComposeApp::Ptr& app) {
     const auto app_dir{apps_dir_ / app->name() / app->hash()};
@@ -148,16 +55,18 @@ class OfflineRegistry : public BaseHttpClient {
     Utils::writeFile(blobs_dir_ / app->image().config().hash, app->image().config().data);
     Utils::writeFile(blobs_dir_ / app->image().layerBlob().hash, app->image().layerBlob().data);
 
-    return {app->name(), hostname_ + '/' + "factory/" + app->name() + '@' + "sha256:" + app->hash()};
+    const auto app_uri{hostname_ + '/' + "factory/" + app->name() + '@' + "sha256:" + app->hash()};
+    Utils::writeFile(app_dir / "uri", app_uri);
+    return {app->name(), app_uri};
   }
 
   boost::filesystem::path blobsDir() const { return root_dir_ / "blobs"; }
   const boost::filesystem::path& appsDir() const { return apps_dir_; }
+  const boost::filesystem::path& dir() const { return root_dir_; }
 
  private:
   const boost::filesystem::path root_dir_;
   const std::string hostname_;
-  const std::string auth_endpoint_{"https://" + hostname_ + "/token-auth"};
   const boost::filesystem::path apps_dir_{root_dir_ / "apps"};
   const boost::filesystem::path blobs_dir_{root_dir_ / "blobs" / "sha256"};
 };
@@ -168,9 +77,12 @@ class AkliteOffline : public ::testing::Test {
       : sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
         sys_repo_{(test_dir_.Path() / "sysrepo").string(), os},
         ostree_repo_{(test_dir_.Path() / "treehub").string(), true},
-        tuf_repo_{test_dir_.Path() / "tuf"},
-        meta_fetcher_{new OfflineMetaFetcher(tuf_repo_.getPath())},
-        daemon_{test_dir_.Path() / "daemon"} {
+        tuf_repo_{src_dir_ / "tuf"},
+        daemon_{test_dir_.Path() / "daemon"},
+        app_store_{test_dir_.Path() / "apps"} {
+    // hardware ID
+    cfg_.provision.primary_ecu_hardware_id = hw_id;
+
     // a path to the config dir
     cfg_.storage.path = test_dir_.Path() / "sota-dir";
 
@@ -178,10 +90,18 @@ class AkliteOffline : public ::testing::Test {
     cfg_.pacman.sysroot = sys_repo_.getPath();
     cfg_.pacman.os = os;
     cfg_.pacman.booted = BootedType::kStaged;
+    cfg_.pacman.type = "ostree+compose_apps";
 
     // configure bootloader/booting related functionality
     cfg_.bootloader.reboot_command = "/bin/true";
     cfg_.bootloader.reboot_sentinel_dir = test_dir_.Path();
+
+    cfg_.pacman.extra["reset_apps"] = "";
+    cfg_.pacman.extra["reset_apps_root"] = (test_dir_.Path() / "reset-apps").string();
+    cfg_.pacman.extra["compose_apps_root"] = (test_dir_.Path() / "compose-apps").string();
+    cfg_.pacman.extra["docker_compose_bin"] =
+        boost::filesystem::canonical("tests/docker-compose_fake.py").string() + " " + daemon_.dir().string() + " ";
+    cfg_.pacman.extra["images_data_root"] = daemon_.dataRoot();
 
     // add an initial rootfs to the ostree-based sysroot that liteclient manages and deploy it
     const auto hash = sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch);
@@ -204,7 +124,7 @@ class AkliteOffline : public ::testing::Test {
     const std::string unique_content = Utils::randomUuid();
     const std::string unique_file = Utils::randomUuid();
     Utils::writeFile(sys_rootfs_.path + "/" + unique_file, unique_content, true);
-    auto hash = ostree_repo_.commit(sys_rootfs_.path, os);
+    auto hash = ostree_repo_.commit(sys_rootfs_.path, branch);
 
     Json::Value apps_json;
     if (apps) {
@@ -225,111 +145,27 @@ class AkliteOffline : public ::testing::Test {
   void reboot() { boost::filesystem::remove(getSentinelFilePath()); }
 
  protected:
-  static const std::string branch;
   static const std::string hw_id;
   static const std::string os;
+  static const std::string branch;
 
  protected:
   TemporaryDirectory test_dir_;  // must be the first element in the class
+  const boost::filesystem::path src_dir_{test_dir_.Path() / "offline-update-src"};
   Config cfg_;
   SysRootFS sys_rootfs_;        // a sysroot that is bitbaked and added to the ostree repo that liteclient fetches from
   SysOSTreeRepoMock sys_repo_;  // an ostree-based sysroot that liteclient manages
   OSTreeRepoMock ostree_repo_;  // a source ostree repo to fetch update from
   TufRepoMock tuf_repo_;
   fixtures::DockerDaemon daemon_;
-
-  std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher_;
+  AppStore app_store_;
 };
 
-const std::string AkliteOffline::branch{"lmp"};
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
 const std::string AkliteOffline::os{"lmp"};
+const std::string AkliteOffline::branch{hw_id + "-" + os};
 
-TEST_F(AkliteOffline, FetchMeta) {
-  LiteClient client(cfg_, nullptr, nullptr, meta_fetcher_);
-  const auto target{addTarget()};
-
-  ASSERT_TRUE(client.checkForUpdatesBegin());
-  const auto targets{client.allTargets()};
-  ASSERT_GE(targets.size(), 1);
-  ASSERT_EQ(targets[0].filename(), target.filename());
-  ASSERT_NO_THROW(client.checkForUpdatesEnd(targets[0]));
-}
-
-TEST_F(AkliteOffline, FetchAndInstallOstree) {
-  // use the ostree package manager to avoid fetching Apps in this test
-  cfg_.pacman.type = "ostree";
-  // instruct the lite client (ostree pac manager) to fetch an ostree commit from a local repo
-  cfg_.pacman.ostree_server = "file://" + ostree_repo_.getPath();
-
-  Uptane::Target target{Uptane::Target::Unknown()};
-  {
-    // somehow liteclient/aktualizr modifies an input config so we have to make a copy of it
-    // to avoid modification of the original configuration.
-    Config cfg{cfg_};
-    LiteClient client(cfg, nullptr, nullptr, meta_fetcher_);
-    target = addTarget();
-
-    // pull TUF metadata
-    ASSERT_TRUE(client.checkForUpdatesBegin());
-    const auto targets{client.allTargets()};
-    ASSERT_GE(targets.size(), 1);
-    ASSERT_EQ(targets[0].filename(), target.filename());
-    ASSERT_NO_THROW(client.checkForUpdatesEnd(targets[0]));
-
-    // pull and install an ostree commit that Target refers to
-    ASSERT_TRUE(client.download(target, ""));
-    ASSERT_EQ(client.install(target), data::ResultCode::Numeric::kNeedCompletion);
-  }
-
-  reboot();
-
-  {
-    Config cfg{cfg_};
-    LiteClient client(cfg, nullptr, nullptr, meta_fetcher_);
-    ASSERT_TRUE(client.finalizeInstall());
-    ASSERT_EQ(client.getCurrent().filename(), target.filename());
-    ASSERT_EQ(client.getCurrent().sha256Hash(), target.sha256Hash());
-  }
-}
-
-TEST_F(AkliteOffline, FetchAndInstallApps) {
-  boost::filesystem::create_directories(test_dir_.Path() / "compose-bin-dir");
-  cfg_.pacman.type = "ostree+compose_apps";
-  cfg_.pacman.extra["docker_compose_bin"] =
-      boost::filesystem::canonical("tests/docker-compose_fake.py").string() + " " + daemon_.dir().string() + " ";
-  cfg_.pacman.extra["compose_apps_root"] = (test_dir_.Path() / "compose-apps").string();
-  cfg_.pacman.extra["reset_apps"] = "";
-  cfg_.pacman.extra["reset_apps_root"] = (test_dir_.Path() / "reset-apps").string();
-  // instruct the lite client (ostree pac manager) to fetch an ostree commit from a local repo
-  cfg_.pacman.ostree_server = "file://" + ostree_repo_.getPath();
-
-  ComposeAppManager::Config pacman_cfg(cfg_.pacman);
-
-  const boost::filesystem::path store_root{pacman_cfg.reset_apps_root};
-  const boost::filesystem::path install_root{pacman_cfg.apps_root};
-  const boost::filesystem::path docker_root{pacman_cfg.images_data_root};
-  std::shared_ptr<HttpInterface> registry_basic_auth_client{std::make_shared<RegistryBasicAuthClient>()};
-  std::shared_ptr<OfflineRegistry> offline_registry{std::make_shared<OfflineRegistry>(test_dir_.Path() / "registry")};
-
-  Docker::RegistryClient::Ptr registry_client{std::make_shared<Docker::RegistryClient>(
-      registry_basic_auth_client, "foobar",
-      [&offline_registry](const std::vector<std::string>*) { return offline_registry; })};
-
-  AppEngine::Ptr app_engine{std::make_shared<Docker::RestorableAppEngine>(
-      store_root, install_root, docker_root, registry_client,
-      std::make_shared<Docker::DockerClient>(daemon_.getClient()), pacman_cfg.skopeo_bin.string(), daemon_.getUrl(),
-      pacman_cfg.compose_bin.string(), Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
-      [&offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
-        Docker::Uri uri{Docker::Uri::parseUri(image_uri)};
-        return "--src-shared-blob-dir " + offline_registry->blobsDir().string() +
-               " oci:" + offline_registry->appsDir().string() + "/" + app_uri.app + "/" + app_uri.digest.hash() +
-               "/images/" + uri.registryHostname + "/" + uri.repo + "/" + uri.digest.hash();
-      },
-      false /* don't create containers on install because it makes dockerd to check if pinned images
-    present in its store what we should avoid until images are registered (hacked) in dockerd store
-  */)};
-
+TEST_F(AkliteOffline, OfflineClient) {
   Uptane::Target target{Uptane::Target::Unknown()};
 
   const auto layer_size{1024};
@@ -338,34 +174,27 @@ TEST_F(AkliteOffline, FetchAndInstallApps) {
       "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
   layers["layers"][0]["size"] = layer_size;
 
-  const auto app{offline_registry->addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
-  const std::vector<AppEngine::App> apps{app};
+  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
+  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
+  {
+    const std::vector<AppEngine::App> apps{app01};
+    addTarget(&apps);
+  }
+  const std::vector<AppEngine::App> apps{app01, app02};
   target = addTarget(&apps);
 
-  {
-    Config cfg{cfg_};
-    LiteClient client(cfg, app_engine, nullptr, meta_fetcher_);
+  offline::UpdateSrc src{
+      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
+      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
+  };
 
-    ASSERT_TRUE(client.checkForUpdatesBegin());
-    const auto targets{client.allTargets()};
-    ASSERT_GE(targets.size(), 1);
-    ASSERT_EQ(targets[0].filename(), target.filename());
-    ASSERT_NO_THROW(client.checkForUpdatesEnd(targets[0]));
-    ASSERT_TRUE(client.download(target, ""));
-    ASSERT_EQ(client.install(target), data::ResultCode::Numeric::kNeedCompletion);
-    ASSERT_FALSE(app_engine->isRunning(app));
-  }
+  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
+  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src));
+  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
 
   reboot();
 
-  {
-    Config cfg{cfg_};
-    LiteClient client(cfg, app_engine, nullptr, meta_fetcher_);
-    ASSERT_TRUE(client.finalizeInstall());
-    ASSERT_EQ(client.getCurrent().filename(), target.filename());
-    ASSERT_EQ(client.getCurrent().sha256Hash(), target.sha256Hash());
-    ASSERT_TRUE(app_engine->isRunning(app));
-  }
+  ASSERT_NO_THROW(offline::client::run(cfg_, src, daemon_.getClient()));
 }
 
 int main(int argc, char** argv) {

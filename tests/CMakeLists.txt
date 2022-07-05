@@ -205,5 +205,5 @@ add_aktualizr_test(NAME aklite_offline
 )
 aktualizr_source_file_checks(aklite_offline_test.cc)
 target_include_directories(t_aklite_offline PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
-target_link_libraries(t_aklite_offline aktualizr_lite ${TEST_LIBS} testutilities uptane_generator_lib)
+target_link_libraries(t_aklite_offline aktualizr_lite ${TEST_LIBS} testutilities uptane_generator_lib ${AKLITE_OFFLINE_LIB})
 set_tests_properties(test_aklite_offline PROPERTIES LABELS "aklite:offline")

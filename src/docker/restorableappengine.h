@@ -88,7 +88,7 @@ class RestorableAppEngine : public AppEngine {
       std::string client = "/sbin/skopeo", std::string docker_host = "unix:///var/run/docker.sock",
       std::string compose_cmd = "/usr/bin/docker-compose",
       StorageSpaceFunc storage_space_func = RestorableAppEngine::GetDefStorageSpaceFunc(),
-      ClientImageSrcFunc client_image_src_func = [](const Docker::Uri& app_uri,
+      ClientImageSrcFunc client_image_src_func = [](const Docker::Uri& /* app_uri */,
                                                     const std::string& image_uri) { return "docker://" + image_uri; },
       bool create_containers_if_install = true);
 

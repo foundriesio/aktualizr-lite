@@ -103,7 +103,7 @@ TEST_P(AkliteTest, AppRemoval) {
 
   reboot(client, boost::make_optional(std::vector<std::string>{"app-01"}));
   // make sure the "hadleRemovedApps" is called
-  client->appsInSync();
+  client->appsInSync(client->getCurrent());
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
   checkHeaders(*client, target01);
   checkEvents(*client, target01, UpdateType::kApp);

@@ -159,9 +159,9 @@ TEST_P(AkliteTest, RollbackIfOstreeInstallFails) {
     if (app_engine_type == "RestorableAppEngine") {
       // a download process doesn't "break" currently installed and running retsorable apps
       // appsInSync cleans any unneeded layers stored in the skopeo/OCI store
-      ASSERT_TRUE(client->appsInSync());
+      ASSERT_TRUE(client->appsInSync(client->getCurrent()));
     } else {
-      ASSERT_FALSE(client->appsInSync());
+      ASSERT_FALSE(client->appsInSync(client->getCurrent()));
       // sync target_01 apps
       updateApps(*client, client->getCurrent(), client->getCurrent());
     }
@@ -217,7 +217,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
     client->checkForUpdatesBegin();
     ASSERT_TRUE(client->isRollback(target_02));
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
-    ASSERT_FALSE(client->appsInSync());
+    ASSERT_FALSE(client->appsInSync(client->getCurrent()));
     // sync target_01 apps
     updateApps(*client, client->getCurrent(), client->getCurrent());
     client->checkForUpdatesEnd(target_01);
@@ -248,7 +248,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
     ASSERT_TRUE(client->isRollback(target_02));
-    ASSERT_FALSE(client->appsInSync());
+    ASSERT_FALSE(client->appsInSync(client->getCurrent()));
     // sync target_01 apps
     updateApps(*client, client->getCurrent(), client->getCurrent());
     client->checkForUpdatesEnd(target_01);
@@ -267,7 +267,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
 
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_03));
     ASSERT_TRUE(app_engine->isRunning(app01_updated));
-    ASSERT_TRUE(client->appsInSync());
+    ASSERT_TRUE(client->appsInSync(client->getCurrent()));
     ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
   }
 }
@@ -339,7 +339,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsAndPowerCut) {
 
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_03));
     ASSERT_TRUE(app_engine->isRunning(app01_updated));
-    ASSERT_TRUE(client->appsInSync());
+    ASSERT_TRUE(client->appsInSync(client->getCurrent()));
     ASSERT_TRUE(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty());
   }
 }
@@ -383,7 +383,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsNoContainer) {
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
     ASSERT_TRUE(client->isRollback(target_02));
-    ASSERT_FALSE(client->appsInSync());
+    ASSERT_FALSE(client->appsInSync(client->getCurrent()));
     // sync target_01 apps
     updateApps(*client, client->getCurrent(), client->getCurrent());
     client->checkForUpdatesEnd(target_01);
@@ -408,7 +408,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsNoContainer) {
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
     ASSERT_TRUE(client->isRollback(target_02));
-    ASSERT_FALSE(client->appsInSync());
+    ASSERT_FALSE(client->appsInSync(client->getCurrent()));
     // sync target_01 apps
     updateApps(*client, client->getCurrent(), client->getCurrent());
     client->checkForUpdatesEnd(target_01);
@@ -459,7 +459,7 @@ TEST_P(AkliteTest, AppRollbackIfAppsInstallFails) {
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
     ASSERT_TRUE(client->isRollback(target_02));
-    ASSERT_FALSE(client->appsInSync());
+    ASSERT_FALSE(client->appsInSync(client->getCurrent()));
     // sync target_01 apps
     updateApps(*client, client->getCurrent(), client->getCurrent());
     client->checkForUpdatesEnd(target_01);
