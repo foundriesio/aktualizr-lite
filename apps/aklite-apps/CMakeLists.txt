@@ -8,6 +8,7 @@ set(HEADERS cmds.h)
 
 add_executable(${TARGET} ${SRC})
 add_dependencies(aklite-tests ${TARGET})
+set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 17)
 
 set(INCS
   ${AKLITE_DIR}/include/
