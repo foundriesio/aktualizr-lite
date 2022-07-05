@@ -7,6 +7,7 @@ set(SRC main.cpp cmds.cpp)
 set(HEADERS cmds.h)
 
 add_executable(${TARGET} ${SRC})
+add_dependencies(aklite-tests ${TARGET})
 
 set(INCS
   ${AKLITE_DIR}/include/
