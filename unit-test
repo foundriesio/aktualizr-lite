@@ -11,6 +11,8 @@ fi
 set -x
 
 build=$(mktemp -d)
+export CC=clang
+export CXX=clang++
 
 echo "## Compiling aklite"
 cmake -S . -B $build -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON
