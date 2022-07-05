@@ -27,4 +27,4 @@ scripts:
     #!/bin/bash -ex
     wrapdocker &
     chown -R testuser:testuser .
-    sudo -u testuser CCACHE_DIR=/tmp/ccache make -f dev-flow.mk config build format tidy test
+    sudo -u testuser CCACHE_DIR=/tmp/ccache CXX=clang++ CC=clang make -f dev-flow.mk config build format tidy test
