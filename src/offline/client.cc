@@ -142,6 +142,9 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   // make LiteClient to pull from a local ostree repo
   cfg.pacman.ostree_server = "file://" + src.OstreeRepoDir.string();
 
+  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps.
+  cfg.pacman.type = "ostree+compose_apps";
+
   // Handle DG:/token-auth
   std::shared_ptr<HttpInterface> registry_basic_auth_client{std::make_shared<RegistryBasicAuthClient>()};
 
@@ -152,6 +155,13 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
       [offline_registry](const std::vector<std::string>*) { return offline_registry; })};
 
   ComposeAppManager::Config pacman_cfg(cfg.pacman);
+  std::string compose_cmd{pacman_cfg.compose_bin.string()};
+  if (pacman_cfg.compose_bin.filename().compare("docker") == 0) {
+    compose_cmd = boost::filesystem::canonical(pacman_cfg.compose_bin).string() + " ";
+    // if it is a `docker` binary then turn it into ` the  `docker compose` command
+    // and make sure that the `compose` is actually supported by a given `docker` utility.
+    compose_cmd += "compose ";
+  }
 
   std::string docker_host{"unix:///var/run/docker.sock"};
   auto env{boost::this_process::environment()};
@@ -162,7 +172,7 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   AppEngine::Ptr app_engine{std::make_shared<Docker::RestorableAppEngine>(
       pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client,
       std::make_shared<Docker::DockerClient>(docker_client_http_client), pacman_cfg.skopeo_bin.string(), docker_host,
-      pacman_cfg.compose_bin.string(), Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
+      compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
       [offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
         Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
         return "--src-shared-blob-dir " + offline_registry->blobsDir().string() +
