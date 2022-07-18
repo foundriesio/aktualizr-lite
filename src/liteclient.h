@@ -68,6 +68,9 @@ class LiteClient {
   bool isRollback(const Uptane::Target& target);
 
   void notifyDownloadFinished(const Uptane::Target& t, bool success, const std::string& err_msg = "");
+  std::tuple<bool, boost::filesystem::path> isRootMetaImportNeeded();
+  bool importRootMeta(const boost::filesystem::path& src, Uptane::Version max_ver = Uptane::Version());
+  void importRootMetaIfNeededAndPresent();
 
  private:
   FRIEND_TEST(helpers, locking);

@@ -74,6 +74,7 @@ void AkliteClient::Init(Config& config) {
   }
   client_ = std::make_unique<LiteClient>(config, nullptr);
   if (!read_only_) {
+    client_->importRootMetaIfNeededAndPresent();
     client_->finalizeInstall();
   }
 }

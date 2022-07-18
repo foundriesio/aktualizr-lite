@@ -22,29 +22,6 @@ static std::unique_ptr<LiteClient> createOfflineClient(
 static Uptane::Target getTarget(LiteClient& client, const std::string& target_name = "");
 static void registerApps(const Uptane::Target& target);
 
-class MetaFetcher : public Uptane::IMetadataFetcher {
- public:
-  MetaFetcher(boost::filesystem::path tuf_repo_path) : tuf_repo_path_{std::move(tuf_repo_path)} {}
-
-  void fetchRole(std::string* result, int64_t maxsize, Uptane::RepositoryType repo, const Uptane::Role& role,
-                 Uptane::Version version) const override {
-    const boost::filesystem::path meta_file_path{tuf_repo_path_ / version.RoleFileName(role)};
-    if (!boost::filesystem::exists(meta_file_path)) {
-      throw Uptane::MetadataFetchFailure(repo.ToString(), role.ToString());
-    }
-    std::ifstream meta_file_stream(meta_file_path.string());
-    *result = {std::istreambuf_iterator<char>(meta_file_stream), std::istreambuf_iterator<char>()};
-  }
-
-  void fetchLatestRole(std::string* result, int64_t maxsize, Uptane::RepositoryType repo,
-                       const Uptane::Role& role) const override {
-    fetchRole(result, maxsize, repo, role, Uptane::Version());
-  }
-
- private:
-  const boost::filesystem::path tuf_repo_path_;
-};
-
 class BaseHttpClient : public HttpInterface {
  public:
   HttpResponse post(const std::string&, const std::string&, const std::string&) override {
@@ -340,6 +317,24 @@ static void registerApps(const Uptane::Target& target, const boost::filesystem::
 
 PostInstallAction install(const Config& cfg_in, const UpdateSrc& src) {
   auto client{createOfflineClient(cfg_in, src)};
+
+  const auto import{client->isRootMetaImportNeeded()};
+  if (std::get<0>(import)) {
+    // We don't know whether it's a production or CI device, so we just import the first two versions that are equal for
+    // both prod and CI.
+    // TODO: Consider the way to improve it if needed. For example:
+    // 1) Introduce a new command `aklite-offline init <type> = (prod | ci)` that should be executed during device
+    // manufacturing process 2) Determine a device type based on the first offline update content. If the first update
+    // root metadata are production metadata, then
+    //    consider a device as "prod" and import production root meta from a local file system, otherwise import CI
+    //    meta.
+    LOG_INFO << "Importing root metadata from a local file system...";
+    if (client->importRootMeta(std::get<1>(import) / "ci", Uptane::Version(2))) {
+      LOG_INFO << "Successfully imported root role metadata from " << std::get<1>(import) / "ci";
+    } else {
+      LOG_ERROR << "Failed to import root role metadata from " << std::get<1>(import) / "ci";
+    }
+  }
 
   auto rc = client->updateImageMeta();
   if (!std::get<0>(rc)) {

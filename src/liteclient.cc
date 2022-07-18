@@ -12,6 +12,7 @@
 #include "crypto/p11engine.h"
 #include "helpers.h"
 #include "http/httpclient.h"
+#include "offline/client.h"
 #include "primary/reportqueue.h"
 #include "rootfstreemanager.h"
 #include "storage/invstorage.h"
@@ -258,6 +259,85 @@ void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> ev
       }
     }
     report_queue->enqueue(std::move(event));
+  }
+}
+
+std::tuple<bool, boost::filesystem::path> LiteClient::isRootMetaImportNeeded() {
+  std::string data;
+  if (storage->loadRoot(&data, Uptane::RepositoryType::Image(), Uptane::Version(2))) {
+    LOG_DEBUG << "Root role metadata are already present in DB, skiping their import from FS";
+    return {false, ""};
+  }
+  boost::filesystem::path tuf_meta_src{config.storage.uptane_metadata_path.get("/")};
+  if (tuf_meta_src == "/metadata") {
+    // if libaktualizr's default value then set aklite's default value
+    tuf_meta_src = "/usr/lib/sota/tuf";
+  }
+  if (!boost::filesystem::exists(tuf_meta_src)) {
+    LOG_INFO << "Root metadata are not provisioned to FS, will fetch them from Device Gateway or a flash drive (TOFU)";
+    return {false, ""};
+  }
+  return {true, tuf_meta_src};
+}
+
+bool LiteClient::importRootMeta(const boost::filesystem::path& src, Uptane::Version max_ver) {
+  bool res{true};
+  try {
+    offline::MetaFetcher offline_meta_fetcher{src.string(), max_ver};
+    image_repo_.updateRoot(*storage, offline_meta_fetcher);
+  } catch (const offline::MetaFetcher::NotFoundException&) {
+    // That's OK, it means the latest + 1 root version is not found
+  } catch (const Uptane::ExpiredMetadata&) {
+    // That's OK, the pre-provisioned root versions can expire by the time a system image is flashed on a device
+    // and a device starts importing them. The expiration is quite possible for the first two versions.
+  } catch (const std::exception& exc) {
+    // If it fails then there is no much we can do about it, just do TOFU
+    storage->clearMetadata();
+    res = false;
+    LOG_ERROR << "Failed to import root role metadata: " << exc.what();
+  }
+  return res;
+}
+
+void LiteClient::importRootMetaIfNeededAndPresent() {
+  const auto import{isRootMetaImportNeeded()};
+  if (!std::get<0>(import)) {
+    return;
+  }
+
+  LOG_INFO << "Importing root metadata from a local file system...";
+  const std::string prod_bc_value{"production"};
+  bool prod{false};
+
+  try {
+    const auto bc{key_manager_->getBC()};
+    if (bc == prod_bc_value) {
+      prod = true;
+      LOG_DEBUG << "Found production business category in a device certificate: " << bc;
+    } else {
+      LOG_DEBUG << "Missing or non-production business category found in a device certificate: " << bc;
+    }
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "A device certificate is not found or failed to parse it: " << exc.what();
+    LOG_ERROR
+        << "Cannot determine a device type (prodution or CI). Skiping root metadata import, will download them from "
+           "Device Gateway (TOFU)";
+    return;
+  }
+
+  boost::filesystem::path import_src{std::get<1>(import) / (prod ? "prod" : "ci")};
+  if (prod && !boost::filesystem::exists(import_src / "1.root.json")) {
+    LOG_WARNING
+        << "This production device is not provisioned with production root role metadata, will download them from "
+           "Device Gateway (TOFU)";
+    return;
+  }
+
+  if (importRootMeta(import_src)) {
+    LOG_INFO << "Successfully imported " << (prod ? "production" : "CI") << " root role metadata from " << import_src;
+  } else {
+    LOG_ERROR << "Failed to import " << (prod ? "production" : "CI") << " root role metadata from " << import_src
+              << ", will download them from Device Gateway (TOFU)";
   }
 }
 
