@@ -221,6 +221,7 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
 
 static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
   FileLock lock;
+  client.importRootMetaIfNeededAndPresent();
   client.finalizeInstall();
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
@@ -271,6 +272,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     return EXIT_FAILURE;
   }
 
+  client.importRootMetaIfNeededAndPresent();
   client.finalizeInstall();
 
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
@@ -555,7 +557,7 @@ int main(int argc, char* argv[]) {
     }
 
     Config config(commandline_map);
-    config.storage.uptane_metadata_path = utils::BasedPath(config.storage.path / "metadata");
+
     config.telemetry.report_network = !config.tls.server.empty();
     config.telemetry.report_config = !config.tls.server.empty();
 
