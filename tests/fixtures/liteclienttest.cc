@@ -47,6 +47,7 @@ class ClientTest :virtual public ::testing::Test {
     conf.uptane.repo_server = device_gateway_.getTufRepoUri();
     conf.provision.primary_ecu_hardware_id = hw_id;
     conf.storage.path = test_dir_.Path();
+    conf.storage.uptane_metadata_path = utils::BasedPath(tuf_repo_.getRepoPath());
 
     conf.pacman.type = ComposeAppManager::Name;
     conf.pacman.sysroot = sys_repo_.getPath();
@@ -145,6 +146,22 @@ class ClientTest :virtual public ::testing::Test {
     }
 
     auto client = std::make_shared<LiteClient>(conf, app_engine);
+
+    // import root metadata
+    const auto import{client->isRootMetaImportNeeded()};
+    if (std::get<0>(import)) {
+      // rotate root twice to emulate real-life use-case (initial rotate and user's first rotation)
+      tuf_repo_.repo().rotate(Uptane::Role::Root());
+      tuf_repo_.repo().rotate(Uptane::Role::Root());
+
+      LOG_INFO << "Importing root role metadata...";
+      if (!client->importRootMeta(std::get<1>(import))) {
+        throw std::runtime_error("Failed to import root metadata");
+      }
+      // another rotation in case if root was rotated before a device initial boot
+      tuf_repo_.repo().rotate(Uptane::Role::Root());
+    }
+
     if (finalize) {
       client->finalizeInstall();
     }

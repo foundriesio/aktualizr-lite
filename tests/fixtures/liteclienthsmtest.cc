@@ -31,6 +31,7 @@ class ClientHSMTest : public ClientTest {
     conf.storage.tls_clientcert_path = { "" };
     conf.storage.tls_pkey_path = { "" };
     conf.storage.path = test_dir_.Path();
+    conf.storage.uptane_metadata_path = utils::BasedPath(tuf_repo_.getRepoPath());
 
     conf.bootloader.reboot_command = "/bin/true";
     conf.bootloader.reboot_sentinel_dir = conf.storage.path; // note
@@ -171,6 +172,7 @@ class ClientHSMTest : public ClientTest {
     }
 
     auto lite_client = std::make_shared<LiteClient>(conf, app_engine, p11_);
+    lite_client->importRootMetaIfNeededAndPresent();
     lite_client->finalizeInstall();
     return lite_client;
   }
