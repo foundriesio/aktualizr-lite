@@ -38,6 +38,8 @@ class TufRepoMock {
     return latest_;
   }
 
+  ImageRepo& repo() { return repo_; }
+
  private:
   const boost::filesystem::path root_;
   ImageRepo repo_;
