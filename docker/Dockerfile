@@ -14,10 +14,10 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   bison \
   bash \
   ccache \
-  clang-10 \
-  clang-format-10 \
-  clang-tidy-10 \
-  clang-tools-10 \
+  clang-11 \
+  clang-format-11 \
+  clang-tidy-11 \
+  clang-tools-11 \
   cmake \
   curl \
   doxygen \
@@ -75,10 +75,11 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   xsltproc \
   zip \
   docker-compose \
-  sudo
+  sudo \
+  shellcheck
 
-RUN ln -s clang-10 /usr/bin/clang && \
-    ln -s clang++-10 /usr/bin/clang++
+RUN ln -s clang-11 /usr/bin/clang && \
+    ln -s clang++-11 /usr/bin/clang++
 
 WORKDIR /tmp
 RUN git clone https://github.com/pantoniou/libfyaml.git
