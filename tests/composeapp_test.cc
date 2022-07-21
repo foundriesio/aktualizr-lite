@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <boost/filesystem.hpp>
 #include <boost/process.hpp>
+#include <boost/algorithm/hex.hpp>
 
 #include "http/httpclient.h"
 #include "test_utils.h"
@@ -10,6 +11,7 @@
 #include "storage/invstorage.h"
 #include "uptane/fetcher.h"
 #include "http/httpinterface.h"
+#include "libaktualizr/crypto/crypto.h"
 
 #include "composeappmanager.h"
 #include "docker/composeappengine.h"

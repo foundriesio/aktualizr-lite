@@ -51,7 +51,7 @@ add_aktualizr_test(NAME compose-apps
 )
 
 target_compile_definitions(t_compose-apps PRIVATE ${TEST_DEFS})
-target_include_directories(t_compose-apps PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_INCS})
+target_include_directories(t_compose-apps PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_INCS} ${AKTUALIZR_DIR}/src/)
 target_link_libraries(t_compose-apps ${TEST_LIBS})
 set_tests_properties(test_compose-apps PROPERTIES LABELS "aklite:compose-apps")
 

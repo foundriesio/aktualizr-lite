@@ -237,7 +237,7 @@ class AkliteClient {
   /**
    * Default files/paths to search for sota toml when configuration client.
    */
-  static std::vector<boost::filesystem::path> CONFIG_DIRS;
+  static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  private:
   void Init(Config &config);

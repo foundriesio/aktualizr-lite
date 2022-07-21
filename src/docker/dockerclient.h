@@ -12,7 +12,7 @@ class DockerClient {
  public:
   using Ptr = std::shared_ptr<DockerClient>;
   using HttpClientFactory = std::function<std::shared_ptr<HttpInterface>(const std::string& docker_host)>;
-  static HttpClientFactory DefaultHttpClientFactory;
+  static const HttpClientFactory DefaultHttpClientFactory;
 
   explicit DockerClient(
       std::shared_ptr<HttpInterface> http_client = DefaultHttpClientFactory("unix:///var/run/docker.sock"));
