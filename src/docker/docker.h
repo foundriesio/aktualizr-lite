@@ -110,7 +110,7 @@ class RegistryClient {
   static const std::string SupportedRegistryVersion;
 
   using HttpClientFactory = std::function<std::shared_ptr<HttpInterface>(const std::vector<std::string>*)>;
-  static HttpClientFactory DefaultHttpClientFactory;
+  static const HttpClientFactory DefaultHttpClientFactory;
   using Ptr = std::shared_ptr<RegistryClient>;
 
   explicit RegistryClient(std::shared_ptr<HttpInterface> ota_lite_client,

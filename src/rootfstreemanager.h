@@ -3,6 +3,7 @@
 
 #include "bootloader/bootloaderlite.h"
 #include "downloader.h"
+#include "http/httpinterface.h"
 #include "ostree/sysroot.h"
 #include "package_manager/ostreemanager.h"
 

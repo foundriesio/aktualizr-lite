@@ -1,6 +1,8 @@
 #include "docker.h"
+#include <fstream>
 
-#include <boost/algorithm/algorithm.hpp>
+#include <boost/algorithm/hex.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 
 #include "crypto/crypto.h"
 #include "http/httpclient.h"
@@ -65,7 +67,7 @@ HashedDigest::HashedDigest(const std::string& hash_digest) : digest_{boost::algo
   short_hash_ = hash_.substr(0, 7);
 }
 
-RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
+const RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
     [](const std::vector<std::string>* headers) { return std::make_shared<HttpClient>(headers); };
 
 const std::string RegistryClient::ManifestEndpoint{"/manifests/"};

@@ -7,7 +7,7 @@
 
 namespace Docker {
 
-DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = [](const std::string& docker_host_in) {
+const DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = [](const std::string& docker_host_in) {
   std::string docker_host{docker_host_in};
   auto env{boost::this_process::environment()};
   if (env.end() != env.find("DOCKER_HOST")) {

@@ -2,6 +2,8 @@
 #include <random>
 
 #include <boost/optional.hpp>
+#include <boost/algorithm/hex.hpp>
+#include "libaktualizr/crypto/crypto.h"
 
 
 namespace fixtures {

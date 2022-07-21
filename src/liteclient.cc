@@ -17,6 +17,7 @@
 #include "rootfstreemanager.h"
 #include "storage/invstorage.h"
 #include "target.h"
+#include "uptane/exceptions.h"
 #include "uptane/fetcher.h"
 
 LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11,

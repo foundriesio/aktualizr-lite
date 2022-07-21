@@ -1,4 +1,5 @@
 #include "sysroot.h"
+#include "logging/logging.h"
 
 namespace OSTree {
 

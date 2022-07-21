@@ -98,7 +98,7 @@ class ComposeAppEngine : public AppEngine {
     }
 
    private:
-    std::string version_{""};
+    std::string version_;
     State state_{State::kUnknown};
 
     File version_file_;

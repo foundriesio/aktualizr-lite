@@ -1,4 +1,7 @@
 #include "primary/reportqueue.h"
+#include "crypto/p11engine.h"
+#include "http/httpclient.h"
+
 
 namespace fixtures {
 
@@ -407,7 +410,7 @@ class ClientTest :virtual public ::testing::Test {
     // So, if we do the event draining by the queue instance re-creation then we need to fix/improve
     // the Device Gateway mock so it removes even duplicates.
     // sleep(2);
-    client.report_queue = std_::make_unique<ReportQueue>(client.config, client.http_client, client.storage);
+    client.report_queue = std::make_unique<ReportQueue>(client.config, client.http_client, client.storage);
 
     const std::unordered_map<UpdateType, std::vector<std::string>> updateToevents = {
         { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},

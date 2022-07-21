@@ -2,6 +2,7 @@
 #include <thread>
 #include <unordered_map>
 
+#include <boost/algorithm/string/join.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>

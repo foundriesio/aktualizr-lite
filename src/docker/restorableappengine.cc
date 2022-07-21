@@ -4,6 +4,7 @@
 #include <limits>
 #include <unordered_set>
 
+#include <boost/algorithm/hex.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/process.hpp>
