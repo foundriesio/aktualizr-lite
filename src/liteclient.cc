@@ -576,6 +576,23 @@ void LiteClient::reportHwInfo() {
   }
 }
 
+void LiteClient::reportAppsState() {
+  if (package_manager_->name() != ComposeAppManager::Name) {
+    return;
+  }
+  auto compose_pacman = std::dynamic_pointer_cast<ComposeAppManager>(package_manager_);
+  if (!compose_pacman) {
+    LOG_ERROR << "Cannot downcast the package manager to Compose App Manager";
+    return;
+  }
+  const auto apps_state{compose_pacman->getAppsState()};
+
+  auto resp = http_client->post(config.tls.server + "/apps-states", apps_state);
+  if (!resp.isOk()) {
+    LOG_WARNING << "Failed to send App states to Device Gateway: " << resp.getStatusStr();
+  }
+}
+
 DownloadResult LiteClient::download(const Uptane::Target& target, const std::string& reason) {
   notifyDownloadStarted(target, reason);
   auto download_result{downloadImage(target)};

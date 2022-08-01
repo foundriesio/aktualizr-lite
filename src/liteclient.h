@@ -57,6 +57,7 @@ class LiteClient {
   void reportAktualizrConfiguration();
   void reportNetworkInfo();
   void reportHwInfo();
+  void reportAppsState();
   bool isTargetActive(const Uptane::Target& target) const;
   bool appsInSync(const Uptane::Target& target) const;
   void setAppsNotChecked();

@@ -58,6 +58,7 @@ class ComposeAppManager : public RootfsTreeManager {
   bool checkForAppsToUpdate(const Uptane::Target& target);
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
+  Json::Value getAppsState() const;
 
  private:
   Json::Value getRunningAppsInfo() const;

@@ -253,29 +253,7 @@ bool RestorableAppEngine::isRunning(const App& app) const {
 Json::Value RestorableAppEngine::getRunningAppsInfo() const {
   Json::Value apps;
   try {
-    Json::Value containers;
-    docker_client_->getContainers(containers);
-
-    for (Json::ValueIterator ii = containers.begin(); ii != containers.end(); ++ii) {
-      Json::Value val = *ii;
-
-      std::string app_name = val["Labels"]["com.docker.compose.project"].asString();
-      if (app_name.empty()) {
-        continue;
-      }
-
-      std::string service = val["Labels"]["com.docker.compose.service"].asString();
-      std::string hash = val["Labels"]["io.compose-spec.config-hash"].asString();
-      std::string image = val["Image"].asString();
-      std::string state = val["State"].asString();
-      std::string status = val["Status"].asString();
-
-      apps[app_name]["services"][service]["hash"] = hash;
-      apps[app_name]["services"][service]["image"] = image;
-      apps[app_name]["services"][service]["state"] = state;
-      apps[app_name]["services"][service]["status"] = status;
-    }
-
+    apps = docker_client_->getRunningApps();
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
   }

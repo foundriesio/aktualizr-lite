@@ -521,13 +521,53 @@ std::string ComposeAppManager::getRunningAppsInfoForReport() const {
 
     Json::Value services = (*ii)["services"];
     for (Json::ValueConstIterator jj = services.begin(); jj != services.end(); ++jj) {
-      result += "\t" + jj.key().asString() + ": " + (*jj)["hash"].asString();
+      result += "\t" + (*jj)["name"].asString() + ": " + (*jj)["hash"].asString();
       result += "; image: " + (*jj)["image"].asString();
       result += "; state: " + (*jj)["state"].asString();
       result += "; status: " + (*jj)["status"].asString() + "\n";
     }
   }
   return result;
+}
+
+Json::Value ComposeAppManager::getAppsState() const {
+  Json::Value apps_state;
+
+  try {
+    auto apps{app_engine_->getRunningAppsInfo()};
+    if (!apps.isNull()) {
+      const auto hash{sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent)};
+      apps_state["deviceTime"] = TimeStamp::Now().ToString();
+      apps_state["ostree"] = hash;
+
+      for (Json::ValueIterator ii = apps.begin(); ii != apps.end(); ++ii) {
+        const auto app_name{ii.key().asString()};
+        const Json::Value& services{(*ii)["services"]};
+
+        (*ii)["state"] = "healthy";
+        for (Json::ValueConstIterator jj = services.begin(); jj != services.end(); ++jj) {
+          const Json::Value service{(*jj)};
+          // determine a service health based on its `health` field value if present
+          if (service["health"] == "unhealthy") {
+            // if it's unhealthy then an overall App is considered unhealthy
+            (*ii)["state"] = "unhealthy";
+            break;
+          }
+        }
+
+        if (!(*ii).isMember("uri")) {
+          // App's URI is stored in the `state` in the case of a regular Compose App engine
+          (*ii)["uri"] = "";  // TODO: figure out an app's URI
+        }
+      }  // for each App
+
+      apps_state["apps"] = apps;
+    }
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to obtain information about running Apps: " << exc.what();
+  }
+
+  return apps_state;
 }
 
 ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target,
