@@ -20,11 +20,14 @@ class DockerClient {
 
   static std::tuple<bool, std::string> getContainerState(const Json::Value& root, const std::string& app,
                                                          const std::string& service, const std::string& hash);
+  std::string getContainerLogs(const std::string& id, int tail = 5);
   const Json::Value& engineInfo() const { return engine_info_; }
   const std::string& arch() const { return arch_; }
+  Json::Value getRunningApps(const std::function<void(const std::string&, Json::Value&)>& ext_func = nullptr);
 
  private:
   Json::Value getEngineInfo();
+  Json::Value getContainerInfo(const std::string& id);
 
   std::shared_ptr<HttpInterface> http_client_;
   const Json::Value engine_info_;

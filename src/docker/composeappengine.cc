@@ -240,37 +240,17 @@ bool ComposeAppEngine::isRunning(const App& app) const {
 Json::Value ComposeAppEngine::getRunningAppsInfo() const {
   Json::Value apps;
   try {
-    Json::Value containers;
-    docker_client_->getContainers(containers);
-
-    for (Json::ValueIterator ii = containers.begin(); ii != containers.end(); ++ii) {
-      Json::Value val = *ii;
-
-      std::string app_name = val["Labels"]["com.docker.compose.project"].asString();
-      if (app_name.empty()) {
-        continue;
-      }
-
-      if (!apps.isMember(app_name) && AppState::exists(root_ / app_name)) {
+    std::function<void(const std::string&, Json::Value&)> ext_func = [this](const std::string& app_name,
+                                                                            Json::Value& app_desc) {
+      if (!app_desc.isMember("uri") && AppState::exists(root_ / app_name)) {
         App app{app_name, ""};
         AppState state(app, appRoot(app));
-        app.uri = state.version();
-        apps[app.name]["uri"] = app.uri;
-        apps[app.name]["state"] = state.toStr();
+        app_desc["uri"] = state.version();
+        app_desc["state"] = state.toStr();
       }
+    };
 
-      std::string service = val["Labels"]["com.docker.compose.service"].asString();
-      std::string hash = val["Labels"]["io.compose-spec.config-hash"].asString();
-      std::string image = val["Image"].asString();
-      std::string state = val["State"].asString();
-      std::string status = val["Status"].asString();
-
-      apps[app_name]["services"][service]["hash"] = hash;
-      apps[app_name]["services"][service]["image"] = image;
-      apps[app_name]["services"][service]["state"] = state;
-      apps[app_name]["services"][service]["status"] = status;
-    }
-
+    apps = docker_client_->getRunningApps(ext_func);
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
   }

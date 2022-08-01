@@ -87,8 +87,8 @@ TEST_F(ComposeAppEngineTest, FetchRunCompare) {
 
   Json::Value apps_info = app_engine->getRunningAppsInfo();
   ASSERT_TRUE(apps_info.isMember("app-02"));
-  ASSERT_TRUE(apps_info["app-02"]["services"].isMember("service-02"));
-  ASSERT_EQ(apps_info["app-02"]["services"]["service-02"]["image"].asString(), app->image().uri());
+  ASSERT_EQ(apps_info["app-02"]["services"][0]["name"], "service-02");
+  ASSERT_EQ(apps_info["app-02"]["services"][0]["image"].asString(), app->image().uri());
 }
 
 int main(int argc, char** argv) {

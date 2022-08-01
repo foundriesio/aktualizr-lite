@@ -57,6 +57,71 @@ std::tuple<bool, std::string> DockerClient::getContainerState(const Json::Value&
   return {false, ""};
 }
 
+Json::Value DockerClient::getContainerInfo(const std::string& id) {
+  const std::string cmd{"http://localhost/containers/" + id + "/json"};
+  auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
+  if (!resp.isOk()) {
+    throw std::runtime_error("Request to dockerd has failed: " + cmd);
+  }
+  return resp.getJson();
+}
+
+std::string DockerClient::getContainerLogs(const std::string& id, int tail) {
+  const std::string cmd{"http://localhost/containers/" + id + "/logs?stderr=1&tail=" + std::to_string(tail)};
+  auto resp = http_client_->get(cmd, HttpInterface::kNoLimit);
+  if (!resp.isOk()) {
+    throw std::runtime_error("Request to dockerd has failed: " + cmd);
+  }
+  return resp.body;
+}
+
+Json::Value DockerClient::getRunningApps(const std::function<void(const std::string&, Json::Value&)>& ext_func) {
+  Json::Value apps;
+  Json::Value containers;
+  getContainers(containers);
+
+  for (Json::ValueIterator ii = containers.begin(); ii != containers.end(); ++ii) {
+    Json::Value val = *ii;
+
+    std::string app_name = val["Labels"]["com.docker.compose.project"].asString();
+    if (app_name.empty()) {
+      continue;
+    }
+
+    std::string state = val["State"].asString();
+    std::string status = val["Status"].asString();
+
+    Json::Value service_attributes;
+    service_attributes["name"] = val["Labels"]["com.docker.compose.service"].asString();
+    service_attributes["hash"] = val["Labels"]["io.compose-spec.config-hash"].asString();
+    service_attributes["image"] = val["Image"].asString();
+    service_attributes["state"] = state;
+    service_attributes["status"] = status;
+
+    // (created|restarting|running|removing|paused|exited|dead)
+    service_attributes["health"] = "healthy";
+    if (status.find("health") != std::string::npos) {
+      service_attributes["health"] = getContainerInfo(val["Id"].asString())["State"]["Health"]["Status"].asString();
+    } else {
+      if (state == "dead" ||
+          (state == "exited" && getContainerInfo(val["Id"].asString())["State"]["ExitCode"].asInt() != 0)) {
+        service_attributes["health"] = "unhealthy";
+      }
+    }
+
+    if (service_attributes["health"] != "healthy") {
+      service_attributes["logs"] = getContainerLogs(val["Id"].asString());
+    }
+
+    apps[app_name]["services"].append(service_attributes);
+
+    if (ext_func) {
+      ext_func(app_name, apps[app_name]);
+    }
+  }
+  return apps;
+}
+
 Json::Value DockerClient::getEngineInfo() {
   Json::Value info;
   const std::string cmd{"http://localhost/version"};

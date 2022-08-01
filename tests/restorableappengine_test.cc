@@ -458,8 +458,8 @@ TEST_F(RestorableAppEngineTest, FetchRunCompare) {
 
   Json::Value apps_info = app_engine->getRunningAppsInfo();
   ASSERT_TRUE(apps_info.isMember("app-06"));
-  ASSERT_TRUE(apps_info["app-06"]["services"].isMember("service-02"));
-  ASSERT_EQ(apps_info["app-06"]["services"]["service-02"]["image"].asString(), app->image().uri());
+  ASSERT_EQ(apps_info["app-06"]["services"][0]["name"], "service-02");
+  ASSERT_EQ(apps_info["app-06"]["services"][0]["image"].asString(), app->image().uri());
 }
 
 /**
