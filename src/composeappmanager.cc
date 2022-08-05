@@ -535,11 +535,8 @@ Json::Value ComposeAppManager::getAppsState() const {
 
   try {
     auto apps{app_engine_->getRunningAppsInfo()};
-    if (!apps.isNull()) {
-      const auto hash{sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent)};
-      apps_state["deviceTime"] = TimeStamp::Now().ToString();
-      apps_state["ostree"] = hash;
 
+    if (!apps.isNull()) {
       for (Json::ValueIterator ii = apps.begin(); ii != apps.end(); ++ii) {
         const auto app_name{ii.key().asString()};
         const Json::Value& services{(*ii)["services"]};
@@ -560,9 +557,13 @@ Json::Value ComposeAppManager::getAppsState() const {
           (*ii)["uri"] = "";  // TODO: figure out an app's URI
         }
       }  // for each App
-
-      apps_state["apps"] = apps;
     }
+
+    const auto hash{sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent)};
+    apps_state["deviceTime"] = TimeStamp::Now().ToString();
+    apps_state["ostree"] = hash;
+    apps_state["apps"] = apps;
+
   } catch (const std::exception& exc) {
     LOG_ERROR << "Failed to obtain information about running Apps: " << exc.what();
   }

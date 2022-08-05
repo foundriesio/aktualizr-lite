@@ -587,6 +587,10 @@ void LiteClient::reportAppsState() {
   }
   const auto apps_state{compose_pacman->getAppsState()};
 
+  if (apps_state.isNull()) {
+    LOG_WARNING << "Failed to obtain Apps state, skipping sending it to Device Gateway";
+    return;
+  }
   auto resp = http_client->post(config.tls.server + "/apps-states", apps_state);
   if (!resp.isOk()) {
     LOG_WARNING << "Failed to send App states to Device Gateway: " << resp.getStatusStr();

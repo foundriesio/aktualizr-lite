@@ -106,6 +106,7 @@ CheckInResult AkliteClient::CheckIn() const {
   }
   client_->reportNetworkInfo();
   client_->reportHwInfo();
+  client_->reportAppsState();
 
   auto status = CheckInResult::Status::Ok;
   Uptane::HardwareIdentifier hwidToFind(client_->config.provision.primary_ecu_hardware_id);
