@@ -962,6 +962,58 @@ TEST(ComposeApp, DISABLED_resumeAppUpdate) {
   }
 }
 
+TEST(ComposeApp, AppsStateComparison) {
+  {
+    ASSERT_TRUE(ComposeAppManager::compareAppsStates(Json::Value(), Json::Value()));
+  }
+  {
+    Json::Value new_state;
+    Json::Value cur_state;
+    new_state["deviceTime"] = Json::Value();
+    cur_state["deviceTime"] = Json::Value();
+    ASSERT_TRUE(ComposeAppManager::compareAppsStates(cur_state, new_state));
+   }
+  {
+    Json::Value new_state;
+    new_state["apps"]["app-01"] = Json::Value();
+    ASSERT_FALSE(ComposeAppManager::compareAppsStates(Json::Value(), new_state));
+   }
+   {
+    Json::Value new_state;
+    Json::Value cur_state;
+    new_state["apps"]["app-01"] = Json::Value();
+    cur_state["apps"]["app-02"] = Json::Value();
+
+    ASSERT_FALSE(ComposeAppManager::compareAppsStates(cur_state, new_state));
+   }
+   {
+    Json::Value new_state{Json::Value()};
+    Json::Value cur_state{Json::Value()};
+    new_state["apps"]["app-01"]["state"] = "healthy";
+    cur_state["apps"]["app-01"]["state"] = "unhealthy";
+    ASSERT_FALSE(ComposeAppManager::compareAppsStates(cur_state, new_state));
+   }
+   {
+    Json::Value new_state{Json::Value()};
+    Json::Value cur_state{Json::Value()};
+    new_state["apps"]["app-01"]["state"] = "healthy";
+    new_state["apps"]["app-01"]["uri"] = "123";
+    cur_state["apps"]["app-01"]["state"] = "healthy";
+    cur_state["apps"]["app-01"]["uri"] = "345";
+    ASSERT_FALSE(ComposeAppManager::compareAppsStates(cur_state, new_state));
+   }
+   {
+    Json::Value new_state{Json::Value()};
+    Json::Value cur_state{Json::Value()};
+    cur_state["apps"]["app-01"]["state"] = "healthy";
+    cur_state["apps"]["app-01"]["services"][0] = "";
+    new_state["apps"]["app-01"]["state"] = "healthy";
+    new_state["apps"]["app-01"]["services"][0] = "";
+    new_state["apps"]["app-01"]["services"][1] = "";
+    ASSERT_FALSE(ComposeAppManager::compareAppsStates(cur_state, new_state));
+   }
+}
+
 #ifndef __NO_MAIN__
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
