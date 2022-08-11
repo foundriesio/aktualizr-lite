@@ -571,6 +571,38 @@ Json::Value ComposeAppManager::getAppsState() const {
   return apps_state;
 }
 
+bool ComposeAppManager::compareAppsStates(const Json::Value& left, const Json::Value& right) {
+  // Unfortunately we cannot just compare json docs (Json::Value == Json::Value) because the App status
+  // includes Apps running duration which obviously changes as time goes.
+  // An input jsons are dicts of Apps, an app name is the dict key.
+  if (!left.isMember("apps") && !right.isMember("apps")) {
+    // no states at all, considered equal
+    return true;
+  }
+  if (left.size() != right.size()) {
+    // "apps" are present in one and missing in another
+    return false;
+  }
+  if (left["apps"].size() != right["apps"].size()) {
+    // Different quantity of Apps
+    return false;
+  }
+  for (Json::ValueConstIterator ii = left["apps"].begin(); ii != left["apps"].end(); ++ii) {
+    const auto app_name{ii.key().asString()};
+    if (!right["apps"].isMember(app_name)) {
+      // Different set of Apps
+      return false;
+    }
+    if ((*ii)["state"] != right["apps"][app_name]["state"] || (*ii)["uri"] != right["apps"][app_name]["uri"]) {
+      return false;
+    }
+    if ((*ii)["services"].size() != right["apps"][app_name]["services"].size()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target,
                                                                    bool check_store) const {
   AppsContainer apps;

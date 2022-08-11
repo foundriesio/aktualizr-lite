@@ -106,6 +106,7 @@ class LiteClient {
   std::vector<Uptane::Target> no_targets_;
 
   std::shared_ptr<Downloader> downloader_;
+  Json::Value apps_state_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_
