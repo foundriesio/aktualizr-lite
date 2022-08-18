@@ -1,6 +1,8 @@
 #ifndef AKTUALIZR_LITE_ROLLBACK_H_
 #define AKTUALIZR_LITE_ROLLBACK_H_
 
+#include <fstream>
+
 #include <boost/algorithm/algorithm.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
