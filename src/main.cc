@@ -5,6 +5,7 @@
 #include <boost/algorithm/string/join.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
 #include <boost/format.hpp>
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/program_options.hpp>
