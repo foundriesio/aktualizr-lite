@@ -107,6 +107,8 @@ class LiteClient {
 
   std::shared_ptr<Downloader> downloader_;
   Json::Value apps_state_;
+  const int report_queue_run_pause_s_{10};
+  const int report_queue_event_limit_{6};
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

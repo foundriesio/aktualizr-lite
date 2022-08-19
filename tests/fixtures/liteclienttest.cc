@@ -410,7 +410,7 @@ class ClientTest :virtual public ::testing::Test {
     // So, if we do the event draining by the queue instance re-creation then we need to fix/improve
     // the Device Gateway mock so it removes even duplicates.
     // sleep(2);
-    client.report_queue = std::make_unique<ReportQueue>(client.config, client.http_client, client.storage);
+    client.report_queue = std::make_unique<ReportQueue>(client.config, client.http_client, client.storage, 0, 1);
 
     const std::unordered_map<UpdateType, std::vector<std::string>> updateToevents = {
         { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},
@@ -423,7 +423,7 @@ class ClientTest :virtual public ::testing::Test {
     const std::vector<std::string>& expected_events{updateToevents.at(update_type)};
     auto expected_event_it = expected_events.begin();
     // wait a bit to make sure all events arrive at Device Gateway before making the following call
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
     auto events = getDeviceGateway().getEvents();
     ASSERT_EQ(expected_events.size(), events.size());
     for (auto rec_event_it = events.begin(); rec_event_it != events.end(); ++rec_event_it) {
