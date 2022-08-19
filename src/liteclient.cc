@@ -107,7 +107,8 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   if (!uptane_fetcher_) {
     uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
   }
-  report_queue = std_::make_unique<ReportQueue>(config, http_client, storage);
+  report_queue = std_::make_unique<ReportQueue>(config, http_client, storage, report_queue_run_pause_s_,
+                                                report_queue_event_limit_);
 
   if (config.pacman.type == ComposeAppManager::Name) {
     package_manager_ = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
