@@ -197,6 +197,40 @@ TEST_F(AkliteOffline, OfflineClient) {
   ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
 }
 
+TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
+  Uptane::Target target{Uptane::Target::Unknown()};
+
+  const auto layer_size{1024};
+  Json::Value layers;
+  layers["layers"][0]["digest"] =
+      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+  layers["layers"][0]["size"] = layer_size;
+
+  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
+  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
+  {
+    const std::vector<AppEngine::App> apps{app01};
+    addTarget(&apps);
+  }
+  const std::vector<AppEngine::App> apps{app01, app02};
+  target = addTarget(&apps);
+
+  // Remove all Target Apps from App store to make sure that only ostree can be updated
+  boost::filesystem::remove_all(app_store_.appsDir());
+  offline::UpdateSrc src{
+      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
+      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
+  };
+
+  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
+  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src));
+  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
+
+  reboot();
+
+  ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
+}
+
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << argv[0] << " invalid arguments\n";
