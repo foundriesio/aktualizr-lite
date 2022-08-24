@@ -186,8 +186,10 @@ static void parseUpdateContent(const Uptane::HardwareIdentifier& hw_id,
       found_ostree_commits.push_back(ref.second);
     }
   }
-
   {
+    if (!boost::filesystem::exists(apps_dir)) {
+      return;
+    }
     for (auto const& app_dir_entry : boost::filesystem::directory_iterator{apps_dir}) {
       const auto app_name{app_dir_entry.path().filename().string()};
       for (auto const& app_ver_dir_entry : boost::filesystem::directory_iterator{app_dir_entry.path()}) {
@@ -247,9 +249,6 @@ static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
     auto shortlisted_target_apps{Target::appsJson(t)};
 
     for (const auto& app : Target::Apps(t)) {
-      if (found_but_not_target_apps.empty()) {
-        break;
-      }
       if (found_apps.end() == std::find(found_apps.begin(), found_apps.end(), app.uri)) {
         // It may happen because App was shortlisted during running the CI run that fetched Apps, so we `continue` with
         // the App matching We just need to make sure that all found/update Apps macthes subset of Target Apps
@@ -258,6 +257,9 @@ static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
         continue;
       }
       found_but_not_target_apps.remove(app.uri);
+      if (found_but_not_target_apps.empty()) {
+        break;
+      }
     }
 
     if (found_but_not_target_apps.empty()) {
