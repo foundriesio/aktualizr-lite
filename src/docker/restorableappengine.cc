@@ -253,7 +253,7 @@ bool RestorableAppEngine::isRunning(const App& app) const {
 Json::Value RestorableAppEngine::getRunningAppsInfo() const {
   Json::Value apps;
   try {
-    apps = docker_client_->getRunningApps();
+    apps = docker_client_->getRunningApps(nullptr);
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
   }

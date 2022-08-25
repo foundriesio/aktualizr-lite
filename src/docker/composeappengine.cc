@@ -10,10 +10,10 @@
 namespace Docker {
 
 ComposeAppEngine::ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin,
-                                   Docker::DockerClient::Ptr docker_client, Docker::RegistryClient::Ptr registry_client)
+                                   AppEngine::Client::Ptr client, Docker::RegistryClient::Ptr registry_client)
     : root_{std::move(root_dir)},
       compose_{std::move(compose_bin)},
-      docker_client_{std::move(docker_client)},
+      client_{std::move(client)},
       registry_client_{std::move(registry_client)} {}
 
 AppEngine::Result ComposeAppEngine::fetch(const App& app) {
@@ -27,7 +27,7 @@ AppEngine::Result ComposeAppEngine::fetch(const App& app) {
     download(app);
     state.setState(AppState::State::kDownloaded);
 
-    exec(compose_ + "config", "compose App validation failed", boost::process::start_dir = appRoot(app));
+    runComposeCmd(app, "config", "compose App validation failed");
     state.setState(AppState::State::kVerified);
 
     pullImages(app);
@@ -154,7 +154,7 @@ AppEngine::Result ComposeAppEngine::run(const App& app) {
 void ComposeAppEngine::stop(const App& app) {
   try {
     const auto root_dir{appRoot(app)};
-    exec(compose_ + "down", "failed to bring App down", boost::process::start_dir = root_dir);
+    runComposeCmd(app, "down", "failed to bring App down");
   } catch (const std::exception& exc) {
     LOG_ERROR << "docker-compose was unable to bring down: " << exc.what();
   }
@@ -163,7 +163,7 @@ void ComposeAppEngine::stop(const App& app) {
 void ComposeAppEngine::remove(const App& app) {
   try {
     const auto root_dir{appRoot(app)};
-    exec(compose_ + "down", "failed to bring App down", boost::process::start_dir = root_dir);
+    runComposeCmd(app, "down", "failed to bring App down");
     boost::filesystem::remove_all(root_dir);
   } catch (const std::exception& exc) {
     LOG_ERROR << "docker-compose was unable to bring down: " << exc.what();
@@ -216,12 +216,12 @@ bool ComposeAppEngine::isRunning(const App& app) const {
     }
 
     Json::Value containers;
-    docker_client_->getContainers(containers);
+    client_->getContainers(containers);
 
     for (std::size_t i = 0; i < services.size(); i++) {
       std::string service = services[i].asString();
       std::string hash = info.getHash(services[i]);
-      const auto container_state{docker_client_->getContainerState(containers, app.name, service, hash)};
+      const auto container_state{client_->getContainerState(containers, app.name, service, hash)};
       if (std::get<0>(container_state) /* container exists */ &&
           std::get<1>(container_state) != "created" /* container was started */) {
         continue;
@@ -250,7 +250,7 @@ Json::Value ComposeAppEngine::getRunningAppsInfo() const {
       }
     };
 
-    apps = docker_client_->getRunningApps(ext_func);
+    apps = client_->getRunningApps(ext_func);
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
   }
@@ -302,7 +302,7 @@ AppEngine::Result ComposeAppEngine::verify(const App& app) {
   Result result{true};
   try {
     LOG_INFO << "Validating compose file";
-    exec(compose_ + "config", "compose file validation failed", boost::process::start_dir = appRoot(app));
+    runComposeCmd(app, "config", "compose file validation failed");
   } catch (const std::exception& exc) {
     result = {false, exc.what()};
   }
@@ -311,17 +311,17 @@ AppEngine::Result ComposeAppEngine::verify(const App& app) {
 
 void ComposeAppEngine::pullImages(const App& app) {
   LOG_INFO << "Pulling containers";
-  exec(compose_ + "pull --no-parallel", "failed to pull App images", boost::process::start_dir = appRoot(app));
+  runComposeCmd(app, "pull --no-parallel", "failed to pull App images");
 }
 
 void ComposeAppEngine::installApp(const App& app) {
   LOG_INFO << "Installing App";
-  exec(compose_ + "up --remove-orphans --no-start", "failed to install App", boost::process::start_dir = appRoot(app));
+  runComposeCmd(app, "up --remove-orphans --no-start", "failed to install App");
 }
 
 void ComposeAppEngine::start(const App& app) {
   LOG_INFO << "Starting App: " << app.name << " -> " << app.uri;
-  exec(compose_ + "up --remove-orphans -d", "failed to bring Compose App up", boost::process::start_dir = appRoot(app));
+  runComposeCmd(app, "up --remove-orphans -d", "failed to bring Compose App up");
 }
 
 bool ComposeAppEngine::areContainersCreated(const App& app) {
@@ -333,12 +333,12 @@ bool ComposeAppEngine::areContainersCreated(const App& app) {
   }
 
   Json::Value containers;
-  docker_client_->getContainers(containers);
+  client_->getContainers(containers);
 
   for (std::size_t i = 0; i < services.size(); i++) {
     std::string service = services[i].asString();
     std::string hash = info.getHash(services[i]);
-    const auto container_state{docker_client_->getContainerState(containers, app.name, service, hash)};
+    const auto container_state{client_->getContainerState(containers, app.name, service, hash)};
     if (std::get<0>(container_state) /* container exists */) {
       continue;
     }
@@ -483,6 +483,10 @@ void ComposeAppEngine::AppState::File::read(void* data, ssize_t size) const {
   if (-1 == rr) {
     throw std::system_error(errno, std::system_category(), std::string("Failed to read from a file: ") + path_);
   }
+}
+
+void ComposeAppEngine::runComposeCmd(const App& app, const std::string& cmd, const std::string& err_msg) const {
+  exec(compose_ + cmd, err_msg, boost::process::start_dir = appRoot(app));
 }
 
 }  // namespace Docker

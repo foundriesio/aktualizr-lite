@@ -16,7 +16,7 @@ class ComposeAppEngine : public AppEngine {
   static constexpr const char* const ArchiveExt{".tgz"};
   static constexpr const char* const ComposeFile{"docker-compose.yml"};
 
-  ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin, Docker::DockerClient::Ptr docker_client,
+  ComposeAppEngine(boost::filesystem::path root_dir, std::string compose_bin, AppEngine::Client::Ptr client,
                    Docker::RegistryClient::Ptr registry_client);
 
   Result fetch(const App& app) override;
@@ -34,6 +34,13 @@ class ComposeAppEngine : public AppEngine {
   }
 
   static void pruneDockerStore();
+
+ protected:
+  virtual void pullImages(const App& app);
+  virtual void installApp(const App& app);
+  virtual void runComposeCmd(const App& app, const std::string& cmd, const std::string& err_msg) const;
+  boost::filesystem::path appRoot(const App& app) const { return root_ / app.name; }
+  const std::string compose_;
 
  private:
   static constexpr const char* const MetaDir{".meta"};
@@ -108,19 +115,15 @@ class ComposeAppEngine : public AppEngine {
   static std::pair<bool, std::string> cmd(const std::string& cmd);
 
   void download(const App& app);
-  void pullImages(const App& app);
-  void installApp(const App& app);
   void start(const App& app);
   bool areContainersCreated(const App& app);
 
   static bool checkAvailableStorageSpace(const boost::filesystem::path& app_root, uint64_t& out_available_size);
   void verifyAppArchive(const App& app, const std::string& archive_file_name);
   void extractAppArchive(const App& app, const std::string& archive_file_name, bool delete_after_extraction = true);
-  boost::filesystem::path appRoot(const App& app) const { return root_ / app.name; }
 
   const boost::filesystem::path root_;
-  const std::string compose_;
-  Docker::DockerClient::Ptr docker_client_;
+  AppEngine::Client::Ptr client_;
   Docker::RegistryClient::Ptr registry_client_;
 };
 
