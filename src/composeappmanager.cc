@@ -8,6 +8,10 @@
 #include "bootloader/bootloaderlite.h"
 #include "docker/restorableappengine.h"
 #include "target.h"
+#ifdef BUILD_AKLITE_WITH_NERDCTL
+#include "containerd/client.h"
+#include "containerd/engine.h"
+#endif  // BUILD_AKLITE_WITH_NERDCTL
 
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
@@ -105,7 +109,6 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       cfg_{pconfig},
       app_engine_{std::move(app_engine)} {
   if (!app_engine_) {
-    auto docker_client{std::make_shared<Docker::DockerClient>()};
     auto registry_client{std::make_shared<Docker::RegistryClient>(http, cfg_.hub_auth_creds_endpoint)};
     std::string compose_cmd{boost::filesystem::canonical(cfg_.compose_bin).string() + " "};
 
@@ -134,11 +137,22 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
         docker_host = env.get("DOCKER_HOST");
       }
       app_engine_ = std::make_shared<Docker::RestorableAppEngine>(
-          cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client, docker_client, skopeo_cmd,
-          docker_host, compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
+          cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
+          std::make_shared<Docker::DockerClient>(), skopeo_cmd, docker_host, compose_cmd,
+          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
     } else {
-      app_engine_ =
-          std::make_shared<Docker::ComposeAppEngine>(cfg_.apps_root, compose_cmd, docker_client, registry_client);
+#ifdef BUILD_AKLITE_WITH_NERDCTL
+      if (cfg_.compose_bin.filename().compare("nerdctl") == 0) {
+        const auto nerdctl_cmd{boost::filesystem::canonical(cfg_.compose_bin).string()};
+        app_engine_ =
+            std::make_shared<containerd::Engine>(cfg_.apps_root, nerdctl_cmd + " compose ",
+                                                 std::make_shared<containerd::Client>(nerdctl_cmd), registry_client);
+      } else
+#endif  // BUILD_AKLITE_WITH_NERDCTL
+      {
+        app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
+            cfg_.apps_root, compose_cmd, std::make_shared<Docker::DockerClient>(), registry_client);
+      }
     }
   }
 }

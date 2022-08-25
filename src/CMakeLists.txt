@@ -42,6 +42,12 @@ set(HEADERS helpers.h
         downloader.h
         exec.h)
 
+if (BUILD_AKLITE_WITH_NERDCTL)
+  set(SRC ${SRC} containerd/client.cc containerd/engine.cc)
+  set(HEADERS ${HEADERS} containerd/client.h containerd/engine.h)
+  add_definitions(-DBUILD_AKLITE_WITH_NERDCTL)
+endif(BUILD_AKLITE_WITH_NERDCTL)
+
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
 add_library(${TARGET_LIB} SHARED ${SRC} api.cc)
