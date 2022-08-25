@@ -43,7 +43,8 @@ void DockerClient::getContainers(Json::Value& root) {
 }
 
 std::tuple<bool, std::string> DockerClient::getContainerState(const Json::Value& root, const std::string& app,
-                                                              const std::string& service, const std::string& hash) {
+                                                              const std::string& service,
+                                                              const std::string& hash) const {
   for (Json::ValueConstIterator ii = root.begin(); ii != root.end(); ++ii) {
     Json::Value val = *ii;
     if (val["Labels"]["com.docker.compose.project"].asString() == app) {
@@ -110,7 +111,7 @@ Json::Value DockerClient::getRunningApps(const std::function<void(const std::str
     }
 
     if (service_attributes["health"] != "healthy") {
-      service_attributes["logs"] = getContainerLogs(val["Id"].asString());
+      service_attributes["logs"] = getContainerLogs(val["Id"].asString(), 5);
     }
 
     apps[app_name]["services"].append(service_attributes);

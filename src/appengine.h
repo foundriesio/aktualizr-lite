@@ -1,6 +1,7 @@
 #ifndef AKTUALIZR_LITE_APP_ENGINE_H_
 #define AKTUALIZR_LITE_APP_ENGINE_H_
 
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -9,6 +10,29 @@
 
 class AppEngine {
  public:
+  class Client {
+   public:
+    using Ptr = std::shared_ptr<Client>;
+
+    virtual void getContainers(Json::Value& root) = 0;
+    virtual std::tuple<bool, std::string> getContainerState(const Json::Value& root, const std::string& app,
+                                                            const std::string& service,
+                                                            const std::string& hash) const = 0;
+    virtual std::string getContainerLogs(const std::string& id, int tail) = 0;
+    virtual const Json::Value& engineInfo() const = 0;
+    virtual const std::string& arch() const = 0;
+    virtual Json::Value getRunningApps(const std::function<void(const std::string&, Json::Value&)>& ext_func) = 0;
+
+    virtual ~Client() = default;
+    Client(const Client&&) = delete;
+    Client(const Client&) = delete;
+    Client& operator=(const Client&) = delete;
+    Client& operator=(const Client&&) = delete;
+
+   protected:
+    Client() = default;
+  };
+
   struct App {
     std::string name;
     std::string uri;
