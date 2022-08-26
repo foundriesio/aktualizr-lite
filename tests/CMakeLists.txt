@@ -9,6 +9,7 @@ add_test(test_aktualizr-lite
           ${CMAKE_BINARY_DIR}/aktualizr/src/uptane_generator/uptane-generator
           ${PROJECT_SOURCE_DIR}/aktualizr/tests
           ${CMAKE_CURRENT_SOURCE_DIR}/compose_fake.sh
+          ${CMAKE_CURRENT_SOURCE_DIR}/docker-daemon_fake.py
 )
 
 set_tests_properties(test_aktualizr-lite PROPERTIES DEPENDS uptane-generator)
@@ -52,7 +53,7 @@ add_aktualizr_test(NAME compose-apps
 
 target_compile_definitions(t_compose-apps PRIVATE ${TEST_DEFS})
 target_include_directories(t_compose-apps PRIVATE ${AKTUALIZR_DIR}/tests ${TEST_INCS} ${AKTUALIZR_DIR}/src/)
-target_link_libraries(t_compose-apps ${TEST_LIBS})
+target_link_libraries(t_compose-apps ${TEST_LIBS} testutilities)
 set_tests_properties(test_compose-apps PROPERTIES LABELS "aklite:compose-apps")
 
 add_aktualizr_test(NAME lite-helpers
