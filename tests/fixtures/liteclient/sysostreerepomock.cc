@@ -9,6 +9,10 @@ class SysOSTreeRepoMock {
     LOG_INFO << "System ostree-based repo has been initialized at " << path_;
   }
 
+  ~SysOSTreeRepoMock() {
+    boost::filesystem::remove_all(path_);
+  }
+
   const std::string& getPath() const { return path_; }
   OSTreeRepoMock& getRepo() { return repo_; }
 
