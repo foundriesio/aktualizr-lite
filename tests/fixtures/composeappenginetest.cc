@@ -12,6 +12,8 @@ class AppEngineTest : virtual public ::testing::Test {
   AppEngineTest() : registry{test_dir_.Path() / "registry"}, daemon_{test_dir_.Path() / "daemon"} {}
 
   void SetUp() override {
+    auto env{boost::this_process::environment()};
+    env.set("DOCKER_HOST", daemon_.getUnixSocket());
     compose_cmd =
         boost::filesystem::canonical("tests/docker-compose_fake.py").string() + " " + daemon_.dir().string() + " ";
 

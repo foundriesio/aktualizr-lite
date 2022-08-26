@@ -50,6 +50,8 @@ class AppStore {
     index_json["manifests"][0]["mediaType"] = "application/vnd.docker.distribution.manifest.v2+json";
     index_json["manifests"][0]["digest"] = "sha256:" + app->image().manifest().hash;
     index_json["manifests"][0]["size"] = app->image().manifest().size;
+    index_json["manifests"][0]["platform"]["architecture"] = "amd64";
+    index_json["manifests"][0]["platform"]["os"] = "linux";
     Utils::writeFile(image_dir / "index.json", Utils::jsonToStr(index_json));
     Utils::writeFile(blobs_dir_ / app->image().manifest().hash, app->image().manifest().data);
     Utils::writeFile(blobs_dir_ / app->image().config().hash, app->image().config().data);
@@ -189,7 +191,9 @@ TEST_F(AkliteOffline, OfflineClient) {
   };
 
   offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
-  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src));
+  auto env{boost::this_process::environment()};
+  env.set("DOCKER_HOST", daemon_.getUrl());
+  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
   ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
 
   reboot();
