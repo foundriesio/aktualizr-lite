@@ -423,7 +423,7 @@ class ClientTest :virtual public ::testing::Test {
     const std::vector<std::string>& expected_events{updateToevents.at(update_type)};
     auto expected_event_it = expected_events.begin();
     // wait a bit to make sure all events arrive at Device Gateway before making the following call
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     auto events = getDeviceGateway().getEvents();
     ASSERT_EQ(expected_events.size(), events.size());
     for (auto rec_event_it = events.begin(); rec_event_it != events.end(); ++rec_event_it) {
