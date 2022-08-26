@@ -2,13 +2,13 @@
 
 ## A simple wrapper to allow development to occur in a container.
 
-container="aklite-dev"
+container="foundries/aklite-dev"
 DEF_COMPILER_ARGS="-e CC=clang -e CXX=clang++"
 
 here=$(dirname $(readlink -f $0))
 cd $here
 
-if ! docker image inspect $container 2>/dev/null 1>/dev/null ; then
+if ! docker pull $container 2>/dev/null 1>/dev/null ; then
 	echo "Container not found, doing one time docker build"
 	docker build -t $container -f ./docker/Dockerfile .
 fi
