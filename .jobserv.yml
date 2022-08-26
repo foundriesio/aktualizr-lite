@@ -20,8 +20,9 @@ scripts:
   unit-test: |
     #!/bin/sh -ex
     export CCACHE_DIR=/tmp/ccache
-    wrapdocker
-    ./unit-test no-docker
+    wrapdocker &
+    chown -R testuser:testuser .
+    sudo -u testuser ./unit-test no-docker
 
   dev-flow: |
     #!/bin/bash -ex
