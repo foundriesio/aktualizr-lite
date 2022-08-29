@@ -16,6 +16,7 @@
 #include "composeappmanager.h"
 #include "docker/composeappengine.h"
 #include "target.h"
+#include "fixtures/dockerdaemon.cc"
 
 
 class FakeRegistry {
@@ -186,8 +187,9 @@ class TestSysroot: public OSTree::Sysroot {
 
 struct TestClient {
   TestClient(const char* apps = nullptr, const Uptane::Target* installedTarget = nullptr,
-             FakeRegistry* registry = nullptr, bool force_update = false, TestSysroot::Hasher sysroot_hasher = nullptr) {
-    tempdir = std_::make_unique<TemporaryDirectory>();
+             FakeRegistry* registry = nullptr, bool force_update = false, TestSysroot::Hasher sysroot_hasher = nullptr):
+             tempdir{std_::make_unique<TemporaryDirectory>()},
+             daemon{tempdir->Path() / "daemon"} {
 
     config.logger.loglevel = 1;
     config.pacman.type = ComposeAppManager::Name;
@@ -237,7 +239,7 @@ struct TestClient {
     ComposeAppManager::Config pacman_cfg{config.pacman};
     app_engine_ = std::make_shared<Docker::ComposeAppEngine>(pacman_cfg.apps_root,
                                                            boost::filesystem::canonical(pacman_cfg.compose_bin).string() + " ",
-                                                           std::make_shared<Docker::DockerClient>(),
+                                                           std::make_shared<Docker::DockerClient>(daemon.getClient()),
                                                            std::make_shared<Docker::RegistryClient>(http_client, pacman_cfg.hub_auth_creds_endpoint, registry_http_client_factory));
     pacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client, sysroot, *keys, app_engine_);
 
@@ -256,6 +258,7 @@ struct TestClient {
 
   Config config;
   std::unique_ptr<TemporaryDirectory> tempdir;
+  fixtures::DockerDaemon daemon;
   std::shared_ptr<INvStorage> storage;
   std::shared_ptr<ComposeAppManager> pacman;
   std::shared_ptr<Downloader> downloader;
