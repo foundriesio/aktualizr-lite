@@ -1,0 +1,48 @@
+name: Aklite CI Tests
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  clang:
+    runs-on: ubuntu-latest
+    container:
+      image: foundries/aklite-dev
+      env:
+        CXX: clang++
+        CC: clang
+        CCACHE_DIR: /tmp/ccache
+    
+    steps:
+      - uses: actions/checkout@v3
+      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+      - run: git submodule update --init --recursive
+      - name: config
+        run: make -f dev-flow.mk config
+      - name: format
+        run: make -f dev-flow.mk format
+      - name: tidy
+        run: make -f dev-flow.mk tidy
+
+  tests:
+    runs-on: ubuntu-latest
+    container:
+      image: foundries/aklite-dev
+      options: --privileged        
+      env:
+        CXX: clang++
+        CC: clang
+        CCACHE_DIR: /tmp/ccache
+    steps:
+      - uses: actions/checkout@v3
+      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+      - run: git submodule update --init --recursive
+      - name: build
+        run: make -f dev-flow.mk config build
+      - name: install
+        run: sudo make -f install
+      - name: custom-client
+        run: make -f custom-client
+
