@@ -1,0 +1,31 @@
+timeout: 30
+triggers:
+  - name: pull-request
+    type: github_pr
+    runs:
+      - name: unit-test
+        privileged: true
+        container: foundries/aklite-dev
+        host-tag: amd64
+        script: unit-test
+
+      - name: dev-flow
+        privileged: true
+        container: foundries/aklite-dev
+        host-tag: amd64
+        script: dev-flow
+
+scripts:
+
+  unit-test: |
+    #!/bin/sh -ex
+    export CCACHE_DIR=/tmp/ccache
+    wrapdocker &
+    chown -R testuser:testuser .
+    sudo -u testuser ./unit-test no-docker
+
+  dev-flow: |
+    #!/bin/bash -ex
+    wrapdocker &
+    chown -R testuser:testuser .
+    sudo -u testuser CCACHE_DIR=/tmp/ccache CXX=clang++ CC=clang make -f dev-flow.mk config build test
