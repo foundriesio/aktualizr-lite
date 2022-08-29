@@ -5,8 +5,28 @@
 #include "primary/reportqueue.h"
 #include "storage/invstorage.h"
 #include "target.h"
+#include "appengine.h"
+
+#include "fixtures/basehttpclient.cc"
 
 static boost::filesystem::path test_sysroot;
+
+
+class DockerHttpClientMock: public fixtures::BaseHttpClient {
+  public:
+    HttpResponse get(const std::string &url, int64_t maxsize) override {
+      if (url == "http://localhost/version") {
+        return HttpResponse("{\"Arch\": \"amd64\"}", 200, CURLE_OK, "");
+      }
+      return HttpResponse("", 500, CURLE_OK, "not supported");
+    }
+};
+
+static std::shared_ptr<AppEngine> createAppEngine(Config& config) {
+  return std::make_shared<Docker::ComposeAppEngine>(
+      config.pacman.extra["compose_apps_root"], config.pacman.extra["docker_compose_bin"],
+      std::make_shared<Docker::DockerClient>(std::make_shared<DockerHttpClientMock>()), nullptr);
+}
 
 TEST(version, bad_versions) {
   ASSERT_TRUE(Target::Version("bar") < Target::Version("foo"));
@@ -50,7 +70,7 @@ TEST(helpers, lite_client_finalize) {
   Uptane::Target target("test-finalize", target_json);
 
   storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
-  ASSERT_TRUE(target.MatchHash(LiteClient(config).getCurrent().hashes()[0]));
+  ASSERT_TRUE(target.MatchHash(LiteClient(config, createAppEngine(config)).getCurrent().hashes()[0]));
 
   config = Config();  // Create a new config since LiteClient std::move's it
   config.storage.path = cfg_dir.Path();
@@ -67,7 +87,7 @@ TEST(helpers, lite_client_finalize) {
   target_json["hashes"]["sha256"] = "abcd";
   Uptane::Target new_target("test-finalize", target_json);
   storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
-  ASSERT_FALSE(new_target.MatchHash(LiteClient(config).getCurrent().hashes()[0]));
+  ASSERT_FALSE(new_target.MatchHash(LiteClient(config, createAppEngine(config)).getCurrent().hashes()[0]));
 }
 
 TEST(helpers, target_has_tags) {
@@ -117,7 +137,7 @@ TEST(helpers, callback) {
   bad_config.storage.path = cfg_dir.Path();
   bad_config.pacman.extra["callback_program"] = "This does not exist";
 
-  LiteClient bad_client(bad_config);
+  LiteClient bad_client(bad_config, createAppEngine(bad_config));
   ASSERT_EQ(0, bad_client.callback_program.size());
   bad_client.callback("Just call to make sure it doesnt crash", Uptane::Target::Unknown());
 
@@ -142,7 +162,7 @@ TEST(helpers, callback) {
   Utils::writeFile(cb, script);
   chmod(cb.c_str(), S_IRWXU);
 
-  LiteClient(config).callback("AmigaOsInstall", Uptane::Target::Unknown(), "OK");
+  LiteClient(config, createAppEngine(config)).callback("AmigaOsInstall", Uptane::Target::Unknown(), "OK");
   std::string line;
   std::ifstream in(env);
   bool found_target = false, found_message = false, found_result = false;
@@ -185,7 +205,8 @@ static LiteClient createClient(TemporaryDirectory& cfg_dir,
   target_json["hashes"]["sha256"] = "deadbeef";
   target_json["custom"]["targetFormat"] = "OSTREE";
   target_json["length"] = 0;
-  return LiteClient(config);
+
+  return LiteClient(config, createAppEngine(config));
 }
 
 // Ensure we handle config changes of containers at start-up properly
