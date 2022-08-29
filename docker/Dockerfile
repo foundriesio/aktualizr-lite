@@ -113,6 +113,6 @@ RUN apt-get update && apt-get -y install skopeo && ln -s /usr/bin/skopeo /sbin/s
 # Install specific version of docker-compose
 RUN pip3 install docker==4.2.1 && pip3 install docker-compose==1.26
 
-RUN useradd -m testuser && usermod -aG docker testuser
+RUN useradd -m testuser && passwd -d testuser && usermod -aG docker testuser && adduser testuser sudo
 
 WORKDIR /
