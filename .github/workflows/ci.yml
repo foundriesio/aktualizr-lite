@@ -7,6 +7,7 @@ on:
 
 jobs:
   clang:
+    name: Clang Format And Tidy
     runs-on: ubuntu-latest
     container:
       image: foundries/aklite-dev
@@ -26,7 +27,8 @@ jobs:
       - name: tidy
         run: make -f dev-flow.mk tidy
 
-  tests:
+  custom-client:
+    name: Install Akite and Build Custom Client
     runs-on: ubuntu-latest
     container:
       image: foundries/aklite-dev
@@ -42,7 +44,33 @@ jobs:
       - name: build
         run: make -f dev-flow.mk config build
       - name: install
-        run: sudo make -f install
+        run: sudo make -f dev-flow.mk install
       - name: custom-client
-        run: make -f custom-client
+        run: make -f dev-flow.mk custom-client
 
+  garage-tools:
+    name: Build Garage Tools
+    runs-on: ubuntu-latest
+    container:
+      image: foundries/aklite-dev
+      env:
+        CXX: clang++
+        CC: clang
+        CCACHE_DIR: /tmp/ccache
+
+    steps:
+      - uses: actions/checkout@v3
+      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+      - run: git submodule update --init --recursive
+      - name: build garage tools
+        run: make -f dev-flow.mk garage-tools
+      - name: check garage tools
+        run: |
+          if [[ ! -f build-garage/aktualizr/src/sota_tools/garage-sign/bin/garage-sign ]]; then
+            echo "Failed to build garage-sign!"
+            exit 1
+          fi
+          if [[ ! -f build-garage/aktualizr/src/sota_tools/garage-push ]]; then
+            echo "Failed to build garage-push!"
+            exit 1
+          fi
