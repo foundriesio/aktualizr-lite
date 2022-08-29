@@ -168,6 +168,22 @@ set_tests_properties(test_aklite_rollback PROPERTIES LABELS "aklite:aklite-rollb
 
 aktualizr_source_file_checks(aklite_rollback_test.cc)
 
+add_aktualizr_test(NAME aklite_rollback_ext
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> aklite_rollback_ext_test.cc
+  PROJECT_WORKING_DIRECTORY
+  ARGS
+  ${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
+  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+)
+
+target_compile_definitions(t_aklite_rollback_ext PRIVATE ${TEST_DEFS})
+target_include_directories(t_aklite_rollback_ext PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_aklite_rollback_ext ${TEST_LIBS} uptane_generator_lib testutilities)
+add_dependencies(t_aklite_rollback_ext make_ostree_sysroot)
+set_tests_properties(test_aklite_rollback_ext PROPERTIES LABELS "aklite:aklite-rollback-ext")
+
+aktualizr_source_file_checks(aklite_rollback_ext_test.cc)
+
 add_aktualizr_test(NAME apiclient
   SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> apiclient_test.cc
   PROJECT_WORKING_DIRECTORY
