@@ -62,7 +62,9 @@ class MetaFetcher : public Uptane::IMetadataFetcher {
 
 namespace client {
 
-PostInstallAction install(const Config& cfg_in, const UpdateSrc& src);
+PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
+                          std::shared_ptr<HttpInterface> docker_client_http_client =
+                              Docker::DockerClient::DefaultHttpClientFactory("unix:///var/run/docker.sock"));
 PostRunAction run(const Config& cfg_in,
                   std::shared_ptr<HttpInterface> docker_client_http_client =
                       Docker::DockerClient::DefaultHttpClientFactory("unix:///var/run/docker.sock"));
