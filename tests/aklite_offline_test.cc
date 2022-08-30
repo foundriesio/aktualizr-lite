@@ -223,7 +223,7 @@ TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
   };
 
   offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
-  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src));
+  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
   ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
 
   reboot();
