@@ -317,8 +317,9 @@ static void registerApps(const Uptane::Target& target, const boost::filesystem::
   Utils::writeFile(repositories_file.string(), repositories);
 }
 
-PostInstallAction install(const Config& cfg_in, const UpdateSrc& src) {
-  auto client{createOfflineClient(cfg_in, src)};
+PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
+                          std::shared_ptr<HttpInterface> docker_client_http_client) {
+  auto client{createOfflineClient(cfg_in, src, docker_client_http_client)};
 
   const auto import{client->isRootMetaImportNeeded()};
   if (std::get<0>(import)) {
