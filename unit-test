@@ -5,7 +5,7 @@ cd $here
 
 if [ $# -eq 0 ] ; then
 	echo "Launching unit tests in docker"
-	TEST=1 exec ./dev-shell sudo -u testuser ./unit-test indocker
+	exec ./dev-shell ./unit-test indocker
 fi
 
 set -x

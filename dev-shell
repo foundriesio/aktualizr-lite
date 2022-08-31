@@ -8,6 +8,7 @@ DEF_COMPILER_ARGS="-e CC=clang -e CXX=clang++"
 here=$(dirname $(readlink -f $0))
 cd $here
 
+echo "Pulling ${container} unless found locally..."
 if ! docker pull $container 2>/dev/null 1>/dev/null ; then
 	echo "Container not found, doing one time docker build"
 	docker build -t $container -f ./docker/Dockerfile .
@@ -21,8 +22,4 @@ else
 fi
 
 set -x
-if [ -n "${TEST}" ]; then
-	exec docker run --privileged $DEF_COMPILER_ARGS $CCACHE_ARGS --entrypoint="wrapdocker" --rm -it -v $here:$here -w $here $container $*
-else
-	exec docker run --privileged $DEF_COMPILER_ARGS $CCACHE_ARGS -u $(id -u):$(id -g) --rm -it -v $here:$here -w $here $container $*
-fi
+exec docker run $DEF_COMPILER_ARGS $CCACHE_ARGS -u $(id -u):$(id -g) --rm -it -v $here:$here -w $here $container $*
