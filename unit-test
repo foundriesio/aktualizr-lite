@@ -11,17 +11,10 @@ fi
 set -x
 
 build=$(mktemp -d)
-install=$(mktemp -d)
-
-export CC=clang
-export CXX=clang++
 
 echo "## Compiling aklite"
-cmake -S . -B $build -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON
-cmake --build $build --target aklite-tests
+CC=clang CXX=clang++ BUILD_DIR="${build}" EXTRA_CMAKE_CONFIG_ARGS="-DBUILD_AKLITE_OFFLINE=OFF -DBUILD_AKLITE_WITH_NERDCTL=OFF" make -f dev-flow.mk
 
 echo "## Running aklite unit tests"
-cd $build
-ctest -j6 -L aklite --output-on-failure
-cd $here
+BUILD_DIR="${build}" make -f dev-flow.mk test
 rm -rf $build
