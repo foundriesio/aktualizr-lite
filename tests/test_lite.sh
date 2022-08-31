@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -ex
 
+
 build_dir=$(pwd)
 aklite=$1
 uptane_gen_bin=$2
@@ -8,6 +9,7 @@ tests_dir=$3
 compose_bin=$4
 #valgrind=$4
 valgrind=""
+docker_daemon=$5
 
 dest_dir=$(mktemp -d)
 
@@ -18,8 +20,27 @@ cleanup() {
         echo "killing webserver"
         kill $pid
     fi
+    if [ -n "${daemon_pid}" ] ; then
+      echo "killing docker daemon mock: "${daemon_pid}""
+      kill "${daemon_pid}"
+    fi
+    if [ -n "${daemon_sock}" ] && [ -r "${daemon_sock}" ]; then
+      rm -f "${daemon_sock}"
+    fi
+    if [ -n "${daemon_dir}" ] && [ -d "${daemon_dir}" ]; then
+      rm -rf "${daemon_dir}"
+    fi
 }
 trap cleanup EXIT
+
+start_docker_daemon_mock() {
+  daemon_dir=$(mktemp -d)
+  daemon_sock=$(mktemp -u)
+  "${docker_daemon}" -d "${daemon_dir}" -u "${daemon_sock}" &
+  daemon_pid=$!
+  export DOCKER_HOST="unix://${daemon_sock}"
+  echo "docker daemon mock is listening on ${daemon_sock}"
+}
 
 uptane_gen() {
     $uptane_gen_bin --repotype image --path "$dest_dir" "$@"
@@ -51,6 +72,7 @@ EOF
                --hwid hwid-for-test --targetcustom $custom_json
 }
 
+start_docker_daemon_mock
 uptane_gen --command generate --expires 2041-07-04T16:33:27Z
 add_target 1000 foo1
 add_target 1001 foo2
@@ -165,4 +187,3 @@ if [ -f ${sota_dir}/${callback}.log ] ; then
     echo "ERROR: Callback not performed for $callback"
     exit 1
 fi
-
