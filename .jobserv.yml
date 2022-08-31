@@ -8,17 +8,8 @@ triggers:
         host-tag: amd64
         script: unit-test
 
-      - name: dev-flow
-        container: foundries/aklite-dev
-        host-tag: amd64
-        script: dev-flow
-
 scripts:
 
   unit-test: |
     #!/bin/sh -ex
     CCACHE_DIR=/tmp/ccache ./unit-test no-docker
-
-  dev-flow: |
-    #!/bin/bash -ex
-    CCACHE_DIR=/tmp/ccache CXX=clang++ CC=clang make -f dev-flow.mk config build test
