@@ -11,7 +11,7 @@ cd $here
 echo "Pulling ${container} unless found locally..."
 if ! docker pull $container 2>/dev/null 1>/dev/null ; then
 	echo "Container not found, doing one time docker build"
-	docker build -t $container -f ./docker/Dockerfile .
+	docker build -t $container -f ./docker/Dockerfile ./docker
 fi
 
 if [ -n "$CCACHE_DIR" ] ; then
@@ -22,4 +22,4 @@ else
 fi
 
 set -x
-exec docker run $DEF_COMPILER_ARGS $CCACHE_ARGS -u $(id -u):$(id -g) --rm -it -v $here:$here -w $here $container $*
+exec docker run --init $DEF_COMPILER_ARGS $CCACHE_ARGS -u $(id -u):$(id -g) --rm -it -v $here:$here -w $here $container $*
