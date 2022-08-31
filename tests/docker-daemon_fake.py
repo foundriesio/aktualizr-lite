@@ -14,12 +14,25 @@ logger = logging.getLogger("Fake Docker Daemon")
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def do_HEAD(self):
+        logger.info(">>> HEAD  %s" % self.path)
+        self.send_response(200)
+        self.send_header('Api-Version:', '1.41')
+        self.end_headers()
+
     def do_GET(self):
         logger.info(">>> GET  %s" % self.path)
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps({'Arch': 'amd64'}).encode())
+        if self.path.startswith('/_ping'):
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain; charset=utf-8')
+            self.send_header('Api-Version:', '1.41')
+            self.end_headers()
+        else:
+            self.send_response(200)
+            self.send_header('Api-Version:', '1.41')
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'Arch': 'amd64'}).encode())
 
     def do_POST(self):
         logger.info(">>> POST  %s" % self.path)
