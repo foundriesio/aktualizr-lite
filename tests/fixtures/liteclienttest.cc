@@ -149,6 +149,7 @@ class ClientTest :virtual public ::testing::Test {
     }
 
     auto client = std::make_shared<LiteClient>(conf, app_engine);
+    client->report_queue = std::make_unique<ReportQueue>(client->config, client->http_client, client->storage, 0, 1);
 
     // import root metadata
     const auto import{client->isRootMetaImportNeeded()};
@@ -400,18 +401,6 @@ class ClientTest :virtual public ::testing::Test {
   }
 
   void checkEvents(LiteClient& client, const Uptane::Target& target, UpdateType update_type, const std::string& download_failure_err_msg = "", const std::string& install_failure_err_msg = "") {
-    // Before checking events we need to make sure that the ReportQueue actually has drained all events.
-    // Unfortunatelly, it doesn't expose any public method to do it, so we need either `sleep()` here
-    // or re-create the report queueu instance. Sleeping tests running time longer and it's not reliable
-    // since we don't know how much time we really need to sleep in order to drain all events.
-    // Therefore, let's re-create the queue instance. Unfortunatelly, it uncovers the sync issue in ReportQueue.
-    // Specifically, it may cause sending of the same event(s) twice because the `ReportQueue::flushQueue()`
-    // invocations in the dtor and the ReportQueue::run() are not synced or/and deleting events from the DB.
-    // So, if we do the event draining by the queue instance re-creation then we need to fix/improve
-    // the Device Gateway mock so it removes even duplicates.
-    // sleep(2);
-    client.report_queue = std::make_unique<ReportQueue>(client.config, client.http_client, client.storage, 0, 1);
-
     const std::unordered_map<UpdateType, std::vector<std::string>> updateToevents = {
         { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},
         { UpdateType::kApp, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},
@@ -422,10 +411,11 @@ class ClientTest :virtual public ::testing::Test {
     };
     const std::vector<std::string>& expected_events{updateToevents.at(update_type)};
     auto expected_event_it = expected_events.begin();
-    // wait a bit to make sure all events arrive at Device Gateway before making the following call
+    // drain events by recreating the report queue and wait a bit to make sure all events arrive at Device Gateway before making the following call
+    client.report_queue = std::make_unique<ReportQueue>(client.config, client.http_client, client.storage, 0, 1);
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     auto events = getDeviceGateway().getEvents();
-    ASSERT_EQ(expected_events.size(), events.size());
+    ASSERT_EQ(expected_events.size(), events.size()) << events;
     for (auto rec_event_it = events.begin(); rec_event_it != events.end(); ++rec_event_it) {
       const auto& rec_event_json = *rec_event_it;
       const auto event_type = rec_event_json["eventType"]["id"].asString();
