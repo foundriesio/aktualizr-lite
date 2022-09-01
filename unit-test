@@ -5,56 +5,16 @@ cd $here
 
 if [ $# -eq 0 ] ; then
 	echo "Launching unit tests in docker"
-	TEST=1 exec ./dev-shell sudo -u testuser ./unit-test indocker
+	exec ./dev-shell ./unit-test indocker
 fi
 
 set -x
 
 build=$(mktemp -d)
-export CC=clang
-export CXX=clang++
 
 echo "## Compiling aklite"
-cmake -S . -B $build -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON
-cmake --build $build --target aklite-tests
-
-echo "## Running clang tidy checks"
-clang_tests=$(ninja -C $build help | grep aktualizr_clang_tidy-src- | cut -d: -f1)
-cmake --build $build --target $clang_tests
-
-
-echo "## Running clang format checks"
-clang_tests=$(ninja -C $build help | grep aktualizr_ci_clang_format-src- | cut -d: -f1)
-cmake --build $build --target $clang_tests
+CC=clang CXX=clang++ BUILD_DIR="${build}" EXTRA_CMAKE_CONFIG_ARGS="-DBUILD_AKLITE_OFFLINE=OFF -DBUILD_AKLITE_WITH_NERDCTL=OFF" make -f dev-flow.mk
 
 echo "## Running aklite unit tests"
-cd $build
-ctest -j6 -V -L aklite
-ninja install
-cd $here
-rm -rf $build
-
-echo "## Compiling the custom-client-cxx example"
-build=$(mktemp -d)
-cp -r $here/aktualizr/third_party/jsoncpp/include/json /usr/include
-cd $build
-cmake -GNinja $here/examples/custom-client-cxx
-ninja
-cd $here
-rm -rf $build
-
-echo "## Compiling garage tools"
-build=$(mktemp -d)
-cmake -S . -B $build -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON -DBUILD_SOTA_TOOLS=ON
-cmake --build $build --target all
-
-if [[ ! -f $build/aktualizr/src/sota_tools/garage-sign/bin/garage-sign ]]; then
-  echo "Failed to build garage-sign!"
-  exit 1
-fi
-if [[ ! -f $build/aktualizr/src/sota_tools/garage-push ]]; then
-  echo "Failed to build garage-push!"
-  exit 1
-fi
-
+BUILD_DIR="${build}" make -f dev-flow.mk test
 rm -rf $build
