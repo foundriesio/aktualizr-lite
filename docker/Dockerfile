@@ -98,13 +98,6 @@ RUN mkdir ostree && cd ostree && git init && git remote add origin https://githu
     --with-curl --without-soup --prefix=/usr && \
     make -j8  install
 
-# Docker in docker
-RUN curl -sSL https://get.docker.com/ | sh
-
-# Install the magic wrapper.
-ADD ./docker/wrapdocker /usr/local/bin/wrapdocker
-RUN chmod +x /usr/local/bin/wrapdocker
-
 # Install skopeo
 RUN echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     wget -nv https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key -O- | apt-key add -
@@ -112,7 +105,5 @@ RUN apt-get update && apt-get -y install skopeo && ln -s /usr/bin/skopeo /sbin/s
 
 # Install specific version of docker-compose
 RUN pip3 install docker==4.2.1 && pip3 install docker-compose==1.26
-
-RUN useradd -m testuser && usermod -aG docker testuser
 
 WORKDIR /

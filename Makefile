@@ -9,12 +9,12 @@ CC ?= clang
 GTEST_FILTER ?= "*"
 
 
-TASKS = config build format tidy
+TASKS = config build format tidy garage-tools
 .PHONY: $(TASKS) test
 
 
 all $(TASKS):
-	docker run -u $(shell id -u):$(shell id -g) --rm -v $(PWD):$(PWD) -w $(PWD) -eCCACHE_DIR=$(CCACHE_DIR) -eCC=$(CC) -eCXX=$(CXX) -eBUILD_DIR=$(BUILD_DIR) -eTARGET=$(TARGET) $(CONTAINER) make -f dev-flow.mk $@
+	docker run --init -u $(shell id -u):$(shell id -g) --rm -v $(PWD):$(PWD) -w $(PWD) -eCCACHE_DIR=$(CCACHE_DIR) -eCC=$(CC) -eCXX=$(CXX) -eBUILD_DIR=$(BUILD_DIR) -eTARGET=$(TARGET) $(CONTAINER) make -f dev-flow.mk $@
 
 test:
-	docker run --privileged  --entrypoint="wrapdocker"  --rm -v $(PWD):$(PWD) -w $(PWD) $(CONTAINER) sudo -u testuser TEST_LABEL=$(TEST_LABEL) CTEST_ARGS=$(CTEST_ARGS) BUILD_DIR=$(BUILD_DIR) GTEST_FILTER=$(GTEST_FILTER) make -f dev-flow.mk $@
+	docker run --init -u $(shell id -u):$(shell id -g) --rm -v $(PWD):$(PWD) -w $(PWD) -eTEST_LABEL=$(TEST_LABEL) -eCTEST_ARGS=$(CTEST_ARGS) -eBUILD_DIR=$(BUILD_DIR) -eGTEST_FILTER=$(GTEST_FILTER) $(CONTAINER) make -f dev-flow.mk $@
