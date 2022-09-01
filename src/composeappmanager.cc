@@ -315,34 +315,11 @@ TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const
 }
 
 data::InstallationResult ComposeAppManager::install(const Uptane::Target& target) const {
-  data::InstallationResult res;
-  Uptane::Target current = OstreeManager::getCurrent();
-  // Do ostree install if the currently installed target's hash differs from the specified target's hash,
-  // or there is pending installation and it differs from the specified target so we undeploy it and make the new target
-  // pending
-  if ((current.sha256Hash() != target.sha256Hash()) ||
-      (!sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty() &&
-       sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kPending) != target.sha256Hash())) {
-    // notify the bootloader before installation happens as it is not atomic
-    // and a false notification doesn't hurt with rollback support in place
-    // Hacking in order to invoke non-const method from the const one !!!
-    const_cast<ComposeAppManager*>(this)->updateNotify();
-    res = OstreeManager::install(target);
-    if (res.result_code.num_code == data::ResultCode::Numeric::kInstallFailed) {
-      LOG_ERROR << "Failed to install OSTree target, skipping Docker Compose Apps";
-      res.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
-      return res;
-    }
-    const_cast<ComposeAppManager*>(this)->installNotify(target);
-    if (current.sha256Hash() == target.sha256Hash() &&
-        res.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
-      LOG_INFO << "Successfully undeployed the pending failing Target";
-      LOG_INFO << "Target " << target.sha256Hash() << " is same as current";
-      res = data::InstallationResult(data::ResultCode::Numeric::kOk, "OSTree hash already installed, same as current");
-    }
-  } else {
-    LOG_INFO << "Target " << target.sha256Hash() << " is same as current";
-    res = data::InstallationResult(data::ResultCode::Numeric::kOk, "OSTree hash already installed, same as current");
+  data::InstallationResult res{RootfsTreeManager::install(target)};
+  if (res.result_code.num_code == data::ResultCode::Numeric::kInstallFailed) {
+    LOG_ERROR << "OSTree target installation has failed, skipping Docker Compose Apps";
+    res.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
+    return res;
   }
 
   bool prune_images{cfg_.docker_prune};
