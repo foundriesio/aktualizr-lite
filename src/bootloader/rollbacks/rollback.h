@@ -26,34 +26,39 @@ class Rollback {
 
  protected:
   static std::string getVersion(const Uptane::Target& target) {
-    std::string file;
-    for (auto& p : boost::filesystem::directory_iterator("/ostree/deploy/lmp/deploy/")) {
-      std::string dir = p.path().string();
-      if (!boost::filesystem::is_directory(dir)) {
-        continue;
+    try {
+      std::string file;
+      for (auto& p : boost::filesystem::directory_iterator("/ostree/deploy/lmp/deploy/")) {
+        std::string dir = p.path().string();
+        if (!boost::filesystem::is_directory(dir)) {
+          continue;
+        }
+        if (boost::algorithm::contains(dir, target.sha256Hash())) {
+          file = dir + "/usr/lib/firmware/version.txt";
+          break;
+        }
       }
-      if (boost::algorithm::contains(dir, target.sha256Hash())) {
-        file = dir + "/usr/lib/firmware/version.txt";
-        break;
+      if (file.empty()) {
+        LOG_WARNING << "Target hash not found";
+        return std::string();
       }
-    }
-    if (file.empty()) {
-      LOG_WARNING << "Target hash not found";
-      return std::string();
-    }
 
-    LOG_INFO << "Target firmware file: " << file;
-    std::ifstream ifs(file);
-    std::string version((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-    std::string watermark = "bootfirmware_version";
-    std::string::size_type i = version.find(watermark);
-    if (i != std::string::npos) {
-      version.erase(i, watermark.length() + 1);
-      LOG_INFO << "Target firmware version: " << version;
-      return version;
-    } else {
-      LOG_WARNING << "Target firmware version not found";
-      return std::string();
+      LOG_INFO << "Target firmware file: " << file;
+      std::ifstream ifs(file);
+      std::string version((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+      std::string watermark = "bootfirmware_version";
+      std::string::size_type i = version.find(watermark);
+      if (i != std::string::npos) {
+        version.erase(i, watermark.length() + 1);
+        LOG_INFO << "Target firmware version: " << version;
+        return version;
+      } else {
+        LOG_WARNING << "Target firmware version not found";
+        return std::string();
+      }
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to obtain Target firmware version:  " << exc.what();
+      return "";
     }
   }
 };
