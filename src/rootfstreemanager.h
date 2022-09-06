@@ -22,7 +22,8 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   RootfsTreeManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
                     std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys)
-      : OstreeManager(pconfig, bconfig, storage, http, new BootloaderLite(bconfig, *storage)),
+      : OstreeManager(pconfig, bconfig, storage, http,
+                      new BootloaderLite(bconfig, *storage, sysroot->deployment_path())),
         sysroot_{std::move(sysroot)},
         http_client_{http},
         gateway_url_{pconfig.ostree_server},

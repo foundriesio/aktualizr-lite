@@ -6,6 +6,8 @@
 
 class MaskedRollback : public Rollback {
  public:
+  explicit MaskedRollback(const std::string& deployment_path) : Rollback(deployment_path) {}
+
   void setBootOK() override {
     std::string sink;
     if (Utils::shell("fw_setenv bootcount 0", &sink) != 0) {

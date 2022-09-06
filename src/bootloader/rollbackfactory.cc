@@ -4,7 +4,7 @@
 #include "rollbacks/generic.h"
 #include "rollbacks/masked.h"
 
-std::unique_ptr<Rollback> RollbackFactory::makeRollback(RollbackMode mode) {
+std::unique_ptr<Rollback> RollbackFactory::makeRollback(RollbackMode mode, const std::string& deployment_path) {
   switch (mode) {
     case RollbackMode::kBootloaderNone:
       return std::make_unique<Rollback>();
@@ -13,10 +13,10 @@ std::unique_ptr<Rollback> RollbackFactory::makeRollback(RollbackMode mode) {
       return std::make_unique<GenericRollback>();
       break;
     case RollbackMode::kUbootMasked:
-      return std::make_unique<MaskedRollback>();
+      return std::make_unique<MaskedRollback>(deployment_path);
       break;
     case RollbackMode::kFioVB:
-      return std::make_unique<FiovbRollback>();
+      return std::make_unique<FiovbRollback>(deployment_path);
       break;
     default:
       return std::make_unique<ExceptionRollback>();

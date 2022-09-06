@@ -4,7 +4,10 @@
 namespace OSTree {
 
 Sysroot::Sysroot(std::string sysroot_path, BootedType booted, std::string os_name)
-    : path_{std::move(sysroot_path)}, booted_{booted}, os_name_{std::move(os_name)} {
+    : path_{std::move(sysroot_path)},
+      booted_{booted},
+      os_name_{std::move(os_name)},
+      deployment_path_{path_ + "/ostree/deploy/" + os_name_ + "/deploy"} {
   sysroot_ = OstreeManager::LoadSysroot(path_);
 }
 

@@ -13,7 +13,10 @@
 
 class Rollback {
  public:
-  Rollback() = default;
+  constexpr static const char* const VersionFile{"/usr/lib/firmware/version.txt"};
+
+  explicit Rollback(std::string deployment_dir = "/ostree/deploy/lmp/deploy/")
+      : deployment_dir_{std::move(deployment_dir)} {}
   virtual ~Rollback() = default;
   Rollback(const Rollback&) = delete;
   Rollback(Rollback&&) = delete;
@@ -25,16 +28,16 @@ class Rollback {
   virtual void installNotify(const Uptane::Target& target) { (void)target; }
 
  protected:
-  static std::string getVersion(const Uptane::Target& target) {
+  std::string getVersion(const Uptane::Target& target) {
     try {
       std::string file;
-      for (auto& p : boost::filesystem::directory_iterator("/ostree/deploy/lmp/deploy/")) {
+      for (auto& p : boost::filesystem::directory_iterator(deployment_dir_)) {
         std::string dir = p.path().string();
         if (!boost::filesystem::is_directory(dir)) {
           continue;
         }
         if (boost::algorithm::contains(dir, target.sha256Hash())) {
-          file = dir + "/usr/lib/firmware/version.txt";
+          file = dir + VersionFile;
           break;
         }
       }
@@ -61,6 +64,9 @@ class Rollback {
       return "";
     }
   }
+
+ private:
+  const std::string deployment_dir_;
 };
 
 #endif  // AKTUALIZR_LITE_ROLLBACK_H_

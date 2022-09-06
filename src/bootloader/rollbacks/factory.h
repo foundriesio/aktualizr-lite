@@ -6,7 +6,7 @@
 
 class RollbackFactory {
  public:
-  static std::unique_ptr<Rollback> makeRollback(RollbackMode mode);
+  static std::unique_ptr<Rollback> makeRollback(RollbackMode mode, const std::string& deployment_path);
 };
 
 #endif  // AKTUALIZR_LITE_ROLLBACK_FACTORY_H_
