@@ -76,11 +76,16 @@ class LiteClientTest : public fixtures::ClientTest {
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
 };
 
+class LiteClientTestMultiPacman : public LiteClientTest, public ::testing::WithParamInterface<std::string> {
+ protected:
+  void tweakConf(Config& conf) override { conf.pacman.type = GetParam(); };
+};
+
 /*----------------------------------------------------------------------------*/
 /*  TESTS                                                                     */
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
-TEST_F(LiteClientTest, OstreeUpdateWhenNoInstalledVersions) {
+TEST_P(LiteClientTestMultiPacman, OstreeUpdateWhenNoInstalledVersions) {
   // boot device with no installed versions
   auto client = createLiteClient(InitialVersion::kOff);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
@@ -102,7 +107,7 @@ TEST_F(LiteClientTest, OstreeUpdateWhenNoInstalledVersions) {
   checkHeaders(*client, new_target);
 }
 
-TEST_F(LiteClientTest, OstreeUpdateInstalledVersionsCorrupted1) {
+TEST_P(LiteClientTestMultiPacman, OstreeUpdateInstalledVersionsCorrupted1) {
   // boot device with an invalid initial_version json file (ostree sha)
   auto client = createLiteClient(InitialVersion::kCorrupted1);
 
@@ -125,7 +130,7 @@ TEST_F(LiteClientTest, OstreeUpdateInstalledVersionsCorrupted1) {
   checkHeaders(*client, new_target);
 }
 
-TEST_F(LiteClientTest, OstreeUpdateInstalledVersionsCorrupted2) {
+TEST_P(LiteClientTestMultiPacman, OstreeUpdateInstalledVersionsCorrupted2) {
   // boot device with a corrupted json file in the filesystem
   auto client = createLiteClient(InitialVersion::kCorrupted2);
 
@@ -148,7 +153,7 @@ TEST_F(LiteClientTest, OstreeUpdateInstalledVersionsCorrupted2) {
   checkHeaders(*client, new_target);
 }
 
-TEST_F(LiteClientTest, OstreeUpdate) {
+TEST_P(LiteClientTestMultiPacman, OstreeUpdate) {
   // boot device
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
@@ -163,7 +168,7 @@ TEST_F(LiteClientTest, OstreeUpdate) {
   checkHeaders(*client, new_target);
 }
 
-TEST_F(LiteClientTest, OstreeUpdateNoSpace) {
+TEST_P(LiteClientTestMultiPacman, OstreeUpdateNoSpace) {
   // boot device
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
@@ -181,7 +186,7 @@ TEST_F(LiteClientTest, OstreeUpdateNoSpace) {
   checkHeaders(*client, getInitialTarget());
 }
 
-TEST_F(LiteClientTest, OstreeUpdateRollback) {
+TEST_P(LiteClientTestMultiPacman, OstreeUpdateRollback) {
   // boot device
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
@@ -210,7 +215,7 @@ TEST_F(LiteClientTest, OstreeUpdateRollback) {
   checkHeaders(*client, new_target_03);
 }
 
-TEST_F(LiteClientTest, OstreeUpdateToLatestAfterManualUpdate) {
+TEST_P(LiteClientTestMultiPacman, OstreeUpdateToLatestAfterManualUpdate) {
   // boot device
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
@@ -436,7 +441,7 @@ TEST_F(LiteClientTest, CheckEmptyTargets) {
   ASSERT_GT(client->allTargets().size(), 0);
 }
 
-TEST_F(LiteClientTest, OstreeUpdateIfSameVersion) {
+TEST_P(LiteClientTestMultiPacman, OstreeUpdateIfSameVersion) {
   // boot device
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
@@ -462,6 +467,9 @@ TEST_F(LiteClientTest, OstreeUpdateIfSameVersion) {
     checkHeaders(*client, target_01_1);
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(MultiPacmanType, LiteClientTestMultiPacman,
+                         ::testing::Values(RootfsTreeManager::Name, ComposeAppManager::Name));
 
 /*
  * main
