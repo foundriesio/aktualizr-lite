@@ -6,6 +6,8 @@
 
 class FiovbRollback : public Rollback {
  public:
+  explicit FiovbRollback(const std::string& deployment_path) : Rollback(deployment_path) {}
+
   void setBootOK() override {
     std::string sink;
     if (Utils::shell("fiovb_setenv bootcount 0", &sink) != 0) {

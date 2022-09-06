@@ -9,7 +9,7 @@ class INvStorage;
 
 class BootloaderLite : public Bootloader {
  public:
-  explicit BootloaderLite(BootloaderConfig config, INvStorage& storage);
+  explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, const std::string& deployment_path);
 
   void setBootOK() const override;
   void updateNotify() const override;
