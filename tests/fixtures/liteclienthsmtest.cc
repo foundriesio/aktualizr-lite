@@ -35,6 +35,7 @@ class ClientHSMTest : public ClientTest {
 
     conf.bootloader.reboot_command = "/bin/true";
     conf.bootloader.reboot_sentinel_dir = conf.storage.path; // note
+    conf.bootloader.rollback_mode = RollbackMode::kFioVB;
 
     conf.uptane.repo_server = device_gateway_.getTufRepoUri();
 

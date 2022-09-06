@@ -1,3 +1,6 @@
+#include <boost/filesystem.hpp>
+#include <boost/format.hpp>
+
 #include "primary/reportqueue.h"
 #include "crypto/p11engine.h"
 #include "http/httpclient.h"
@@ -11,6 +14,8 @@ namespace fixtures {
 #include "liteclient/sysostreerepomock.cc"
 #include "liteclient/tufrepomock.cc"
 #include "liteclient/devicegatewaymock.cc"
+#include "liteclient/fiovb.cc"
+
 
 class ClientTest :virtual public ::testing::Test {
  public:
@@ -18,7 +23,8 @@ class ClientTest :virtual public ::testing::Test {
 
  protected:
   ClientTest(std::string certs_dir = "")
-      : sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
+      : fiovb_{(test_dir_.Path() / "fiovb").string()},
+        sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
         sys_repo_{(test_dir_.Path() / "sysrepo").string(), os},
         tuf_repo_{test_dir_.Path() / "repo"},
         ostree_repo_{(test_dir_.Path() / "treehub").string(), true},
@@ -72,6 +78,7 @@ class ClientTest :virtual public ::testing::Test {
 
     conf.bootloader.reboot_command = "/bin/true";
     conf.bootloader.reboot_sentinel_dir = conf.storage.path;
+    conf.bootloader.rollback_mode = RollbackMode::kFioVB;
     conf.import.base_path = test_dir_ / "import";
 
     if (initial_version == InitialVersion::kOn || initial_version == InitialVersion::kCorrupted1 ||
@@ -274,6 +281,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
 
       checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
+      checkBootloaderFlags(expected_install_code);
     } else {
       checkEvents(client, from, UpdateType::kDownloadFailed, expected_download_result.description);
     }
@@ -382,6 +390,7 @@ class ClientTest :virtual public ::testing::Test {
       app_shortlist_ = new_app_list;
     }
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
+    ASSERT_EQ(0, fiovb_.bootcount());
   }
 
   /**
@@ -439,6 +448,14 @@ class ClientTest :virtual public ::testing::Test {
     }
   }
 
+  void checkBootloaderFlags(data::ResultCode::Numeric install_res) {
+    if (install_res != data::ResultCode::Numeric::kInstallFailed) {
+      ASSERT_EQ(1, fiovb_.upgrade_available());
+      ASSERT_EQ(0, fiovb_.bootcount());
+      ASSERT_EQ(0, fiovb_.rollback());
+    }
+  }
+
   /**
    * methods: miscellaneous
    */
@@ -459,6 +476,7 @@ class ClientTest :virtual public ::testing::Test {
 
  protected:
   TemporaryDirectory test_dir_;  // must be the first element in the class
+  FioVb fiovb_;
   SysRootFS sys_rootfs_;
   SysOSTreeRepoMock sys_repo_;
   TufRepoMock tuf_repo_;
