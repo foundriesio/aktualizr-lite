@@ -41,6 +41,7 @@ class ClientTest :virtual public ::testing::Test {
   virtual std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
                                                        boost::optional<std::vector<std::string>> apps = boost::none,
                                                        bool finalize = true) = 0;
+  virtual void tweakConf(Config& conf) {};
 
   /**
    * method createLiteClient
@@ -155,6 +156,7 @@ class ClientTest :virtual public ::testing::Test {
       getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, "1");
     }
 
+    tweakConf(conf);
     auto client = std::make_shared<LiteClient>(conf, app_engine);
     // Recreate the report queue with the configuration needed for tests, specifically:
     // - make the worker thread not to wait before reading from DB and sending to DG the next set of events;
