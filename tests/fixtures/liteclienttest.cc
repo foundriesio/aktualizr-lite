@@ -149,9 +149,9 @@ class ClientTest :virtual public ::testing::Test {
     }
 
     auto client = std::make_shared<LiteClient>(conf, app_engine);
-	// Recreate the report queue with the configuration needed for tests, specifically:
-	// - make the worker thread not to wait before reading from DB and sending to DG the next set of events;
-	// - make the report queue include just one event in a single request to DG.
+    // Recreate the report queue with the configuration needed for tests, specifically:
+    // - make the worker thread not to wait before reading from DB and sending to DG the next set of events;
+    // - make the report queue include just one event in a single request to DG.
     client->report_queue = std::make_unique<ReportQueue>(client->config, client->http_client, client->storage, 0, 1);
 
     // import root metadata
@@ -414,8 +414,8 @@ class ClientTest :virtual public ::testing::Test {
     };
     const std::vector<std::string>& expected_events{updateToevents.at(update_type)};
     auto expected_event_it = expected_events.begin();
-	// drain all events to DG by recreating the report queue instance
-	client.report_queue = std::make_unique<ReportQueue>(client.config, client.http_client, client.storage, 0, 1);
+    // drain all events to DG by recreating the report queue instance
+    client.report_queue = std::make_unique<ReportQueue>(client.config, client.http_client, client.storage, 0, 1);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     auto events = getDeviceGateway().getEvents();
     ASSERT_EQ(expected_events.size(), events.size()) << events;
