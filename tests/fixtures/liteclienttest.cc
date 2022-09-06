@@ -4,6 +4,7 @@
 #include "primary/reportqueue.h"
 #include "crypto/p11engine.h"
 #include "http/httpclient.h"
+#include "bootloader/rollbacks/rollback.h"
 
 
 namespace fixtures {
@@ -189,7 +190,8 @@ class ClientTest :virtual public ::testing::Test {
    */
   Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid = "",
                               const std::string& rootfs_path = "", boost::optional<TufRepoMock&> tuf_repo = boost::none,
-                              const std::string& ver = "") {
+                              const std::string& ver = "",
+                              const std::string& bootloader_ver = "bootfirmware_version:1.1") {
     auto& repo{!!tuf_repo?*tuf_repo:getTufRepo()};
     const auto& latest_target{repo.getLatest()};
     std::string version{ver};
@@ -210,6 +212,7 @@ class ClientTest :virtual public ::testing::Test {
       rootfs = getSysRootFs().path;
     }
     Utils::writeFile(rootfs + "/" + unique_file, unique_content, true);
+    Utils::writeFile(rootfs + Rollback::VersionFile, bootloader_ver, true);
     auto hash = getOsTreeRepo().commit(rootfs, "lmp");
 
     Json::Value apps_json;
@@ -264,7 +267,7 @@ class ClientTest :virtual public ::testing::Test {
    */
   void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
               data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kNeedCompletion,
-              DownloadResult expected_download_result = {DownloadResult::Status::Ok, ""}, const std::string& expected_install_err_msg = "") {
+              DownloadResult expected_download_result = {DownloadResult::Status::Ok, ""}, const std::string& expected_install_err_msg = "", bool expect_boot_firmware = true) {
     device_gateway_.resetEvents();
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
@@ -283,7 +286,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
 
       checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
-      checkBootloaderFlags(expected_install_code);
+      checkBootloaderFlags(expect_boot_firmware);
     } else {
       checkEvents(client, from, UpdateType::kDownloadFailed, expected_download_result.description);
     }
@@ -450,11 +453,12 @@ class ClientTest :virtual public ::testing::Test {
     }
   }
 
-  void checkBootloaderFlags(data::ResultCode::Numeric install_res) {
-    if (install_res != data::ResultCode::Numeric::kInstallFailed) {
-      ASSERT_EQ(1, fiovb_.upgrade_available());
-      ASSERT_EQ(0, fiovb_.bootcount());
-      ASSERT_EQ(0, fiovb_.rollback());
+  void checkBootloaderFlags(bool expect_boot_firmware = true) {
+    ASSERT_EQ(1, fiovb_.upgrade_available());
+    ASSERT_EQ(0, fiovb_.bootcount());
+    ASSERT_EQ(0, fiovb_.rollback());
+    if (expect_boot_firmware) {
+      ASSERT_EQ(1, fiovb_.bootupgrade_available());
     }
   }
 
