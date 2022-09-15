@@ -385,17 +385,15 @@ void ComposeAppEngine::extractAppArchive(const App& app, const std::string& arch
   }
 }
 
-void ComposeAppEngine::pruneDockerStore() {
-  LOG_INFO << "Pruning unused docker containers";
-  if (std::system("docker container prune -f --filter=\"label!=aktualizr-no-prune\"") != 0) {
-    LOG_WARNING << "Unable to prune unused docker containers";
-  }
+void ComposeAppEngine::pruneDockerStore(AppEngine::Client& client) {
+  try {
+    LOG_INFO << "Pruning unused docker containers";
+    client.pruneContainers();
 
-  LOG_INFO << "Pruning unused docker images";
-  // Utils::shell which isn't interactive, we'll use std::system so that
-  // stdout/stderr is streamed while docker sets things up.
-  if (std::system("docker image prune -a -f --filter=\"label!=aktualizr-no-prune\"") != 0) {
-    LOG_WARNING << "Unable to prune unused docker images";
+    LOG_INFO << "Pruning unused docker images";
+    client.pruneImages();
+  } catch (const std::exception& exc) {
+    LOG_ERROR << exc.what();
   }
 }
 
