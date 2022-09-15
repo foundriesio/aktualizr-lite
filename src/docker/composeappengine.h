@@ -30,10 +30,10 @@ class ComposeAppEngine : public AppEngine {
   Json::Value getRunningAppsInfo() const override;
   void prune(const Apps& app_shortlist) override {
     (void)app_shortlist;
-    pruneDockerStore();
+    pruneDockerStore(*client_);
   }
 
-  static void pruneDockerStore();
+  static void pruneDockerStore(AppEngine::Client& client);
 
  protected:
   virtual void pullImages(const App& app);

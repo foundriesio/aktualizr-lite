@@ -37,14 +37,15 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         logger.info(">>> POST  %s" % self.path)
 
-        while True:
-            line = self.rfile.readline().strip()
-            chunk_length = int(line, 16)
-            if chunk_length == 0:
-                break
+        if not (self.path.startswith('/containers/prune') or self.path.startswith('/images/prune')):
+            while True:
+                line = self.rfile.readline().strip()
+                chunk_length = int(line, 16)
+                if chunk_length == 0:
+                    break
 
-            self.rfile.read(chunk_length)
-            self.rfile.readline()
+                self.rfile.read(chunk_length)
+                self.rfile.readline()
 
         self.send_response(200)
         self.end_headers()

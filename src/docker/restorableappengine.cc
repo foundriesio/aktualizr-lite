@@ -357,7 +357,7 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
 
   // prune docker store
   if (prune_docker_store) {
-    ComposeAppEngine::pruneDockerStore();
+    ComposeAppEngine::pruneDockerStore(*docker_client_);
   }
 }
 

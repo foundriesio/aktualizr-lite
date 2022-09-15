@@ -25,6 +25,8 @@ class DockerClient : public AppEngine::Client {
   const Json::Value& engineInfo() const override { return engine_info_; }
   const std::string& arch() const override { return arch_; }
   Json::Value getRunningApps(const std::function<void(const std::string&, Json::Value&)>& ext_func) override;
+  void pruneImages() override;
+  void pruneContainers() override;
 
  private:
   Json::Value getEngineInfo();

@@ -123,6 +123,31 @@ Json::Value DockerClient::getRunningApps(const std::function<void(const std::str
   return apps;
 }
 
+void DockerClient::pruneImages() {
+  // curl -G -X POST --unix-socket <sock> "http://localhost/images/prune" --data-urlencode
+  // 'filters={"dangling":{"false":true},"label!":{"aktualizr-no-prune":true}}'
+  // filters=%7B%22dangling%22%3A%7B%22false%22%3Atrue%7D%2C%22label%21%22%3A%7B%22aktualizr-no-prune%22%3Atrue%7D%7D
+  const std::string cmd{
+      "http://localhost/images/"
+      "prune?filters=%7B%22dangling%22%3A%7B%22false%22%3Atrue%7D%2C%22label%21%22%3A%7B%22aktualizr-no-prune%22%"
+      "3Atrue%7D%7D"};
+  auto resp = http_client_->post(cmd, Json::nullValue);
+  if (!resp.isOk()) {
+    throw std::runtime_error("Failed to prune unused images: " + resp.getStatusStr());
+  }
+}
+void DockerClient::pruneContainers() {
+  // curl -G -X POST --unix-socket <sock> "http://localhost/containers/prune" --data-urlencode
+  // 'filters={"label!":{"aktualizr-no-prune":true}}'
+  // filters=%7B%22label%21%22%3A%7B%22aktualizr-no-prune%22%3Atrue%7D%7D
+  const std::string cmd{
+      "http://localhost/containers/prune?filters=%7B%22label%21%22%3A%7B%22aktualizr-no-prune%22%3Atrue%7D%7D"};
+  auto resp = http_client_->post(cmd, Json::nullValue);
+  if (!resp.isOk()) {
+    throw std::runtime_error("Failed to prune unused containers: " + resp.getStatusStr());
+  }
+}
+
 Json::Value DockerClient::getEngineInfo() {
   Json::Value info;
   const std::string cmd{"http://localhost/version"};
