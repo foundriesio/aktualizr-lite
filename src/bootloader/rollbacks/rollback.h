@@ -65,6 +65,26 @@ class Rollback {
     }
   }
 
+  static void increaseBootUpgradeAvailable(const std::string& get_cmd, const std::string& set_cmd) {
+    std::string ba_str{"0"};
+    if (Utils::shell(get_cmd + " bootupgrade_available", &ba_str) != 0) {
+      LOG_WARNING << "Failed to read bootupgrade_available, assume it is set to 0";
+    }
+    int bootupgrade_available{0};
+    try {
+      bootupgrade_available = std::stoi(ba_str);
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to convert `bootupgrade_available` value: " << exc.what() << "; assume it is set to 0";
+    }
+    ++bootupgrade_available;
+    std::string sink;
+    if (Utils::shell(set_cmd + " bootupgrade_available " + std::to_string(bootupgrade_available), &sink) == 0) {
+      LOG_INFO << "bootupgrade_available is set to " << bootupgrade_available;
+    } else {
+      LOG_WARNING << "Failed to set bootupgrade_available";
+    }
+  }
+
  private:
   const std::string deployment_dir_;
 };

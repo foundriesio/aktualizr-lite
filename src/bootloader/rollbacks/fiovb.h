@@ -41,13 +41,13 @@ class FiovbRollback : public Rollback {
       LOG_WARNING << "Failed to read bootfirmware_version";
       sink = std::string();
     }
-    LOG_INFO << "Current firmware version: " << sink;
-    if (sink != version) {
-      LOG_INFO << "Update firmware to version: " << version;
-      if (Utils::shell("fiovb_setenv bootupgrade_available 1", &sink) != 0) {
-        LOG_WARNING << "Failed to set bootupgrade_available";
-      }
+    LOG_INFO << "Current bootfirmware version: " << sink;
+    if (sink == version) {
+      LOG_INFO << "No new bootfirmware version is found";
+      return;
     }
+    LOG_INFO << "New bootfirmware is found: " << version;
+    increaseBootUpgradeAvailable("fiovb_printenv", "fiovb_setenv");
   }
 };
 

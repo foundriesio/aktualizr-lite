@@ -41,13 +41,13 @@ class MaskedRollback : public Rollback {
       LOG_WARNING << "Failed to read bootfirmware_version";
       return;
     }
-    LOG_INFO << "Current boot firmware version: " << sink;
-    if (sink != version) {
-      LOG_INFO << "Update firmware to version: " << version;
-      if (Utils::shell("fw_setenv bootupgrade_available 1", &sink) != 0) {
-        LOG_WARNING << "Failed to set bootupgrade_available";
-      }
+    LOG_INFO << "Current bootfirmware version: " << sink;
+    if (sink == version) {
+      LOG_INFO << "No new bootfirmware version is found";
+      return;
     }
+    LOG_INFO << "New bootfirmware is found: " << version;
+    increaseBootUpgradeAvailable("fw_printenv -n", "fw_setenv");
   }
 };
 
