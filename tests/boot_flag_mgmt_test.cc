@@ -103,6 +103,123 @@ INSTANTIATE_TEST_SUITE_P(
                       std::tuple<std::string, RollbackMode>{"ostree+compose_apps", RollbackMode::kUbootMasked},
                       std::tuple<std::string, RollbackMode>{"ostree+compose_apps", RollbackMode::kFioVB}));
 
+class BootUpgradeFlagMgmtTestSuite : public BootFlagMgmtTestSuite {};
+
+TEST_P(BootUpgradeFlagMgmtTestSuite, OstreeAndBootloaderUpdate) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // First update
+  {
+    // Create a new Target: update rootfs and commit it into Treehub's repo
+    auto new_target =
+        createTarget(nullptr, "", "", boost::none, "", std::string(bootloader::BootloaderLite::VersionTitle) + ":1.1");
+    update(*client, getInitialTarget(), new_target);
+
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+    checkHeaders(*client, new_target);
+  }
+
+  // make sure `bootupgrade_available` is set to 1 after the first successful reboot
+  ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 1);
+
+  // Second update
+  {
+    // Create a new Target: update rootfs and commit it into Treehub's repo
+    auto new_target =
+        createTarget(nullptr, "", "", boost::none, "", std::string(bootloader::BootloaderLite::VersionTitle) + ":1.2");
+    update(*client, client->getCurrent(), new_target);
+    // make sure `bootupgrade_available` is set to 2 after the second successful update
+    ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 2);
+    // emulate the bootloader reset of `bootupgrade_available` to 0
+    boot_flag_mgr_->set_bootupgrade_available(0);
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+    checkHeaders(*client, new_target);
+    ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 0);
+  }
+}
+
+TEST_P(BootUpgradeFlagMgmtTestSuite, OstreeAndBootloaderUpdateFollowedByRollback) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // First update
+  {
+    // Create a new Target: update rootfs and commit it into Treehub's repo
+    auto new_target =
+        createTarget(nullptr, "", "", boost::none, "", std::string(bootloader::BootloaderLite::VersionTitle) + ":1.1");
+    update(*client, getInitialTarget(), new_target);
+
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+    checkHeaders(*client, new_target);
+  }
+
+  // make sure `bootupgrade_available` is set to 1 after the first successful reboot
+  ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 1);
+
+  // Second update
+  {
+    const auto initialTarget{client->getCurrent()};
+    // Create a new Target: update rootfs and commit it into Treehub's repo
+    auto new_target =
+        createTarget(nullptr, "", "", boost::none, "", std::string(bootloader::BootloaderLite::VersionTitle) + ":1.2");
+    update(*client, client->getCurrent(), new_target);
+    // make sure `bootupgrade_available` is set to 2 after the second successful update
+    ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 2);
+
+    // emulate rollback caused by App installation failure
+    client->install(initialTarget);
+
+    ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 1);
+  }
+}
+
+TEST_P(BootUpgradeFlagMgmtTestSuite, OstreeUpdateIfNoBootloaderUpdate) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // First update
+  {
+    // Create a new Target: update rootfs and commit it into Treehub's repo
+    auto new_target =
+        createTarget(nullptr, "", "", boost::none, "", std::string(bootloader::BootloaderLite::VersionTitle) + ":1.1");
+    update(*client, getInitialTarget(), new_target);
+
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+    checkHeaders(*client, new_target);
+  }
+
+  // make sure `bootupgrade_available` is set to 1 after the first successful reboot
+  ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 1);
+
+  // Second update
+  {
+    const auto initialTarget{client->getCurrent()};
+    // Create a new Target: update rootfs and commit it into Treehub's repo
+    // No boot fw update, it' still 1.1
+    auto new_target =
+        createTarget(nullptr, "", "", boost::none, "", std::string(bootloader::BootloaderLite::VersionTitle) + ":1.1");
+    update(*client, client->getCurrent(), new_target);
+    // make sure `bootupgrade_available` is still 1 after the second successful update which does not include the boot
+    // fw update
+    ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 1);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    BootUpgradeFlagMgmtTestParam, BootUpgradeFlagMgmtTestSuite,
+    ::testing::Values(std::tuple<std::string, RollbackMode>{"ostree", RollbackMode::kUbootMasked},
+                      std::tuple<std::string, RollbackMode>{"ostree", RollbackMode::kFioVB},
+                      std::tuple<std::string, RollbackMode>{"ostree+compose_apps", RollbackMode::kUbootMasked},
+                      std::tuple<std::string, RollbackMode>{"ostree+compose_apps", RollbackMode::kFioVB}));
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";

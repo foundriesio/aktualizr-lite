@@ -92,8 +92,7 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateWhenNoInstalledVersions) {
 
   // Create a new Target: update rootfs and commit it into Treehub's repo
   auto new_target = createTarget(nullptr, "", "", boost::none, "", "no_bootfirmware_update");
-  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kNeedCompletion,
-         {DownloadResult::Status::Ok, ""}, "", false);
+  update(*client, getInitialTarget(), new_target);
 
   // check there is still no target
   auto req_headers = getDeviceGateway().getReqHeaders();

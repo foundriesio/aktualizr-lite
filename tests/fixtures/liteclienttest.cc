@@ -165,10 +165,6 @@ class ClientTest :virtual public ::testing::Test {
       }
       case RollbackMode::kUbootMasked: {
         boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
-        std::string sink;
-        if (Utils::shell("fw_setenv bootfirmware_version 0.1", &sink) != 0) {
-          throw std::runtime_error("Failed to set bootfirmware_version");
-        }
         break;
        }
       case RollbackMode::kUbootGeneric: {
@@ -212,7 +208,7 @@ class ClientTest :virtual public ::testing::Test {
   Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid = "",
                               const std::string& rootfs_path = "", boost::optional<TufRepoMock&> tuf_repo = boost::none,
                               const std::string& ver = "",
-                              const std::string& bootloader_ver = "bootfirmware_version:1.1") {
+                              const std::string& bootloader_ver = std::string(bootloader::BootloaderLite::VersionTitle) + ":1.1") {
     auto& repo{!!tuf_repo?*tuf_repo:getTufRepo()};
     const auto& latest_target{repo.getLatest()};
     std::string version{ver};
@@ -288,7 +284,7 @@ class ClientTest :virtual public ::testing::Test {
    */
   void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
               data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kNeedCompletion,
-              DownloadResult expected_download_result = {DownloadResult::Status::Ok, ""}, const std::string& expected_install_err_msg = "", bool expect_boot_firmware = true) {
+              DownloadResult expected_download_result = {DownloadResult::Status::Ok, ""}, const std::string& expected_install_err_msg = "") {
     device_gateway_.resetEvents();
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
@@ -307,7 +303,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
 
       checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
-      checkBootloaderFlags(client.config.bootloader.rollback_mode, expect_boot_firmware);
+      checkBootloaderFlags(client.config.bootloader.rollback_mode);
     } else {
       checkEvents(client, from, UpdateType::kDownloadFailed, expected_download_result.description);
     }
@@ -417,6 +413,14 @@ class ClientTest :virtual public ::testing::Test {
     }
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
     ASSERT_EQ(0, boot_flag_mgr_->bootcount());
+
+    // After reboot the deployed ostree directory is mount on `/` hence the `version.txt` that is present
+    // in the ostree deploy folder becomes present in the sysroot mount/folder
+    const auto depl_path{OSTree::Sysroot(sys_repo_.getPath(), BootedType::kStaged).deployment_path()};
+    const std::string boot_fm_ver{bootloader::BootloaderLite::getVersion(depl_path, bootloader::BootloaderLite::VersionFile, bootloader::BootloaderLite::VersionTitle, client->getCurrent().sha256Hash())};
+    if (!boot_fm_ver.empty()) {
+      Utils::writeFile(sys_repo_.getPath() + bootloader::BootloaderLite::VersionFile, std::string(bootloader::BootloaderLite::VersionTitle) + ":" + boot_fm_ver);
+    }
   }
 
   /**
@@ -474,15 +478,12 @@ class ClientTest :virtual public ::testing::Test {
     }
   }
 
-  void checkBootloaderFlags(RollbackMode bootloader_mode, bool expect_boot_firmware = true) {
+  void checkBootloaderFlags(RollbackMode bootloader_mode) {
     ASSERT_EQ(0, boot_flag_mgr_->bootcount());
     ASSERT_EQ(0, boot_flag_mgr_->rollback());
 
     if (bootloader_mode == RollbackMode::kUbootMasked || bootloader_mode == RollbackMode::kFioVB) {
       ASSERT_EQ(1, boot_flag_mgr_->upgrade_available());
-      if (expect_boot_firmware) {
-        ASSERT_EQ(1, boot_flag_mgr_->bootupgrade_available());
-      }
     }
   }
 
