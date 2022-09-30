@@ -4,7 +4,7 @@
 #include "primary/reportqueue.h"
 #include "crypto/p11engine.h"
 #include "http/httpclient.h"
-#include "bootloader/rollbacks/rollback.h"
+#include "bootloader/bootloaderlite.h"
 
 
 namespace fixtures {
@@ -212,7 +212,7 @@ class ClientTest :virtual public ::testing::Test {
       rootfs = getSysRootFs().path;
     }
     Utils::writeFile(rootfs + "/" + unique_file, unique_content, true);
-    Utils::writeFile(rootfs + Rollback::VersionFile, bootloader_ver, true);
+    Utils::writeFile(rootfs + bootloader::BootloaderLite::VersionFile, bootloader_ver, true);
     auto hash = getOsTreeRepo().commit(rootfs, "lmp");
 
     Json::Value apps_json;

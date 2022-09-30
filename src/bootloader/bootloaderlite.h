@@ -3,20 +3,24 @@
 
 #include "bootloader/bootloader.h"
 #include "libaktualizr/config.h"
-#include "rollbacks/rollback.h"
+#include "ostree/sysroot.h"
 
 class INvStorage;
 
+namespace bootloader {
+
 class BootloaderLite : public Bootloader {
  public:
-  explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, const std::string& deployment_path);
+  static constexpr const char* const VersionFile{"/usr/lib/firmware/version.txt"};
 
-  void setBootOK() const override;
-  void updateNotify() const override;
+  explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot);
+
   void installNotify(const Uptane::Target& target) const override;
 
  private:
-  std::unique_ptr<Rollback> rollback_;
+  OSTree::Sysroot::Ptr sysroot_;
 };
+
+}  // namespace bootloader
 
 #endif  // AKTUALIZR_LITE_BOOTLOADERLITE_H_

@@ -11,6 +11,7 @@ namespace OSTree {
 class Sysroot {
  public:
   enum class Deployment { kCurrent = 0, kPending, kRollback };
+  using Ptr = std::shared_ptr<Sysroot>;
 
   explicit Sysroot(std::string sysroot_path, BootedType booted = BootedType::kBooted, std::string os_name = "lmp");
 

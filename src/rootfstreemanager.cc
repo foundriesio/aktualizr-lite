@@ -1,4 +1,7 @@
 #include "rootfstreemanager.h"
+
+#include <boost/algorithm/string.hpp>
+
 #include "ostree/repo.h"
 #include "target.h"
 
