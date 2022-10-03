@@ -15,7 +15,7 @@ namespace fixtures {
 #include "liteclient/sysostreerepomock.cc"
 #include "liteclient/tufrepomock.cc"
 #include "liteclient/devicegatewaymock.cc"
-#include "liteclient/fiovb.cc"
+#include "liteclient/boot_flag_mgr.cc"
 
 
 class ClientTest :virtual public ::testing::Test {
@@ -24,7 +24,7 @@ class ClientTest :virtual public ::testing::Test {
 
  protected:
   ClientTest(std::string certs_dir = "")
-      : fiovb_{(test_dir_.Path() / "fiovb").string()},
+      : boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())},
         sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
         sys_repo_{(test_dir_.Path() / "sysrepo").string(), os},
         tuf_repo_{test_dir_.Path() / "repo"},
@@ -158,6 +158,27 @@ class ClientTest :virtual public ::testing::Test {
     }
 
     tweakConf(conf);
+    switch (conf.bootloader.rollback_mode) {
+      case RollbackMode::kFioVB: {
+        boot_flag_mgr_ = std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string());
+        break;
+      }
+      case RollbackMode::kUbootMasked: {
+        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
+        std::string sink;
+        if (Utils::shell("fw_setenv bootfirmware_version 0.1", &sink) != 0) {
+          throw std::runtime_error("Failed to set bootfirmware_version");
+        }
+        break;
+       }
+      case RollbackMode::kUbootGeneric: {
+        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
+        break;
+      }
+      default:
+        break;
+    }
+
     auto client = std::make_shared<LiteClient>(conf, app_engine);
     // Recreate the report queue with the configuration needed for tests, specifically:
     // - make the worker thread not to wait before reading from DB and sending to DG the next set of events;
@@ -286,7 +307,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
 
       checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
-      checkBootloaderFlags(expect_boot_firmware);
+      checkBootloaderFlags(client.config.bootloader.rollback_mode, expect_boot_firmware);
     } else {
       checkEvents(client, from, UpdateType::kDownloadFailed, expected_download_result.description);
     }
@@ -395,7 +416,7 @@ class ClientTest :virtual public ::testing::Test {
       app_shortlist_ = new_app_list;
     }
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
-    ASSERT_EQ(0, fiovb_.bootcount());
+    ASSERT_EQ(0, boot_flag_mgr_->bootcount());
   }
 
   /**
@@ -453,12 +474,15 @@ class ClientTest :virtual public ::testing::Test {
     }
   }
 
-  void checkBootloaderFlags(bool expect_boot_firmware = true) {
-    ASSERT_EQ(1, fiovb_.upgrade_available());
-    ASSERT_EQ(0, fiovb_.bootcount());
-    ASSERT_EQ(0, fiovb_.rollback());
-    if (expect_boot_firmware) {
-      ASSERT_EQ(1, fiovb_.bootupgrade_available());
+  void checkBootloaderFlags(RollbackMode bootloader_mode, bool expect_boot_firmware = true) {
+    ASSERT_EQ(0, boot_flag_mgr_->bootcount());
+    ASSERT_EQ(0, boot_flag_mgr_->rollback());
+
+    if (bootloader_mode == RollbackMode::kUbootMasked || bootloader_mode == RollbackMode::kFioVB) {
+      ASSERT_EQ(1, boot_flag_mgr_->upgrade_available());
+      if (expect_boot_firmware) {
+        ASSERT_EQ(1, boot_flag_mgr_->bootupgrade_available());
+      }
     }
   }
 
@@ -482,7 +506,7 @@ class ClientTest :virtual public ::testing::Test {
 
  protected:
   TemporaryDirectory test_dir_;  // must be the first element in the class
-  FioVb fiovb_;
+  BootFlagMgr::Ptr boot_flag_mgr_;
   SysRootFS sys_rootfs_;
   SysOSTreeRepoMock sys_repo_;
   TufRepoMock tuf_repo_;
