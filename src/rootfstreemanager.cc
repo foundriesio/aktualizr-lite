@@ -83,10 +83,18 @@ data::InstallationResult RootfsTreeManager::install(const Uptane::Target& target
   Uptane::Target current = OstreeManager::getCurrent();
   // Do ostree install if the currently installed target's hash differs from the specified target's hash,
   // or there is pending installation and it differs from the specified target so we undeploy it and make the new target
-  // pending
+  // pending (app driven rollback)
   if ((current.sha256Hash() != target.sha256Hash()) ||
       (!sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty() &&
        sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kPending) != target.sha256Hash())) {
+    // If the boot fw update is in progress and it is an installation of Target ostree of which differs
+    //  from the ostree a device is booted on then
+    if (boot_fw_update_status_->isUpdateInProgress() && (current.sha256Hash() != target.sha256Hash())) {
+      LOG_WARNING << "Boot fw update is in progress."
+                     " A device must be rebooted to confirm and finalize the boot fw update"
+                     " before installation of a new Target with ostree/rootfs change";
+      return data::InstallationResult(data::ResultCode::Numeric::kNeedCompletion, "");
+    }
     // notify the bootloader before installation happens as it is not atomic
     // and a false notification doesn't hurt with rollback support in place
     // Hacking in order to invoke non-const method from the const one !!!
@@ -101,6 +109,7 @@ data::InstallationResult RootfsTreeManager::install(const Uptane::Target& target
         res.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
       LOG_INFO << "Successfully undeployed the pending failing Target";
       LOG_INFO << "Target " << target.sha256Hash() << " is same as current";
+      const_cast<RootfsTreeManager*>(this)->updateNotify();
       res = data::InstallationResult(data::ResultCode::Numeric::kOk, "OSTree hash already installed, same as current");
     }
   } else {

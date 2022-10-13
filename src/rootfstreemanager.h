@@ -24,6 +24,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
                     std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys)
       : OstreeManager(pconfig, bconfig, storage, http, new bootloader::BootloaderLite(bconfig, *storage, sysroot)),
         sysroot_{std::move(sysroot)},
+        boot_fw_update_status_{new bootloader::BootloaderLite(bconfig, *storage, sysroot)},
         http_client_{http},
         gateway_url_{pconfig.ostree_server},
         keys_{keys} {}
@@ -48,6 +49,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
 
   const KeyManager& keys_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;
+  std::unique_ptr<bootloader::BootFwUpdateStatus> boot_fw_update_status_;
   std::shared_ptr<HttpInterface> http_client_;
   const std::string gateway_url_;
 };

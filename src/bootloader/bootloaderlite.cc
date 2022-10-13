@@ -98,4 +98,31 @@ std::string getVersion(const std::string& deployment_dir, const std::string& ver
   }
 }
 
+bool BootloaderLite::isUpdateInProgress() const {
+  const std::unordered_map<RollbackMode, std::string> typeToCmd{
+      {RollbackMode::kUbootMasked, "fw_printenv -n"},
+      {RollbackMode::kFioVB, "fiovb_printenv"},
+  };
+  if (0 == typeToCmd.count(config_.rollback_mode)) {
+    return false;
+  }
+  int bootupgrade_available{readBootUpgradeAvailable(typeToCmd.at(config_.rollback_mode))};
+  return bootupgrade_available == 1;
+}
+
+int BootloaderLite::readBootUpgradeAvailable(const std::string& get_cmd) {
+  int bootupgrade_available{0};
+  std::string ba_str{"0"};
+
+  try {
+    if (Utils::shell(get_cmd + " bootupgrade_available", &ba_str) != 0) {
+      LOG_ERROR << "Failed to read bootupgrade_available, assume it is set to 0";
+    }
+    bootupgrade_available = std::stoi(ba_str);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to get `bootupgrade_available` value: " << exc.what() << "; assume it is set to 0";
+  }
+  return bootupgrade_available;
+}
+
 }  // namespace bootloader
