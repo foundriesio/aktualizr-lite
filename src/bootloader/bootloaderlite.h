@@ -9,7 +9,21 @@ class INvStorage;
 
 namespace bootloader {
 
-class BootloaderLite : public Bootloader {
+class BootFwUpdateStatus {
+ public:
+  BootFwUpdateStatus(const BootFwUpdateStatus&) = delete;
+  BootFwUpdateStatus& operator=(const BootFwUpdateStatus&) = delete;
+  BootFwUpdateStatus& operator=(BootFwUpdateStatus&&) = delete;
+  virtual ~BootFwUpdateStatus() = default;
+
+  virtual bool isUpdateInProgress() const = 0;
+
+ protected:
+  BootFwUpdateStatus() = default;
+  BootFwUpdateStatus(BootFwUpdateStatus&&) = default;
+};
+
+class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
  public:
   static constexpr const char* const VersionFile{"/usr/lib/firmware/version.txt"};
 
@@ -17,7 +31,11 @@ class BootloaderLite : public Bootloader {
 
   void installNotify(const Uptane::Target& target) const override;
 
+  bool isUpdateInProgress() const override;
+
  private:
+  static int readBootUpgradeAvailable(const std::string& get_cmd);
+
   OSTree::Sysroot::Ptr sysroot_;
 };
 

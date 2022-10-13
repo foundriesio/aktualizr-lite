@@ -307,7 +307,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
 
       checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
-      checkBootloaderFlags(client.config.bootloader.rollback_mode, expect_boot_firmware);
+      checkBootloaderFlags(client.config.bootloader.rollback_mode, expected_install_code != data::ResultCode::Numeric::kInstallFailed, expect_boot_firmware);
     } else {
       checkEvents(client, from, UpdateType::kDownloadFailed, expected_download_result.description);
     }
@@ -415,6 +415,7 @@ class ClientTest :virtual public ::testing::Test {
     if (!!new_app_list) {
       app_shortlist_ = new_app_list;
     }
+    boot_flag_mgr_->reset_bootupgrade_available();
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
     ASSERT_EQ(0, boot_flag_mgr_->bootcount());
   }
@@ -474,12 +475,14 @@ class ClientTest :virtual public ::testing::Test {
     }
   }
 
-  void checkBootloaderFlags(RollbackMode bootloader_mode, bool expect_boot_firmware = true) {
+  void checkBootloaderFlags(RollbackMode bootloader_mode, bool check_upgrade_available, bool expect_boot_firmware = true) {
     ASSERT_EQ(0, boot_flag_mgr_->bootcount());
     ASSERT_EQ(0, boot_flag_mgr_->rollback());
 
     if (bootloader_mode == RollbackMode::kUbootMasked || bootloader_mode == RollbackMode::kFioVB) {
-      ASSERT_EQ(1, boot_flag_mgr_->upgrade_available());
+      if (check_upgrade_available) {
+        ASSERT_EQ(1, boot_flag_mgr_->upgrade_available());
+      }
       if (expect_boot_firmware) {
         ASSERT_EQ(1, boot_flag_mgr_->bootupgrade_available());
       }

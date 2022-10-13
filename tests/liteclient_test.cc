@@ -231,7 +231,8 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateToLatestAfterManualUpdate) {
   checkHeaders(*client, new_target);
 
   // emulate manuall update to the previous version
-  update(*client, new_target, getInitialTarget());
+  update(*client, new_target, getInitialTarget(), data::ResultCode::Numeric::kNeedCompletion,
+         {DownloadResult::Status::Ok, ""}, "", false);
 
   // reboot device and make sure that the previous version is installed
   reboot(client);

@@ -33,6 +33,10 @@ class BootFlagMgr {
    return std::stoi(Utils::readFile(dir_/"bootupgrade_available"));
   }
 
+  void reset_bootupgrade_available() {
+    Utils::writeFile(dir_/"bootupgrade_available", std::string("0"));
+  }
+
  private:
   const boost::filesystem::path dir_;
 };

@@ -150,7 +150,8 @@ TEST_P(AkliteTest, RollbackIfOstreeInstallFails) {
     auto target_02 = createTarget(&apps, "", broken_rootfs_dir.PathString());
 
     // try to update to the latest version, it must fail because the target's rootfs is invalid (no kernel)
-    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed, {DownloadResult::Status::Ok, ""});
+    update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed, {DownloadResult::Status::Ok, ""},
+           "Failed to find kernel", false);
 
     // emulate next iteration/update cycle of daemon_main
     client->checkForUpdatesBegin();
