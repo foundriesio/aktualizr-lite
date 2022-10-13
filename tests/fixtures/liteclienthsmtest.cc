@@ -161,9 +161,10 @@ class ClientHSMTest : public ClientTest {
     conf.p11.tls_pkey_id = subscriber_->keyId_;
     conf.p11.module = hsm_->module_.c_str();
     conf.p11.pass = hsm_->pin_;
+    conf.p11.label = hsm_->label_;
 
     if (!p11_) {
-      p11_ = std::make_shared<P11EngineGuard>(conf.p11.module, conf.p11.pass);
+      p11_ = std::make_shared<P11EngineGuard>(conf.p11.module, conf.p11.pass, conf.p11.label);
     }
 
     if (version == InitialVersion::kOn ||
