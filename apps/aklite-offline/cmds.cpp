@@ -14,13 +14,19 @@ int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::pat
     switch (install_res) {
       case offline::PostInstallAction::NeedReboot: {
         ret_code = 100;
-        std::cout << "Please reboot a device and run `run` command to apply installation and start the updated Apps\n";
+        std::cout << "Please reboot a device and run `run` command to apply installation and start the updated Apps "
+                     "(unless no Apps to update or dockerless system)\n";
         break;
       }
       case offline::PostInstallAction::NeedDockerRestart: {
         std::cout << "Please restart `docker` service `systemctl restart docker` and run `run` command to start the "
                      "updated Apps\n";
         ret_code = 101;
+        break;
+      }
+      case offline::PostInstallAction::AlreadyInstalled: {
+        std::cout << "The given Target has been already installed\n";
+        ret_code = EXIT_SUCCESS;
         break;
       }
       default:
@@ -40,7 +46,7 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
     const auto run_res = offline::client::run(cfg_in);
     switch (run_res) {
       case offline::PostRunAction::Ok: {
-        LOG_INFO << "Successfully applied new version of rootfs and started Apps";
+        LOG_INFO << "Successfully applied new version of rootfs and started Apps if present";
         ret_code = 0;
         break;
       }
