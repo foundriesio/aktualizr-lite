@@ -133,7 +133,7 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
 
   ComposeAppManager::Config pacman_cfg(cfg.pacman);
   std::string compose_cmd{pacman_cfg.compose_bin.string()};
-  if (pacman_cfg.compose_bin.filename().compare("docker") == 0) {
+  if (boost::filesystem::exists(pacman_cfg.compose_bin) && pacman_cfg.compose_bin.filename().compare("docker") == 0) {
     compose_cmd = boost::filesystem::canonical(pacman_cfg.compose_bin).string() + " ";
     // if it is a `docker` binary then turn it into ` the  `docker compose` command
     // and make sure that the `compose` is actually supported by a given `docker` utility.
