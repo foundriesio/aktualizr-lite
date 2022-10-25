@@ -20,7 +20,7 @@ struct UpdateSrc {
   std::string TargetName;
 };
 
-enum class PostInstallAction { Undefined = -1, NeedReboot, NeedDockerRestart };
+enum class PostInstallAction { Undefined = -1, NeedReboot, NeedDockerRestart, AlreadyInstalled };
 enum class PostRunAction { Undefined = -1, Ok, RollbackNeedReboot };
 
 class MetaFetcher : public Uptane::IMetadataFetcher {
