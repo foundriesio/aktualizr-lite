@@ -120,7 +120,12 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   cfg.pacman.ostree_server = "file://" + src.OstreeRepoDir.string();
 
   // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps.
-  cfg.pacman.type = "ostree+compose_apps";
+  cfg.pacman.type = ComposeAppManager::Name;
+  // Unless there is no `docker` or `dockerd`
+  if (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker")) {
+    cfg.pacman.type = RootfsTreeManager::Name;
+    return std::make_unique<LiteClient>(cfg, nullptr, nullptr, std::make_shared<MetaFetcher>(src.TufDir));
+  }
 
   // Handle DG:/token-auth
   std::shared_ptr<HttpInterface> registry_basic_auth_client{std::make_shared<RegistryBasicAuthClient>()};
@@ -362,15 +367,19 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
       throw std::runtime_error("Failed to install Target");
     }
     post_install_action = PostInstallAction::NeedReboot;
-  } else {
+  } else if (client->config.pacman.type == ComposeAppManager::Name) {
     // don't `install` since it will create/run containers and we don't want to do it
     // before we register images and restart dockerd
     client->storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
     post_install_action = PostInstallAction::NeedDockerRestart;
+  } else {
+    post_install_action = PostInstallAction::AlreadyInstalled;
   }
 
-  const auto pacman_cfg{ComposeAppManager::Config(cfg_in.pacman)};
-  registerApps(target, pacman_cfg.reset_apps_root, pacman_cfg.images_data_root);
+  if (client->config.pacman.type == ComposeAppManager::Name) {
+    const auto pacman_cfg{ComposeAppManager::Config(cfg_in.pacman)};
+    registerApps(target, pacman_cfg.reset_apps_root, pacman_cfg.images_data_root);
+  }
 
   return post_install_action;
 }
@@ -416,7 +425,11 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   }
 
   if (install_res == data::ResultCode::Numeric::kOk && client->isTargetActive(target)) {
-    LOG_INFO << "Update has been successfully applied and Apps started: " << target.filename();
+    if (client->config.pacman.type == ComposeAppManager::Name) {
+      LOG_INFO << "Update has been successfully applied and Apps started: " << target.filename();
+    } else {
+      LOG_INFO << "Update has been successfully applied: " << target.filename();
+    }
     return PostRunAction::Ok;
   }
 
