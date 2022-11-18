@@ -8,14 +8,24 @@ class DockerRegistry {
   DockerRegistry(const boost::filesystem::path& dir,
                  const std::string& base_url = "hub.foundries.io",
                  const std::string& auth_url = "https://ota-lite.foundries.io:8443/hub-creds/",
-                 const std::string& repo = "factory"):
-                 dir_{dir}, base_url_{base_url}, auth_url_{auth_url}, repo_{repo}, port_{TestUtils::getFreePort()}, process_{RunCmd, "--port", port_, "--dir", dir.string()} {
+                 const std::string& repo = "factory",
+                 bool no_auth = false):
+                 dir_{dir}, base_url_{base_url}, auth_url_{auth_url}, repo_{repo}, port_{TestUtils::getFreePort()}, process_{RunCmd, "--port", port_, "--dir", dir.string()}, no_auth_{no_auth} {
     TestUtils::waitForServer("http://localhost:" + port_ + "/v2/");
   }
 
   ~DockerRegistry() {
     process_.terminate();
     process_.wait_for(std::chrono::seconds(10));
+  }
+
+  void setNoAuth(bool no_auth) {
+    no_auth_ = no_auth;
+  }
+
+  bool auth() const { return !no_auth_; }
+  void setAuthFunc(const std::function<std::string(const std::string&)>& www_auth_func) {
+    www_auth_func_ = www_auth_func;
   }
 
   std::string getSkopeoClient() const {
@@ -27,10 +37,10 @@ class DockerRegistry {
     return "skopeo --registries-conf " + (dir_ / registry_config_file).string();
   }
 
-  std::shared_ptr<HttpInterface> getClient() { return std::make_shared<HttpClient>(*this); }
+  std::shared_ptr<HttpInterface> getClient(const std::vector<std::string>* headers_in = nullptr) { return std::make_shared<HttpClient>(*this, headers_in); }
   Docker::RegistryClient::HttpClientFactory getClientFactory() {
-    return [this](const std::vector<std::string>*) {
-      return getClient();
+    return [this](const std::vector<std::string>* headers_in, const std::set<std::string>*) {
+      return getClient(headers_in);
     };
   }
 
@@ -75,17 +85,49 @@ class DockerRegistry {
   }
 
   const std::string& authURL() const { return auth_url_; }
+  std::string getWwwAuthHeader(const std::string &url) const {
+    if (www_auth_func_ != nullptr) {
+      return www_auth_func_(url);
+    }
+    // bearer realm="https://hub-auth.foundries.io/token-auth/",service="registry",scope="repository:msul-dev01/simpleapp:pull"
+    auto url_elements = parseUrlExt(url);
+
+    const std::vector<std::pair<std::string, std::string>> auth_params = {
+      {"realm", "https://" + base_url_ + "/token-auth/"},
+      {"service", "registry"},
+      {"scope", "repository:" + url_elements[1] + "/" + url_elements[2] + ":pull"}
+    };
+
+    std::string www_auth_val{"bearer "};
+    for (const auto& val: auth_params) {
+      www_auth_val += val.first + "=\"" + val.second + "\",";
+    }
+    www_auth_val = www_auth_val.substr(0, www_auth_val.size() - 1);
+    return www_auth_val;
+  }
 
  private:
   class HttpClient: public BaseHttpClient {
    public:
-    HttpClient(DockerRegistry& registry):registry_{registry} {}
+    HttpClient(DockerRegistry& registry, const std::vector<std::string>* headers_in = nullptr):registry_{registry}, headers_in_{headers_in}{}
     HttpResponse get(const std::string &url, int64_t maxsize) override {
       std::string resp;
       if (std::string::npos != url.find(registry_.base_url_ + "/token-auth/")) {
         // request for OAuth token
         resp = "{\"token\":\"token\"}";
       } else if (std::string::npos != url.find(registry_.base_url_ + "/v2/")) {
+        if (registry_.auth()) {
+          if (headers_in_ == nullptr || headers_in_->size() == 0) {
+            return HttpResponse(resp, 401, CURLE_OK, "Unauthorized", {{"www-authenticate", registry_.getWwwAuthHeader(url)}});
+          }
+          auto auth_find_it = std::find_if(headers_in_->begin(), headers_in_->end(), [](const std::string& header) {
+              return boost::starts_with(header, "authorization");
+          });
+          if (auth_find_it == headers_in_->end()) {
+            return HttpResponse(resp, 401, CURLE_OK, "Unauthorized", {{"www-authenticate", registry_.getWwwAuthHeader(url)}});
+          }
+        }
+
         // request for manifest
         resp = registry_.getAppManifest(url);
         if (resp.size() == 0) {
@@ -106,6 +148,18 @@ class DockerRegistry {
       (void)progress_cb;
       (void)from;
 
+      if (registry_.auth()) {
+          if (headers_in_ == nullptr || headers_in_->size() == 0) {
+            return HttpResponse("", 401, CURLE_OK, "Unauthorized", {{"www-authenticate", registry_.getWwwAuthHeader(url)}});
+          }
+          auto auth_find_it = std::find_if(headers_in_->begin(), headers_in_->end(), [](const std::string& header) {
+              return boost::starts_with(header, "authorization");
+          });
+          if (auth_find_it == headers_in_->end()) {
+            return HttpResponse("", 401, CURLE_OK, "Unauthorized", {{"www-authenticate", registry_.getWwwAuthHeader(url)}});
+          }
+      }
+
       std::string data{registry_.getAppArchive(url)};
       write_cb(const_cast<char*>(data.c_str()), data.size(), 1, userp);
 
@@ -113,9 +167,10 @@ class DockerRegistry {
     }
    private:
     DockerRegistry& registry_;
+    const std::vector<std::string>* headers_in_;
   };
 
-  std::string parseUrl(const std::string& url, const std::string endpoint) const {
+  std::array<std::string, 5> parseUrlExt(const std::string& url, std::string endpoint = "") const {
     // https://hub.foundries.io/v2/factory/app-01/manifests/sha256:4567bac35dd2a7446448052e0b5745c49a8983b2
     // https://hub.foundries.io/v2/factory/app-01/blobs/sha256:e723bc71a139ad7e1f6cbc117178c74b821a65afec5b
 
@@ -139,7 +194,7 @@ class DockerRegistry {
       throw std::invalid_argument("Invalid App URL: " + url + "; expected `v2` got " + url_elements[0]);
     }
 
-    if (url_elements[3] != endpoint) {
+    if (endpoint.size() > 0 && url_elements[3] != endpoint) {
       throw std::invalid_argument("Invalid App URL: " + url + "; expected `" + endpoint + "` endpoint, got " + url_elements[3]);
     }
 
@@ -147,7 +202,11 @@ class DockerRegistry {
       throw std::invalid_argument("Invalid App URL: " + url + "; expected `" + repo_ + "`, got " + url_elements[1]);
     }
 
-    return url_elements[4];
+    return url_elements;
+  }
+
+  std::string parseUrl(const std::string& url, const std::string endpoint) const {
+    return parseUrlExt(url, endpoint)[4];
   }
 
   using AppID = std::pair<std::string, std::string>;
@@ -164,6 +223,9 @@ class DockerRegistry {
   std::unordered_map<std::string, std::string> hash2manifest_;
   std::unordered_map<std::string, int> manifest2pull_numb_;
   std::unordered_map<std::string, ComposeApp::Ptr> blob2app_;
+
+  bool no_auth_;
+  std::function<std::string(const std::string&)> www_auth_func_;
 };
 
 std::string DockerRegistry::RunCmd{"./tests/docker-registry_fake.py"};
