@@ -30,6 +30,26 @@ TEST_F(ComposeAppEngineTest, Fetch) {
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
+TEST_F(ComposeAppEngineTest, FetchIfNoAuth) {
+  registry.setNoAuth(true);
+  auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  ASSERT_TRUE(app_engine->fetch(app));
+  registry.setNoAuth(false);
+}
+
+TEST_F(ComposeAppEngineTest, FetchIfInvalidAuth) {
+  registry.setAuthFunc([](const std::string& url) {
+    // no opening `"` after `=`
+    return "bearer realm = https://hub-auth.foundries.io/token-auth/"
+           "\",service=\"registry\",scope=\"repository:msul-dev01/simpleapp:pull\"";
+  });
+  auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  const auto res{app_engine->fetch(app)};
+  ASSERT_FALSE(res);
+  ASSERT_TRUE(boost::starts_with(res.err, "Invalid value of Bearer auth parameters"));
+  registry.setAuthFunc(nullptr);
+}
+
 TEST_F(ComposeAppEngineTest, FetchAndInstall) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));

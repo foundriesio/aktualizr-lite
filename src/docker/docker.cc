@@ -3,6 +3,10 @@
 
 #include <boost/algorithm/hex.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/algorithm/string/join.hpp>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/trim.hpp>
 
 #include "crypto/crypto.h"
 #include "http/httpclient.h"
@@ -68,11 +72,81 @@ HashedDigest::HashedDigest(const std::string& hash_digest) : digest_{boost::algo
 }
 
 const RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
-    [](const std::vector<std::string>* headers) { return std::make_shared<HttpClient>(headers); };
+    [](const std::vector<std::string>* headers, const std::set<std::string>* response_header_names) {
+      return std::make_shared<HttpClient>(headers, response_header_names);
+    };
 
 const std::string RegistryClient::ManifestEndpoint{"/manifests/"};
 const std::string RegistryClient::BlobEndpoint{"/blobs/"};
 const std::string RegistryClient::SupportedRegistryVersion{"/v2/"};
+
+const std::string RegistryClient::BearerAuth::Header{"www-authenticate"};
+const std::string RegistryClient::BearerAuth::AuthType{"bearer"};
+
+RegistryClient::BearerAuth::BearerAuth(const std::string& auth_header_value) {
+  if (!boost::starts_with(auth_header_value, AuthType)) {
+    throw std::invalid_argument("Unsupported authentication type to access Registry: " + auth_header_value);
+  }
+  auto bearer_val{auth_header_value.substr(auth_header_value.rfind(AuthType) + AuthType.size())};
+  boost::trim(bearer_val);
+
+  std::unordered_map<std::string, std::string> bearer_params;
+  std::size_t param_begin_pos{0};
+  std::size_t param_eq_pos;
+  while (std::string::npos != (param_eq_pos = bearer_val.find('=', param_begin_pos))) {
+    std::size_t param_value_beg_pos = bearer_val.find('"', param_begin_pos);
+    if (std::string::npos == param_value_beg_pos) {
+      throw std::invalid_argument("Invalid value of Bearer auth parameters; missing openning `\"` in " +
+                                  auth_header_value);
+    }
+    if (param_eq_pos > param_value_beg_pos) {
+      throw std::invalid_argument("Invalid value of Bearer auth parameters; `\"` before `=` in " + auth_header_value);
+    }
+
+    // No any symbol should be between `=` and the opening `"` except a space
+    const auto must_be_empty_or_space = bearer_val.substr(param_eq_pos + 1, param_value_beg_pos - param_eq_pos - 1);
+    for (const auto& s : must_be_empty_or_space) {
+      if (s != ' ') {
+        throw std::invalid_argument("Invalid value of Bearer auth parameters; missing openning `\"` in " +
+                                    auth_header_value);
+      }
+    }
+    std::size_t param_value_end_pos = bearer_val.find('"', param_value_beg_pos + 1);
+    if (std::string::npos == param_value_end_pos) {
+      throw std::invalid_argument("Invalid value of Bearer auth parameters; missing clossing `\"` in " +
+                                  auth_header_value);
+    }
+
+    auto param_name = bearer_val.substr(param_begin_pos, param_eq_pos - param_begin_pos);
+    boost::trim(param_name);
+    auto param_value = bearer_val.substr(param_value_beg_pos + 1, param_value_end_pos - param_value_beg_pos - 1);
+    boost::trim(param_value);
+
+    bearer_params[param_name] = param_value;
+    param_begin_pos = bearer_val.find(',', param_value_end_pos);
+    if (param_begin_pos != std::string::npos) {
+      ++param_begin_pos;
+    }
+  }
+  // The OAuth spec does not state that the following auth params are mandatory
+  // https://www.rfc-editor.org/rfc/rfc6750#section-3, but, the Docker Registry v2 auth spec requires it
+  // https://github.com/distribution/distribution/blob/263da70ea6a4e96f61f7a6770273ec6baac38941/docs/spec/auth/token.md
+  const std::array<std::string, 3> required_params{"realm", "service", "scope"};
+  std::vector<std::string> missing_params;
+  for (const auto& param : required_params) {
+    if (bearer_params.count(param) == 0) {
+      missing_params.push_back(param);
+    }
+  }
+
+  if (!missing_params.empty()) {
+    throw std::invalid_argument("Missing required auth param(s): " + boost::algorithm::join(missing_params, ", "));
+  }
+
+  Realm = bearer_params[required_params[0]];
+  Service = bearer_params[required_params[1]];
+  Scope = bearer_params[required_params[2]];
+}
 
 RegistryClient::RegistryClient(std::shared_ptr<HttpInterface> ota_lite_client, std::string auth_creds_endpoint,
                                HttpClientFactory http_client_factory)
@@ -85,14 +159,28 @@ std::string RegistryClient::getAppManifest(const Uri& uri, const std::string& fo
   const std::string manifest_url{composeManifestUrl(uri)};
   LOG_DEBUG << "Downloading App manifest: " << manifest_url;
 
-  std::vector<std::string> registry_repo_request_headers{getBearerAuthHeader(uri), "accept:" + format};
-  auto registry_repo_client{http_client_factory_(&registry_repo_request_headers)};
+  std::vector<std::string> registry_repo_request_headers{"accept:" + format};
+  const std::set<std::string> header_to_get{BearerAuth::Header};
 
   std::int64_t manifest_max_size{DefManifestMaxSize};
   if (!!manifest_size) {
     manifest_max_size = *manifest_size;
   }
-  auto manifest_resp = registry_repo_client->get(manifest_url, manifest_max_size);
+  std::function<HttpResponse()> doGetManifestRequest = [&]() {
+    auto registry_repo_client{http_client_factory_(&registry_repo_request_headers, &header_to_get)};
+    return registry_repo_client->get(manifest_url, manifest_max_size);
+  };
+
+  auto manifest_resp = doGetManifestRequest();
+  if (manifest_resp.http_status_code == 401) {
+    if (manifest_resp.headers.empty() || manifest_resp.headers.count(BearerAuth::Header) == 0) {
+      throw std::runtime_error("No `" + BearerAuth::Header + "` header found in the 401 response");
+    }
+    auto auth_header{getBearerAuthHeader(BearerAuth(manifest_resp.headers[BearerAuth::Header]))};
+    registry_repo_request_headers.push_back(auth_header);
+    manifest_resp = doGetManifestRequest();
+  }
+
   if (!manifest_resp.isOk()) {
     throw std::runtime_error("Failed to download App manifest: " + manifest_resp.getStatusStr());
   }
@@ -156,6 +244,12 @@ struct DownloadCtx {
     hasher.update(reinterpret_cast<const unsigned char*>(data), size);
     return (end_pos - start_pos);
   }
+  void reset() {
+    out_stream.seekp(std::ios_base::beg);
+    hasher.reset();
+    written_size = 0;
+    received_size = 0;
+  }
 };
 
 static size_t DownloadHandler(char* data, size_t buf_size, size_t buf_numb, void* user_ctx) {
@@ -170,18 +264,30 @@ void RegistryClient::downloadBlob(const Uri& uri, const boost::filesystem::path&
 
   LOG_DEBUG << "Downloading App blob: " << compose_app_blob_url;
 
-  std::vector<std::string> registry_repo_request_headers{getBearerAuthHeader(uri)};
-  auto registry_repo_client{http_client_factory_(&registry_repo_request_headers)};
-
   std::ofstream output_file{filepath.string(), std::ios_base::out | std::ios_base::binary};
   if (!output_file.is_open()) {
     throw std::runtime_error("Failed to open a file: " + filepath.string());
   }
   MultiPartSHA256Hasher hasher;
-
   DownloadCtx download_ctx{output_file, hasher, expected_size};
-  auto get_blob_resp = registry_repo_client->download(compose_app_blob_url, DownloadHandler, nullptr, &download_ctx, 0);
 
+  const std::set<std::string> header_to_get{BearerAuth::Header};
+  std::vector<std::string> registry_repo_request_headers;
+  std::function<HttpResponse()> doDownloadBlobRequest = [&]() {
+    auto registry_repo_client{http_client_factory_(&registry_repo_request_headers, &header_to_get)};
+    return registry_repo_client->download(compose_app_blob_url, DownloadHandler, nullptr, &download_ctx, 0);
+  };
+
+  auto get_blob_resp = doDownloadBlobRequest();
+  if (get_blob_resp.http_status_code == 401) {
+    if (get_blob_resp.headers.empty() || get_blob_resp.headers.count(BearerAuth::Header) == 0) {
+      throw std::runtime_error("No `" + BearerAuth::Header + "` header found in the 401 response");
+    }
+    auto auth_header{getBearerAuthHeader(BearerAuth(get_blob_resp.headers[BearerAuth::Header]))};
+    registry_repo_request_headers.push_back(auth_header);
+    download_ctx.reset();
+    get_blob_resp = doDownloadBlobRequest();
+  }
   if (!get_blob_resp.isOk()) {
     throw std::runtime_error("Failed to download App blob: " + get_blob_resp.getStatusStr());
   }
@@ -238,26 +344,15 @@ std::string RegistryClient::getBasicAuthHeader() const {
   return "authorization: basic " + encoded_auth_secret;
 }
 
-std::string RegistryClient::getBearerAuthHeader(const Uri& uri) const {
-  // TODO: to make it generic we need to make a request for a resource at first
-  // and then if we get 401 we should parse 'Www-Authenticate' header and get
-  // URL and params of the request for a token from it.
-  // Currently, we support just FIO's Registry so we know its endpoint and what params we need to send
-  // so we do shortcut here.
-  // The aktualizr HTTP client doesn't return headers in the response object so adding this functionality
-  // implies making changes in libaktualizr or writing our own http client what is not justifiable at the moment
-  std::string auth_token_endpoint{"https://" + uri.registryHostname + "/token-auth/"};
-  LOG_DEBUG << "Getting Docker Registry token from " << auth_token_endpoint;
+std::string RegistryClient::getBearerAuthHeader(const BearerAuth& bearer) const {
+  LOG_DEBUG << "Getting Docker Registry token from " << bearer.Realm;
 
   std::vector<std::string> auth_header = {getBasicAuthHeader()};
-
-  auto registry_client{http_client_factory_(&auth_header)};
-  std::string token_req_params{"?service=registry&scope=repository:" + uri.repo + ":pull"};
-
-  auto token_resp = registry_client->get(auth_token_endpoint + token_req_params, AuthMaterialMaxSize);
+  auto registry_client{http_client_factory_(&auth_header, nullptr)};
+  auto token_resp = registry_client->get(bearer.uri(), AuthMaterialMaxSize);
 
   if (!token_resp.isOk()) {
-    throw std::runtime_error("Failed to get Auth Token at Docker Registry " + auth_token_endpoint +
+    throw std::runtime_error("Failed to get Auth Token at Docker Registry " + bearer.Realm +
                              "; error: " + token_resp.getStatusStr());
   }
 

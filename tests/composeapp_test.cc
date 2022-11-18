@@ -87,6 +87,17 @@ class FakeOtaClient: public HttpInterface {
       if (std::string::npos != url.find(registry_->baseURL() + "/token-auth/")) {
         resp = "{\"token\":\"token\"}";
       } else if (std::string::npos != url.find(registry_->baseURL() + "/v2/")) {
+        if (headers_ == nullptr || headers_->size() == 0) {
+          return HttpResponse(resp, 401, CURLE_OK, "Unauthorized", {{"www-authenticate",
+           "bearer realm=\"https://" + registry_->baseURL() + "/token-auth/\",service=\"registry\",scope=\"foobar\""}});
+        }
+        auto auth_find_it = std::find_if(headers_->begin(), headers_->end(), [](const std::string& header) {
+            return boost::starts_with(header, "authorization");
+        });
+        if (auth_find_it == headers_->end()) {
+          return HttpResponse(resp, 401, CURLE_OK, "Unauthorized", {{"www-authenticate",
+          "bearer realm=\"https://" + registry_->baseURL() + "/token-auth/\",service=\"registry\",scope=\"foobar\""}});
+        }
         resp = registry_->getManifest();
       } else if (url == registry_->authURL()) {
         resp = "{\"Secret\":\"secret\",\"Username\":\"test-user\"}";
@@ -231,7 +242,7 @@ struct TestClient {
     http_client = std::make_shared<HttpClient>();
     if (registry) {
       http_client = std::make_shared<FakeOtaClient>(registry);
-      registry_http_client_factory = [registry](const std::vector<std::string>* headers) {
+      registry_http_client_factory = [registry](const std::vector<std::string>* headers, const std::set<std::string>*) {
         return std::make_shared<FakeOtaClient>(registry, headers);
       };
     }

@@ -134,7 +134,7 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   // Handle requests to Registry aimed to download App
   Docker::RegistryClient::Ptr registry_client{std::make_shared<Docker::RegistryClient>(
       registry_basic_auth_client, "",
-      [offline_registry](const std::vector<std::string>*) { return offline_registry; })};
+      [offline_registry](const std::vector<std::string>*, const std::set<std::string>*) { return offline_registry; })};
 
   ComposeAppManager::Config pacman_cfg(cfg.pacman);
   std::string compose_cmd{pacman_cfg.compose_bin.string()};

@@ -97,6 +97,40 @@ TEST_F(RestorableAppEngineTest, Fetch) {
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
+TEST_F(RestorableAppEngineTest, FetchIfNoAuth) {
+  registry.setNoAuth(true);
+  auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  ASSERT_TRUE(app_engine->fetch(app));
+  ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_TRUE(app_engine->verify(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+  registry.setNoAuth(false);
+}
+
+TEST_F(RestorableAppEngineTest, FetchIfInvalidAuth) {
+  registry.setAuthFunc([](const std::string& url) { return "bearer foobar=\"sads\""; });
+  auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  const auto res{app_engine->fetch(app)};
+  ASSERT_FALSE(res);
+  ASSERT_TRUE(boost::starts_with(res.err, "Missing required auth param"));
+  ASSERT_FALSE(app_engine->isFetched(app));
+  ASSERT_FALSE(app_engine->verify(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+  registry.setAuthFunc(nullptr);
+}
+
+TEST_F(RestorableAppEngineTest, FetchIfNotBearerAuth) {
+  registry.setAuthFunc([](const std::string& url) { return "basic foobar=\"sads\""; });
+  auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  const auto res{app_engine->fetch(app)};
+  ASSERT_FALSE(res);
+  ASSERT_TRUE(boost::starts_with(res.err, "Unsupported authentication type to access Registry"));
+  ASSERT_FALSE(app_engine->isFetched(app));
+  ASSERT_FALSE(app_engine->verify(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+  registry.setAuthFunc(nullptr);
+}
+
 TEST_F(RestorableAppEngineTest, FetchCheckAndRefetch) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));

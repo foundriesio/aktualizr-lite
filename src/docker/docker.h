@@ -2,6 +2,7 @@
 #define AKTUALIZR_LITE_DOCKER_H_
 
 #include <limits>
+#include <set>
 #include <string>
 
 #include <boost/optional.hpp>
@@ -109,7 +110,20 @@ class RegistryClient {
   static const std::string BlobEndpoint;
   static const std::string SupportedRegistryVersion;
 
-  using HttpClientFactory = std::function<std::shared_ptr<HttpInterface>(const std::vector<std::string>*)>;
+  struct BearerAuth {
+    static const std::string Header;
+    static const std::string AuthType;
+    explicit BearerAuth(const std::string& auth_header_value);
+
+    std::string uri() const { return Realm + "?service=" + Service + "&scope=" + Scope; }
+
+    std::string Realm;
+    std::string Service;
+    std::string Scope;
+  };
+
+  using HttpClientFactory =
+      std::function<std::shared_ptr<HttpInterface>(const std::vector<std::string>*, const std::set<std::string>*)>;
   static const HttpClientFactory DefaultHttpClientFactory;
   using Ptr = std::shared_ptr<RegistryClient>;
 
@@ -123,7 +137,7 @@ class RegistryClient {
 
  private:
   std::string getBasicAuthHeader() const;
-  std::string getBearerAuthHeader(const Uri& uri) const;
+  std::string getBearerAuthHeader(const BearerAuth& bearer) const;
 
   static std::string composeManifestUrl(const Uri& uri) {
     return "https://" + uri.registryHostname + SupportedRegistryVersion + uri.repo + ManifestEndpoint + uri.digest();

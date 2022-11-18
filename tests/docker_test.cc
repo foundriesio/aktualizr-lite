@@ -97,6 +97,78 @@ TEST(Docker, ParseUriNegative) {
       std::invalid_argument);
 }
 
+TEST(Docker, BearerAuth) {
+  {
+    const auto auth{
+        Docker::RegistryClient::BearerAuth("bearer "
+                                           "realm=\"https://hub-auth.foundries.io/token-auth/"
+                                           "\",service=\"registry\",scope=\"repository:msul-dev01/simpleapp:pull\"")};
+    ASSERT_EQ(auth.Realm, "https://hub-auth.foundries.io/token-auth/");
+    ASSERT_EQ(auth.Service, "registry");
+    ASSERT_EQ(auth.Scope, "repository:msul-dev01/simpleapp:pull");
+    ASSERT_EQ(auth.uri(),
+              "https://hub-auth.foundries.io/token-auth/?service=registry&scope=repository:msul-dev01/simpleapp:pull");
+  }
+  {
+    // correct but with spaces value of `www-authenticate`
+    const auto auth{
+        Docker::RegistryClient::BearerAuth("bearer   realm = \"https://hub-auth.foundries.io/token-auth/\" , service=  "
+                                           " \"registry\" , scope  = \" repository:msul-dev01/simpleapp:pull,push\" ")};
+    ASSERT_EQ(auth.Realm, "https://hub-auth.foundries.io/token-auth/");
+    ASSERT_EQ(auth.Service, "registry");
+    ASSERT_EQ(auth.Scope, "repository:msul-dev01/simpleapp:pull,push");
+    ASSERT_EQ(
+        auth.uri(),
+        "https://hub-auth.foundries.io/token-auth/?service=registry&scope=repository:msul-dev01/simpleapp:pull,push");
+  }
+}
+
+TEST(Docker, BearerAuthNegative) {
+  {
+    // unsupported auth type
+    EXPECT_THROW(Docker::RegistryClient::BearerAuth("basic"), std::invalid_argument);
+  }
+  {
+    // no required auth param
+    EXPECT_THROW(
+        Docker::RegistryClient::BearerAuth("bearer "
+                                           "norealm=\"https://hub-auth.foundries.io/token-auth/"
+                                           "\",service=\"registry\",scope=\"repository:msul-dev01/simpleapp:pull\""),
+        std::invalid_argument);
+    EXPECT_THROW(
+        Docker::RegistryClient::BearerAuth("bearer "
+                                           "realm=\"https://hub-auth.foundries.io/token-auth/"
+                                           "\",service=\"registry\",noscope=\"repository:msul-dev01/simpleapp:pull\""),
+        std::invalid_argument);
+    EXPECT_THROW(
+        Docker::RegistryClient::BearerAuth("bearer "
+                                           "realm=\"https://hub-auth.foundries.io/token-auth/"
+                                           "\",noservice=\"registry\",scope=\"repository:msul-dev01/simpleapp:pull\""),
+        std::invalid_argument);
+    EXPECT_THROW(Docker::RegistryClient::BearerAuth("bearer "), std::invalid_argument);
+  }
+  {
+    // no `"`
+    EXPECT_THROW(Docker::RegistryClient::BearerAuth("bearer realm =https://hub-auth.foundries.io/token-auth/"),
+                 std::invalid_argument);
+    // the opening `"` before `=`
+    EXPECT_THROW(
+        Docker::RegistryClient::BearerAuth("bearer realm\" "
+                                           "=https://hub-auth.foundries.io/token-auth/"
+                                           "\",service=\"registry\",scope=\"repository:msul-dev01/simpleapp:pull\""),
+        std::invalid_argument);
+    // the closing `"` is missing
+    EXPECT_THROW(Docker::RegistryClient::BearerAuth("bearer realm=\"https://hub-auth.foundries.io/token-auth/"),
+                 std::invalid_argument);
+    // no opening `"` after `=`
+    EXPECT_THROW(
+        Docker::RegistryClient::BearerAuth("bearer realm = "
+                                           "https://hub-auth.foundries.io/token-auth/"
+                                           "\",service=\"registry\",scope=\"repository:msul-dev01/simpleapp:pull\""),
+        std::invalid_argument);
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
