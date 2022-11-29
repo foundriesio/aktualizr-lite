@@ -440,7 +440,7 @@ void ComposeAppManager::handleRemovedApps(const Uptane::Target& target) const {
 
   // prune the restorable app store, make sure we remove unused blobs of Apps removed in the previous call,
   // as well as the apps and their blobs that had been only in `reset_apps` list and were removed from it
-  if (!!cfg_.reset_apps) {
+  if (cfg_.docker_prune && !!cfg_.reset_apps) {
     // get all Apps that we need to keep in the store
     const auto required_apps{getAppsToFetch(target, false)};
     // remove not required apps, only apps listed in required_apps will be preserved
