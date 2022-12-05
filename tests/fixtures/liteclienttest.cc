@@ -81,6 +81,7 @@ class ClientTest :virtual public ::testing::Test {
     conf.bootloader.reboot_command = "/bin/true";
     conf.bootloader.reboot_sentinel_dir = conf.storage.path;
     conf.bootloader.rollback_mode = RollbackMode::kFioVB;
+    conf.pacman.extra["ostree_update_block"] = "0";
     conf.import.base_path = test_dir_ / "import";
 
     if (initial_version == InitialVersion::kOn || initial_version == InitialVersion::kCorrupted1 ||

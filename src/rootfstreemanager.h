@@ -21,13 +21,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
 
   RootfsTreeManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
-                    std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys)
-      : OstreeManager(pconfig, bconfig, storage, http, new bootloader::BootloaderLite(bconfig, *storage, sysroot)),
-        sysroot_{std::move(sysroot)},
-        boot_fw_update_status_{new bootloader::BootloaderLite(bconfig, *storage, sysroot)},
-        http_client_{http},
-        gateway_url_{pconfig.ostree_server},
-        keys_{keys} {}
+                    std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys);
 
   DownloadResult Download(const TufTarget& target) override;
 
@@ -52,6 +46,9 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   std::unique_ptr<bootloader::BootFwUpdateStatus> boot_fw_update_status_;
   std::shared_ptr<HttpInterface> http_client_;
   const std::string gateway_url_;
+  // A flag enabling/disabling ostree update blocking if there is ongoing boot firmware update
+  // that requires confirmation by means of reboot.
+  bool update_block_{true};
 };
 
 #endif  // AKTUALIZR_LITE_ROOTFS_TREE_MANAGER_H_

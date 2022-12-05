@@ -5,6 +5,23 @@
 #include "ostree/repo.h"
 #include "target.h"
 
+RootfsTreeManager::RootfsTreeManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
+                                     const std::shared_ptr<INvStorage>& storage,
+                                     const std::shared_ptr<HttpInterface>& http,
+                                     std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys)
+    : OstreeManager(pconfig, bconfig, storage, http, new bootloader::BootloaderLite(bconfig, *storage, sysroot)),
+      sysroot_{std::move(sysroot)},
+      boot_fw_update_status_{new bootloader::BootloaderLite(bconfig, *storage, sysroot)},
+      http_client_{http},
+      gateway_url_{pconfig.ostree_server},
+      keys_{keys} {
+  const std::string update_block_attr_name{"ostree_update_block"};
+  if (pconfig.extra.count(update_block_attr_name) == 1) {
+    std::string val{pconfig.extra.at(update_block_attr_name)};
+    update_block_ = val != "0" && val != "false";
+  }
+}
+
 DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
   auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
     // report_progress_cb(events_channel.get(), t, description, progress);
@@ -88,8 +105,9 @@ data::InstallationResult RootfsTreeManager::install(const Uptane::Target& target
       (!sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kPending).empty() &&
        sysroot()->getDeploymentHash(OSTree::Sysroot::Deployment::kPending) != target.sha256Hash())) {
     // If the boot fw update is in progress and it is an installation of Target ostree of which differs
-    //  from the ostree a device is booted on then
-    if (boot_fw_update_status_->isUpdateInProgress() && (current.sha256Hash() != target.sha256Hash())) {
+    //  from the ostree a device is booted on then (unless `pacman.ostree_update_block` is set to `false` or "0")
+    if (update_block_ && boot_fw_update_status_->isUpdateInProgress() &&
+        (current.sha256Hash() != target.sha256Hash())) {
       LOG_WARNING << "Boot fw update is in progress."
                      " A device must be rebooted to confirm and finalize the boot fw update"
                      " before installation of a new Target with ostree/rootfs change";
