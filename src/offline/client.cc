@@ -262,9 +262,9 @@ static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
         continue;
       }
       found_but_not_target_apps.remove(app.uri);
-      if (found_but_not_target_apps.empty()) {
-        break;
-      }
+      // We cannot exit this loop earlier even if `found_but_not_target_apps` becomes empty,
+      // which indicates that all found Apps are listed in Target, because
+      // we need to shortlist ALL Target apps that are no found on the provided filesystem.
     }
 
     if (found_but_not_target_apps.empty()) {
