@@ -121,8 +121,9 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
 
   // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps.
   cfg.pacman.type = ComposeAppManager::Name;
-  // Unless there is no `docker` or `dockerd`
-  if (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker")) {
+  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
+  if (docker_client_http_client == nullptr &&
+      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
     cfg.pacman.type = RootfsTreeManager::Name;
     return std::make_unique<LiteClient>(cfg, nullptr, nullptr, std::make_shared<MetaFetcher>(src.TufDir));
   }
