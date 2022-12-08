@@ -201,6 +201,42 @@ TEST_F(AkliteOffline, OfflineClient) {
   ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
 }
 
+TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
+  Uptane::Target target{Uptane::Target::Unknown()};
+
+  const auto layer_size{1024};
+  Json::Value layers;
+  layers["layers"][0]["digest"] =
+      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+  layers["layers"][0]["size"] = layer_size;
+
+  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
+  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
+  const auto app03{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("zz00-app-03", layers))};
+
+  const std::vector<AppEngine::App> apps{app01, app02, app03};
+  target = addTarget(&apps);
+
+  // remove zz00-app-03 (app03) from the file system to make sure that offline update succeeds
+  // if one of the targets apps is missing in the provided update content.
+  boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
+
+  offline::UpdateSrc src{
+      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
+      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
+  };
+
+  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
+  auto env{boost::this_process::environment()};
+  env.set("DOCKER_HOST", daemon_.getUrl());
+  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
+  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
+
+  reboot();
+
+  ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
+}
+
 TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
   Uptane::Target target{Uptane::Target::Unknown()};
 
