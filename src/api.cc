@@ -172,6 +172,10 @@ TufTarget AkliteClient::GetCurrent() const {
   return TufTarget(current.filename(), current.sha256Hash(), ver, current.custom_data());
 }
 
+std::string AkliteClient::GetDeviceID() const {
+  return client_->getDeviceID();
+}
+
 class LiteInstall : public InstallContext {
  public:
   LiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason)

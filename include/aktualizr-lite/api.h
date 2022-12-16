@@ -216,6 +216,11 @@ class AkliteClient {
   TufTarget GetCurrent() const;
 
   /**
+   * Return the device's UUID as defined in the x509 client certificate's CN
+   */
+  std::string GetDeviceID() const;
+
+  /**
    * Create an InstallContext object to help drive an update.
    */
   std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
