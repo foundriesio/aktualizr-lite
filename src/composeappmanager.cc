@@ -354,6 +354,17 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
 
   } else {
+    // If both ostree and Apps are updated and the `create_containers_before_reboot` param is set to 0/false, then
+    // stop disabled and updated Apps
+    stopDisabledComposeApps(target);
+    // We are stopping the updated containers so they are not started automatically by dockerd just after reboot,
+    // aklite is going to re-create and start them (valid for the `create_containers_before_reboot=0` case).
+    for (const auto& pair : cur_apps_to_fetch_and_update_) {
+      LOG_INFO << "Stopping the updated container " << pair.first << " -> " << pair.second;
+      auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
+      non_const_app_engine->stop({pair.first, pair.second});
+    }
+
     LOG_INFO << "Apps' containers will be re-created and started just after succesfull boot on the new ostree version";
     res.description += "\n# Fecthed Apps' containers will be created and started after reboot\n";
     // don't prune Compose Apps' images because new images are not used by any containers and can be removed as a
