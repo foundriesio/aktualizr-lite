@@ -85,6 +85,16 @@ TEST_F(ApiClientTest, GetCurrent) {
   ASSERT_EQ(-1, cur.Version());
 }
 
+TEST_F(ApiClientTest, GetDevice) {
+  AkliteClient client(createLiteClient(InitialVersion::kOff));
+  auto res = client.GetDevice();
+  ASSERT_EQ(DeviceResult::Status::Ok, res.status);
+  ASSERT_EQ("fake-device", res.name);
+  ASSERT_EQ("fake-factory", res.factory);
+  ASSERT_EQ("fake-owner", res.owner);
+  ASSERT_EQ("fake-id", res.repo_id);
+}
+
 TEST_F(ApiClientTest, CheckIn) {
   AkliteClient client(createLiteClient(InitialVersion::kOff));
 
