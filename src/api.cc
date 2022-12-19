@@ -172,6 +172,24 @@ TufTarget AkliteClient::GetCurrent() const {
   return TufTarget(current.filename(), current.sha256Hash(), ver, current.custom_data());
 }
 
+DeviceResult AkliteClient::GetDevice() const {
+  DeviceResult res{DeviceResult::Status::Failed};
+  const auto http_res = client_->http_client->get(client_->config.tls.server + "/device", HttpInterface::kNoLimit);
+  if (http_res.isOk()) {
+    const Json::Value device_info = http_res.getJson();
+    if (!device_info.empty()) {
+      res.status = DeviceResult::Status::Ok;
+      res.name = device_info["Name"].asString();
+      res.factory = device_info["factory"].asString();
+      res.owner = device_info["owner"].asString();
+      res.repo_id = device_info["repo_id"].asString();
+    } else {
+      LOG_WARNING << "Failed to get a device name from a device info: " << device_info;
+    }
+  }
+  return res;
+}
+
 std::string AkliteClient::GetDeviceID() const { return client_->getDeviceID(); }
 
 class LiteInstall : public InstallContext {

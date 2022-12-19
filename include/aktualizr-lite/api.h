@@ -150,6 +150,23 @@ struct SecondaryEcu {
 };
 
 /**
+ * The response from an AkliteClient call to GetDevice
+ */
+class DeviceResult {
+ public:
+  enum class Status {
+    Ok = 0,
+    Failed,
+  };
+  Status status;
+  std::string name;
+  std::string factory;
+  std::string owner;
+  std::string repo_id;
+};
+
+
+/**
  * AkliteClient provides an easy-to-use API for users wanting to customize
  * the behavior of aktualizr-lite.
  */
@@ -214,6 +231,12 @@ class AkliteClient {
    * Return the Target currently running on the system.
    */
   TufTarget GetCurrent() const;
+
+  /**
+   * Check in with device-gateway to get server managed information about
+   * the device.
+   */
+  DeviceResult GetDevice() const;
 
   /**
    * Return the device's UUID as defined in the x509 client certificate's CN

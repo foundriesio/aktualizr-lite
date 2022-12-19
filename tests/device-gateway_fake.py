@@ -20,6 +20,7 @@ class Handler(SimpleHTTPRequestHandler):
     RegistryPrefix = "/v2/"
     EventPrefix = "/events"
     SysInfoPrefix = "/system_info"
+    DevicePrefix = "/device"
 
     def do_PUT(self):
         if not self.path.startswith(self.SysInfoPrefix) and not self.path.startswith("/ecus"):
@@ -69,6 +70,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.registry_auth_handler()
         if self.path.startswith(self.RegistryPrefix):
             self.registry_handler()
+        if self.path.startswith(self.DevicePrefix):
+            self.device_handler()
 
     def treehub_handler(self):
         logger.info("Treehub: GET request %s" % self.path)
@@ -91,6 +94,12 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps({'Username': 'foo', 'Secret': 'bar'}).encode())
+
+    def device_handler(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({'Name': 'fake-device', 'factory': 'fake-factory', 'owner': 'fake-owner', 'repo_id': 'fake-id'}).encode())
 
     def registry_auth_handler(self):
         self.send_response(200)
