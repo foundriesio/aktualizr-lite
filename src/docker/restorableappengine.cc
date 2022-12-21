@@ -117,8 +117,14 @@ AppEngine::Result RestorableAppEngine::verify(const App& app) {
   try {
     const Uri uri{Uri::parseUri(app.uri)};
     const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
+    const Manifest manifest{Utils::parseJSONFile(app_dir / Manifest::Filename)};
+    const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
     TemporaryDirectory app_tmp_dir;
-    installApp(app_dir, app_tmp_dir.Path());
+
+    // extract the compose file (i.e. docker-compose.yml) to a temporary directory to verify it.
+    exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "no compose file found in archive",
+         boost::process::start_dir = app_tmp_dir.Path());
+
     LOG_DEBUG << app.name << ": verifying App: " << app_dir << " --> " << app_tmp_dir.Path();
     exec(boost::format("%s config %s") % compose_cmd_ % "-q", "compose file verification failed",
          boost::process::start_dir = app_tmp_dir.Path());
