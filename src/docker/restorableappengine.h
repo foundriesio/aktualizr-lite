@@ -139,6 +139,8 @@ class RestorableAppEngine : public AppEngine {
                            const std::string& tag, const std::string& format = "v2s2");
 
   static void verifyComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir);
+  static void pullComposeAppImages(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
+                                   const std::string& flags = "--no-parallel");
   static void startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
                               const std::string& flags = "up --remove-orphans -d");
 

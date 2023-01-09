@@ -43,6 +43,7 @@ class AppEngine {
       OK = 0,
       Failed,
       InsufficientSpace,
+      ImagePullFailure,
     };
     // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
     Result(bool var, std::string errMsg = "") : status{var ? ID::OK : ID::Failed}, err{std::move(errMsg)} {}
@@ -50,6 +51,7 @@ class AppEngine {
     // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
     operator bool() const { return status == ID::OK; }
     bool noSpace() const { return status == ID::InsufficientSpace; }
+    bool imagePullFailure() const { return status == ID::ImagePullFailure; }
 
     ID status;
     std::string err;

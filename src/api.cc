@@ -47,6 +47,8 @@ std::ostream& operator<<(std::ostream& os, const InstallResult& res) {
     os << "NeedsCompletion/";
   } else if (res.status == InstallResult::Status::Failed) {
     os << "Failed/";
+  } else if (res.status == InstallResult::Status::DownloadFailed) {
+    os << "DownloadFailed/";
   }
   os << res.description;
   return os;
@@ -187,6 +189,8 @@ class LiteInstall : public InstallContext {
     } else if (rc == data::ResultCode::Numeric::kOk) {
       client_->http_client->updateHeader("x-ats-target", target_->filename());
       status = InstallResult::Status::Ok;
+    } else if (rc == data::ResultCode::Numeric::kDownloadFailed) {
+      status = InstallResult::Status::DownloadFailed;
     }
     return InstallResult{status, ""};
   }

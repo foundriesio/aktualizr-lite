@@ -84,6 +84,7 @@ class InstallResult {
     Ok = 0,
     NeedsCompletion,
     Failed,
+    DownloadFailed,
   };
   Status status;
   std::string description;
@@ -147,6 +148,22 @@ struct SecondaryEcu {
   std::string serial;
   std::string hwid;
   std::string target_name;
+};
+
+/**
+ * The response from an AkliteClient call to GetDevice
+ */
+class DeviceResult {
+ public:
+  enum class Status {
+    Ok = 0,
+    Failed,
+  };
+  Status status;
+  std::string name;
+  std::string factory;
+  std::string owner;
+  std::string repo_id;
 };
 
 /**

@@ -347,7 +347,9 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
                                               pair.first % pair.second % run_res.err)};
         LOG_ERROR << err_desc;
 
-        res = data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, err_desc);
+        res = data::InstallationResult(run_res.imagePullFailure() ? data::ResultCode::Numeric::kDownloadFailed
+                                                                  : data::ResultCode::Numeric::kInstallFailed,
+                                       err_desc);
       } else {
         res.description += "\n" + pair.second;
       }
@@ -412,7 +414,9 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
         // this is a hack to distinguish between ostree install (rollback) and App start failures.
         // data::ResultCode::Numeric::kInstallFailed - boot on a new ostree version failed (rollback at boot)
         // data::ResultCode::Numeric::kCustomError - boot on a new version was successful but new App failed to start
-        return data::InstallationResult(data::ResultCode::Numeric::kCustomError, ir.description);
+        return data::InstallationResult(run_res.imagePullFailure() ? data::ResultCode::Numeric::kDownloadFailed
+                                                                   : data::ResultCode::Numeric::kCustomError,
+                                        ir.description);
       }
     }
     handleRemovedApps(target);
