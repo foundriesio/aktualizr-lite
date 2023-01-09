@@ -8,6 +8,7 @@ class DockerDaemon {
  public:
   // tests/docker-compose_fake.py fills/populates this file with "running" containers
   static constexpr const char* const ContainersFile{"containers.json"};
+  static constexpr const char* const ImagePullFailFlag{"image-pull-fails"};
  public:
   // run two processes, one (http) is needed for the test business logic, another one (unix) to mock docker daemon
   // since there are spots in the code where the `docker` CLI is invoked directly.
@@ -37,6 +38,14 @@ class DockerDaemon {
   bool areContainersCreated() const {
     const std::string cur_containers{Utils::readFile(dir_ / ContainersFile)};
     return !(cur_containers == none_containers_);
+  }
+
+  void setImagePullFailFlag(bool fail) {
+    if (fail) {
+      Utils::writeFile(dir_ / ImagePullFailFlag, std::string(""));
+    } else {
+      boost::filesystem::remove(dir_ / ImagePullFailFlag);
+    }
   }
 
 
