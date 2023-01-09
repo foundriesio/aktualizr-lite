@@ -284,7 +284,11 @@ TEST_F(RestorableAppEngineTest, FetchAndInstall) {
   ASSERT_TRUE(app_engine->isFetched(app));
   ASSERT_TRUE(app_engine->verify(app));
   ASSERT_FALSE(app_engine->isRunning(app));
-  ASSERT_TRUE(app_engine->install(app));
+  daemon_.setImagePullFailFlag(true);
+  ASSERT_FALSE(app_engine->install(app));
+  daemon_.setImagePullFailFlag(false);
+  const auto install_res{app_engine->install(app)};
+  ASSERT_EQ(install_res, true) << install_res.err;
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
@@ -293,7 +297,12 @@ TEST_F(RestorableAppEngineTest, FetchAndRun) {
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
   ASSERT_TRUE(app_engine->verify(app));
-  ASSERT_TRUE(app_engine->run(app));
+  daemon_.setImagePullFailFlag(true);
+  ASSERT_FALSE(app_engine->run(app));
+  ASSERT_FALSE(app_engine->isRunning(app));
+  daemon_.setImagePullFailFlag(false);
+  const auto run_res{app_engine->run(app)};
+  ASSERT_EQ(run_res, true) << run_res.err;
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 

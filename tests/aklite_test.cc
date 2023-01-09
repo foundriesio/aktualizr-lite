@@ -47,6 +47,16 @@ TEST_P(AkliteTest, AppUpdate) {
 
   auto target01 = createAppTarget({app01});
 
+  const auto app_engine_type{GetParam()};
+  if (app_engine_type == "RestorableAppEngine") {
+    // inject image pull failure  during App installation for Restorable Apps
+    daemon_.setImagePullFailFlag(true);
+    updateApps(*client, getInitialTarget(), target01, DownloadResult::Status::Ok, "",
+               data::ResultCode::Numeric::kDownloadFailed, "");
+    // turn off failure, and try to update againg
+    daemon_.setImagePullFailFlag(false);
+    ASSERT_FALSE(client->isRollback(target01));
+  }
   updateApps(*client, getInitialTarget(), target01);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
   ASSERT_TRUE(app_engine->isRunning(app01));
@@ -182,6 +192,16 @@ TEST_P(AkliteTest, OstreeAndAppUpdate) {
   std::vector<AppEngine::App> apps{app01};
   auto new_target = createTarget(&apps);
 
+  const auto app_engine_type{GetParam()};
+  if (app_engine_type == "RestorableAppEngine") {
+    // inject image pull failure  during App installation for Restorable Apps
+    daemon_.setImagePullFailFlag(true);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed);
+    // turn off failure, and try to update againg
+    daemon_.setImagePullFailFlag(false);
+    ASSERT_FALSE(client->isRollback(new_target));
+  }
+
   // update to the latest version
   update(*client, getInitialTarget(), new_target);
   // make sure that the installed Target is not "finalized"/applied and Apps are not running
@@ -208,6 +228,11 @@ TEST_P(AkliteTest, OstreeAndAppUpdateIfCreateAfterBoot) {
   std::vector<AppEngine::App> apps{app01};
   auto new_target = createTarget(&apps);
 
+  const auto app_engine_type{GetParam()};
+  if (app_engine_type == "RestorableAppEngine") {
+    // inject image pull failure  during App installation for Restorable Apps
+    daemon_.setImagePullFailFlag(true);
+  }
   // update to the latest version
   update(*client, getInitialTarget(), new_target);
   // make sure that the installed Target is not "finalized"/applied and Apps are not running
@@ -216,10 +241,18 @@ TEST_P(AkliteTest, OstreeAndAppUpdateIfCreateAfterBoot) {
   ASSERT_FALSE(daemon_.areContainersCreated());
 
   reboot(client);
+
+  checkEvents(*client, new_target, UpdateType::kOstree);
+  if (app_engine_type == "RestorableAppEngine") {
+    ASSERT_FALSE(app_engine->isRunning(app01));
+    ASSERT_FALSE(client->isRollback(new_target));
+    daemon_.setImagePullFailFlag(false);
+    updateApps(*client, getInitialTarget(), new_target);
+    checkEvents(*client, new_target, UpdateType::kApp);
+  }
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
   ASSERT_TRUE(app_engine->isRunning(app01));
-  checkEvents(*client, new_target, UpdateType::kOstree);
 }
 
 TEST_P(AkliteTest, OstreeAndAppUpdateWithShortlist) {
