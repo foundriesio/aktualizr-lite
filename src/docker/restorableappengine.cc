@@ -155,8 +155,29 @@ AppEngine::Result RestorableAppEngine::installContainerless(const App& app) {
 
 AppEngine::Result RestorableAppEngine::installAndCreateContainers(const App& app) {
   Result res{false};
+
   try {
     const auto app_install_root{installAppAndImages(app)};
+    res = true;
+  } catch (const std::exception& exc) {
+    res = {false, exc.what()};
+  }
+
+  try {
+    const auto app_install_root{install_root_ / app.name};
+    // Make the docker store aware about the app images by invoking `docker compose pull` command.
+    // The command fetches just image manifests since `installAppAndImages` injects all image data
+    // to the docker store. The goal is to update the docker store map (`repositories.json`) between
+    // image URIs and internal image represntation's hash.
+    // If the pull fails then `ImagePullFailure` error is returned so the client can distnguish it from
+    // the other image install/run errors and keep trying to install/run App containers.
+    pullComposeAppImages(compose_cmd_, app_install_root);
+  } catch (const std::exception& exc) {
+    return {Result::ID::ImagePullFailure, exc.what()};
+  }
+
+  try {
+    const auto app_install_root{install_root_ / app.name};
     startComposeApp(compose_cmd_, app_install_root, "--remove-orphans --no-start");
     res = true;
   } catch (const std::exception& exc) {
@@ -183,8 +204,29 @@ AppEngine::Result RestorableAppEngine::installAndCreateContainers(const App& app
 
 AppEngine::Result RestorableAppEngine::run(const App& app) {
   Result res{false};
+
   try {
     const auto app_install_root{installAppAndImages(app)};
+    res = true;
+  } catch (const std::exception& exc) {
+    res = {false, exc.what()};
+  }
+
+  try {
+    const auto app_install_root{install_root_ / app.name};
+    // Make the docker store aware about the app images by invoking `docker compose pull` command.
+    // The command fetches just image manifests since `installAppAndImages` injects all image data
+    // to the docker store. The goal is to update the docker store map (`repositories.json`) between
+    // image URIs and internal image represntation's hash.
+    // If the pull fails then `ImagePullFailure` error is returned so the client can distnguish it from
+    // the other image install/run errors and keep trying to install/run App containers.
+    pullComposeAppImages(compose_cmd_, app_install_root);
+  } catch (const std::exception& exc) {
+    return {Result::ID::ImagePullFailure, exc.what()};
+  }
+
+  try {
+    const auto app_install_root{install_root_ / app.name};
     startComposeApp(compose_cmd_, app_install_root, "--remove-orphans -d");
     res = true;
   } catch (const std::exception& exc) {
@@ -753,6 +795,12 @@ void RestorableAppEngine::installImage(const std::string& client, const boost::f
 
 void RestorableAppEngine::verifyComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
   exec(boost::format{"%s config"} % compose_cmd, "Compose App verification failed",
+       boost::process::start_dir = app_dir);
+}
+
+void RestorableAppEngine::pullComposeAppImages(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
+                                               const std::string& flags) {
+  exec(boost::format{"%s pull %s"} % compose_cmd % flags, "failed to pull Compose App images",
        boost::process::start_dir = app_dir);
 }
 

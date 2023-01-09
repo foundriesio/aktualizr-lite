@@ -84,6 +84,7 @@ class InstallResult {
     Ok = 0,
     NeedsCompletion,
     Failed,
+    DownloadFailed,
   };
   Status status;
   std::string description;
@@ -164,7 +165,6 @@ class DeviceResult {
   std::string owner;
   std::string repo_id;
 };
-
 
 /**
  * AkliteClient provides an easy-to-use API for users wanting to customize
