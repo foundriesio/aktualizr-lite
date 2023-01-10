@@ -111,7 +111,7 @@ class RestorableAppEngine : public AppEngine {
                      const boost::filesystem::path& dst_dir);
 
   // install App&Images
-  Result installAndCreateContainers(const App& app);
+  Result installAndCreateOrRunContainers(const App& app, bool run = false);
   Result installContainerless(const App& app);
   boost::filesystem::path installAppAndImages(const App& app);
   static void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);

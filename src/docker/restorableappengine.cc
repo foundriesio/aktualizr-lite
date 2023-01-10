@@ -139,7 +139,7 @@ AppEngine::Result RestorableAppEngine::install(const App& app) {
   if (!create_containers_if_install_) {
     return installContainerless(app);
   }
-  return installAndCreateContainers(app);
+  return installAndCreateOrRunContainers(app);
 }
 
 AppEngine::Result RestorableAppEngine::installContainerless(const App& app) {
@@ -153,7 +153,7 @@ AppEngine::Result RestorableAppEngine::installContainerless(const App& app) {
   return res;
 }
 
-AppEngine::Result RestorableAppEngine::installAndCreateContainers(const App& app) {
+AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App& app, bool run) {
   Result res{false};
 
   try {
@@ -178,7 +178,8 @@ AppEngine::Result RestorableAppEngine::installAndCreateContainers(const App& app
 
   try {
     const auto app_install_root{install_root_ / app.name};
-    startComposeApp(compose_cmd_, app_install_root, "--remove-orphans --no-start");
+    const std::string flags{run ? "--remove-orphans -d" : "--remove-orphans --no-start"};
+    startComposeApp(compose_cmd_, app_install_root, flags);
     res = true;
   } catch (const std::exception& exc) {
     res = {false, exc.what()};
@@ -190,7 +191,8 @@ AppEngine::Result RestorableAppEngine::installAndCreateContainers(const App& app
 
   try {
     if (!areContainersCreated(app, (install_root_ / app.name / ComposeFile).string(), docker_client_)) {
-      res = {false, "App containers haven't been created"};
+      const std::string action{run ? "started" : "created"};
+      res = {false, "App containers haven't been " + action};
     }
   } catch (const std::exception& exc) {
     LOG_WARNING << "failed to check whether containers have been created: " << exc.what();
@@ -202,54 +204,7 @@ AppEngine::Result RestorableAppEngine::installAndCreateContainers(const App& app
   return res;
 }
 
-AppEngine::Result RestorableAppEngine::run(const App& app) {
-  Result res{false};
-
-  try {
-    const auto app_install_root{installAppAndImages(app)};
-    res = true;
-  } catch (const std::exception& exc) {
-    res = {false, exc.what()};
-  }
-
-  try {
-    const auto app_install_root{install_root_ / app.name};
-    // Make the docker store aware about the app images by invoking `docker compose pull` command.
-    // The command fetches just image manifests since `installAppAndImages` injects all image data
-    // to the docker store. The goal is to update the docker store map (`repositories.json`) between
-    // image URIs and internal image represntation's hash.
-    // If the pull fails then `ImagePullFailure` error is returned so the client can distnguish it from
-    // the other image install/run errors and keep trying to install/run App containers.
-    pullComposeAppImages(compose_cmd_, app_install_root);
-  } catch (const std::exception& exc) {
-    return {Result::ID::ImagePullFailure, exc.what()};
-  }
-
-  try {
-    const auto app_install_root{install_root_ / app.name};
-    startComposeApp(compose_cmd_, app_install_root, "--remove-orphans -d");
-    res = true;
-  } catch (const std::exception& exc) {
-    res = {false, exc.what()};
-  }
-
-  if (!res) {
-    return res;
-  }
-
-  try {
-    if (!areContainersCreated(app, (install_root_ / app.name / ComposeFile).string(), docker_client_)) {
-      res = {false, "failed to create App containers"};
-    }
-  } catch (const std::exception& exc) {
-    LOG_WARNING << "failed to check whether containers have been created: " << exc.what();
-    // if we fail (exception) to check whether containers have been created is doesn't mean
-    // that installation was not succesful, just assume that the App creation succeeded if
-    // `docker-compose up` returns EXIT_SUCCESS
-  }
-
-  return res;
-}
+AppEngine::Result RestorableAppEngine::run(const App& app) { return installAndCreateOrRunContainers(app, true); }
 
 void RestorableAppEngine::stop(const App& app) {
   try {
