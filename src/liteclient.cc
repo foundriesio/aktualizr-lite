@@ -170,6 +170,7 @@ bool LiteClient::finalizeInstall() {
   // finalize pending installs
   storage->loadInstalledVersions("", nullptr, &pending);
   if (!!pending) {
+    callback("install-final-pre", *pending);
     ret = finalizePendingUpdate(pending);
   } else {
     LOG_INFO << "No Pending Installs";
