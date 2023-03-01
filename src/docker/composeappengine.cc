@@ -279,9 +279,9 @@ void ComposeAppEngine::download(const App& app) {
 
   uint64_t available_storage;
   if (checkAvailableStorageSpace(appRoot(app), available_storage)) {
-    // assume that an extracted files total size is up to 10x larger than the archive size
+    // assume that an extracted files total size is up to 3x larger than the archive size
     // 80% is a storage space watermark, we don't want to fill a storage volume above it
-    auto need_storage = manifest.archiveSize() * 10;
+    auto need_storage = manifest.archiveSize() * 3;
     auto available_for_apps = static_cast<uint64_t>(available_storage * 0.8);
     if (need_storage > available_for_apps) {
       throw std::runtime_error("There is no sufficient storage space available to download App archive, available: " +

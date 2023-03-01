@@ -379,9 +379,9 @@ void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path&
   if (ec.failed()) {
     LOG_WARNING << "Failed to get an available storage size: " << ec.message();
   } else {
-    // assume that an extracted files total size is up to 10x larger than the archive size
+    // assume that an extracted files total size is up to 3x larger than the archive size
     // 80% is a storage space watermark, we don't want to fill a storage volume above it
-    auto need_storage = manifest.archiveSize() * 10;
+    auto need_storage = manifest.archiveSize() * 3;
     auto available = static_cast<boost::uintmax_t>(fs_storage_info.available * 0.8);
     if (need_storage > available) {
       throw std::runtime_error("There is no sufficient storage space available to download App archive, available: " +
