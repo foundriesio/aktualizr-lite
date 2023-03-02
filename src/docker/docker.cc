@@ -182,7 +182,8 @@ std::string RegistryClient::getAppManifest(const Uri& uri, const std::string& fo
   }
 
   if (!manifest_resp.isOk()) {
-    throw std::runtime_error("Failed to download App manifest: " + manifest_resp.getStatusStr());
+    throw std::runtime_error("Failed to download App manifest: " + manifest_resp.getStatusStr() + "; " +
+                             manifest_resp.body);
   }
 
   if (!!manifest_size) {

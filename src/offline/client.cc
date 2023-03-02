@@ -95,6 +95,10 @@ class OfflineRegistry : public BaseHttpClient {
     }
     const auto hash_pos{digest_pos + hash_prefix.size()};
     const auto hash{url.substr(hash_pos)};
+    const auto blob_path{blobs_dir_ / hash};
+    if (!boost::filesystem::exists(blob_path)) {
+      return HttpResponse("The app blob is missing: " + blob_path.string(), 404, CURLE_OK, "Not found");
+    }
     return HttpResponse(Utils::readFile(blobs_dir_ / hash), 200, CURLE_OK, "");
   }
 
