@@ -75,15 +75,23 @@ class OfflineRegistry : public BaseHttpClient {
     }
     const auto hash_pos{digest_pos + hash_prefix.size()};
     const auto hash{url.substr(hash_pos)};
+    const auto blob_path{(blobs_dir_ / hash).string()};
+
+    if (!boost::filesystem::exists(blob_path)) {
+      return HttpResponse("The app blob is missing: " + blob_path, 404, CURLE_OK, "Not found");
+    }
 
     char buf[1024 * 4];
-    std::ifstream blob_file{(blobs_dir_ / hash).string()};
+    std::ifstream blob_file{blob_path};
 
     std::streamsize read_byte_numb;
-    while ((read_byte_numb = blob_file.readsome(buf, sizeof(buf))) > 0) {
-      write_cb(buf, read_byte_numb, 1, userp);
+    while (blob_file.good()) {
+      blob_file.read(buf, sizeof(buf));
+      write_cb(buf, blob_file.gcount(), 1, userp);
     }
-    blob_file.close();
+    if (!blob_file.eof()) {
+      HttpResponse("Failed to read app blob data: " + blob_path, 500, CURLE_OK, "Internal Error");
+    }
     return HttpResponse("", 200, CURLE_OK, "");
   }
 
