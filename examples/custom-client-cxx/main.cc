@@ -67,7 +67,26 @@ int main(int argc, char **argv) {
       }
 
       auto latest = res.GetLatest();
-      LOG_INFO << "Found Latest Target: " << latest.Name();
+      if (client.IsRollback(latest)) {
+        LOG_INFO << "Latest Target is marked for causing a rollback and won't be installed: " << latest.Name();
+      } else {
+        LOG_INFO << "Found Latest Target: " << latest.Name();
+      }
+
+      if (client.IsRollback(latest) && current.Name() == latest.Name()) {
+        // Handle the case when Apps failed to start on boot just after an update.
+        // This is only possible with `pacman.create_containers_before_reboot = 0`.
+        LOG_INFO << "The currently booted Target is a failing Target, finding Target to rollback to...";
+        const TufTarget rollback_target = client.GetRollbackTarget();
+        if (rollback_target.IsUnknown()) {
+          LOG_ERROR << "Failed to find Target to rollback to after failure to start Apps at boot of a new sysroot";
+          std::this_thread::sleep_for(std::chrono::seconds(interval));
+          continue;
+        }
+        latest = rollback_target;
+        LOG_INFO << "Rollback Target is " << latest.Name();
+      }
+
       if (latest.Name() != current.Name() && !client.IsRollback(latest)) {
         std::string reason = "Updating from " + current.Name() + " to " + latest.Name();
         auto installer = client.Installer(latest, reason);

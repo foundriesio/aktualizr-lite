@@ -43,6 +43,18 @@ class TufTarget {
    */
   const Json::Value &Custom() const { return custom_; }
 
+  /**
+   * Is this a known target in the Tuf manifest? There are two common causes
+   * to this situation:
+   *  1) A device has been re-registered (sql.db got wiped out) and the
+   *     /var/sota/installed_versions file is missing. The device might
+   *     running the correct target but the system isn't sure.
+   *  2) A device might be running a Target from a different tag it's not
+   *     configured for. This means the Target isn't present in the targets.json
+   *     this device is getting from the device-gateway.
+   */
+  bool IsUnknown() const { return name_ == "unknown"; }
+
  private:
   std::string name_;
   std::string sha256_;
@@ -231,6 +243,13 @@ class AkliteClient {
    * Return the Target currently running on the system.
    */
   TufTarget GetCurrent() const;
+
+  /**
+   * Find the Target to rollback to in the event the current target wasn't
+   * able to start it's Apps after rebooting from an ostree change. This
+   * situation is only possible when `pacman.create_containers_before_reboot = 0`.
+   */
+  TufTarget GetRollbackTarget() const;
 
   /**
    * Check in with device-gateway to get server managed information about
