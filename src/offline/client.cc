@@ -379,7 +379,13 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
     if (install_res != data::ResultCode::Numeric::kNeedCompletion) {
       throw std::runtime_error("Failed to install Target");
     }
-    post_install_action = PostInstallAction::NeedReboot;
+    if (client->isTargetPending(target)) {
+      post_install_action = PostInstallAction::NeedReboot;
+    } else {
+      // If Target's ostree is not pending then the installation was interrupted due to
+      // the ongoing boot firmware update.
+      post_install_action = PostInstallAction::NeedRebootToUpdateBootFw;
+    }
   } else if (client->config.pacman.type == ComposeAppManager::Name) {
     // don't `install` since it will create/run containers and we don't want to do it
     // before we register images and restart dockerd
@@ -415,7 +421,7 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   client->storage->loadInstalledVersions("", nullptr, &pending);
   if (!pending) {
     LOG_INFO << "No any pending installations found";
-    return PostRunAction::Ok;
+    return PostRunAction::NoUpdateToRun;
   }
 
   data::ResultCode::Numeric install_res{data::ResultCode::Numeric::kUnknown};
@@ -426,8 +432,11 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
     // apply ostree installation and run Apps
     if (client->finalizeInstall()) {
       install_res = data::ResultCode::Numeric::kOk;
+    } else if (client->isRollback(target)) {
+      LOG_ERROR << "Failed to finalize the ostree installation or start the updated Apps";
     } else {
-      LOG_ERROR << "Failed to boot on the updated ostree-based rootfs or start updated Apps";
+      LOG_INFO << "Please reboot device before finalizaing the installation and running the updated Apps";
+      return PostRunAction::NeedReboot;
     }
   } else {
     // just run Apps of the new Target
@@ -456,10 +465,15 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   if (!rollback_target.IsValid()) {
     // If either a device failed to boot on a new device or ostree hasn't changed but new version Apps failed to start,
     // then the current version is actually "rollback" Target we need to switch to, which is effectivelly syncing Apps
-    rollback_target = current_target;
+    if (current_target.IsValid() && current_target.filename() != "unknown") {
+      rollback_target = current_target;
+    } else {
+      // something really bad has happened
+      return PostRunAction::Failed;
+    }
   }
 
-  LOG_INFO << "Rollback to " << rollback_target.filename();
+  LOG_INFO << "Rolling back to " << rollback_target.filename();
 
   client->appsInSync(rollback_target);
   rollback_install_res = client->install(rollback_target);
@@ -472,6 +486,18 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   }
   return (data::ResultCode::Numeric::kOk == rollback_install_res) ? PostRunAction::Ok
                                                                   : PostRunAction::RollbackNeedReboot;
+}
+
+const Uptane::Target getCurrentTarget(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_client_http_client) {
+  auto client{createOfflineClient(cfg_in,
+                                  /* src dir is not needed in the case of get current */
+                                  {
+                                      "unknown-tuf-dir",
+                                      "unknown-ostree-dir",
+                                      "unknown-apps-dir",
+                                  },
+                                  docker_client_http_client)};
+  return client->getCurrent();
 }
 
 }  // namespace client

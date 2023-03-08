@@ -24,14 +24,14 @@ class ClientTest :virtual public ::testing::Test {
 
  protected:
   ClientTest(std::string certs_dir = "")
-      : boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())},
-        sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
+      : sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
         sys_repo_{(test_dir_.Path() / "sysrepo").string(), os},
         tuf_repo_{test_dir_.Path() / "repo"},
         ostree_repo_{(test_dir_.Path() / "treehub").string(), true},
         device_gateway_{ostree_repo_, tuf_repo_, certs_dir},
         sysroot_hash_{sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch)},
-        initial_target_{"unknown", Uptane::EcuMap(), {Hash(Hash::Type::kSha256, sysroot_hash_)}, 0, "", "OSTREE"} {
+        initial_target_{"unknown", Uptane::EcuMap(), {Hash(Hash::Type::kSha256, sysroot_hash_)}, 0, "", "OSTREE"},
+        boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())} {
     sys_repo_.deploy(sysroot_hash_);
   }
 

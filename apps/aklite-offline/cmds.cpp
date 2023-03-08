@@ -18,6 +18,12 @@ int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::pat
                      "(unless no Apps to update or dockerless system)\n";
         break;
       }
+      case offline::PostInstallAction::NeedRebootToUpdateBootFw: {
+        ret_code = 110;
+        std::cout << "Please reboot a device to finalize the boot firmware update and then re-run the `install` "
+                     "command again";
+        break;
+      }
       case offline::PostInstallAction::NeedDockerRestart: {
         std::cout << "Please restart `docker` service `systemctl restart docker` and run `run` command to start the "
                      "updated Apps\n";
@@ -54,6 +60,22 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
         LOG_INFO << "Installation or Apps start has failed so a device was rolled backed to a previous version";
         LOG_INFO << "Reboot is required to complete the rollback";
         ret_code = 100;
+        break;
+      }
+      case offline::PostRunAction::NoUpdateToRun: {
+        LOG_INFO << "No new Target to run has been found";
+        ret_code = 110;
+        break;
+      }
+      case offline::PostRunAction::NeedReboot: {
+        LOG_INFO << "Please, reboot a device before finalizing the update and running the updated Apps";
+        ret_code = 120;
+        break;
+      }
+      case offline::PostRunAction::Failed: {
+        LOG_INFO
+            << "Failed to finalize the update; no rollback is needed since a device is running the previous version";
+        ret_code = 130;
         break;
       }
       default:
