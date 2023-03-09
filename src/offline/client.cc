@@ -16,9 +16,7 @@ namespace offline {
 namespace client {
 
 static std::unique_ptr<LiteClient> createOfflineClient(
-    const Config& cfg_in, const UpdateSrc& src,
-    std::shared_ptr<HttpInterface> docker_client_http_client =
-        Docker::DockerClient::DefaultHttpClientFactory("unix:///var/run/docker.sock"));
+    const Config& cfg_in, const UpdateSrc& src, std::shared_ptr<HttpInterface> docker_client_http_client = nullptr);
 static Uptane::Target getTarget(LiteClient& client, const std::string& target_name = "");
 static void registerApps(const Uptane::Target& target);
 
@@ -166,8 +164,9 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
 
   AppEngine::Ptr app_engine{std::make_shared<Docker::RestorableAppEngine>(
       pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client,
-      std::make_shared<Docker::DockerClient>(docker_client_http_client), pacman_cfg.skopeo_bin.string(), docker_host,
-      compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
+      docker_client_http_client ? std::make_shared<Docker::DockerClient>(docker_client_http_client)
+                                : std::make_shared<Docker::DockerClient>(),
+      pacman_cfg.skopeo_bin.string(), docker_host, compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
       [offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
         Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
         return "--src-shared-blob-dir " + offline_registry->blobsDir().string() +
