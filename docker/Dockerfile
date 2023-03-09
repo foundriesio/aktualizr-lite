@@ -104,6 +104,6 @@ RUN echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontain
 RUN apt-get update && apt-get -y install skopeo && ln -s /usr/bin/skopeo /sbin/skopeo
 
 # Install specific version of docker-compose
-RUN pip3 install docker==4.2.1 && pip3 install docker-compose==1.26
+RUN pip3 install docker==4.2.1 && pip3 install docker-compose==1.26 pyOpenSSL==23.0.0
 
 WORKDIR /
