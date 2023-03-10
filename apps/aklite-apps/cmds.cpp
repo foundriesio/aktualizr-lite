@@ -114,7 +114,7 @@ int RegisterCmd::hackDockerStore(const std::vector<std::string>& shortlist, cons
 
   const auto apps{getStoreApps(store_root, shortlist)};
   if (apps.size() == 0) {
-    LOG_INFO << "No any Apps found in the store; path:  " << store_root;
+    LOG_INFO << "No Apps found in the store; path:  " << store_root;
     exit(EXIT_SUCCESS);
   }
 
@@ -164,7 +164,7 @@ int RunCmd::runApps(const std::vector<std::string>& shortlist, const std::string
 
   const auto apps{getStoreApps(store_root, shortlist)};
   if (apps.size() == 0) {
-    LOG_INFO << "No any Apps found in the store; path:  " << store_root
+    LOG_INFO << "No Apps found in the store; path:  " << store_root
              << ";  shortlist: " << boost::algorithm::join(shortlist, ",");
     exit(EXIT_SUCCESS);
   }
