@@ -172,8 +172,19 @@ int RunCmd::runApps(const std::vector<std::string>& shortlist, const std::string
   auto http_client = std::make_shared<HttpClient>();
   auto docker_client{std::make_shared<Docker::DockerClient>()};
   auto registry_client{std::make_shared<Docker::RegistryClient>(http_client, "")};
-  Docker::RestorableAppEngine app_engine{store_root,    compose_root, docker_root, registry_client,
-                                         docker_client, client,       docker_host, compose_client};
+  Docker::RestorableAppEngine app_engine{
+      store_root,
+      compose_root,
+      docker_root,
+      registry_client,
+      docker_client,
+      client,
+      docker_host,
+      compose_client,
+      Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
+      [](const Docker::Uri& /* app_uri */, const std::string& image_uri) { return "docker://" + image_uri; },
+      false,
+      true};
 
   for (const auto& app : apps) {
     LOG_INFO << "Starting App: " << app.name;

@@ -173,9 +173,10 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
                " oci:" + offline_registry->appsDir().string() + "/" + app_uri.app + "/" + app_uri.digest.hash() +
                "/images/" + uri.registryHostname + "/" + uri.repo + "/" + uri.digest.hash();
       },
-      false /* don't create containers on install because it makes dockerd check if pinned images
-    present in its store what we should avoid until images are registered (hacked) in dockerd store
-  */)};
+      false, /* don't create containers on install because it makes dockerd check if pinned images
+    present in its store what we should avoid until images are registered (hacked) in dockerd store */
+      true   /* indicate that this is an offline client */
+      )};
 
   return std::make_unique<LiteClient>(cfg, app_engine, nullptr, std::make_shared<MetaFetcher>(src.TufDir));
 }
