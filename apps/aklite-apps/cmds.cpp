@@ -160,7 +160,7 @@ int RunCmd::runApps(const std::vector<std::string>& shortlist, const std::string
   LOG_INFO << "Starting Apps preloaded into the store: " << store_root
            << "\n\tshortlist: " << boost::algorithm::join(shortlist, ",") << "\n\tdocker-host: " << docker_host
            << "\n\tcompose-root: " << compose_root << "\n\tdocker-root: " << docker_root << "\n\tclient: " << client
-           << "\n\tcompose-client: " << client << std::endl;
+           << "\n\tcompose-client: " << compose_client << std::endl;
 
   const auto apps{getStoreApps(store_root, shortlist)};
   if (apps.size() == 0) {
