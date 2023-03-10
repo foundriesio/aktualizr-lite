@@ -90,7 +90,7 @@ class RestorableAppEngine : public AppEngine {
       StorageSpaceFunc storage_space_func = RestorableAppEngine::GetDefStorageSpaceFunc(),
       ClientImageSrcFunc client_image_src_func = [](const Docker::Uri& /* app_uri */,
                                                     const std::string& image_uri) { return "docker://" + image_uri; },
-      bool create_containers_if_install = true);
+      bool create_containers_if_install = true, bool offline = false);
 
   Result fetch(const App& app) override;
   Result verify(const App& app) override;
@@ -172,6 +172,7 @@ class RestorableAppEngine : public AppEngine {
   StorageSpaceFunc storage_space_func_;
   ClientImageSrcFunc client_image_src_func_;
   bool create_containers_if_install_;
+  bool offline_;
 };
 
 }  // namespace Docker

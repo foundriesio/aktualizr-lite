@@ -57,7 +57,7 @@ RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boo
                                          Docker::DockerClient::Ptr docker_client, std::string client,
                                          std::string docker_host, std::string compose_cmd,
                                          StorageSpaceFunc storage_space_func, ClientImageSrcFunc client_image_src_func,
-                                         bool create_containers_if_install)
+                                         bool create_containers_if_install, bool offline)
     : store_root_{std::move(store_root)},
       install_root_{std::move(install_root)},
       docker_root_{std::move(docker_root)},
@@ -69,7 +69,8 @@ RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boo
       docker_client_{std::move(docker_client)},
       storage_space_func_{std::move(storage_space_func)},
       client_image_src_func_{std::move(client_image_src_func)},
-      create_containers_if_install_{create_containers_if_install} {
+      create_containers_if_install_{create_containers_if_install},
+      offline_{offline} {
   boost::filesystem::create_directories(apps_root_);
   boost::filesystem::create_directories(blobs_root_);
 }
@@ -163,17 +164,19 @@ AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App
     res = {false, exc.what()};
   }
 
-  try {
-    const auto app_install_root{install_root_ / app.name};
-    // Make the docker store aware about the app images by invoking `docker compose pull` command.
-    // The command fetches just image manifests since `installAppAndImages` injects all image data
-    // to the docker store. The goal is to update the docker store map (`repositories.json`) between
-    // image URIs and internal image represntation's hash.
-    // If the pull fails then `ImagePullFailure` error is returned so the client can distnguish it from
-    // the other image install/run errors and keep trying to install/run App containers.
-    pullComposeAppImages(compose_cmd_, app_install_root);
-  } catch (const std::exception& exc) {
-    return {Result::ID::ImagePullFailure, exc.what()};
+  if (!offline_) {
+    try {
+      const auto app_install_root{install_root_ / app.name};
+      // Make the docker store aware about the app images by invoking `docker compose pull` command.
+      // The command fetches just image manifests since `installAppAndImages` injects all image data
+      // to the docker store. The goal is to update the docker store map (`repositories.json`) between
+      // image URIs and internal image represntation's hash.
+      // If the pull fails then `ImagePullFailure` error is returned so the client can distnguish it from
+      // the other image install/run errors and keep trying to install/run App containers.
+      pullComposeAppImages(compose_cmd_, app_install_root);
+    } catch (const std::exception& exc) {
+      return {Result::ID::ImagePullFailure, exc.what()};
+    }
   }
 
   try {
