@@ -414,7 +414,7 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   boost::optional<Uptane::Target> pending;
   client->storage->loadInstalledVersions("", nullptr, &pending);
   if (!pending) {
-    LOG_INFO << "No any pending installations found";
+    LOG_INFO << "No pending installations found";
     return PostRunAction::Ok;
   }
 
