@@ -144,7 +144,30 @@ class AkliteOffline : public ::testing::Test {
     return (cfg_.bootloader.reboot_sentinel_dir / "need_reboot").string();
   }
 
-  void reboot() { boost::filesystem::remove(getSentinelFilePath()); }
+  void reboot() {
+    boost::filesystem::remove(getSentinelFilePath());
+    reloadDockerEngine();
+  }
+  void reloadDockerEngine() {
+    // emulate registration of images located in `/var/lib/docker/image/overlay2/repositories.json
+    const boost::filesystem::path repositories_file{daemon_.dir() / "/image/overlay2/repositories.json"};
+    Json::Value repositories;
+    Json::Value images;
+    if (boost::filesystem::exists(repositories_file)) {
+      repositories = Utils::parseJSONFile(repositories_file.string());
+    } else {
+      repositories = Utils::parseJSON("{\"Repositories\":{}}");
+    }
+
+    for (const auto& repo : repositories["Repositories"]) {
+      for (Json::ValueConstIterator image_it = repo.begin(); image_it != repo.end(); ++image_it) {
+        const auto image_uri{image_it.key().asString()};
+        images[image_uri] = true;
+      }
+    }
+    // The docker daemon and docker compose mocks use the "image.json" file
+    Utils::writeFile(daemon_.dir() / "images.json", images);
+  }
 
  protected:
   static const std::string hw_id;
