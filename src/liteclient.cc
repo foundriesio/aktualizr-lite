@@ -344,6 +344,17 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
   }
 }
 
+bool LiteClient::isPendingTarget(const Uptane::Target& target) {
+  boost::optional<Uptane::Target> pending;
+
+  storage->loadInstalledVersions("", nullptr, &pending);
+  if (!pending) {
+    return false;
+  }
+
+  return target.sha256Hash() == pending->sha256Hash();
+}
+
 class DetailedDownloadReport : public EcuDownloadStartedReport {
  public:
   DetailedDownloadReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, const std::string& details)
@@ -616,8 +627,16 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   auto iresult = installPackage(target);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
-    storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
     is_reboot_required_ = (config.pacman.booted == BootedType::kBooted);
+    if (target.sha256Hash() == sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending)) {
+      // Don't mark Target as pending if its ostree deployment is not really pending.
+      // It happens if rootfs/ostreemanager::install() detects the boot firmware update during installation
+      // and exists the installation earlier before the target ostree is actually deployed.
+      // So, we should not mark such target as "pending" to avoid "finalization" just after reboot.
+      // So, after the reboot the boot fw update is confirmed and then the aklite will try to install
+      // the given Target again.
+      storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
+    }
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
