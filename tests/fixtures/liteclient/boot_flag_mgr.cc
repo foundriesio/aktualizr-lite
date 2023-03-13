@@ -32,9 +32,11 @@ class BootFlagMgr {
   int bootupgrade_available() const {
    return std::stoi(Utils::readFile(dir_/"bootupgrade_available"));
   }
-
   void reset_bootupgrade_available() {
     Utils::writeFile(dir_/"bootupgrade_available", std::string("0"));
+  }
+  void set_bootupgrade_available() {
+    Utils::writeFile(dir_/"bootupgrade_available", std::string("1"));
   }
 
  private:

@@ -355,6 +355,16 @@ bool LiteClient::isPendingTarget(const Uptane::Target& target) {
   return target.sha256Hash() == pending->sha256Hash();
 }
 
+bool LiteClient::isBootFwUpdateInProgress() const {
+  auto* rootfs_pacman = dynamic_cast<RootfsTreeManager*>(package_manager_.get());
+  if (rootfs_pacman == nullptr) {
+    LOG_ERROR << "Cannot downcast the package manager to the rootfs package manager";
+    return false;
+  }
+
+  return rootfs_pacman->bootFwUpdateStatus().isUpdateInProgress();
+}
+
 class DetailedDownloadReport : public EcuDownloadStartedReport {
  public:
   DetailedDownloadReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, const std::string& details)

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <boost/filesystem.hpp>
+#include <boost/format.hpp>
 #include <boost/process.hpp>
 #include <fstream>
 
@@ -16,6 +17,7 @@
 // include test fixtures
 #include "fixtures/composeapp.cc"
 #include "fixtures/dockerdaemon.cc"
+#include "fixtures/liteclient/boot_flag_mgr.cc"
 #include "fixtures/liteclient/executecmd.cc"
 #include "fixtures/liteclient/ostreerepomock.cc"
 #include "fixtures/liteclient/sysostreerepomock.cc"
@@ -81,7 +83,8 @@ class AkliteOffline : public ::testing::Test {
         ostree_repo_{(test_dir_.Path() / "treehub").string(), true},
         tuf_repo_{src_dir_ / "tuf"},
         daemon_{test_dir_.Path() / "daemon"},
-        app_store_{test_dir_.Path() / "apps"} {
+        app_store_{test_dir_.Path() / "apps"},
+        boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())} {
     // hardware ID
     cfg_.provision.primary_ecu_hardware_id = hw_id;
 
@@ -97,6 +100,7 @@ class AkliteOffline : public ::testing::Test {
     // configure bootloader/booting related functionality
     cfg_.bootloader.reboot_command = "/bin/true";
     cfg_.bootloader.reboot_sentinel_dir = test_dir_.Path();
+    cfg_.bootloader.rollback_mode = RollbackMode::kFioVB;
 
     cfg_.pacman.extra["reset_apps"] = "";
     cfg_.pacman.extra["reset_apps_root"] = (test_dir_.Path() / "reset-apps").string();
@@ -184,6 +188,7 @@ class AkliteOffline : public ::testing::Test {
   TufRepoMock tuf_repo_;
   fixtures::DockerDaemon daemon_;
   AppStore app_store_;
+  BootFlagMgr::Ptr boot_flag_mgr_;
 };
 
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
@@ -292,6 +297,90 @@ TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
   reboot();
 
   ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
+}
+
+TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
+  Uptane::Target target{Uptane::Target::Unknown()};
+
+  const auto layer_size{1024};
+  Json::Value layers;
+  layers["layers"][0]["digest"] =
+      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+  layers["layers"][0]["size"] = layer_size;
+
+  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
+  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
+  {
+    const std::vector<AppEngine::App> apps{app01};
+    addTarget(&apps);
+  }
+  const std::vector<AppEngine::App> apps{app01, app02};
+  target = addTarget(&apps);
+
+  offline::UpdateSrc src{
+      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
+      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
+  };
+
+  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
+  auto env{boost::this_process::environment()};
+  env.set("DOCKER_HOST", daemon_.getUrl());
+  // Emulate the situation when the previous ostree update that included boot fw update
+  // hasn't been fully completed.
+  // I.E. the final reboot that confirms successful reboot on a new boot fw
+  // and ostree for the bootloader, so it finalizes the boot fw update and resets `bootupgrade_available`.
+  // Also, it may happen that `bootupgrade_available` is set by mistake.
+  // The bootloader will detect such situation and reset `bootupgrade_available`.
+  boot_flag_mgr_->set_bootupgrade_available();
+  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
+  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedRebootForBootFw);
+
+  reboot();
+  boot_flag_mgr_->reset_bootupgrade_available();
+  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
+  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
+  reboot();
+
+  ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
+}
+
+TEST_F(AkliteOffline, BootFwUpdate) {
+  Uptane::Target target{Uptane::Target::Unknown()};
+
+  const auto layer_size{1024};
+  Json::Value layers;
+  layers["layers"][0]["digest"] =
+      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+  layers["layers"][0]["size"] = layer_size;
+
+  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
+  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
+  {
+    const std::vector<AppEngine::App> apps{app01};
+    addTarget(&apps);
+  }
+  const std::vector<AppEngine::App> apps{app01, app02};
+  target = addTarget(&apps);
+
+  offline::UpdateSrc src{
+      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
+      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
+  };
+
+  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
+  auto env{boost::this_process::environment()};
+  env.set("DOCKER_HOST", daemon_.getUrl());
+  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
+  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
+
+  reboot();
+  // emulate boot firmware update
+  boot_flag_mgr_->set_bootupgrade_available();
+  ASSERT_EQ(offline::client::run(cfg_, daemon_.getClient()), offline::PostRunAction::OkNeedReboot);
+  reboot();
+  // emulate boot firmware update confirmation
+  boot_flag_mgr_->reset_bootupgrade_available();
+  ASSERT_EQ(offline::client::run(cfg_, daemon_.getClient()), offline::PostRunAction::Ok);
 }
 
 int main(int argc, char** argv) {

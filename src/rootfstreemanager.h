@@ -28,6 +28,8 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
+  const bootloader::BootFwUpdateStatus& bootFwUpdateStatus() const { return *boot_fw_update_status_; }
+
  protected:
   void installNotify(const Uptane::Target& target) override;
   data::InstallationResult install(const Uptane::Target& target) const override;
