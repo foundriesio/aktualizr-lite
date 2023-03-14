@@ -87,6 +87,7 @@ class AkliteOffline : public ::testing::Test {
         boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())} {
     // hardware ID
     cfg_.provision.primary_ecu_hardware_id = hw_id;
+    cfg_.provision.primary_ecu_serial = "test_primary_ecu_serial_id";
 
     // a path to the config dir
     cfg_.storage.path = test_dir_.Path() / "sota-dir";
@@ -124,6 +125,8 @@ class AkliteOffline : public ::testing::Test {
   offline::PostInstallAction install() { return offline::client::install(cfg_, src(), daemon_.getClient()); }
 
   offline::PostRunAction run() { return offline::client::run(cfg_, daemon_.getClient()); }
+
+  const Uptane::Target getCurrent() { return offline::client::getCurrent(cfg_, daemon_.getClient()); }
 
   Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false) {
     const auto& latest_target{tuf_repo_.getLatest()};
@@ -227,6 +230,7 @@ TEST_F(AkliteOffline, OfflineClient) {
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
@@ -239,6 +243,7 @@ TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
@@ -249,6 +254,7 @@ TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
@@ -268,6 +274,7 @@ TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, BootFwUpdate) {
@@ -282,6 +289,7 @@ TEST_F(AkliteOffline, BootFwUpdate) {
   // emulate boot firmware update confirmation
   boot_flag_mgr_->reset_bootupgrade_available();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 int main(int argc, char** argv) {

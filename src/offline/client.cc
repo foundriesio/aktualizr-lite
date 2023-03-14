@@ -483,5 +483,17 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
                                                                   : PostRunAction::RollbackNeedReboot;
 }
 
+const Uptane::Target getCurrent(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_client_http_client) {
+  auto client{createOfflineClient(cfg_in,
+                                  /* src dir is not needed in the case of run command */
+                                  {
+                                      "unknown-tuf-dir",
+                                      "unknown-ostree-dir",
+                                      "unknown-apps-dir",
+                                  },
+                                  docker_client_http_client)};
+  return client->getCurrent();
+}
+
 }  // namespace client
 }  // namespace offline

@@ -57,6 +57,7 @@ class ClientTest :virtual public ::testing::Test {
     conf.tls.server = device_gateway_.getTlsUri();
     conf.uptane.repo_server = device_gateway_.getTufRepoUri();
     conf.provision.primary_ecu_hardware_id = hw_id;
+    conf.provision.primary_ecu_serial = "test_primary_ecu_serial_id";
     conf.storage.path = test_dir_.Path();
     conf.storage.uptane_metadata_path = utils::BasedPath(tuf_repo_.getRepoPath());
 
