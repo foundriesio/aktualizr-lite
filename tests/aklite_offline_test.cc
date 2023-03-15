@@ -194,7 +194,7 @@ class AkliteOffline : public ::testing::Test {
     custom[Target::ComposeAppField] = apps_json;
     custom["name"] = cfg_.provision.primary_ecu_hardware_id + "-lmp";
     custom["version"] = "0";
-    custom["hadrwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+    custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
     custom["targetFormat"] = "OSTREE";
     custom["arch"] = "arm64";
     installed_target_json[initial_target_.filename()]["custom"] = custom;
@@ -345,16 +345,49 @@ TEST_F(AkliteOffline, UpdateAfterPreloadingWithShortlisting) {
   const auto app02{createApp("app-02")};
   preloadApps({createApp("app-01"), app02}, {app02.name});
 
-  boost::filesystem::remove_all(
-      app_store_.appsDir());  // remove the current target app from the store/install source dir
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
   const auto app02_updated{createApp("app-02")};
   const auto new_target{addTarget({createApp("app-01"), app02_updated})};
-  boost::filesystem::remove_all(app_store_.appsDir() /
-                                app02_updated.name);  // remove app-02 from the install source dir
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
   ASSERT_TRUE(new_target.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, Rollback) {
+  preloadApps({createApp("app-01")}, {});
+
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01")})};
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.sha256Hash());
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, RollbackWithAppShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
+
+  // remove the current target apps from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03")})};
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.sha256Hash());
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
 }
 
 int main(int argc, char** argv) {

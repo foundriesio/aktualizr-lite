@@ -1,5 +1,7 @@
 #include "client.h"
 
+#include <filesystem>
+
 #include <boost/process.hpp>
 
 #include "aktualizr-lite/api.h"
@@ -11,6 +13,8 @@
 #include "ostree/repo.h"
 #include "storage/invstorage.h"
 #include "target.h"
+
+namespace fs = std::filesystem;
 
 namespace offline {
 namespace client {
@@ -335,6 +339,36 @@ static void registerApps(const Uptane::Target& target, const boost::filesystem::
   Utils::writeFile(repositories_file.string(), repositories);
 }
 
+static void shortlistTargetAppsByContent(const boost::filesystem::path& apps_root, Uptane::Target& target) {
+  if (!boost::filesystem::exists(apps_root) || !boost::filesystem::exists(apps_root / "apps")) {
+    return;
+  }
+  const auto target_apps{Target::appsJson(target)};
+  if (target_apps.empty()) {
+    return;
+  }
+  const fs::path apps_dir{(apps_root / "apps").string()};
+  Json::Value app_shortlist;
+  for (auto const& app_dir_entry : std::filesystem::directory_iterator{apps_dir}) {
+    const auto app_name{app_dir_entry.path().filename().string()};
+    if (!target_apps.isMember(app_name)) {
+      continue;
+    }
+    for (auto const& app_ver_dir_entry : std::filesystem::directory_iterator{app_dir_entry.path()}) {
+      const auto uri_file{app_ver_dir_entry.path() / "uri"};
+      if (fs::exists(uri_file)) {
+        const auto app_uri{Utils::readFile(uri_file.string())};
+        if (target_apps[app_name]["uri"] == app_uri) {
+          app_shortlist[app_name]["uri"] = app_uri;
+        }
+      }
+    }
+  }
+  auto custom{target.custom_data()};
+  custom[Target::ComposeAppField] = app_shortlist;
+  target.updateCustom(custom);
+}
+
 PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
                           std::shared_ptr<HttpInterface> docker_client_http_client) {
   auto client{createOfflineClient(cfg_in, src, docker_client_http_client)};
@@ -468,7 +502,13 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
     rollback_target = current_target;
   }
 
-  LOG_INFO << "Rollback to " << rollback_target.filename();
+  ComposeAppManager::Config pacman_cfg(cfg_in.pacman);
+  shortlistTargetAppsByContent(pacman_cfg.reset_apps_root, rollback_target);
+  if (current_target.sha256Hash() == rollback_target.sha256Hash()) {
+    client->logTarget("Syncing with Target that device rolled back to:  ", rollback_target);
+  } else {
+    client->logTarget("Rolling back to: ", rollback_target);
+  }
 
   client->appsInSync(rollback_target);
   rollback_install_res = client->install(rollback_target);
@@ -479,7 +519,7 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
     LOG_ERROR << "Try to reboot and re-run";
     // we really don't know what to do in this case, just let user to reboot a device and let re-run again.
   }
-  return (data::ResultCode::Numeric::kOk == rollback_install_res) ? PostRunAction::Ok
+  return (data::ResultCode::Numeric::kOk == rollback_install_res) ? PostRunAction::RollbackOk
                                                                   : PostRunAction::RollbackNeedReboot;
 }
 

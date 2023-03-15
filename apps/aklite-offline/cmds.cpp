@@ -67,6 +67,12 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
         ret_code = 90;
         break;
       }
+      case offline::PostRunAction::RollbackOk: {
+        LOG_INFO << "Installation or Apps start has failed so a device was rolled backed to a previous version";
+        LOG_INFO << "No reboot is required";
+        ret_code = 99;
+        break;
+      }
       case offline::PostRunAction::RollbackNeedReboot: {
         LOG_INFO << "Installation or Apps start has failed so a device was rolled backed to a previous version";
         LOG_INFO << "Reboot is required to complete the rollback";
