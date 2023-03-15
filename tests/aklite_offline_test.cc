@@ -233,14 +233,14 @@ class AkliteOffline : public ::testing::Test {
     Utils::writeFile(daemon_.dir() / "images.json", images);
   }
 
-  AppEngine::App createApp(const std::string& name) {
+  AppEngine::App createApp(const std::string& name, const std::string& failure = "none") {
     const auto layer_size{1024};
     Json::Value layers;
     layers["layers"][0]["digest"] =
         "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
     layers["layers"][0]["size"] = layer_size;
 
-    return app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers(name, layers));
+    return app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers(name, layers, boost::none, failure));
   }
 
   offline::UpdateSrc src() const {
@@ -387,6 +387,25 @@ TEST_F(AkliteOffline, RollbackWithAppShortlisting) {
   // emulate "normal" rollback - boot on the previous target
   sys_repo_.deploy(initial_target_.sha256Hash());
   ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, RollbackIfAppStartFailsWithAppShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
+
+  // remove the current target apps from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03", "compose-start-failure")})};
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackNeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
   ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
 }
 
