@@ -84,7 +84,8 @@ class AkliteOffline : public ::testing::Test {
         tuf_repo_{src_dir_ / "tuf"},
         daemon_{test_dir_.Path() / "daemon"},
         app_store_{test_dir_.Path() / "apps"},
-        boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())} {
+        boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())},
+        initial_target_{Uptane::Target::Unknown()} {
     // hardware ID
     cfg_.provision.primary_ecu_hardware_id = hw_id;
     cfg_.provision.primary_ecu_serial = "test_primary_ecu_serial_id";
@@ -112,9 +113,18 @@ class AkliteOffline : public ::testing::Test {
 
     cfg_.import.base_path = cfg_.storage.path / "import";
 
-    // add an initial rootfs to the ostree-based sysroot that liteclient manages and deploy it
-    const auto hash = sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch);
+    // add an initial rootfs to the ostree repo (treehub), pull it to the sysroot's repo, and deploy it
+    const auto hash{ostree_repo_.commit(sys_rootfs_.path, sys_rootfs_.branch)};
+    sys_repo_.getRepo().pullLocal(ostree_repo_.getPath(), hash);
     sys_repo_.deploy(hash);
+
+    Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
+    std::vector<Hash> hashes{Hash(Hash::Type::kSha256, hash)};
+    initial_target_ = Uptane::Target{hw_id + "-lmp-0", ecus, hashes, 0, "", "OSTREE"};
+    // update the initial Target to add the hardware ID so Target::MatchTarget() works correctly
+    auto custom{initial_target_.custom_data()};
+    custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+    initial_target_.updateCustom(custom);
   }
 
   void SetUp() {
@@ -139,7 +149,7 @@ class AkliteOffline : public ::testing::Test {
         version = "1";
       }
     }
-    auto hash{latest_target.sha256Hash()};
+    auto hash{latest_target.IsValid() ? latest_target.sha256Hash() : initial_target_.sha256Hash()};
     if (!just_apps) {
       // update rootfs and commit it into Treehub's repo
       const std::string unique_content = Utils::randomUuid();
@@ -154,6 +164,43 @@ class AkliteOffline : public ::testing::Test {
     // add new target to TUF repo
     const std::string name = hw_id + "-" + os + "-" + version;
     return tuf_repo_.addTarget(name, hash, hw_id, version, apps_json);
+  }
+
+  void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload) {
+    // do App preloading by installing Target that refers to the current ostree hash
+    // and contains the list of apps to preload.
+    Uptane::Target preloaded_target{initial_target_};
+    Json::Value apps_json;
+
+    for (const auto& app : apps) {
+      apps_json[app.name]["uri"] = app.uri;
+    }
+    tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-0", initial_target_.sha256Hash(),
+                        cfg_.provision.primary_ecu_hardware_id, "0", apps_json);
+
+    // content-based shortlisting
+    for (const auto& app : apps_not_to_preload) {
+      boost::filesystem::remove_all(app_store_.appsDir() / app);
+    }
+    ASSERT_EQ(install(), offline::PostInstallAction::NeedDockerRestart);
+    reloadDockerEngine();
+    ASSERT_EQ(run(), offline::PostRunAction::Ok);
+
+    Json::Value installed_target_json;
+    installed_target_json[initial_target_.filename()]["hashes"]["sha256"] = initial_target_.sha256Hash();
+    installed_target_json[initial_target_.filename()]["length"] = 0;
+    installed_target_json[initial_target_.filename()]["is_current"] = true;
+    Json::Value custom;
+    custom[Target::ComposeAppField] = apps_json;
+    custom["name"] = cfg_.provision.primary_ecu_hardware_id + "-lmp";
+    custom["version"] = "0";
+    custom["hadrwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+    custom["targetFormat"] = "OSTREE";
+    custom["arch"] = "arm64";
+    installed_target_json[initial_target_.filename()]["custom"] = custom;
+    LOG_ERROR << installed_target_json;
+    Utils::writeFile(cfg_.import.base_path / "installed_versions", installed_target_json);
+    ASSERT_EQ(getCurrent().filename(), initial_target_.filename());
   }
 
   const std::string getSentinelFilePath() const {
@@ -218,6 +265,7 @@ class AkliteOffline : public ::testing::Test {
   fixtures::DockerDaemon daemon_;
   AppStore app_store_;
   BootFlagMgr::Ptr boot_flag_mgr_;
+  Uptane::Target initial_target_;
 };
 
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
@@ -290,6 +338,23 @@ TEST_F(AkliteOffline, BootFwUpdate) {
   boot_flag_mgr_->reset_bootupgrade_available();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
   ASSERT_TRUE(target.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, UpdateAfterPreloadingWithShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
+
+  boost::filesystem::remove_all(
+      app_store_.appsDir());  // remove the current target app from the store/install source dir
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated})};
+  boost::filesystem::remove_all(app_store_.appsDir() /
+                                app02_updated.name);  // remove app-02 from the install source dir
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(new_target.MatchTarget(getCurrent()));
 }
 
 int main(int argc, char** argv) {

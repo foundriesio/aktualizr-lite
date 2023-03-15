@@ -7,6 +7,12 @@ class OSTreeRepoMock {
     LOG_INFO << "OSTree repo was created at " + path_;
   }
 
+  void pullLocal(const std::string& src_dir, const std::string& hash) {
+    executeCmd("ostree", { "pull-local", "--repo", path_, src_dir, hash },
+                         "pulling " + hash + " from " + src_dir + " to " + path_);
+  }
+
+
   std::string commit(const std::string& src_dir, const std::string& branch) {
     return executeCmd("ostree", { "commit", "--repo", path_, "--branch", branch, "--tree=dir=" + src_dir },
                       "commit from " + src_dir + " to " + path_);
