@@ -114,7 +114,7 @@ int RegisterCmd::hackDockerStore(const std::vector<std::string>& shortlist, cons
 
   const auto apps{getStoreApps(store_root, shortlist)};
   if (apps.size() == 0) {
-    LOG_INFO << "No any Apps found in the store; path:  " << store_root;
+    LOG_INFO << "No Apps found in the store; path:  " << store_root;
     exit(EXIT_SUCCESS);
   }
 
@@ -157,14 +157,14 @@ int RegisterCmd::hackDockerStore(const std::vector<std::string>& shortlist, cons
 int RunCmd::runApps(const std::vector<std::string>& shortlist, const std::string& docker_host,
                     const std::string& store_root, const std::string& compose_root, const std::string& docker_root,
                     const std::string& client, const std::string& compose_client) {
-  LOG_INFO << "Starting Apps prelaoded into the store: " << store_root
+  LOG_INFO << "Starting Apps preloaded into the store: " << store_root
            << "\n\tshortlist: " << boost::algorithm::join(shortlist, ",") << "\n\tdocker-host: " << docker_host
            << "\n\tcompose-root: " << compose_root << "\n\tdocker-root: " << docker_root << "\n\tclient: " << client
-           << "\n\tcompose-client: " << client << std::endl;
+           << "\n\tcompose-client: " << compose_client << std::endl;
 
   const auto apps{getStoreApps(store_root, shortlist)};
   if (apps.size() == 0) {
-    LOG_INFO << "No any Apps found in the store; path:  " << store_root
+    LOG_INFO << "No Apps found in the store; path:  " << store_root
              << ";  shortlist: " << boost::algorithm::join(shortlist, ",");
     exit(EXIT_SUCCESS);
   }

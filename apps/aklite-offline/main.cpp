@@ -15,7 +15,7 @@ static std::vector<apps::aklite_offline::Cmd::Ptr> cmds{
 };
 
 static void print_usage() {
-  std::cout << "Usage:\n\t aklite-apps <cmd> [options]\nSupported commands: ";
+  std::cout << "Usage:\n\t aklite-offline <cmd> [options]\nSupported commands: ";
   for (const auto& cmd : cmds) {
     std::cout << cmd->name() << " ";
   }
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
   arg_opts.add_options()("cmd", po::value<std::string>());
   arg_opts.add(cmd_opts);
   auto print_usage = [](const std::string& cmd, const po::options_description& opts) {
-    std::cout << "aklite-apps " << cmd << " [options]\n" << opts;
+    std::cout << "aklite-offline " << cmd << " [options]\n" << opts;
   };
 
   try {
