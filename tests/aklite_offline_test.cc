@@ -305,6 +305,14 @@ TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
   ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
+TEST_F(AkliteOffline, OfflineClientAppsOnly) {
+  const auto target{addTarget({createApp("app-01")}, true)};
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedDockerRestart);
+  reloadDockerEngine();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
+}
+
 TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
   const auto target{addTarget({createApp("app-01")})};
   offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
