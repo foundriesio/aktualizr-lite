@@ -483,6 +483,18 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   // should be available.
   Uptane::Target rollback_target = client->getRollbackTarget();
   if (!rollback_target.IsValid()) {
+    if (Target::isUnknown(current_target)) {
+      // We don't know details of TUF Target to rollback to, so just let device to stay on the current undefined state
+      LOG_ERROR << "A device rolled back to the previous Target's rootfs/ostree; "
+                << " TUF Target to rollback to is unknown so cannot sync Apps to desired state.";
+      return PostRunAction::RollbackToUnknown;
+    }
+    if (client->isRollback(current_target)) {
+      // We don't know details of TUF Target to rollback to, and already booted on "failing" Target
+      LOG_ERROR << "Failed to start the updated Apps after successfull boot on the updated rootfs;"
+                   " TUF Target to rollback to is unknown so cannot perform a rollback to the previous version.";
+      return PostRunAction::RollbackToUnknownIfAppFailed;
+    }
     // If either a device failed to boot on a new device or ostree hasn't changed but new version Apps failed to start,
     // then the current version is actually "rollback" Target we need to switch to, which is effectivelly syncing Apps
     rollback_target = current_target;

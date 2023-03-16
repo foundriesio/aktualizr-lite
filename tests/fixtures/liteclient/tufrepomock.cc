@@ -42,6 +42,11 @@ class TufRepoMock {
 
   ImageRepo& repo() { return repo_; }
 
+  void reset() {
+    boost::filesystem::remove_all(root_);
+    repo_.generateRepo(KeyType::kED25519);
+  }
+
  private:
   const boost::filesystem::path root_;
   ImageRepo repo_;

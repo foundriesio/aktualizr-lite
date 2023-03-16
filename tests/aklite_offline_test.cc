@@ -166,7 +166,8 @@ class AkliteOffline : public ::testing::Test {
     return tuf_repo_.addTarget(name, hash, hw_id, version, apps_json);
   }
 
-  void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload) {
+  void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload,
+                   bool add_installed_versions = true) {
     // do App preloading by installing Target that refers to the current ostree hash
     // and contains the list of apps to preload.
     Uptane::Target preloaded_target{initial_target_};
@@ -186,21 +187,28 @@ class AkliteOffline : public ::testing::Test {
     reloadDockerEngine();
     ASSERT_EQ(run(), offline::PostRunAction::Ok);
 
-    Json::Value installed_target_json;
-    installed_target_json[initial_target_.filename()]["hashes"]["sha256"] = initial_target_.sha256Hash();
-    installed_target_json[initial_target_.filename()]["length"] = 0;
-    installed_target_json[initial_target_.filename()]["is_current"] = true;
-    Json::Value custom;
-    custom[Target::ComposeAppField] = apps_json;
-    custom["name"] = cfg_.provision.primary_ecu_hardware_id + "-lmp";
-    custom["version"] = "0";
-    custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
-    custom["targetFormat"] = "OSTREE";
-    custom["arch"] = "arm64";
-    installed_target_json[initial_target_.filename()]["custom"] = custom;
-    LOG_ERROR << installed_target_json;
-    Utils::writeFile(cfg_.import.base_path / "installed_versions", installed_target_json);
-    ASSERT_EQ(getCurrent().filename(), initial_target_.filename());
+    if (add_installed_versions) {
+      Json::Value installed_target_json;
+      installed_target_json[initial_target_.filename()]["hashes"]["sha256"] = initial_target_.sha256Hash();
+      installed_target_json[initial_target_.filename()]["length"] = 0;
+      installed_target_json[initial_target_.filename()]["is_current"] = true;
+      Json::Value custom;
+      custom[Target::ComposeAppField] = apps_json;
+      custom["name"] = cfg_.provision.primary_ecu_hardware_id + "-lmp";
+      custom["version"] = "0";
+      custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+      custom["targetFormat"] = "OSTREE";
+      custom["arch"] = "arm64";
+      installed_target_json[initial_target_.filename()]["custom"] = custom;
+      Utils::writeFile(cfg_.import.base_path / "installed_versions", installed_target_json);
+      ASSERT_EQ(getCurrent().filename(), initial_target_.filename());
+    } else {
+      // we need to remove the initial target from the TUF repo so it's not listed in the source TUF repo
+      // for the following offline update and as result it will be "unknown" to the client.
+      tuf_repo_.reset();
+    }
+    // remove the DB generated during the update for the app preloading, to emulate real-life situation
+    boost::filesystem::remove(cfg_.storage.sqldb_path.get(cfg_.storage.path));
   }
 
   const std::string getSentinelFilePath() const {
@@ -415,6 +423,32 @@ TEST_F(AkliteOffline, RollbackIfAppStartFailsWithAppShortlisting) {
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
   ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, RollbackToUnknown) {
+  preloadApps({createApp("app-01")}, {}, false);
+
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01")})};
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.sha256Hash());
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknown);
+  ASSERT_EQ(getCurrent().sha256Hash(), initial_target_.sha256Hash());
+}
+
+TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
+  preloadApps({createApp("app-01")}, {}, false);
+
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknownIfAppFailed);
+  ASSERT_EQ(getCurrent().sha256Hash(), new_target.sha256Hash());
 }
 
 int main(int argc, char** argv) {
