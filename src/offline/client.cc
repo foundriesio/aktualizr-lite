@@ -460,19 +460,10 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   const auto target{*pending};                     /* target to be applied and started */
   const auto current_target{client->getCurrent()}; /* current target */
 
-  if (current_target.sha256Hash() != target.sha256Hash()) {
-    // apply ostree installation and run Apps
-    if (client->finalizeInstall()) {
-      install_res = data::ResultCode::Numeric::kOk;
-    } else {
-      LOG_ERROR << "Failed to boot on the updated ostree-based rootfs or start updated Apps";
-    }
+  if (client->finalizeInstall()) {
+    install_res = data::ResultCode::Numeric::kOk;
   } else {
-    // just run Apps of the new Target
-    client->appsInSync(target);
-    if ((install_res = client->install(target)) != data::ResultCode::Numeric::kOk) {
-      LOG_ERROR << "Failed to start the updated Apps";
-    }
+    LOG_ERROR << "Failed to boot on the updated ostree-based rootfs or start updated Apps";
   }
 
   if (install_res == data::ResultCode::Numeric::kOk && client->isTargetActive(target)) {
@@ -481,12 +472,7 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
     } else {
       LOG_INFO << "Update has been successfully applied: " << target.filename();
     }
-
-    if (client->isBootFwUpdateInProgress()) {
-      return PostRunAction::OkNeedReboot;
-    }
-
-    return PostRunAction::Ok;
+    return client->isBootFwUpdateInProgress() ? PostRunAction::OkNeedReboot : PostRunAction::Ok;
   }
 
   // Rollback
