@@ -379,7 +379,11 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
     if (install_res != data::ResultCode::Numeric::kNeedCompletion) {
       throw std::runtime_error("Failed to install Target");
     }
-    post_install_action = PostInstallAction::NeedReboot;
+    if (client->isPendingTarget(target)) {
+      post_install_action = PostInstallAction::NeedReboot;
+    } else {
+      post_install_action = PostInstallAction::NeedRebootForBootFw;
+    }
   } else if (client->config.pacman.type == ComposeAppManager::Name) {
     // don't `install` since it will create/run containers and we don't want to do it
     // before we register images and restart dockerd
@@ -443,6 +447,11 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
     } else {
       LOG_INFO << "Update has been successfully applied: " << target.filename();
     }
+
+    if (client->isBootFwUpdateInProgress()) {
+      return PostRunAction::OkNeedReboot;
+    }
+
     return PostRunAction::Ok;
   }
 

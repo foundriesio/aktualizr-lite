@@ -12,6 +12,16 @@ int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::pat
         offline::client::install(cfg_in, {src_dir / "tuf", src_dir / "ostree_repo", src_dir / "apps"});
 
     switch (install_res) {
+      case offline::PostInstallAction::NeedRebootForBootFw: {
+        ret_code = 90;
+        std::cout
+            << "Please reboot a device to confirm a boot firmware update, and then run the `install` command again\n";
+        std::cout << "If the reboot doesn't help to proceed with the update, then make sure that "
+                     "`bootupgrade_available` is set to `0`.";
+        std::cout << "Try running `fw_setenv|fiovb_setenv bootupgrade_available 0`, reboot a device, and then run "
+                     "the `install` again";
+        break;
+      }
       case offline::PostInstallAction::NeedReboot: {
         ret_code = 100;
         std::cout << "Please reboot a device and run `run` command to apply installation and start the updated Apps "
@@ -48,6 +58,13 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
       case offline::PostRunAction::Ok: {
         LOG_INFO << "Successfully applied new version of rootfs and started Apps if present";
         ret_code = 0;
+        break;
+      }
+      case offline::PostRunAction::OkNeedReboot: {
+        LOG_INFO << "Successfully applied new version of rootfs and started Apps if present.";
+        LOG_INFO << "Please, optionally reboot a device to confirm the boot firmware update;"
+                    " the reboot can be performed now, anytime later, or at the beginning of the next update";
+        ret_code = 90;
         break;
       }
       case offline::PostRunAction::RollbackNeedReboot: {
