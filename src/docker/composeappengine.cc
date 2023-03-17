@@ -4,8 +4,11 @@
 
 #include <sys/statvfs.h>
 #include <boost/process.hpp>
+#include <filesystem>
 
 #include "exec.h"
+
+namespace fs = std::filesystem;
 
 namespace Docker {
 
@@ -237,7 +240,20 @@ bool ComposeAppEngine::isRunning(const App& app) const {
   return false;
 }
 
-AppEngine::Apps ComposeAppEngine::getInstalledApps() const { return {}; }
+AppEngine::Apps ComposeAppEngine::getInstalledApps() const {
+  if (!fs::exists(root_.string())) {
+    return {};
+  }
+  Apps installed_apps;
+  for (auto const& app_dir_entry : fs::directory_iterator{root_.string()}) {
+    const App app{app_dir_entry.path().filename().string(), ""};
+    AppState state(app, appRoot(app));
+    if (state() >= AppState::State::kInstalled) {
+      installed_apps.emplace_back(App{app.name, state.version()});
+    }
+  }
+  return installed_apps;
+}
 
 Json::Value ComposeAppEngine::getRunningAppsInfo() const {
   Json::Value apps;
