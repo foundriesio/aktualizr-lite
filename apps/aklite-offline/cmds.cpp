@@ -67,10 +67,28 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
         ret_code = 90;
         break;
       }
+      case offline::PostRunAction::RollbackOk: {
+        LOG_INFO << "Installation has failed so a device was rolled backed to a previous version";
+        LOG_INFO << "No reboot is required";
+        ret_code = 99;
+        break;
+      }
       case offline::PostRunAction::RollbackNeedReboot: {
-        LOG_INFO << "Installation or Apps start has failed so a device was rolled backed to a previous version";
+        LOG_INFO << "Apps start has failed so a device was rolled backed to a previous version";
         LOG_INFO << "Reboot is required to complete the rollback";
         ret_code = 100;
+        break;
+      }
+      case offline::PostRunAction::RollbackToUnknown: {
+        LOG_INFO << "Installation has failed so a device was rolled backed to a previous version hash";
+        LOG_INFO << "No reboot is required; Apps are in undefined state";
+        ret_code = 110;
+        break;
+      }
+      case offline::PostRunAction::RollbackToUnknownIfAppFailed: {
+        LOG_INFO << "Apps start has failed after successful boot on the updated rootfs";
+        LOG_INFO << "Apps are in undefined state";
+        ret_code = 120;
         break;
       }
       default:

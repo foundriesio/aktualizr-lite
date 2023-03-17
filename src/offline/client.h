@@ -21,7 +21,15 @@ struct UpdateSrc {
 };
 
 enum class PostInstallAction { Undefined = -1, NeedReboot, NeedRebootForBootFw, NeedDockerRestart, AlreadyInstalled };
-enum class PostRunAction { Undefined = -1, Ok, OkNeedReboot, RollbackNeedReboot };
+enum class PostRunAction {
+  Undefined = -1,
+  Ok,
+  OkNeedReboot,
+  RollbackOk,
+  RollbackNeedReboot,
+  RollbackToUnknown,
+  RollbackToUnknownIfAppFailed
+};
 
 class MetaFetcher : public Uptane::IMetadataFetcher {
  public:
@@ -65,6 +73,8 @@ namespace client {
 PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
                           std::shared_ptr<HttpInterface> docker_client_http_client = nullptr);
 PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_client_http_client = nullptr);
+const Uptane::Target getCurrent(const Config& cfg_in,
+                                std::shared_ptr<HttpInterface> docker_client_http_client = nullptr);
 
 }  // namespace client
 }  // namespace offline

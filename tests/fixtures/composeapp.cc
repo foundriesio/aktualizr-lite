@@ -92,9 +92,11 @@ class ComposeApp {
     return app;
   }
 
-  static Ptr createAppWithCustomeLayers(const std::string& name, const Json::Value& layers, boost::optional<std::size_t> layer_man_size = boost::none) {
+  static Ptr createAppWithCustomeLayers(const std::string& name, const Json::Value& layers,
+                                        boost::optional<std::size_t> layer_man_size = boost::none,
+                                        const std::string& failure = "none") {
     Ptr app{new ComposeApp(name, Docker::ComposeAppEngine::ComposeFile, "factory/image-01")};
-    app->updateService("service-01", ServiceTemplate, "none", layers, layer_man_size);
+    app->updateService("service-01", ServiceTemplate, failure, layers, layer_man_size);
     return app;
   }
 

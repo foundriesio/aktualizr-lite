@@ -26,6 +26,8 @@ class TufRepoMock {
     custom_json["targetFormat"] = "OSTREE";
     custom_json["version"] = version;
     custom_json["uri"] = "https://ci.foundries.io/projects/factory/lmp/builds/1097";
+    custom_json["hardwareIds"][0] = hardware_id;
+    custom_json["ecuIdentifiers"]["test_primary_ecu_serial_id"]["hardwareId"] = hardware_id;
 
     custom_json[Target::ComposeAppField] = apps_json;
     repo_.addCustomImage(name, hash_obj, 0, hardware_id, "", 0, null_delegation, custom_json);
@@ -39,6 +41,11 @@ class TufRepoMock {
   }
 
   ImageRepo& repo() { return repo_; }
+
+  void reset() {
+    boost::filesystem::remove_all(root_);
+    repo_.generateRepo(KeyType::kED25519);
+  }
 
  private:
   const boost::filesystem::path root_;

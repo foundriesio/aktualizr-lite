@@ -84,9 +84,11 @@ class AkliteOffline : public ::testing::Test {
         tuf_repo_{src_dir_ / "tuf"},
         daemon_{test_dir_.Path() / "daemon"},
         app_store_{test_dir_.Path() / "apps"},
-        boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())} {
+        boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())},
+        initial_target_{Uptane::Target::Unknown()} {
     // hardware ID
     cfg_.provision.primary_ecu_hardware_id = hw_id;
+    cfg_.provision.primary_ecu_serial = "test_primary_ecu_serial_id";
 
     // a path to the config dir
     cfg_.storage.path = test_dir_.Path() / "sota-dir";
@@ -109,12 +111,34 @@ class AkliteOffline : public ::testing::Test {
         boost::filesystem::canonical("tests/docker-compose_fake.py").string() + " " + daemon_.dir().string() + " ";
     cfg_.pacman.extra["images_data_root"] = daemon_.dataRoot();
 
-    // add an initial rootfs to the ostree-based sysroot that liteclient manages and deploy it
-    const auto hash = sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch);
+    cfg_.import.base_path = cfg_.storage.path / "import";
+
+    // add an initial rootfs to the ostree repo (treehub), pull it to the sysroot's repo, and deploy it
+    const auto hash{ostree_repo_.commit(sys_rootfs_.path, sys_rootfs_.branch)};
+    sys_repo_.getRepo().pullLocal(ostree_repo_.getPath(), hash);
     sys_repo_.deploy(hash);
+
+    Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
+    std::vector<Hash> hashes{Hash(Hash::Type::kSha256, hash)};
+    initial_target_ = Uptane::Target{hw_id + "-lmp-0", ecus, hashes, 0, "", "OSTREE"};
+    // update the initial Target to add the hardware ID so Target::MatchTarget() works correctly
+    auto custom{initial_target_.custom_data()};
+    custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+    initial_target_.updateCustom(custom);
   }
 
-  Uptane::Target addTarget(const std::vector<AppEngine::App>* apps = nullptr) {
+  void SetUp() {
+    auto env{boost::this_process::environment()};
+    env.set("DOCKER_HOST", daemon_.getUrl());
+  }
+
+  offline::PostInstallAction install() { return offline::client::install(cfg_, src(), daemon_.getClient()); }
+
+  offline::PostRunAction run() { return offline::client::run(cfg_, daemon_.getClient()); }
+
+  const Uptane::Target getCurrent() { return offline::client::getCurrent(cfg_, daemon_.getClient()); }
+
+  Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false) {
     const auto& latest_target{tuf_repo_.getLatest()};
     std::string version;
     if (version.size() == 0) {
@@ -125,23 +149,66 @@ class AkliteOffline : public ::testing::Test {
         version = "1";
       }
     }
-
-    // update rootfs and commit it into Treehub's repo
-    const std::string unique_content = Utils::randomUuid();
-    const std::string unique_file = Utils::randomUuid();
-    Utils::writeFile(sys_rootfs_.path + "/" + unique_file, unique_content, true);
-    auto hash = ostree_repo_.commit(sys_rootfs_.path, branch);
-
-    Json::Value apps_json;
-    if (apps) {
-      for (const auto& app : *apps) {
-        apps_json[app.name]["uri"] = app.uri;
-      }
+    auto hash{latest_target.IsValid() ? latest_target.sha256Hash() : initial_target_.sha256Hash()};
+    if (!just_apps) {
+      // update rootfs and commit it into Treehub's repo
+      const std::string unique_content = Utils::randomUuid();
+      const std::string unique_file = Utils::randomUuid();
+      Utils::writeFile(sys_rootfs_.path + "/" + unique_file, unique_content, true);
+      hash = ostree_repo_.commit(sys_rootfs_.path, branch);
     }
-
+    Json::Value apps_json;
+    for (const auto& app : apps) {
+      apps_json[app.name]["uri"] = app.uri;
+    }
     // add new target to TUF repo
     const std::string name = hw_id + "-" + os + "-" + version;
     return tuf_repo_.addTarget(name, hash, hw_id, version, apps_json);
+  }
+
+  void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload,
+                   bool add_installed_versions = true) {
+    // do App preloading by installing Target that refers to the current ostree hash
+    // and contains the list of apps to preload.
+    Uptane::Target preloaded_target{initial_target_};
+    Json::Value apps_json;
+
+    for (const auto& app : apps) {
+      apps_json[app.name]["uri"] = app.uri;
+    }
+    tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-0", initial_target_.sha256Hash(),
+                        cfg_.provision.primary_ecu_hardware_id, "0", apps_json);
+
+    // content-based shortlisting
+    for (const auto& app : apps_not_to_preload) {
+      boost::filesystem::remove_all(app_store_.appsDir() / app);
+    }
+    ASSERT_EQ(install(), offline::PostInstallAction::NeedDockerRestart);
+    reloadDockerEngine();
+    ASSERT_EQ(run(), offline::PostRunAction::Ok);
+
+    if (add_installed_versions) {
+      Json::Value installed_target_json;
+      installed_target_json[initial_target_.filename()]["hashes"]["sha256"] = initial_target_.sha256Hash();
+      installed_target_json[initial_target_.filename()]["length"] = 0;
+      installed_target_json[initial_target_.filename()]["is_current"] = true;
+      Json::Value custom;
+      custom[Target::ComposeAppField] = apps_json;
+      custom["name"] = cfg_.provision.primary_ecu_hardware_id + "-lmp";
+      custom["version"] = "0";
+      custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+      custom["targetFormat"] = "OSTREE";
+      custom["arch"] = "arm64";
+      installed_target_json[initial_target_.filename()]["custom"] = custom;
+      Utils::writeFile(cfg_.import.base_path / "installed_versions", installed_target_json);
+      ASSERT_EQ(getCurrent().filename(), initial_target_.filename());
+    } else {
+      // we need to remove the initial target from the TUF repo so it's not listed in the source TUF repo
+      // for the following offline update and as result it will be "unknown" to the client.
+      tuf_repo_.reset();
+    }
+    // remove the DB generated during the update for the app preloading, to emulate real-life situation
+    boost::filesystem::remove(cfg_.storage.sqldb_path.get(cfg_.storage.path));
   }
 
   const std::string getSentinelFilePath() const {
@@ -152,6 +219,7 @@ class AkliteOffline : public ::testing::Test {
     boost::filesystem::remove(getSentinelFilePath());
     reloadDockerEngine();
   }
+
   void reloadDockerEngine() {
     // emulate registration of images located in `/var/lib/docker/image/overlay2/repositories.json
     const boost::filesystem::path repositories_file{daemon_.dir() / "/image/overlay2/repositories.json"};
@@ -173,6 +241,22 @@ class AkliteOffline : public ::testing::Test {
     Utils::writeFile(daemon_.dir() / "images.json", images);
   }
 
+  AppEngine::App createApp(const std::string& name, const std::string& failure = "none") {
+    const auto layer_size{1024};
+    Json::Value layers;
+    layers["layers"][0]["digest"] =
+        "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+    layers["layers"][0]["size"] = layer_size;
+
+    return app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers(name, layers, boost::none, failure));
+  }
+
+  offline::UpdateSrc src() const {
+    return {
+        tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
+        "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */};
+  }
+
  protected:
   static const std::string hw_id;
   static const std::string os;
@@ -189,6 +273,7 @@ class AkliteOffline : public ::testing::Test {
   fixtures::DockerDaemon daemon_;
   AppStore app_store_;
   BootFlagMgr::Ptr boot_flag_mgr_;
+  Uptane::Target initial_target_;
 };
 
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
@@ -196,135 +281,49 @@ const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
 
 TEST_F(AkliteOffline, OfflineClient) {
-  Uptane::Target target{Uptane::Target::Unknown()};
+  const auto target{addTarget({createApp("app-01")})};
 
-  const auto layer_size{1024};
-  Json::Value layers;
-  layers["layers"][0]["digest"] =
-      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
-  layers["layers"][0]["size"] = layer_size;
-
-  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
-  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
-  {
-    const std::vector<AppEngine::App> apps{app01};
-    addTarget(&apps);
-  }
-  const std::vector<AppEngine::App> apps{app01, app02};
-  target = addTarget(&apps);
-
-  offline::UpdateSrc src{
-      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
-      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
-  };
-
-  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
-  auto env{boost::this_process::environment()};
-  env.set("DOCKER_HOST", daemon_.getUrl());
-  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
-  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
-
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
-
-  ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
-  Uptane::Target target{Uptane::Target::Unknown()};
-
-  const auto layer_size{1024};
-  Json::Value layers;
-  layers["layers"][0]["digest"] =
-      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
-  layers["layers"][0]["size"] = layer_size;
-
-  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
-  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
-  const auto app03{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("zz00-app-03", layers))};
-
-  const std::vector<AppEngine::App> apps{app01, app02, app03};
-  target = addTarget(&apps);
-
+  const auto app03{createApp("zz00-app-03")};
+  const auto target{addTarget({createApp("app-01"), createApp("app-02"), app03})};
   // remove zz00-app-03 (app03) from the file system to make sure that offline update succeeds
   // if one of the targets apps is missing in the provided update content.
   boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
 
-  offline::UpdateSrc src{
-      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
-      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
-  };
-
-  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
-  auto env{boost::this_process::environment()};
-  env.set("DOCKER_HOST", daemon_.getUrl());
-  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
-  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
-
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
-
-  ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
-  Uptane::Target target{Uptane::Target::Unknown()};
-
-  const auto layer_size{1024};
-  Json::Value layers;
-  layers["layers"][0]["digest"] =
-      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
-  layers["layers"][0]["size"] = layer_size;
-
-  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
-  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
-  {
-    const std::vector<AppEngine::App> apps{app01};
-    addTarget(&apps);
-  }
-  const std::vector<AppEngine::App> apps{app01, app02};
-  target = addTarget(&apps);
-
+  const auto target{addTarget({createApp("app-01")})};
   // Remove all Target Apps from App store to make sure that only ostree can be updated
   boost::filesystem::remove_all(app_store_.appsDir());
-  offline::UpdateSrc src{
-      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
-      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
-  };
 
-  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
-  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
-  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
-
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
+}
 
-  ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
+TEST_F(AkliteOffline, OfflineClientAppsOnly) {
+  const auto target{addTarget({createApp("app-01")}, true)};
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedDockerRestart);
+  reloadDockerEngine();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
-  Uptane::Target target{Uptane::Target::Unknown()};
-
-  const auto layer_size{1024};
-  Json::Value layers;
-  layers["layers"][0]["digest"] =
-      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
-  layers["layers"][0]["size"] = layer_size;
-
-  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
-  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
-  {
-    const std::vector<AppEngine::App> apps{app01};
-    addTarget(&apps);
-  }
-  const std::vector<AppEngine::App> apps{app01, app02};
-  target = addTarget(&apps);
-
-  offline::UpdateSrc src{
-      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
-      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
-  };
-
+  const auto target{addTarget({createApp("app-01")})};
   offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
-  auto env{boost::this_process::environment()};
-  env.set("DOCKER_HOST", daemon_.getUrl());
   // Emulate the situation when the previous ostree update that included boot fw update
   // hasn't been fully completed.
   // I.E. the final reboot that confirms successful reboot on a new boot fw
@@ -332,55 +331,124 @@ TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
   // Also, it may happen that `bootupgrade_available` is set by mistake.
   // The bootloader will detect such situation and reset `bootupgrade_available`.
   boot_flag_mgr_->set_bootupgrade_available();
-  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
-  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedRebootForBootFw);
 
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedRebootForBootFw);
   reboot();
   boot_flag_mgr_->reset_bootupgrade_available();
-  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
-  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
-
-  ASSERT_NO_THROW(offline::client::run(cfg_, daemon_.getClient()));
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, BootFwUpdate) {
-  Uptane::Target target{Uptane::Target::Unknown()};
+  const auto target{addTarget({createApp("app-01")})};
 
-  const auto layer_size{1024};
-  Json::Value layers;
-  layers["layers"][0]["digest"] =
-      "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
-  layers["layers"][0]["size"] = layer_size;
-
-  const auto app01{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers))};
-  const auto app02{app_store_.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers))};
-  {
-    const std::vector<AppEngine::App> apps{app01};
-    addTarget(&apps);
-  }
-  const std::vector<AppEngine::App> apps{app01, app02};
-  target = addTarget(&apps);
-
-  offline::UpdateSrc src{
-      tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir(),
-      "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */
-  };
-
-  offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
-  auto env{boost::this_process::environment()};
-  env.set("DOCKER_HOST", daemon_.getUrl());
-  ASSERT_NO_THROW(post_install_action = offline::client::install(cfg_, src, daemon_.getClient()));
-  ASSERT_EQ(post_install_action, offline::PostInstallAction::NeedReboot);
-
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   // emulate boot firmware update
   boot_flag_mgr_->set_bootupgrade_available();
-  ASSERT_EQ(offline::client::run(cfg_, daemon_.getClient()), offline::PostRunAction::OkNeedReboot);
+  ASSERT_EQ(run(), offline::PostRunAction::OkNeedReboot);
   reboot();
   // emulate boot firmware update confirmation
   boot_flag_mgr_->reset_bootupgrade_available();
-  ASSERT_EQ(offline::client::run(cfg_, daemon_.getClient()), offline::PostRunAction::Ok);
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, UpdateAfterPreloadingWithShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
+
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated})};
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(new_target.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, Rollback) {
+  preloadApps({createApp("app-01")}, {});
+
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01")})};
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.sha256Hash());
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, RollbackWithAppShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
+
+  // remove the current target apps from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03")})};
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.sha256Hash());
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, RollbackIfAppStartFailsWithAppShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
+
+  // remove the current target apps from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03", "compose-start-failure")})};
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackNeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, RollbackToUnknown) {
+  preloadApps({createApp("app-01")}, {}, false);
+
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01")})};
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.sha256Hash());
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknown);
+  ASSERT_EQ(getCurrent().sha256Hash(), initial_target_.sha256Hash());
+}
+
+TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
+  preloadApps({createApp("app-01")}, {}, false);
+
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknownIfAppFailed);
+  ASSERT_EQ(getCurrent().sha256Hash(), new_target.sha256Hash());
 }
 
 int main(int argc, char** argv) {

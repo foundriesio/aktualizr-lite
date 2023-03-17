@@ -4,6 +4,7 @@ set(SRC client.cc)
 set(HEADERS client.h)
 
 add_library(${TARGET} OBJECT ${SRC})
+set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 17)
 
 target_include_directories(${TARGET} PRIVATE
   ${AKLITE_DIR}/include/
