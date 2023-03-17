@@ -237,6 +237,8 @@ bool ComposeAppEngine::isRunning(const App& app) const {
   return false;
 }
 
+AppEngine::Apps ComposeAppEngine::getInstalledApps() const { return {}; }
+
 Json::Value ComposeAppEngine::getRunningAppsInfo() const {
   Json::Value apps;
   try {

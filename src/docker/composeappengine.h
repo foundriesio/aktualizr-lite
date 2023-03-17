@@ -27,6 +27,7 @@ class ComposeAppEngine : public AppEngine {
   void remove(const App& app) override;
   bool isFetched(const App& app) const override;
   bool isRunning(const App& app) const override;
+  Apps getInstalledApps() const override;
   Json::Value getRunningAppsInfo() const override;
   void prune(const Apps& app_shortlist) override {
     (void)app_shortlist;

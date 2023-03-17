@@ -256,6 +256,8 @@ bool RestorableAppEngine::isRunning(const App& app) const {
   return res;
 }
 
+AppEngine::Apps RestorableAppEngine::getInstalledApps() const { return {}; }
+
 Json::Value RestorableAppEngine::getRunningAppsInfo() const {
   Json::Value apps;
   try {

@@ -70,6 +70,7 @@ class AppEngine {
   virtual void remove(const App& app) = 0;
   virtual bool isFetched(const App& app) const = 0;
   virtual bool isRunning(const App& app) const = 0;
+  virtual Apps getInstalledApps() const = 0;
   virtual Json::Value getRunningAppsInfo() const = 0;
   virtual void prune(const Apps& app_shortlist) = 0;
 
