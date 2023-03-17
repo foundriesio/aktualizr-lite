@@ -6,6 +6,8 @@
 
 #include "logging/logging.h"
 
+const std::string Target::InitialTarget{"Initial Target"};
+
 bool Target::hasTag(const Uptane::Target& target, const std::vector<std::string>& tags) {
   if (tags.empty()) {
     return true;
@@ -94,4 +96,23 @@ TufTarget Target::toTufTarget(const Uptane::Target& target) {
   }
 
   return TufTarget{target.filename(), target.sha256Hash(), ver, target.custom_data()};
+}
+
+bool Target::isUnknown(const Uptane::Target& target) {
+  // "unknown" - a valid target that refers to an ostree hash that a device was or is successfuly booted on.
+  // It's "unknown" because there is no corresponding TUF Target in the DB/TUF Targets metadata.
+  // See OstreeManager::getCurrent() for more details
+  return target.IsValid() && target.filename() == "unknown";
+}
+
+Uptane::Target Target::toInitial(const Uptane::Target& target, const std::string& hw_id) {
+  Json::Value target_json;
+  Json::Value custom;
+
+  custom["targetFormat"] = target.type();
+  custom["hardwareIds"][0] = hw_id;
+  target_json["hashes"]["sha256"] = target.sha256Hash();
+  target_json["length"] = 0;
+  target_json["custom"] = custom;
+  return {InitialTarget, target_json};
 }

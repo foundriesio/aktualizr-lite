@@ -110,15 +110,18 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   report_queue = std_::make_unique<ReportQueue>(config, http_client, storage, report_queue_run_pause_s_,
                                                 report_queue_event_limit_);
 
+  std::shared_ptr<RootfsTreeManager> basepacman;
   if (config.pacman.type == ComposeAppManager::Name) {
-    package_manager_ = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
-                                                           ostree_sysroot, *key_manager_, app_engine);
+    basepacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
+                                                     ostree_sysroot, *key_manager_, app_engine);
   } else if (config.pacman.type == RootfsTreeManager::Name) {
-    package_manager_ = std::make_shared<RootfsTreeManager>(config.pacman, config.bootloader, storage, http_client,
-                                                           ostree_sysroot, *key_manager_);
+    basepacman = std::make_shared<RootfsTreeManager>(config.pacman, config.bootloader, storage, http_client,
+                                                     ostree_sysroot, *key_manager_);
   } else {
     throw std::runtime_error("Unsupported package manager type: " + config.pacman.type);
   }
+  basepacman->setInitialTargetIfNeeded(config.provision.primary_ecu_hardware_id);
+  package_manager_ = basepacman;
 
   downloader_ = std::dynamic_pointer_cast<Downloader>(package_manager_);
   if (!downloader_) {

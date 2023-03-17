@@ -5,6 +5,7 @@
 #include "crypto/p11engine.h"
 #include "http/httpclient.h"
 #include "bootloader/bootloaderlite.h"
+#include "target.h"
 
 
 namespace fixtures {
@@ -31,8 +32,15 @@ class ClientTest :virtual public ::testing::Test {
         ostree_repo_{(test_dir_.Path() / "treehub").string(), true},
         device_gateway_{ostree_repo_, tuf_repo_, certs_dir},
         sysroot_hash_{sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch)},
-        initial_target_{"unknown", Uptane::EcuMap(), {Hash(Hash::Type::kSha256, sysroot_hash_)}, 0, "", "OSTREE"} {
+        initial_target_{Uptane::Target::Unknown()} {
+
+
     sys_repo_.deploy(sysroot_hash_);
+    initial_target_ = {Target::InitialTarget, Uptane::EcuMap({{Uptane::EcuSerial("test_primary_ecu_serial_id"),
+                       Uptane::HardwareIdentifier(hw_id)}}), {Hash(Hash::Type::kSha256, sysroot_hash_)}, 0, "", "OSTREE"};
+    auto custom{initial_target_.custom_data()};
+    custom["hardwareIds"][0] = hw_id;
+    initial_target_.updateCustom(custom);
   }
 
   enum class InitialVersion { kOff, kOn, kCorrupted1, kCorrupted2 };
@@ -132,7 +140,7 @@ class ClientTest :virtual public ::testing::Test {
       installed_version["is_current"] = true;
       installed_version["custom"]["name"] = hw_id + "-" + os;
       installed_version["custom"]["version"] = "1";
-      installed_version["custom"]["hardwareIds"] = hw_id;
+      installed_version["custom"]["hardwareIds"][0] = hw_id;
       installed_version["custom"]["targetFormat"] = "OSTREE";
       installed_version["custom"]["arch"] = "aarch64";
       installed_version["custom"]["image-file"] = "lmp-factory-image-raspberrypi4-64.wic.gz";
@@ -145,6 +153,8 @@ class ClientTest :virtual public ::testing::Test {
       // emulate Foundries real Target, add custom.uri attribute
       Json::Value custom_value;
       custom_value["uri"] = "https://ci.foundries.io/projects/factory/lmp/builds/1097";
+      custom_value["targetFormat"] = "OSTREE";
+      custom_value["hardwareIds"][0] = conf.provision.primary_ecu_hardware_id;
       initial_target_.updateCustom(custom_value);
 
       Json::Value ins_ver;

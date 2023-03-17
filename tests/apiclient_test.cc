@@ -82,7 +82,7 @@ TEST_F(ApiClientTest, GetConfig) {
 
 TEST_F(ApiClientTest, GetCurrent) {
   auto cur = AkliteClient(createLiteClient(InitialVersion::kOff)).GetCurrent();
-  ASSERT_EQ("unknown", cur.Name());
+  ASSERT_EQ(Target::InitialTarget, cur.Name());
   ASSERT_EQ(-1, cur.Version());
 }
 

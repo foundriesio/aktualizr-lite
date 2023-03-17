@@ -3,6 +3,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "ostree/repo.h"
+#include "storage/invstorage.h"
 #include "target.h"
 
 RootfsTreeManager::RootfsTreeManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -79,6 +80,16 @@ bool RootfsTreeManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
   (void)keys;
 
   throw std::runtime_error("Using obsolete method of package manager: fetchTarget()");
+}
+
+void RootfsTreeManager::setInitialTargetIfNeeded(const std::string& hw_id) {
+  const auto current{getCurrent()};
+  if (!Target::isUnknown(current)) {
+    return;
+  }
+  // Turning "unknown" Target to "initial" one
+  const auto init_target{Target::toInitial(current, hw_id)};
+  storage_->savePrimaryInstalledVersion(init_target, InstalledVersionUpdateMode::kCurrent);
 }
 
 void RootfsTreeManager::installNotify(const Uptane::Target& target) {

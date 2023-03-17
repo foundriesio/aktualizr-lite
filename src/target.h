@@ -12,6 +12,7 @@ class Target {
   static constexpr const char* const TagField{"tags"};
   static constexpr const char* const ComposeAppField{"docker_compose_apps"};
   static constexpr const char* const ComposeAppOstreeUri{"compose-apps-uri"};
+  static const std::string InitialTarget;
 
   struct Version {
     std::string raw_ver;
@@ -31,12 +32,8 @@ class Target {
 
   static Uptane::Target fromTufTarget(const TufTarget& target);
   static TufTarget toTufTarget(const Uptane::Target& target);
-  static bool isUnknown(const Uptane::Target& target) {
-    // "unknown" - a valid target that refers to an ostree hash that a device was or is successfuly booted on.
-    // It's "unknown" because there is no corresponding TUF Target in the DB/TUF Targets metadata.
-    // See OstreeManager::getCurrent() for more details
-    return target.IsValid() && target.filename() == "unknown";
-  }
+  static bool isUnknown(const Uptane::Target& target);
+  static Uptane::Target toInitial(const Uptane::Target& target, const std::string& hw_id);
 
   class Apps {
    public:
