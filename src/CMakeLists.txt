@@ -15,7 +15,8 @@ set(SRC helpers.cc
         bootloader/bootloaderlite.cc
         liteclient.cc
         yaml2json.cc
-        target.cc)
+        target.cc
+        appengine.cc)
 
 set(HEADERS helpers.h
         composeappmanager.h

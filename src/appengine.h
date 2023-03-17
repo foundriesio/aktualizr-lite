@@ -38,6 +38,7 @@ class AppEngine {
   struct App {
     std::string name;
     std::string uri;
+    bool operator==(const App& rhs) const { return name == rhs.name && uri == rhs.uri; }
   };
 
   struct Result {
@@ -83,5 +84,7 @@ class AppEngine {
  protected:
   AppEngine() = default;
 };
+
+bool operator&(const AppEngine::Apps& apps, const AppEngine::App& app);
 
 #endif  // AKTUALIZR_LITE_APP_ENGINE_H_
