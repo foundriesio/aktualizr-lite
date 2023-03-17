@@ -44,6 +44,8 @@ endif(BUILD_AKLITE_WITH_NERDCTL)
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
 add_library(${TARGET_LIB} SHARED ${SRC} api.cc)
+set_property(TARGET ${TARGET_LIB} PROPERTY CXX_STANDARD 17)
+set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 17)
 
 if(ALLOW_MANUAL_ROLLBACK)
   add_definitions(-DALLOW_MANUAL_ROLLBACK)
