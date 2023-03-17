@@ -1,6 +1,7 @@
 #include "restorableappengine.h"
 
 #include <sys/statvfs.h>
+#include <filesystem>
 #include <limits>
 #include <unordered_set>
 
@@ -13,6 +14,8 @@
 #include "docker/composeappengine.h"
 #include "docker/composeinfo.h"
 #include "exec.h"
+
+namespace fs = std::filesystem;
 
 namespace Docker {
 
@@ -256,7 +259,27 @@ bool RestorableAppEngine::isRunning(const App& app) const {
   return res;
 }
 
-AppEngine::Apps RestorableAppEngine::getInstalledApps() const { return {}; }
+AppEngine::Apps RestorableAppEngine::getInstalledApps() const {
+  if (!fs::exists(apps_root_.string())) {
+    return {};
+  }
+  Apps installed_apps;
+  for (auto const& app_dir_entry : fs::directory_iterator{apps_root_.string()}) {
+    const auto app_name{app_dir_entry.path().filename().string()};
+
+    for (auto const& app_version_dir_entry : fs::directory_iterator{(apps_root_ / app_name).string()}) {
+      const auto uri_file{app_version_dir_entry.path() / "uri"};
+      if (!fs::exists(uri_file)) {
+        continue;
+      }
+      const auto uri{Utils::readFile(uri_file.string())};
+      if (isAppInstalled({app_name, uri})) {
+        installed_apps.emplace_back(App{app_name, uri});
+      }
+    }
+  }
+  return installed_apps;
+}
 
 Json::Value RestorableAppEngine::getRunningAppsInfo() const {
   Json::Value apps;
