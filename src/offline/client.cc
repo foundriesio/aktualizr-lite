@@ -493,6 +493,8 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
       // We don't know details of TUF Target to rollback to, and already booted on "failing" Target
       LOG_ERROR << "Failed to start the updated Apps after successfull boot on the updated rootfs;"
                    " TUF Target to rollback to is unknown so cannot perform a rollback to the previous version.";
+      // Should we deploy the rollback ostree hash and advise a client to reboot to complete the rollback even if
+      // the rollback target is "unknown" just an ostree rollback hash is known?
       return PostRunAction::RollbackToUnknownIfAppFailed;
     }
     // If either a device failed to boot on a new device or ostree hasn't changed but new version Apps failed to start,
