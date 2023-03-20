@@ -435,7 +435,6 @@ TEST_F(AkliteOffline, RollbackToInitialTarget) {
   boost::filesystem::remove_all(app_store_.appsDir());
   const auto new_target{addTarget({createApp("app-01")})};
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-  const auto cur{getCurrent()};
   reboot();
   // emulate "normal" rollback - boot on the previous target
   sys_repo_.deploy(initial_target_.sha256Hash());
@@ -444,7 +443,8 @@ TEST_F(AkliteOffline, RollbackToInitialTarget) {
 }
 
 TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
-  preloadApps({createApp("app-01")}, {}, false);
+  const auto app01{createApp("app-01")};
+  preloadApps({app01}, {}, false);
 
   // remove the current target app from the store/install source dir
   boost::filesystem::remove_all(app_store_.appsDir());
@@ -453,7 +453,11 @@ TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::RollbackNeedReboot);
   reboot();
-  ASSERT_EQ(getCurrent().sha256Hash(), initial_target_.sha256Hash());
+  const auto current{getCurrent()};
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
+  ASSERT_EQ(Target::appsJson(current).size(), 1);
+  ASSERT_TRUE(Target::appsJson(current).isMember(app01.name));
+  ASSERT_EQ(Target::appsJson(current)[app01.name]["uri"], app01.uri);
 }
 
 int main(int argc, char** argv) {

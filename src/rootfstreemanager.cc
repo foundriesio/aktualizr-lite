@@ -87,9 +87,14 @@ void RootfsTreeManager::setInitialTargetIfNeeded(const std::string& hw_id) {
   if (!Target::isUnknown(current)) {
     return;
   }
-  // Turning "unknown" Target to "initial" one
-  const auto init_target{Target::toInitial(current, hw_id)};
-  storage_->savePrimaryInstalledVersion(init_target, InstalledVersionUpdateMode::kCurrent);
+  try {
+    // Turning "unknown" Target to "initial" one
+    Uptane::Target init_target{Target::toInitial(current, hw_id)};
+    completeInitialTarget(init_target);
+    storage_->savePrimaryInstalledVersion(init_target, InstalledVersionUpdateMode::kCurrent);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to set the initial Target: " << exc.what();
+  }
 }
 
 void RootfsTreeManager::installNotify(const Uptane::Target& target) {
