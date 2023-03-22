@@ -75,7 +75,7 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
       }
       case offline::PostRunAction::RollbackNeedReboot: {
         LOG_INFO << "Apps start has failed so a device was rolled backed to a previous version";
-        LOG_INFO << "Reboot is required to complete the rollback";
+        LOG_INFO << "Please reboot a device and execute `aklite-offline run` command to complete the rollback";
         ret_code = 100;
         break;
       }
