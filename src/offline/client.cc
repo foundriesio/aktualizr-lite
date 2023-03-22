@@ -485,7 +485,7 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   if (!rollback_target.IsValid()) {
     if (Target::isUnknown(current_target)) {
       // We don't know details of TUF Target to rollback to, so just let device to stay on the current undefined state
-      LOG_ERROR << "A device rolled back to the previous Target's rootfs/ostree; "
+      LOG_ERROR << "Device rollbacked to the previous Target's rootfs/ostree; "
                 << " TUF Target to rollback to is unknown so cannot sync Apps to desired state.";
       return PostRunAction::RollbackToUnknown;
     }
@@ -505,16 +505,16 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   ComposeAppManager::Config pacman_cfg(cfg_in.pacman);
   shortlistTargetAppsByContent(pacman_cfg.reset_apps_root, rollback_target);
   if (current_target.sha256Hash() == rollback_target.sha256Hash()) {
-    client->logTarget("Syncing with Target that device rolled back to:  ", rollback_target);
+    client->logTarget("Syncing with Target that device rollbacked to:  ", rollback_target);
   } else {
-    client->logTarget("Rolling back to: ", rollback_target);
+    client->logTarget("Rollbacking to: ", rollback_target);
   }
 
   client->appsInSync(rollback_target);
   rollback_install_res = client->install(rollback_target);
 
   if (rollback_install_res == data::ResultCode::Numeric::kOk) {
-    // The Apps we rolled back to must be started, and the new version Apps/blobs should be removed.
+    // The Apps we rollbacked to must be started, and the new version Apps/blobs should be removed.
     // Effectively, we have to perform the same finalization as the one is done just after reboot on a new version.
     client->storage->savePrimaryInstalledVersion(rollback_target, InstalledVersionUpdateMode::kPending);
     if (!client->finalizeInstall()) {

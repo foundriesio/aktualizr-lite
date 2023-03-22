@@ -69,19 +69,19 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
         break;
       }
       case offline::PostRunAction::RollbackOk: {
-        LOG_INFO << "Installation has failed so a device was rolled back to the previous version";
+        LOG_INFO << "Installation has failed so a device rollbacked to the previous version";
         LOG_INFO << "No reboot is required";
         ret_code = 99;
         break;
       }
       case offline::PostRunAction::RollbackNeedReboot: {
-        LOG_INFO << "Apps start has failed so a device is rolling back to the previous version";
+        LOG_INFO << "Apps start has failed so a device is rollbacking to the previous version";
         LOG_INFO << "Please reboot a device and execute `aklite-offline run` command to complete the rollback";
         ret_code = 100;
         break;
       }
       case offline::PostRunAction::RollbackToUnknown: {
-        LOG_INFO << "Installation has failed so a device was rolled back to the previous version";
+        LOG_INFO << "Installation has failed so a device rollbacked to the previous version";
         LOG_INFO << "No reboot is required; Apps are in undefined state";
         ret_code = 110;
         break;
@@ -93,7 +93,7 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
         break;
       }
       case offline::PostRunAction::RollbackFailed: {
-        LOG_INFO << "Apps start has failed while rolling back to the previous version";
+        LOG_INFO << "Apps start has failed while rollbacking to the previous version";
         LOG_INFO << "Apps are in undefined state";
         ret_code = 120;
         break;
