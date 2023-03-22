@@ -513,6 +513,16 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   client->appsInSync(rollback_target);
   rollback_install_res = client->install(rollback_target);
 
+  if (rollback_install_res == data::ResultCode::Numeric::kOk) {
+    // The Apps we rolled back to must be started, and the new version Apps/blobs should be removed.
+    // Effectively, we have to perform the same finalization as the one is done just after reboot on a new version.
+    client->storage->savePrimaryInstalledVersion(rollback_target, InstalledVersionUpdateMode::kPending);
+    if (!client->finalizeInstall()) {
+      LOG_ERROR << "Failed to start the rollback Target Apps";
+      return PostRunAction::RollbackFailed;
+    }
+  }
+
   if (rollback_install_res != data::ResultCode::Numeric::kNeedCompletion &&
       rollback_install_res != data::ResultCode::Numeric::kOk) {
     LOG_ERROR << "Failed to rollback to: " << rollback_target.filename();

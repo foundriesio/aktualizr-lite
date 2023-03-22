@@ -92,6 +92,12 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
         ret_code = 120;
         break;
       }
+      case offline::PostRunAction::RollbackFailed: {
+        LOG_INFO << "Apps start has failed while rolling back to the previous version";
+        LOG_INFO << "Apps are in undefined state";
+        ret_code = 120;
+        break;
+      }
       default:
         LOG_ERROR << "Got invalid post run action code";
     };
