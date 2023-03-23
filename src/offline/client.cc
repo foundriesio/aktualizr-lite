@@ -506,14 +506,6 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   shortlistTargetAppsByContent(pacman_cfg.reset_apps_root, rollback_target);
   if (current_target.sha256Hash() == rollback_target.sha256Hash()) {
     client->logTarget("Syncing with Target that device rollbacked to:  ", rollback_target);
-  } else {
-    client->logTarget("Rollbacking to: ", rollback_target);
-  }
-
-  client->appsInSync(rollback_target);
-  rollback_install_res = client->install(rollback_target);
-
-  if (rollback_install_res == data::ResultCode::Numeric::kOk) {
     // The Apps we rollbacked to must be started, and the new version Apps/blobs should be removed.
     // Effectively, we have to perform the same finalization as the one is done just after reboot on a new version.
     client->storage->savePrimaryInstalledVersion(rollback_target, InstalledVersionUpdateMode::kPending);
@@ -521,6 +513,11 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
       LOG_ERROR << "Failed to start the rollback Target Apps";
       return PostRunAction::RollbackFailed;
     }
+    rollback_install_res = data::ResultCode::Numeric::kOk;
+  } else {
+    client->logTarget("Rollbacking to: ", rollback_target);
+    client->appsInSync(rollback_target);
+    rollback_install_res = client->install(rollback_target);
   }
 
   if (rollback_install_res != data::ResultCode::Numeric::kNeedCompletion &&
