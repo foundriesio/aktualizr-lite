@@ -53,8 +53,8 @@ TEST_F(ComposeAppEngineTest, FetchIfInvalidAuth) {
 TEST_F(ComposeAppEngineTest, FetchAndInstall) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
-  // TODO: AppEngine API doesn't provide mean(s) to check if App is installed
   ASSERT_TRUE(app_engine->install(app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
@@ -62,6 +62,7 @@ TEST_F(ComposeAppEngineTest, FetchAndRun) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->run(app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 
@@ -69,6 +70,7 @@ TEST_F(ComposeAppEngineTest, FetchInstallAndRun) {
   auto app = registry.addApp(fixtures::ComposeApp::create("app-01"));
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->install(app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_TRUE(app_engine->run(app));
   ASSERT_TRUE(app_engine->isRunning(app));
 }
@@ -87,6 +89,7 @@ TEST_F(ComposeAppEngineTest, FetchRunAndUpdate) {
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
   ASSERT_TRUE(app_engine->isRunning(updated_app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & updated_app);
 }
 
 TEST_F(ComposeAppEngineTest, FetchRunCompare) {
@@ -104,6 +107,9 @@ TEST_F(ComposeAppEngineTest, FetchRunCompare) {
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
   ASSERT_TRUE(app_engine->isRunning(updated_app));
+
+  const auto installed_apps{app_engine->getInstalledApps()};
+  ASSERT_EQ(installed_apps[0], updated_app);
 
   Json::Value apps_info = app_engine->getRunningAppsInfo();
   ASSERT_TRUE(apps_info.isMember("app-02"));

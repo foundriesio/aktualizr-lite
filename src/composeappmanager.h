@@ -62,6 +62,7 @@ class ComposeAppManager : public RootfsTreeManager {
   static bool compareAppsStates(const Json::Value& left, const Json::Value& right);
 
  private:
+  void completeInitialTarget(Uptane::Target& init_target) override;
   Json::Value getRunningAppsInfo() const;
   std::string getRunningAppsInfoForReport() const;
 

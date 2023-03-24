@@ -117,14 +117,7 @@ class AkliteOffline : public ::testing::Test {
     const auto hash{ostree_repo_.commit(sys_rootfs_.path, sys_rootfs_.branch)};
     sys_repo_.getRepo().pullLocal(ostree_repo_.getPath(), hash);
     sys_repo_.deploy(hash);
-
-    Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
-    std::vector<Hash> hashes{Hash(Hash::Type::kSha256, hash)};
-    initial_target_ = Uptane::Target{hw_id + "-lmp-0", ecus, hashes, 0, "", "OSTREE"};
-    // update the initial Target to add the hardware ID so Target::MatchTarget() works correctly
-    auto custom{initial_target_.custom_data()};
-    custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
-    initial_target_.updateCustom(custom);
+    setInitialTarget(hash);
   }
 
   void SetUp() {
@@ -138,6 +131,15 @@ class AkliteOffline : public ::testing::Test {
 
   const Uptane::Target getCurrent() { return offline::client::getCurrent(cfg_, daemon_.getClient()); }
 
+  void setInitialTarget(const std::string& hash, bool known = true) {
+    Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
+    std::vector<Hash> hashes{Hash(Hash::Type::kSha256, hash)};
+    initial_target_ = Uptane::Target{known ? hw_id + "-lmp-0" : Target::InitialTarget, ecus, hashes, 0, "", "OSTREE"};
+    // update the initial Target to add the hardware ID so Target::MatchTarget() works correctly
+    auto custom{initial_target_.custom_data()};
+    custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+    initial_target_.updateCustom(custom);
+  }
   Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false) {
     const auto& latest_target{tuf_repo_.getLatest()};
     std::string version;
@@ -206,6 +208,8 @@ class AkliteOffline : public ::testing::Test {
       // we need to remove the initial target from the TUF repo so it's not listed in the source TUF repo
       // for the following offline update and as result it will be "unknown" to the client.
       tuf_repo_.reset();
+      // Turn the "known" target to the "initial" since it's not in DB/TUF meta
+      setInitialTarget(initial_target_.sha256Hash(), false);
     }
     // remove the DB generated during the update for the app preloading, to emulate real-life situation
     boost::filesystem::remove(cfg_.storage.sqldb_path.get(cfg_.storage.path));
@@ -425,9 +429,8 @@ TEST_F(AkliteOffline, RollbackIfAppStartFailsWithAppShortlisting) {
   ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
 }
 
-TEST_F(AkliteOffline, RollbackToUnknown) {
+TEST_F(AkliteOffline, RollbackToInitialTarget) {
   preloadApps({createApp("app-01")}, {}, false);
-
   // remove the current target app from the store/install source dir
   boost::filesystem::remove_all(app_store_.appsDir());
   const auto new_target{addTarget({createApp("app-01")})};
@@ -435,19 +438,66 @@ TEST_F(AkliteOffline, RollbackToUnknown) {
   reboot();
   // emulate "normal" rollback - boot on the previous target
   sys_repo_.deploy(initial_target_.sha256Hash());
-  ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknown);
-  ASSERT_EQ(getCurrent().sha256Hash(), initial_target_.sha256Hash());
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
 }
 
-TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
-  preloadApps({createApp("app-01")}, {}, false);
+TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
+  const auto app01{createApp("app-01")};
+  preloadApps({app01}, {}, false);
 
   // remove the current target app from the store/install source dir
   boost::filesystem::remove_all(app_store_.appsDir());
   const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackNeedReboot);
+  reboot();
+  const auto current{getCurrent()};
+  ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
+  ASSERT_EQ(Target::appsJson(current).size(), 1);
+  ASSERT_TRUE(Target::appsJson(current).isMember(app01.name));
+  ASSERT_EQ(Target::appsJson(current)[app01.name]["uri"], app01.uri);
+}
+
+TEST_F(AkliteOffline, RollbackToUnknown) {
+  const auto app01{createApp("app-01")};
+  preloadApps({app01}, {}, false);
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01")})};
+
+  // make the initial Target setting fail, so the current Target is "unknown"
+  const Docker::Uri uri{Docker::Uri::parseUri(app01.uri)};
+  const auto app_dir{test_dir_.Path() / "reset-apps" / "apps" / uri.app / uri.digest.hash()};
+  Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("broken json"));
+
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  // emulate "normal" rollback - boot on the previous target, which is "unknown"
+  sys_repo_.deploy(initial_target_.sha256Hash());
+  ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknown);
+  const auto current{getCurrent()};
+  ASSERT_TRUE(Target::isUnknown(current));
+  ASSERT_EQ(current.sha256Hash(), initial_target_.sha256Hash());
+}
+
+TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
+  const auto app01{createApp("app-01")};
+  preloadApps({app01}, {}, false);
+
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
+
+  // make the initial Target setting fail, so the current Target is "unknown"
+  const Docker::Uri uri{Docker::Uri::parseUri(app01.uri)};
+  const auto app_dir{test_dir_.Path() / "reset-apps" / "apps" / uri.app / uri.digest.hash()};
+  Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("broken json"));
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
   ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknownIfAppFailed);
+  // Cannot perform rollback to unknown, so still booted on a new target's hash
   ASSERT_EQ(getCurrent().sha256Hash(), new_target.sha256Hash());
 }
 

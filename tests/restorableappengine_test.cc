@@ -289,6 +289,7 @@ TEST_F(RestorableAppEngineTest, FetchAndInstall) {
   daemon_.setImagePullFailFlag(false);
   const auto install_res{app_engine->install(app)};
   ASSERT_EQ(install_res, true) << install_res.err;
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_FALSE(app_engine->isRunning(app));
 }
 
@@ -303,6 +304,7 @@ TEST_F(RestorableAppEngineTest, FetchAndRun) {
   daemon_.setImagePullFailFlag(false);
   const auto run_res{app_engine->run(app)};
   ASSERT_EQ(run_res, true) << run_res.err;
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 
@@ -444,10 +446,12 @@ TEST_F(RestorableAppEngineTest, FetchFetchAndRun) {
 
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_FALSE(app_engine->getInstalledApps() & app);
   ASSERT_FALSE(app_engine->isRunning(app));
   ASSERT_EQ(1, registry.getAppManifestPullNumb(app.uri));
 
   ASSERT_TRUE(app_engine->run(app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 
@@ -458,6 +462,7 @@ TEST_F(RestorableAppEngineTest, FetchInstallAndRun) {
   ASSERT_TRUE(app_engine->verify(app));
   ASSERT_TRUE(app_engine->install(app));
   ASSERT_TRUE(app_engine->run(app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 
@@ -467,6 +472,7 @@ TEST_F(RestorableAppEngineTest, FetchRunAndUpdate) {
   ASSERT_TRUE(app_engine->isFetched(app));
   ASSERT_TRUE(app_engine->verify(app));
   ASSERT_TRUE(app_engine->run(app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_TRUE(app_engine->isRunning(app));
 
   // update App, image URL has changed
@@ -475,9 +481,11 @@ TEST_F(RestorableAppEngineTest, FetchRunAndUpdate) {
   ASSERT_TRUE(app_engine->isFetched(updated_app));
   ASSERT_TRUE(app_engine->verify(updated_app));
   ASSERT_FALSE(app_engine->isRunning(updated_app));
+  ASSERT_FALSE(app_engine->getInstalledApps() & updated_app);
 
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & updated_app);
   ASSERT_TRUE(app_engine->isRunning(updated_app));
 }
 
@@ -498,6 +506,9 @@ TEST_F(RestorableAppEngineTest, FetchRunCompare) {
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
   ASSERT_TRUE(app_engine->isRunning(updated_app));
+
+  const auto installed_apps{app_engine->getInstalledApps()};
+  ASSERT_EQ(installed_apps[0], updated_app);
 
   Json::Value apps_info = app_engine->getRunningAppsInfo();
   ASSERT_TRUE(apps_info.isMember("app-06"));
@@ -538,6 +549,7 @@ TEST_F(RestorableAppEngineTest, ManifestFetchFailureAndRun) {
   }
 
   ASSERT_TRUE(app_engine->run(app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 
@@ -559,6 +571,7 @@ TEST_F(RestorableAppEngineTest, AppArchiveFetchFailureAndRun) {
   ASSERT_EQ(2, registry.getAppManifestPullNumb(app.uri));
 
   ASSERT_TRUE(app_engine->run(app));
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_TRUE(app_engine->isRunning(app));
 }
 

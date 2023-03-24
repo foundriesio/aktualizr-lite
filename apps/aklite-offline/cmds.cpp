@@ -24,13 +24,14 @@ int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::pat
       }
       case offline::PostInstallAction::NeedReboot: {
         ret_code = 100;
-        std::cout << "Please reboot a device and run `run` command to apply installation and start the updated Apps "
-                     "(unless no Apps to update or dockerless system)\n";
+        std::cout
+            << "Please reboot a device and execute `aklite-offline run` command "
+               "to apply installation and start the updated Apps (unless no Apps to update or dockerless system)\n";
         break;
       }
       case offline::PostInstallAction::NeedDockerRestart: {
-        std::cout << "Please restart `docker` service `systemctl restart docker` and run `run` command to start the "
-                     "updated Apps\n";
+        std::cout << "Please restart `docker` service `systemctl restart docker` and execute `aklite-offline run` "
+                     "command to start the updated Apps\n";
         ret_code = 101;
         break;
       }
@@ -68,25 +69,31 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
         break;
       }
       case offline::PostRunAction::RollbackOk: {
-        LOG_INFO << "Installation has failed so a device was rolled backed to a previous version";
+        LOG_INFO << "Installation has failed so a device rollbacked to the previous version";
         LOG_INFO << "No reboot is required";
         ret_code = 99;
         break;
       }
       case offline::PostRunAction::RollbackNeedReboot: {
-        LOG_INFO << "Apps start has failed so a device was rolled backed to a previous version";
-        LOG_INFO << "Reboot is required to complete the rollback";
+        LOG_INFO << "Apps start has failed so a device is rollbacking to the previous version";
+        LOG_INFO << "Please reboot a device and execute `aklite-offline run` command to complete the rollback";
         ret_code = 100;
         break;
       }
       case offline::PostRunAction::RollbackToUnknown: {
-        LOG_INFO << "Installation has failed so a device was rolled backed to a previous version hash";
+        LOG_INFO << "Installation has failed so a device rollbacked to the previous version";
         LOG_INFO << "No reboot is required; Apps are in undefined state";
         ret_code = 110;
         break;
       }
       case offline::PostRunAction::RollbackToUnknownIfAppFailed: {
         LOG_INFO << "Apps start has failed after successful boot on the updated rootfs";
+        LOG_INFO << "Apps are in undefined state";
+        ret_code = 120;
+        break;
+      }
+      case offline::PostRunAction::RollbackFailed: {
+        LOG_INFO << "Apps start has failed while rollbacking to the previous version";
         LOG_INFO << "Apps are in undefined state";
         ret_code = 120;
         break;

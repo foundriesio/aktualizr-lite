@@ -20,7 +20,6 @@
 #include "docker/composeappengine.h"
 #include "helpers.h"
 #include "ostree/repo.h"
-#include "target.h"
 
 #include "fixtures/liteclienttest.cc"
 
@@ -57,6 +56,7 @@ class MockAppEngine : public AppEngine {
   MOCK_METHOD(void, remove, (const App& app), (override));
   MOCK_METHOD(bool, isFetched, (const App& app), (const, override));
   MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
+  MOCK_METHOD(AppEngine::Apps, getInstalledApps, (), (const, override));
   MOCK_METHOD(Json::Value, getRunningAppsInfo, (), (const, override));
   MOCK_METHOD(void, prune, (const Apps& app), (override));
 };
@@ -97,7 +97,7 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateWhenNoInstalledVersions) {
 
   // check there is still no target
   auto req_headers = getDeviceGateway().getReqHeaders();
-  ASSERT_EQ(req_headers["x-ats-target"], Uptane::Target::Unknown().filename());
+  ASSERT_EQ(req_headers["x-ats-target"], Target::InitialTarget);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
 
   // verify the install
@@ -120,7 +120,7 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateInstalledVersionsCorrupted1) {
   update(*client, client->getCurrent(), new_target);
 
   auto req_headers = getDeviceGateway().getReqHeaders();
-  ASSERT_EQ(req_headers["x-ats-target"], Uptane::Target::Unknown().filename());
+  ASSERT_EQ(req_headers["x-ats-target"], Target::InitialTarget);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
 
   // verify the install
@@ -143,7 +143,7 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateInstalledVersionsCorrupted2) {
   update(*client, client->getCurrent(), new_target);
 
   auto req_headers = getDeviceGateway().getReqHeaders();
-  ASSERT_EQ(req_headers["x-ats-target"], Uptane::Target::Unknown().filename());
+  ASSERT_EQ(req_headers["x-ats-target"], Target::InitialTarget);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
 
   // verify the install

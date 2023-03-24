@@ -38,6 +38,7 @@ class AppEngine {
   struct App {
     std::string name;
     std::string uri;
+    bool operator==(const App& rhs) const { return name == rhs.name && uri == rhs.uri; }
   };
 
   struct Result {
@@ -70,6 +71,7 @@ class AppEngine {
   virtual void remove(const App& app) = 0;
   virtual bool isFetched(const App& app) const = 0;
   virtual bool isRunning(const App& app) const = 0;
+  virtual Apps getInstalledApps() const = 0;
   virtual Json::Value getRunningAppsInfo() const = 0;
   virtual void prune(const Apps& app_shortlist) = 0;
 
@@ -82,5 +84,7 @@ class AppEngine {
  protected:
   AppEngine() = default;
 };
+
+bool operator&(const AppEngine::Apps& apps, const AppEngine::App& app);
 
 #endif  // AKTUALIZR_LITE_APP_ENGINE_H_

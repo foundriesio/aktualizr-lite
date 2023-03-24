@@ -29,8 +29,10 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
   const bootloader::BootFwUpdateStatus& bootFwUpdateStatus() const { return *boot_fw_update_status_; }
+  void setInitialTargetIfNeeded(const std::string& hw_id);
 
  protected:
+  virtual void completeInitialTarget(Uptane::Target& init_target){};
   void installNotify(const Uptane::Target& target) override;
   data::InstallationResult install(const Uptane::Target& target) const override;
   data::InstallationResult finalizeInstall(const Uptane::Target& target) override;

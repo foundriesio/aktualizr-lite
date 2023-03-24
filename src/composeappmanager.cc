@@ -517,6 +517,17 @@ void ComposeAppManager::forEachRemovedApp(
   }
 }
 
+void ComposeAppManager::completeInitialTarget(Uptane::Target& init_target) {
+  const AppEngine::Apps installed_apps{app_engine_->getInstalledApps()};
+  Json::Value apps_json;
+  for (const auto& app : installed_apps) {
+    apps_json[app.name]["uri"] = app.uri;
+  }
+  auto custom{init_target.custom_data()};
+  custom[Target::ComposeAppField] = apps_json;
+  init_target.updateCustom(custom);
+}
+
 Json::Value ComposeAppManager::getRunningAppsInfo() const { return app_engine_->getRunningAppsInfo(); }
 std::string ComposeAppManager::getRunningAppsInfoForReport() const {
   std::string result;
