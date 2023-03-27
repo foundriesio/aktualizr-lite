@@ -16,5 +16,3 @@ class SysRootFS {
 };
 
 std::string SysRootFS::CreateCmd;
-
-

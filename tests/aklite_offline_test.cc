@@ -134,10 +134,11 @@ class AkliteOffline : public ::testing::Test {
   void setInitialTarget(const std::string& hash, bool known = true) {
     Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
     std::vector<Hash> hashes{Hash(Hash::Type::kSha256, hash)};
-    initial_target_ = Uptane::Target{known ? hw_id + "-lmp-0" : Target::InitialTarget, ecus, hashes, 0, "", "OSTREE"};
+    initial_target_ = Uptane::Target{known ? hw_id + "-lmp-1" : Target::InitialTarget, ecus, hashes, 0, "", "OSTREE"};
     // update the initial Target to add the hardware ID so Target::MatchTarget() works correctly
     auto custom{initial_target_.custom_data()};
     custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+    custom["version"] = "1";
     initial_target_.updateCustom(custom);
   }
   Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false) {
@@ -148,7 +149,7 @@ class AkliteOffline : public ::testing::Test {
         version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
       } catch (...) {
         LOG_INFO << "No target available, preparing the first version";
-        version = "1";
+        version = "2";
       }
     }
     auto hash{latest_target.IsValid() ? latest_target.sha256Hash() : initial_target_.sha256Hash()};
@@ -178,7 +179,7 @@ class AkliteOffline : public ::testing::Test {
     for (const auto& app : apps) {
       apps_json[app.name]["uri"] = app.uri;
     }
-    tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-0", initial_target_.sha256Hash(),
+    tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-1", initial_target_.sha256Hash(),
                         cfg_.provision.primary_ecu_hardware_id, "0", apps_json);
 
     // content-based shortlisting
@@ -197,7 +198,7 @@ class AkliteOffline : public ::testing::Test {
       Json::Value custom;
       custom[Target::ComposeAppField] = apps_json;
       custom["name"] = cfg_.provision.primary_ecu_hardware_id + "-lmp";
-      custom["version"] = "0";
+      custom["version"] = "1";
       custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
       custom["targetFormat"] = "OSTREE";
       custom["arch"] = "arm64";

@@ -33,14 +33,7 @@ class ClientTest :virtual public ::testing::Test {
         device_gateway_{ostree_repo_, tuf_repo_, certs_dir},
         sysroot_hash_{sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch)},
         initial_target_{Uptane::Target::Unknown()} {
-
-
     sys_repo_.deploy(sysroot_hash_);
-    initial_target_ = {Target::InitialTarget, Uptane::EcuMap({{Uptane::EcuSerial("test_primary_ecu_serial_id"),
-                       Uptane::HardwareIdentifier(hw_id)}}), {Hash(Hash::Type::kSha256, sysroot_hash_)}, 0, "", "OSTREE"};
-    auto custom{initial_target_.custom_data()};
-    custom["hardwareIds"][0] = hw_id;
-    initial_target_.updateCustom(custom);
   }
 
   enum class InitialVersion { kOff, kOn, kCorrupted1, kCorrupted2 };
@@ -93,6 +86,24 @@ class ClientTest :virtual public ::testing::Test {
     conf.pacman.extra["ostree_update_block"] = "0";
     conf.import.base_path = test_dir_ / "import";
 
+    // set the initial Target if not set yet
+    if (!initial_target_.IsValid()) {
+      const std::string initial_ver{"1"};
+      Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
+      std::vector<Hash> hashes{Hash(Hash::Type::kSha256, sysroot_hash_)};
+      initial_target_ = Uptane::Target{initial_version == InitialVersion::kOn ? hw_id + "-lmp-" + initial_ver : Target::InitialTarget,
+                                       ecus, hashes, 0, "", "OSTREE"};
+      // emulate Foundries real Target, add custom.uri attribute
+      Json::Value custom_value{initial_target_.custom_data()};
+      custom_value["uri"] = "https://ci.foundries.io/projects/factory/lmp/builds/1097";
+      custom_value["targetFormat"] = "OSTREE";
+      custom_value["hardwareIds"][0] = hw_id;
+      custom_value["version"] = initial_ver;
+      initial_target_.updateCustom(custom_value);
+      getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, initial_ver);
+    }
+
+    // Add the `installed_versions` file
     if (initial_version == InitialVersion::kOn || initial_version == InitialVersion::kCorrupted1 ||
         initial_version == InitialVersion::kCorrupted2) {
       /*
@@ -139,23 +150,12 @@ class ClientTest :virtual public ::testing::Test {
           sysroot_hash_ + (initial_version == InitialVersion::kCorrupted1 ? "DEADBEEF" : "");
       installed_version["is_current"] = true;
       installed_version["custom"]["name"] = hw_id + "-" + os;
-      installed_version["custom"]["version"] = "1";
+      installed_version["custom"]["version"] = initial_target_.custom_version();
       installed_version["custom"]["hardwareIds"][0] = hw_id;
       installed_version["custom"]["targetFormat"] = "OSTREE";
       installed_version["custom"]["arch"] = "aarch64";
       installed_version["custom"]["image-file"] = "lmp-factory-image-raspberrypi4-64.wic.gz";
       installed_version["custom"]["tags"] = "master";
-
-      /* create the initial_target from the above json file: pass the root node
-       * name as a parameter
-       */
-      initial_target_ = Uptane::Target{hw_id + "-" + os + "-" + "1", installed_version};
-      // emulate Foundries real Target, add custom.uri attribute
-      Json::Value custom_value;
-      custom_value["uri"] = "https://ci.foundries.io/projects/factory/lmp/builds/1097";
-      custom_value["targetFormat"] = "OSTREE";
-      custom_value["hardwareIds"][0] = conf.provision.primary_ecu_hardware_id;
-      initial_target_.updateCustom(custom_value);
 
       Json::Value ins_ver;
       // set the root node name
@@ -165,8 +165,6 @@ class ClientTest :virtual public ::testing::Test {
                        (initial_version == InitialVersion::kCorrupted2) ? "deadbeef\t\ncorrupted file\n\n"
                                                                         : Utils::jsonToCanonicalStr(ins_ver),
                        true);
-
-      getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, "1");
     }
 
     tweakConf(conf);
