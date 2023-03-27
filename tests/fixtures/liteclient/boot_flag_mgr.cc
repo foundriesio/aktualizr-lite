@@ -30,6 +30,9 @@ class BootFlagMgr {
    return std::stoi(Utils::readFile(dir_/"rollback"));
   }
   int bootupgrade_available() const {
+   if (!boost::filesystem::exists(dir_/"bootupgrade_available")) {
+    return 0;
+   }
    return std::stoi(Utils::readFile(dir_/"bootupgrade_available"));
   }
   void reset_bootupgrade_available() {
@@ -40,6 +43,9 @@ class BootFlagMgr {
   }
   void set_bootfirmware_version(const std::string& ver) {
     Utils::writeFile(dir_/"bootfirmware_version", ver);
+  }
+  void set_rollback_protection() {
+    Utils::writeFile(dir_/"rollback_protection", std::string("1"));
   }
 
  private:

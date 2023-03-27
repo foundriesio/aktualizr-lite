@@ -22,24 +22,43 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
       break;
     case RollbackMode::kUbootMasked:
     case RollbackMode::kFioVB: {
-      VersionType target_version;
-      bool target_version_res;
-      std::tie(target_version, target_version_res) = getDeploymentVersion(target.sha256Hash());
-      if (!target_version_res) {
+      const auto target_version_val{getDeploymentVersion(target.sha256Hash())};
+      if (!std::get<1>(target_version_val)) {
+        LOG_WARNING << "Failed to get the Target's bootloader version, skipping bootloader update";
         return;
       }
+      const VersionType target_version{std::get<0>(target_version_val)};
 
       VersionType cur_version;
       bool is_current_ver_valid;
       std::tie(cur_version, is_current_ver_valid) = getCurrentVersion();
-      if (is_current_ver_valid) {
-        LOG_INFO << "Current bootloader version: " << cur_version;
-      } else {
+      if (!is_current_ver_valid) {
         LOG_WARNING << "Failed to get current bootloader version: " << cur_version;
       }
-      if (!is_current_ver_valid || cur_version != target_version) {
-        LOG_INFO << "Bootloader will be updated to version: " << target_version;
-        setEnvVar("bootupgrade_available", "1");
+      const auto is_rollback_protected{isRollbackProtectionEnabled()};
+      if (!is_current_ver_valid || is_rollback_protected ? target_version > cur_version
+                                                         : target_version != cur_version) {
+        // Set `bootupgrade_available` if:
+        // 1. The current bootloader version is unknown and the given target's bootloader version is
+        //    known and valid (checked at the method beginning).
+        // or
+        // 2. The current bootloader version is known and valid and
+        //   a) the given target's bootloader version is higher than the current one if the rollback protection is
+        //   enabled b) the given target's bootloader version doesn't equal to the current one if the rollback
+        //   protection is disabled
+        const auto cur_ver_str{is_current_ver_valid ? std::to_string(cur_version) : "unknown"};
+        if (setEnvVar("bootupgrade_available", "1")) {
+          LOG_INFO << "Bootloader will be updated from version " << cur_ver_str << " to " << target_version
+                   << "; rollback protection: " << (is_rollback_protected ? "ON" : "OFF");
+        } else {
+          LOG_ERROR << "Failed to set `bootupgrade_available`, skipping bootloader update; "
+                    << "current version: " << cur_ver_str << ", Target's version: " << target_version
+                    << ", rollback protection: " << (is_rollback_protected ? "ON" : "OFF");
+        }
+      } else {
+        LOG_INFO << "Skipping bootloader update; current version: " << cur_version
+                 << ", Target's version: " << target_version
+                 << ", rollback protection: " << (is_rollback_protected ? "ON" : "OFF");
       }
     } break;
     default:
@@ -78,11 +97,11 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
       }
     }
     if (file.empty()) {
-      LOG_WARNING << "Target hash not found";
+      LOG_WARNING << "Target deployemnt hash was not found";
       return std::string();
     }
 
-    LOG_INFO << "Target firmware file: " << file;
+    LOG_DEBUG << "Target firmware file: " << file;
     std::ifstream ifs(file);
     std::string version((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     std::string watermark = "bootfirmware_version";
@@ -90,14 +109,13 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
     if (i != std::string::npos) {
       version.erase(i, watermark.length() + 1);
       boost::trim_if(version, boost::is_any_of(" \t\r\n"));
-      LOG_INFO << "Target firmware version: " << version;
       return version;
     } else {
-      LOG_WARNING << "Target firmware version not found";
+      LOG_WARNING << "Failed to extract a bootloader version from the version file: " << file;
       return std::string();
     }
   } catch (const std::exception& exc) {
-    LOG_ERROR << "Failed to obtain Target firmware version:  " << exc.what();
+    LOG_ERROR << "Failed to get Target firmware version:  " << exc.what();
     return "";
   }
 }
@@ -109,6 +127,15 @@ bool BootloaderLite::isUpdateInProgress() const {
     return false;
   }
   return std::get<0>(ba_val) == "1";
+}
+
+bool BootloaderLite::isRollbackProtectionEnabled() const {
+  const auto rb_val{getEnvVar("rollback_protection")};
+  if (!std::get<1>(rb_val)) {
+    LOG_ERROR << "Failed to get `rollback_protection` value, assuming it is turned off; err: " << std::get<0>(rb_val);
+    return false;
+  }
+  return std::get<0>(rb_val) == "1";
 }
 
 bool BootloaderLite::setEnvVar(const std::string& var_name, const std::string& var_val) const {

@@ -321,7 +321,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
 
       checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
-      checkBootloaderFlags(client.config.bootloader.rollback_mode, expected_install_code != data::ResultCode::Numeric::kInstallFailed, expect_boot_firmware);
+      checkBootloaderFlags(client.config.bootloader.rollback_mode, client.isPendingTarget(to) && expected_install_code != data::ResultCode::Numeric::kInstallFailed, expect_boot_firmware);
     } else {
       checkEvents(client, from, UpdateType::kDownloadFailed, expected_download_result.description);
     }
@@ -421,7 +421,7 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method reboot
    */
-  void reboot(std::shared_ptr<LiteClient>& client, boost::optional<std::vector<std::string>> new_app_list = boost::none) {
+  void reboot(std::shared_ptr<LiteClient>& client, boost::optional<std::vector<std::string>> new_app_list = boost::none, bool reset_bootupgrade_available = true) {
     boost::filesystem::remove(test_dir_.Path() / "need_reboot");
     // make sure we tear down an existing instance of a client before a new one is created
     // otherwise we hit race condition with sending events by the report queue thread, the same event is sent twice
@@ -429,7 +429,9 @@ class ClientTest :virtual public ::testing::Test {
     if (!!new_app_list) {
       app_shortlist_ = new_app_list;
     }
-    boot_flag_mgr_->reset_bootupgrade_available();
+    if (reset_bootupgrade_available) {
+      boot_flag_mgr_->reset_bootupgrade_available();
+    }
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
     ASSERT_EQ(0, boot_flag_mgr_->bootcount());
   }

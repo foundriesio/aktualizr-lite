@@ -43,6 +43,7 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
   bool isUpdateInProgress() const override;
 
  private:
+  bool isRollbackProtectionEnabled() const;
   bool setEnvVar(const std::string& var_name, const std::string& var_val) const;
   std::tuple<std::string, bool> getEnvVar(const std::string& var_name) const;
 
