@@ -29,6 +29,9 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
 
   explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot);
 
+  static std::string getVersion(const std::string& deployment_dir, const std::string& hash,
+                                const std::string& ver_file = VersionFile);
+
   void installNotify(const Uptane::Target& target) const override;
 
   bool isUpdateInProgress() const override;

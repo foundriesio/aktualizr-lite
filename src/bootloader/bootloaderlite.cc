@@ -9,8 +9,6 @@
 
 namespace bootloader {
 
-std::string getVersion(const std::string& deployment_dir, const std::string& ver_file, const std::string& hash);
-
 BootloaderLite::BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot)
     : Bootloader(std::move(config), storage), sysroot_{std::move(sysroot)} {}
 
@@ -21,7 +19,7 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
     case RollbackMode::kUbootGeneric:
       break;
     case RollbackMode::kUbootMasked: {
-      std::string version = getVersion(sysroot_->deployment_path(), VersionFile, target.sha256Hash());
+      std::string version = getVersion(sysroot_->deployment_path(), target.sha256Hash());
       if (version.empty()) {
         return;
       }
@@ -39,7 +37,7 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
       }
     } break;
     case RollbackMode::kFioVB: {
-      std::string version = getVersion(sysroot_->deployment_path(), VersionFile, target.sha256Hash());
+      std::string version = getVersion(sysroot_->deployment_path(), target.sha256Hash());
       if (version.empty()) {
         return;
       }
@@ -61,7 +59,8 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
   }
 }
 
-std::string getVersion(const std::string& deployment_dir, const std::string& ver_file, const std::string& hash) {
+std::string BootloaderLite::getVersion(const std::string& deployment_dir, const std::string& hash,
+                                       const std::string& ver_file) {
   try {
     std::string file;
     for (auto& p : boost::filesystem::directory_iterator(deployment_dir)) {
