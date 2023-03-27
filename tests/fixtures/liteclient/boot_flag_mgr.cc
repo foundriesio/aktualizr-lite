@@ -38,6 +38,9 @@ class BootFlagMgr {
   void set_bootupgrade_available() {
     Utils::writeFile(dir_/"bootupgrade_available", std::string("1"));
   }
+  void set_bootfirmware_version(const std::string& ver) {
+    Utils::writeFile(dir_/"bootfirmware_version", ver);
+  }
 
  private:
   const boost::filesystem::path dir_;

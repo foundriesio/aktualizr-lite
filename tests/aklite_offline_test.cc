@@ -140,8 +140,12 @@ class AkliteOffline : public ::testing::Test {
     custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
     custom["version"] = "1";
     initial_target_.updateCustom(custom);
+    // set initial bootloader version
+    const auto boot_fw_ver{bootloader::BootloaderLite::getVersion(sys_repo_.getDeploymentPath(), hash)};
+    boot_flag_mgr_->set_bootfirmware_version(boot_fw_ver);
   }
-  Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false) {
+  Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
+                           bool add_bootloader_update = false) {
     const auto& latest_target{tuf_repo_.getLatest()};
     std::string version;
     if (version.size() == 0) {
@@ -158,6 +162,10 @@ class AkliteOffline : public ::testing::Test {
       const std::string unique_content = Utils::randomUuid();
       const std::string unique_file = Utils::randomUuid();
       Utils::writeFile(sys_rootfs_.path + "/" + unique_file, unique_content, true);
+      if (add_bootloader_update) {
+        Utils::writeFile(sys_rootfs_.path + bootloader::BootloaderLite::VersionFile,
+                         std::string("bootfirmware_version=111"), true);
+      }
       hash = ostree_repo_.commit(sys_rootfs_.path, branch);
     }
     Json::Value apps_json;
@@ -347,12 +355,10 @@ TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
 }
 
 TEST_F(AkliteOffline, BootFwUpdate) {
-  const auto target{addTarget({createApp("app-01")})};
+  const auto target{addTarget({createApp("app-01")}, false, true)};
 
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
-  // emulate boot firmware update
-  boot_flag_mgr_->set_bootupgrade_available();
   ASSERT_EQ(run(), offline::PostRunAction::OkNeedReboot);
   reboot();
   // emulate boot firmware update confirmation

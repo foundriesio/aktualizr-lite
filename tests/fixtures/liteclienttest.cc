@@ -168,26 +168,6 @@ class ClientTest :virtual public ::testing::Test {
     }
 
     tweakConf(conf);
-    switch (conf.bootloader.rollback_mode) {
-      case RollbackMode::kFioVB: {
-        boot_flag_mgr_ = std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string());
-        break;
-      }
-      case RollbackMode::kUbootMasked: {
-        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
-        std::string sink;
-        if (Utils::shell("fw_setenv bootfirmware_version 0.1", &sink) != 0) {
-          throw std::runtime_error("Failed to set bootfirmware_version");
-        }
-        break;
-       }
-      case RollbackMode::kUbootGeneric: {
-        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
-        break;
-      }
-      default:
-        break;
-    }
 
     auto client = std::make_shared<LiteClient>(conf, app_engine);
     // Recreate the report queue with the configuration needed for tests, specifically:
@@ -213,6 +193,26 @@ class ClientTest :virtual public ::testing::Test {
     if (finalize) {
       client->finalizeInstall();
     }
+
+    // initialize the bootloader flag manager and set current bootloader version
+    switch (conf.bootloader.rollback_mode) {
+      case RollbackMode::kFioVB: {
+        boot_flag_mgr_ = std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string());
+        break;
+      }
+      case RollbackMode::kUbootMasked: {
+        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
+        break;
+       }
+      case RollbackMode::kUbootGeneric: {
+        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
+        break;
+      }
+      default:
+        break;
+    }
+    const auto boot_fw_ver{bootloader::BootloaderLite::getVersion(sys_repo_.getDeploymentPath(), client->getCurrent().sha256Hash())};
+    boot_flag_mgr_->set_bootfirmware_version(boot_fw_ver);
     return client;
   }
 
@@ -222,18 +222,17 @@ class ClientTest :virtual public ::testing::Test {
   Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid = "",
                               const std::string& rootfs_path = "", boost::optional<TufRepoMock&> tuf_repo = boost::none,
                               const std::string& ver = "",
-                              const std::string& bootloader_ver = "bootfirmware_version:1.1") {
+                              const std::string& bootloader_ver = "") {
     auto& repo{!!tuf_repo?*tuf_repo:getTufRepo()};
     const auto& latest_target{repo.getLatest()};
-    std::string version{ver};
-    if (version.size() == 0) {
-      try {
-        version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
-      } catch (...) {
-        LOG_INFO << "No target available, preparing the first version";
-        version = "1";
-      }
+    std::string next_version;
+    try {
+      next_version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
+    } catch (...) {
+      LOG_INFO << "No target available, preparing the first version";
+      next_version = "1";
     }
+    const std::string version{ver.empty()?next_version:ver};
 
     // update rootfs and commit it into Treehub's repo
     const std::string unique_content = Utils::randomUuid();
@@ -243,7 +242,12 @@ class ClientTest :virtual public ::testing::Test {
       rootfs = getSysRootFs().path;
     }
     Utils::writeFile(rootfs + "/" + unique_file, unique_content, true);
-    Utils::writeFile(rootfs + bootloader::BootloaderLite::VersionFile, bootloader_ver, true);
+    std::string boot_fw_ver{bootloader_ver};
+    if (boot_fw_ver.empty()) {
+      boot_fw_ver = "bootfirmware_version=" + next_version;
+    }
+    Utils::writeFile(rootfs + bootloader::BootloaderLite::VersionFile, boot_fw_ver, true);
+
     auto hash = getOsTreeRepo().commit(rootfs, "lmp");
 
     Json::Value apps_json;
