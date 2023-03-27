@@ -3,6 +3,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include "bootloader/bootloader.h"
 #include "storage/invstorage.h"
@@ -21,17 +22,22 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
       break;
     case RollbackMode::kUbootMasked:
     case RollbackMode::kFioVB: {
-      std::string target_version = getVersion(sysroot_->deployment_path(), target.sha256Hash());
-      if (target_version.empty()) {
+      VersionType target_version;
+      bool target_version_res;
+      std::tie(target_version, target_version_res) = getDeploymentVersion(target.sha256Hash());
+      if (!target_version_res) {
         return;
       }
-      const auto cur_version{getEnvVar("bootfirmware_version")};
-      if (std::get<1>(cur_version)) {
-        LOG_INFO << "Current bootloader version: " << std::get<0>(cur_version);
+
+      VersionType cur_version;
+      bool is_current_ver_valid;
+      std::tie(cur_version, is_current_ver_valid) = getCurrentVersion();
+      if (is_current_ver_valid) {
+        LOG_INFO << "Current bootloader version: " << cur_version;
       } else {
-        LOG_WARNING << "Failed to get bootloader version: " << std::get<0>(cur_version);
+        LOG_WARNING << "Failed to get current bootloader version: " << cur_version;
       }
-      if (std::get<0>(cur_version) != target_version) {
+      if (!is_current_ver_valid || cur_version != target_version) {
         LOG_INFO << "Bootloader will be updated to version: " << target_version;
         setEnvVar("bootupgrade_available", "1");
       }
@@ -39,6 +45,22 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
     default:
       throw NotImplementedException();
   }
+}
+
+BootloaderLite::VersionNumbRes BootloaderLite::getDeploymentVersion(const std::string& hash) const {
+  const auto ver_str{getVersion(sysroot_->deployment_path(), hash)};
+  if (ver_str.empty()) {
+    return {0, false};
+  }
+  return verStrToNumber(ver_str);
+}
+
+BootloaderLite::VersionNumbRes BootloaderLite::getCurrentVersion() const {
+  const auto cur_version_str{getEnvVar("bootfirmware_version")};
+  if (!std::get<1>(cur_version_str)) {
+    return {0, false};
+  }
+  return verStrToNumber(std::get<0>(cur_version_str));
 }
 
 std::string BootloaderLite::getVersion(const std::string& deployment_dir, const std::string& hash,
@@ -67,6 +89,7 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
     std::string::size_type i = version.find(watermark);
     if (i != std::string::npos) {
       version.erase(i, watermark.length() + 1);
+      boost::trim_if(version, boost::is_any_of(" \t\r\n"));
       LOG_INFO << "Target firmware version: " << version;
       return version;
     } else {
@@ -124,7 +147,19 @@ std::tuple<std::string, bool> BootloaderLite::getEnvVar(const std::string& var_n
                       output};
     return {er_msg.str(), false};
   }
+  boost::trim_if(output, boost::is_any_of(" \t\r\n"));
   return {output, true};
+}
+
+BootloaderLite::VersionNumbRes BootloaderLite::verStrToNumber(const std::string& ver_str) {
+  VersionNumbRes res{0, false};
+  try {
+    res = {boost::lexical_cast<VersionType>(ver_str), true};
+  } catch (const boost::bad_lexical_cast& cast_err) {
+    LOG_ERROR << "Invalid format of the boot firmware version; value: " << ver_str << "; err: " << cast_err.what();
+    res = {0, false};
+  }
+  return res;
 }
 
 }  // namespace bootloader

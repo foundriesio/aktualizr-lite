@@ -32,6 +32,9 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
 
   explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot);
 
+  VersionNumbRes getDeploymentVersion(const std::string& hash) const;
+  VersionNumbRes getCurrentVersion() const;
+
   static std::string getVersion(const std::string& deployment_dir, const std::string& hash,
                                 const std::string& ver_file = VersionFile);
 
@@ -42,6 +45,8 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
  private:
   bool setEnvVar(const std::string& var_name, const std::string& var_val) const;
   std::tuple<std::string, bool> getEnvVar(const std::string& var_name) const;
+
+  static VersionNumbRes verStrToNumber(const std::string& ver_str);
 
   OSTree::Sysroot::Ptr sysroot_;
 };
