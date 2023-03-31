@@ -4,26 +4,17 @@
 
 #include "ostree/repo.h"
 
+
 class OSTreeTest : public ::testing::Test {
  protected:
-  OSTreeTest(){
-  }
-
-  virtual void SetUp() {
-    path_ = mkdtemp(const_cast<char*>((testing::TempDir() + "OSTreeTest-repo-XXXXXX").c_str()));
-    repo_ = std::make_unique<OSTree::Repo>(path_, true);
-  }
-
-  virtual void TearDown() {
-    boost::filesystem::remove_all(path_);
-  }
-
+  OSTreeTest():path_{test_dir_.PathString()}, repo_{std::make_unique<OSTree::Repo>(path_, true)} {}
   bool isRepoInited() const {
     return boost::filesystem::exists(path_ + "/config") && boost::filesystem::exists(path_ + "/objects");
   }
 
  protected:
-  std::string path_;
+  TemporaryDirectory test_dir_;  // must be the first element in the class
+  const std::string path_;
   std::unique_ptr<OSTree::Repo> repo_;
 };
 
