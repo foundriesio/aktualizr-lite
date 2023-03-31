@@ -212,7 +212,7 @@ class ClientTest :virtual public ::testing::Test {
         break;
     }
     const auto boot_fw_ver{bootloader::BootloaderLite::getVersion(sys_repo_.getDeploymentPath(), client->getCurrent().sha256Hash())};
-    boot_flag_mgr_->set_bootfirmware_version(boot_fw_ver);
+    boot_flag_mgr_->set("bootfirmware_version", boot_fw_ver);
     return client;
   }
 
@@ -430,10 +430,10 @@ class ClientTest :virtual public ::testing::Test {
       app_shortlist_ = new_app_list;
     }
     if (reset_bootupgrade_available) {
-      boot_flag_mgr_->reset_bootupgrade_available();
+      boot_flag_mgr_->set("bootupgrade_available", "0");
     }
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
-    ASSERT_EQ(0, boot_flag_mgr_->bootcount());
+    ASSERT_EQ(0, boot_flag_mgr_->get("bootcount"));
   }
 
   /**
@@ -494,15 +494,15 @@ class ClientTest :virtual public ::testing::Test {
   }
 
   void checkBootloaderFlags(RollbackMode bootloader_mode, bool check_upgrade_available, bool expect_boot_firmware = true) {
-    ASSERT_EQ(0, boot_flag_mgr_->bootcount());
-    ASSERT_EQ(0, boot_flag_mgr_->rollback());
+    ASSERT_EQ(0, boot_flag_mgr_->get("bootcount"));
+    ASSERT_EQ(0, boot_flag_mgr_->get("rollback"));
 
     if (bootloader_mode == RollbackMode::kUbootMasked || bootloader_mode == RollbackMode::kFioVB) {
       if (check_upgrade_available) {
-        ASSERT_EQ(1, boot_flag_mgr_->upgrade_available());
+        ASSERT_EQ(1, boot_flag_mgr_->get("upgrade_available"));
       }
       if (expect_boot_firmware) {
-        ASSERT_EQ(1, boot_flag_mgr_->bootupgrade_available());
+        ASSERT_EQ(1, boot_flag_mgr_->get("bootupgrade_available"));
       }
     }
   }

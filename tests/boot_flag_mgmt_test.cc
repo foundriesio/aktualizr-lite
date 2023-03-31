@@ -60,7 +60,7 @@ class BootFlagMgmtTest : public fixtures::ClientTest {
 
     auto client =
         ClientTest::createLiteClient(app_engine_mock_, initial_version, apps, "", boost::none, true, finalize);
-    boot_flag_mgr_->set_rollback_protection();
+    boot_flag_mgr_->set("rollback_protection");
     return client;
   }
 
@@ -95,7 +95,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdate) {
   auto new_target = createTarget();
   update(*client, getInitialTarget(), new_target);
   if (bootloader_type_ != RollbackMode::kUbootGeneric) {
-    ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 1);
+    ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 1);
     ASSERT_TRUE(client->isBootFwUpdateInProgress());
   }
 
@@ -121,7 +121,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdate) {
   update(*client, new_target, new_target_01);
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target_01));
-  ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 0);
+  ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 0);
   ASSERT_FALSE(client->isBootFwUpdateInProgress());
 }
 
@@ -135,14 +135,14 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfBootloaderRollbacks) {
   // Boot firmware update is not expected because the new target's version is lower (0) than the current one (1)
   update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kNeedCompletion,
          {DownloadResult::Status::Ok, ""}, "", false);
-  ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 0);
+  ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 0);
   ASSERT_FALSE(client->isBootFwUpdateInProgress());
 
   // reboot device, and don't reset the boot upgrade flag to emulate the bootloader A/B update
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
-  ASSERT_EQ(boot_flag_mgr_->bootupgrade_available(), 0);
+  ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 0);
   ASSERT_FALSE(client->isBootFwUpdateInProgress());
 }
 

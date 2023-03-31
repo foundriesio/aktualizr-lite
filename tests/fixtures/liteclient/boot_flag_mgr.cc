@@ -20,32 +20,18 @@ class BootFlagMgr {
     }
   }
 
-  int bootcount() const {
-   return std::stoi(Utils::readFile(dir_/"bootcount"));
+  int get(const std::string& flag) const {
+    int res{0};
+    try {
+      res = std::stoi(Utils::readFile(dir_/flag));
+    } catch (const std::exception& exc) {
+      LOG_DEBUG << "Failed to get the flag value; flag: " << flag << ", err: " << exc.what();
+    }
+    return res;
   }
-  int upgrade_available() const {
-   return std::stoi(Utils::readFile(dir_/"upgrade_available"));
-  }
-  int rollback() const {
-   return std::stoi(Utils::readFile(dir_/"rollback"));
-  }
-  int bootupgrade_available() const {
-   if (!boost::filesystem::exists(dir_/"bootupgrade_available")) {
-    return 0;
-   }
-   return std::stoi(Utils::readFile(dir_/"bootupgrade_available"));
-  }
-  void reset_bootupgrade_available() {
-    Utils::writeFile(dir_/"bootupgrade_available", std::string("0"));
-  }
-  void set_bootupgrade_available() {
-    Utils::writeFile(dir_/"bootupgrade_available", std::string("1"));
-  }
-  void set_bootfirmware_version(const std::string& ver) {
-    Utils::writeFile(dir_/"bootfirmware_version", ver);
-  }
-  void set_rollback_protection() {
-    Utils::writeFile(dir_/"rollback_protection", std::string("1"));
+
+  void set(const std::string& flag, const std::string& val = "1") {
+    Utils::writeFile(dir_/flag, val);
   }
 
  private:

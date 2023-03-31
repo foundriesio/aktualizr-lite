@@ -142,7 +142,7 @@ class AkliteOffline : public ::testing::Test {
     initial_target_.updateCustom(custom);
     // set initial bootloader version
     const auto boot_fw_ver{bootloader::BootloaderLite::getVersion(sys_repo_.getDeploymentPath(), hash)};
-    boot_flag_mgr_->set_bootfirmware_version(boot_fw_ver);
+    boot_flag_mgr_->set("bootfirmware_version", boot_fw_ver);
   }
   Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
                            bool add_bootloader_update = false) {
@@ -343,11 +343,11 @@ TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
   // and ostree for the bootloader, so it finalizes the boot fw update and resets `bootupgrade_available`.
   // Also, it may happen that `bootupgrade_available` is set by mistake.
   // The bootloader will detect such situation and reset `bootupgrade_available`.
-  boot_flag_mgr_->set_bootupgrade_available();
+  boot_flag_mgr_->set("bootupgrade_available");
 
   ASSERT_EQ(install(), offline::PostInstallAction::NeedRebootForBootFw);
   reboot();
-  boot_flag_mgr_->reset_bootupgrade_available();
+  boot_flag_mgr_->set("bootupgrade_available", "0");
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
@@ -362,7 +362,7 @@ TEST_F(AkliteOffline, BootFwUpdate) {
   ASSERT_EQ(run(), offline::PostRunAction::OkNeedReboot);
   reboot();
   // emulate boot firmware update confirmation
-  boot_flag_mgr_->reset_bootupgrade_available();
+  boot_flag_mgr_->set("bootupgrade_available", "0");
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
   ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
