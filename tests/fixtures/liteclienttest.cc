@@ -481,7 +481,9 @@ class ClientTest :virtual public ::testing::Test {
         // TODO: check whether a value of ["event"]["details"] macthes the current Target
         // makes sense to represent it as a json string
         const auto event_details = rec_event_json["event"]["details"].asString();
-        ASSERT_TRUE(event_details.find("Apps running:") != std::string::npos);
+        if (client.config.pacman.type == ComposeAppManager::Name) {
+          ASSERT_TRUE(event_details.find("Apps running:") != std::string::npos);
+        }
         ASSERT_TRUE(event_details.find(install_failure_err_msg) != std::string::npos) << event_details;
       }
       if (event_type == "EcuDownloadCompleted") {
