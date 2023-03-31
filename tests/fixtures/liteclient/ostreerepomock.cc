@@ -4,7 +4,6 @@ class OSTreeRepoMock {
   {
     if (!create) return;
     executeCmd("ostree", { "init", "--repo", path_, "--mode=" + mode }, "init an ostree repo at " + path_);
-    LOG_INFO << "OSTree repo was created at " + path_;
   }
 
   void pullLocal(const std::string& src_dir, const std::string& hash) {

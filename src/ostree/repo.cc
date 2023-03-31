@@ -166,4 +166,34 @@ std::unordered_map<std::string, std::string> Repo::getRefs() const {
   return found_refs;
 }
 
+std::string Repo::readFile(const std::string& commit_hash, const std::string& file) const {
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GFile) root = nullptr;
+  GCancellable* cancellable = nullptr;
+
+  if (0 == ostree_repo_read_commit(repo_, commit_hash.c_str(), &root, nullptr, nullptr, &error)) {
+    throw std::runtime_error("Failed to read commit; commit: " + commit_hash + ", err: " + std::string(error->message));
+  }
+
+  g_autoptr(GFile) f = g_file_resolve_relative_path(root, file.c_str());
+  g_autoptr(GInputStream) in = reinterpret_cast<GInputStream*>(g_file_read(f, cancellable, &error));
+  if (in == nullptr) {
+    throw std::runtime_error("Failed to open file; commit: " + commit_hash + ", file: " + file +
+                             ", err: " + std::string(error->message));
+  }
+
+  std::size_t read_res;
+  std::array<char, 1024> buffer{0};
+  std::string file_content;
+  while ((read_res = g_input_stream_read(in, buffer.data(), sizeof(buffer), nullptr, &error)) > 0) {
+    file_content.append({buffer.data(), read_res});
+  }
+  if (read_res == -1) {
+    throw std::runtime_error("Failed to read file from commit; commit: " + commit_hash + ", file: " + file +
+                             ", err: " + std::string(error->message));
+  }
+
+  return file_content;
+}
+
 }  // namespace OSTree
