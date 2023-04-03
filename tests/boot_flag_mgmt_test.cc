@@ -129,21 +129,30 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfBootloaderRollbacks) {
   // boot device
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-
   // Create a new Target: update rootfs and commit it into Treehub's repo
   auto new_target = createTarget(nullptr, "", "", boost::none, "", "bootfirmware_version=0");
   // Boot firmware update is not expected because the new target's version is lower (0) than the current one (1)
-  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kNeedCompletion,
+  update(*client, getInitialTarget(), new_target,
+         bootloader_type_ == RollbackMode::kUbootGeneric ? data::ResultCode::Numeric::kNeedCompletion
+                                                         : data::ResultCode::Numeric::kInstallFailed,
          {DownloadResult::Status::Ok, ""}, "", false);
   ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 0);
   ASSERT_FALSE(client->isBootFwUpdateInProgress());
+  if (bootloader_type_ != RollbackMode::kUbootGeneric) {
+    ASSERT_TRUE(client->isRollback(new_target));
+  } else {
+    ASSERT_FALSE(client->isRollback(new_target));
+  }
 
-  // reboot device, and don't reset the boot upgrade flag to emulate the bootloader A/B update
   reboot(client);
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
-  checkHeaders(*client, new_target);
-  ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 0);
-  ASSERT_FALSE(client->isBootFwUpdateInProgress());
+  if (bootloader_type_ == RollbackMode::kUbootGeneric) {
+    // installation should be successfull for the generic bootloader since it doesn't support
+    // update and there is no "bootloader rollback".
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+    checkHeaders(*client, new_target);
+  } else {
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(

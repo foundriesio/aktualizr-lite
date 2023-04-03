@@ -6,6 +6,7 @@
 #include <boost/lexical_cast.hpp>
 
 #include "bootloader/bootloader.h"
+#include "ostree/repo.h"
 #include "storage/invstorage.h"
 #include "utilities/exceptions.h"
 
@@ -49,8 +50,9 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
         LOG_WARNING << "Failed to get current bootloader version: " << cur_version;
       }
       const auto is_rollback_protected{isRollbackProtectionEnabled()};
-      if (!is_current_ver_valid || is_rollback_protected ? target_version > cur_version
-                                                         : target_version != cur_version) {
+      // The rollback check is done before the installation in verifyBootloaderUpdate(),
+      // so, at this stage, we just check whether the versions differ
+      if (!is_current_ver_valid || target_version != cur_version) {
         // Set `bootupgrade_available` if:
         // 1. The current bootloader version is unknown and the given target's bootloader version is
         //    known and valid (checked at the method beginning).
@@ -158,6 +160,34 @@ bool BootloaderLite::isRollbackProtectionEnabled() const {
     return false;
   }
   return std::get<0>(rb_val) == "1";
+}
+
+BootFwUpdateStatus::RollbackVersionResult BootloaderLite::isRollbackVersion(const std::string& target_hash) const {
+  if (!isUpdateSupported()) {
+    // update is not supported by a given bootloader type, hence cannot be rollback version
+    LOG_DEBUG << "Update is not supported by a given bootloader type (" << config_.rollback_mode << "),"
+              << " assuming it is not a rollback version";
+    return {0, 0, false};
+  }
+
+  OSTree::Repo repo{sysroot_->path() + "/ostree/repo"};
+  std::string version_str;
+  try {
+    const std::string version_line{repo.readFile(target_hash, VersionFile)};
+    version_str = extractVersionValue(version_line);
+  } catch (const std::exception& exc) {
+    LOG_DEBUG << "Failed to get a bootloader version from the commit: " << target_hash;
+    return {0, 0, false};
+  }
+  const auto ver_res{verStrToNumber(version_str)};
+  if (!std::get<1>(ver_res)) {
+    return {0, 0, false};
+  }
+  const auto cur_ver_res{getCurrentVersion()};
+  if (!std::get<1>(cur_ver_res)) {
+    return {0, 0, false};
+  }
+  return {std::get<0>(cur_ver_res), std::get<0>(ver_res), std::get<0>(ver_res) < std::get<0>(cur_ver_res)};
 }
 
 std::tuple<std::string, bool> BootloaderLite::setEnvVar(const std::string& var_name, const std::string& var_val) const {

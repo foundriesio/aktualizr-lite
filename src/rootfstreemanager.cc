@@ -115,7 +115,7 @@ data::InstallationResult RootfsTreeManager::install(const Uptane::Target& target
   data::InstallationResult res;
   Uptane::Target current = OstreeManager::getCurrent();
   if (current.sha256Hash() != target.sha256Hash() && boot_fw_update_status_->isUpdateSupported()) {
-    res = verifyBootloaderUpdate();
+    res = verifyBootloaderUpdate(target);
     if (res.result_code.num_code != data::ResultCode::Numeric::kOk) {
       return res;
     }
@@ -206,12 +206,21 @@ void RootfsTreeManager::setRemote(const std::string& name, const std::string& ur
   }
 }
 
-data::InstallationResult RootfsTreeManager::verifyBootloaderUpdate() const {
+data::InstallationResult RootfsTreeManager::verifyBootloaderUpdate(const Uptane::Target& target) const {
   if (update_block_ && boot_fw_update_status_->isUpdateInProgress()) {
     LOG_WARNING << "Bootlader update is in progress."
                    " A device must be rebooted to confirm and finalize the boot fw update"
                    " before installation of a new Target with ostree/rootfs change";
     return data::InstallationResult(data::ResultCode::Numeric::kNeedCompletion, "bootlader update is in progress");
+  }
+  if (boot_fw_update_status_->isRollbackProtectionEnabled()) {
+    const auto bootloader_ver_res{boot_fw_update_status_->isRollbackVersion(target.sha256Hash())};
+    if (std::get<2>(bootloader_ver_res)) {
+      const std::string err_msg{"bootloader rollback from version " + std::to_string(std::get<0>(bootloader_ver_res)) +
+                                " to " + std::to_string(std::get<1>(bootloader_ver_res)) + " has been detected"};
+      LOG_WARNING << "Rejecting the update: " << err_msg;
+      return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, err_msg);
+    }
   }
   return data::InstallationResult(data::ResultCode::Numeric::kOk, "");
 }

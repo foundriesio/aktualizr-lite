@@ -11,6 +11,10 @@ namespace bootloader {
 
 class BootFwUpdateStatus {
  public:
+  using VersionType = uint64_t;  // clang-tidy prefers uint64_t over unsigned long long int
+  using VersionNumbRes = std::tuple<VersionType, bool>;
+  using RollbackVersionResult = std::tuple<VersionType, VersionType, bool>;
+
   BootFwUpdateStatus(const BootFwUpdateStatus&) = delete;
   BootFwUpdateStatus& operator=(const BootFwUpdateStatus&) = delete;
   BootFwUpdateStatus& operator=(BootFwUpdateStatus&&) = delete;
@@ -18,6 +22,8 @@ class BootFwUpdateStatus {
 
   virtual bool isUpdateInProgress() const = 0;
   virtual bool isUpdateSupported() const = 0;
+  virtual bool isRollbackProtectionEnabled() const = 0;
+  virtual RollbackVersionResult isRollbackVersion(const std::string& target_hash) const = 0;
 
  protected:
   BootFwUpdateStatus() = default;
@@ -26,9 +32,6 @@ class BootFwUpdateStatus {
 
 class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
  public:
-  using VersionType = uint64_t;  // clang-tidy prefers uint64_t over unsigned long long int
-  using VersionNumbRes = std::tuple<VersionType, bool>;
-
   static constexpr const char* const VersionFile{"/usr/lib/firmware/version.txt"};
 
   explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot);
@@ -43,9 +46,10 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
 
   bool isUpdateInProgress() const override;
   bool isUpdateSupported() const override { return !get_env_cmd_.empty(); }
+  bool isRollbackProtectionEnabled() const override;
+  RollbackVersionResult isRollbackVersion(const std::string& target_hash) const override;
 
  private:
-  bool isRollbackProtectionEnabled() const;
   std::tuple<std::string, bool> setEnvVar(const std::string& var_name, const std::string& var_val) const;
   std::tuple<std::string, bool> getEnvVar(const std::string& var_name) const;
 
