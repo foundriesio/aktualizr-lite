@@ -17,6 +17,7 @@ class BootFwUpdateStatus {
   virtual ~BootFwUpdateStatus() = default;
 
   virtual bool isUpdateInProgress() const = 0;
+  virtual bool isUpdateSupported() const = 0;
 
  protected:
   BootFwUpdateStatus() = default;
@@ -41,6 +42,7 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
   void installNotify(const Uptane::Target& target) const override;
 
   bool isUpdateInProgress() const override;
+  bool isUpdateSupported() const override { return !get_env_cmd_.empty(); }
 
  private:
   bool isRollbackProtectionEnabled() const;
@@ -48,6 +50,7 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
   std::tuple<std::string, bool> getEnvVar(const std::string& var_name) const;
 
   static VersionNumbRes verStrToNumber(const std::string& ver_str);
+  static std::string extractVersionValue(const std::string& version_line);
 
   OSTree::Sysroot::Ptr sysroot_;
   const std::string get_env_cmd_;

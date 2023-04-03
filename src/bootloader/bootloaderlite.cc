@@ -112,23 +112,14 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
       }
     }
     if (file.empty()) {
-      LOG_WARNING << "Target deployemnt hash was not found";
+      LOG_WARNING << "Target deployment hash was not found";
       return std::string();
     }
 
     LOG_DEBUG << "Target firmware file: " << file;
     std::ifstream ifs(file);
-    std::string version((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-    std::string watermark = "bootfirmware_version";
-    std::string::size_type i = version.find(watermark);
-    if (i != std::string::npos) {
-      version.erase(i, watermark.length() + 1);
-      boost::trim_if(version, boost::is_any_of(" \t\r\n"));
-      return version;
-    } else {
-      LOG_WARNING << "Failed to extract a bootloader version from the version file: " << file;
-      return std::string();
-    }
+    std::string version_line((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    return extractVersionValue(version_line);
   } catch (const std::exception& exc) {
     LOG_ERROR << "Failed to get Target firmware version:  " << exc.what();
     return "";
@@ -136,7 +127,7 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
 }
 
 bool BootloaderLite::isUpdateInProgress() const {
-  if (get_env_cmd_.empty()) {
+  if (!isUpdateSupported()) {
     // update is not supported by a given bootloader type
     LOG_DEBUG << "Update is not supported by a given bootloader type (" << config_.rollback_mode << "),"
               << " assuming that no bootloader update is in progress.";
@@ -151,10 +142,10 @@ bool BootloaderLite::isUpdateInProgress() const {
 }
 
 bool BootloaderLite::isRollbackProtectionEnabled() const {
-  if (get_env_cmd_.empty()) {
+  if (!isUpdateSupported()) {
     // update is not supported by a given bootloader type, hence no rolback protection support
     LOG_DEBUG << "Update is not supported by a given bootloader type (" << config_.rollback_mode << "),"
-              << " assuming that rollback proectiion is disabled";
+              << " assuming that rollback protection is disabled";
     return false;
   }
   const auto rb_val{getEnvVar("rollback_protection")};
@@ -209,6 +200,19 @@ BootloaderLite::VersionNumbRes BootloaderLite::verStrToNumber(const std::string&
     res = {0, false};
   }
   return res;
+}
+
+std::string BootloaderLite::extractVersionValue(const std::string& version_line) {
+  std::string version{version_line};
+  const std::string watermark{"bootfirmware_version"};
+  const std::string::size_type ver_pos{version.find(watermark)};
+  if (ver_pos == std::string::npos) {
+    throw std::invalid_argument("Failed to parse the bootloader version line; no `" + watermark + "` is found in `" +
+                                version_line + "`");
+  }
+  version.erase(ver_pos, watermark.length() + 1);
+  boost::trim_if(version, boost::is_any_of(" \t\r\n"));
+  return version;
 }
 
 }  // namespace bootloader
