@@ -12,7 +12,7 @@ RootfsTreeManager::RootfsTreeManager(const PackageConfig& pconfig, const Bootloa
                                      std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys)
     : OstreeManager(pconfig, bconfig, storage, http, new bootloader::BootloaderLite(bconfig, *storage, sysroot)),
       sysroot_{std::move(sysroot)},
-      boot_fw_update_status_{new bootloader::BootloaderLite(bconfig, *storage, sysroot)},
+      boot_fw_update_status_{new bootloader::BootloaderLite(bconfig, *storage, sysroot_)},
       http_client_{http},
       gateway_url_{pconfig.ostree_server},
       keys_{keys} {
