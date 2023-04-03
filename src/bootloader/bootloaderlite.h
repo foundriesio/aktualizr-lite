@@ -44,12 +44,14 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
 
  private:
   bool isRollbackProtectionEnabled() const;
-  bool setEnvVar(const std::string& var_name, const std::string& var_val) const;
+  std::tuple<std::string, bool> setEnvVar(const std::string& var_name, const std::string& var_val) const;
   std::tuple<std::string, bool> getEnvVar(const std::string& var_name) const;
 
   static VersionNumbRes verStrToNumber(const std::string& ver_str);
 
   OSTree::Sysroot::Ptr sysroot_;
+  const std::string get_env_cmd_;
+  const std::string set_env_cmd_;
 };
 
 }  // namespace bootloader

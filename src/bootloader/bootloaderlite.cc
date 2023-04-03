@@ -11,8 +11,21 @@
 
 namespace bootloader {
 
+static const std::unordered_map<RollbackMode, std::string> setCmds{
+    {RollbackMode::kUbootMasked, "fw_setenv"},
+    {RollbackMode::kFioVB, "fiovb_setenv"},
+};
+static const std::unordered_map<RollbackMode, std::string> getCmds{
+    {RollbackMode::kUbootMasked, "fw_printenv -n"},
+    {RollbackMode::kFioVB, "fiovb_printenv"},
+};
+static const std::string noneCmd;
+
 BootloaderLite::BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot)
-    : Bootloader(std::move(config), storage), sysroot_{std::move(sysroot)} {}
+    : Bootloader(std::move(config), storage),
+      sysroot_{std::move(sysroot)},
+      get_env_cmd_{getCmds.count(config_.rollback_mode) == 1 ? getCmds.at(config_.rollback_mode) : noneCmd},
+      set_env_cmd_{setCmds.count(config_.rollback_mode) == 1 ? setCmds.at(config_.rollback_mode) : noneCmd} {}
 
 void BootloaderLite::installNotify(const Uptane::Target& target) const {
   std::string sink;
@@ -47,13 +60,15 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
         //   enabled b) the given target's bootloader version doesn't equal to the current one if the rollback
         //   protection is disabled
         const auto cur_ver_str{is_current_ver_valid ? std::to_string(cur_version) : "unknown"};
-        if (setEnvVar("bootupgrade_available", "1")) {
+        const auto set_bu_res{setEnvVar("bootupgrade_available", "1")};
+        if (std::get<1>(set_bu_res)) {
           LOG_INFO << "Bootloader will be updated from version " << cur_ver_str << " to " << target_version
                    << "; rollback protection: " << (is_rollback_protected ? "ON" : "OFF");
         } else {
           LOG_ERROR << "Failed to set `bootupgrade_available`, skipping bootloader update; "
                     << "current version: " << cur_ver_str << ", Target's version: " << target_version
-                    << ", rollback protection: " << (is_rollback_protected ? "ON" : "OFF");
+                    << ", rollback protection: " << (is_rollback_protected ? "ON" : "OFF")
+                    << ", err: " << std::get<0>(set_bu_res);
         }
       } else {
         LOG_INFO << "Skipping bootloader update; current version: " << cur_version
@@ -121,6 +136,12 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
 }
 
 bool BootloaderLite::isUpdateInProgress() const {
+  if (get_env_cmd_.empty()) {
+    // update is not supported by a given bootloader type
+    LOG_DEBUG << "Update is not supported by a given bootloader type (" << config_.rollback_mode << "),"
+              << " assuming that no bootloader update is in progress.";
+    return false;
+  }
   const auto ba_val{getEnvVar("bootupgrade_available")};
   if (!std::get<1>(ba_val)) {
     LOG_ERROR << "Failed to get `bootupgrade_available` value, assuming it is set to 0; err: " << std::get<0>(ba_val);
@@ -130,6 +151,12 @@ bool BootloaderLite::isUpdateInProgress() const {
 }
 
 bool BootloaderLite::isRollbackProtectionEnabled() const {
+  if (get_env_cmd_.empty()) {
+    // update is not supported by a given bootloader type, hence no rolback protection support
+    LOG_DEBUG << "Update is not supported by a given bootloader type (" << config_.rollback_mode << "),"
+              << " assuming that rollback proectiion is disabled";
+    return false;
+  }
   const auto rb_val{getEnvVar("rollback_protection")};
   if (!std::get<1>(rb_val)) {
     LOG_ERROR << "Failed to get `rollback_protection` value, assuming it is turned off; err: " << std::get<0>(rb_val);
@@ -138,36 +165,31 @@ bool BootloaderLite::isRollbackProtectionEnabled() const {
   return std::get<0>(rb_val) == "1";
 }
 
-bool BootloaderLite::setEnvVar(const std::string& var_name, const std::string& var_val) const {
-  const std::unordered_map<RollbackMode, std::string> typeToCmd{
-      {RollbackMode::kUbootMasked, "fw_setenv"},
-      {RollbackMode::kFioVB, "fiovb_setenv"},
-  };
-  if (0 == typeToCmd.count(config_.rollback_mode)) {
-    LOG_DEBUG << "No command to set environment variable found for the given bootloader type: "
-              << config_.rollback_mode;
-    return false;
+std::tuple<std::string, bool> BootloaderLite::setEnvVar(const std::string& var_name, const std::string& var_val) const {
+  if (set_env_cmd_.empty()) {
+    const auto er_msg{
+        boost::format("No command to set an environment variable found for the given bootloader type: `%s`") %
+        config_.rollback_mode};
+    return {er_msg.str(), false};
   }
-  const auto cmd{boost::format{"%s %s %s"} % typeToCmd.at(config_.rollback_mode) % var_name % var_val};
+  const auto cmd{boost::format{"%s %s %s"} % set_env_cmd_ % var_name % var_val};
   std::string output;
   if (Utils::shell(cmd.str(), &output) != 0) {
-    LOG_WARNING << "Failed to set the bootloader's environment variable" << var_name << "; err: " << output;
-    return false;
+    const auto er_msg{boost::format("Failed to set a bootloader environment variable; cmd: %s, err: %s") % cmd %
+                      output};
+    return {er_msg.str(), false};
   }
-  return true;
+  return {"", true};
 }
 
 std::tuple<std::string, bool> BootloaderLite::getEnvVar(const std::string& var_name) const {
-  const std::unordered_map<RollbackMode, std::string> typeToCmd{
-      {RollbackMode::kUbootMasked, "fw_printenv -n"},
-      {RollbackMode::kFioVB, "fiovb_printenv"},
-  };
-  if (0 == typeToCmd.count(config_.rollback_mode)) {
-    const auto er_msg{boost::format("No command to read environment variable found for `%s` bootloader type") %
-                      config_.rollback_mode};
+  if (get_env_cmd_.empty()) {
+    const auto er_msg{
+        boost::format("No command to read an environment variable found for the given bootloader type: `%s`") %
+        config_.rollback_mode};
     return {er_msg.str(), false};
   }
-  const auto cmd{boost::format{"%s %s"} % typeToCmd.at(config_.rollback_mode) % var_name};
+  const auto cmd{boost::format{"%s %s"} % get_env_cmd_ % var_name};
   std::string output;
   if (Utils::shell(cmd.str(), &output) != 0) {
     const auto er_msg{boost::format("Failed to get a bootloader environment variable; cmd: %s, err: %s") % cmd %
