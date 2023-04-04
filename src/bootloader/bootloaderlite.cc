@@ -115,6 +115,10 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
       LOG_WARNING << "Target deployment hash was not found";
       return std::string();
     }
+    if (!boost::filesystem::exists(file)) {
+      LOG_DEBUG << "Target's bootloader version file is not found, expected: " << file;
+      return std::string();
+    }
 
     LOG_DEBUG << "Target firmware file: " << file;
     std::ifstream ifs(file);

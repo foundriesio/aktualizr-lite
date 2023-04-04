@@ -212,7 +212,9 @@ class ClientTest :virtual public ::testing::Test {
         break;
     }
     const auto boot_fw_ver{bootloader::BootloaderLite::getVersion(sys_repo_.getDeploymentPath(), client->getCurrent().sha256Hash())};
-    boot_flag_mgr_->set("bootfirmware_version", boot_fw_ver);
+    if (!boot_fw_ver.empty()) {
+      boot_flag_mgr_->set("bootfirmware_version", boot_fw_ver);
+    }
     return client;
   }
 
