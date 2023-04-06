@@ -58,10 +58,14 @@ class BootFlagMgmtTest : public fixtures::ClientTest {
                                                bool finalize = true) override {
     app_engine_mock_ = std::make_shared<NiceMock<MockAppEngine>>();
 
-    return ClientTest::createLiteClient(app_engine_mock_, initial_version, apps, "", boost::none, true, finalize);
+    auto client =
+        ClientTest::createLiteClient(app_engine_mock_, initial_version, apps, "", boost::none, true, finalize);
+    boot_flag_mgr_->set("rollback_protection");
+    return client;
   }
 
   std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
+  RollbackMode bootloader_type_{RollbackMode::kBootloaderNone};
 
  private:
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
@@ -77,6 +81,8 @@ class BootFlagMgmtTestSuite : public BootFlagMgmtTest,
     std::tie(pacman_type, bootloader_mode) = GetParam();
     conf.pacman.type = pacman_type;
     conf.bootloader.rollback_mode = bootloader_mode;
+    conf.pacman.extra["ostree_update_block"] = "1";
+    bootloader_type_ = bootloader_mode;
   };
 };
 
@@ -88,11 +94,65 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdate) {
   // Create a new Target: update rootfs and commit it into Treehub's repo
   auto new_target = createTarget();
   update(*client, getInitialTarget(), new_target);
+  if (bootloader_type_ != RollbackMode::kUbootGeneric) {
+    ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 1);
+    ASSERT_TRUE(client->isBootFwUpdateInProgress());
+  }
 
-  // reboot device
-  reboot(client);
+  // reboot device, and don't reset the boot upgrade flag to emulate the bootloader A/B update
+  reboot(client, boost::none, false);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
+  if (bootloader_type_ == RollbackMode::kUbootGeneric) {
+    return;
+  }
+
+  // boot fw udpate is in progress
+  ASSERT_TRUE(client->isBootFwUpdateInProgress());
+  // make sure update is banned until a device is rebooted
+  auto new_target_01 = createTarget();
+  update(*client, new_target, new_target_01);
+  // verify that the new target `new_target_01` was not actually applied and is not pending
+  ASSERT_FALSE(client->isPendingTarget(new_target_01));
+
+  // now, do reboot to confirm the boot fw update
+  reboot(client);
+  // and try the update again
+  update(*client, new_target, new_target_01);
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target_01));
+  ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 0);
+  ASSERT_FALSE(client->isBootFwUpdateInProgress());
+}
+
+TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfBootloaderRollbacks) {
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createTarget(nullptr, "", "", boost::none, "", "bootfirmware_version=0");
+  // Boot firmware update is not expected because the new target's version is lower (0) than the current one (1)
+  update(*client, getInitialTarget(), new_target,
+         bootloader_type_ == RollbackMode::kUbootGeneric ? data::ResultCode::Numeric::kNeedCompletion
+                                                         : data::ResultCode::Numeric::kInstallFailed,
+         {DownloadResult::Status::Ok, ""}, "", false);
+  ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 0);
+  ASSERT_FALSE(client->isBootFwUpdateInProgress());
+  if (bootloader_type_ != RollbackMode::kUbootGeneric) {
+    ASSERT_TRUE(client->isRollback(new_target));
+  } else {
+    ASSERT_FALSE(client->isRollback(new_target));
+  }
+
+  reboot(client);
+  if (bootloader_type_ == RollbackMode::kUbootGeneric) {
+    // installation should be successfull for the generic bootloader since it doesn't support
+    // update and there is no "bootloader rollback".
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+    checkHeaders(*client, new_target);
+  } else {
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(

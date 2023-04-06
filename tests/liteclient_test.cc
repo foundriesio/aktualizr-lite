@@ -112,8 +112,12 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateInstalledVersionsCorrupted1) {
   // boot device with an invalid initial_version json file (ostree sha)
   auto client = createLiteClient(InitialVersion::kCorrupted1);
 
-  // verify that the initial version was corrupted
-  ASSERT_FALSE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  // verify that the `installed_version` json file was corrupted,
+  // it means that the current Target should be so-called "initial" target
+  const auto current{client->getCurrent()};
+  ASSERT_EQ(current.filename(), Target::InitialTarget);
+  ASSERT_EQ(getInitialTarget().filename(), Target::InitialTarget);
+  ASSERT_TRUE(targetsMatch(current, getInitialTarget()));
 
   // Create a new Target: update rootfs and commit it into Treehub's repo
   auto new_target = createTarget();
@@ -123,8 +127,6 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateInstalledVersionsCorrupted1) {
   ASSERT_EQ(req_headers["x-ats-target"], Target::InitialTarget);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
 
-  // verify the install
-  ASSERT_FALSE(targetsMatch(client->getCurrent(), getInitialTarget()));
   reboot(client);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
@@ -135,8 +137,12 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateInstalledVersionsCorrupted2) {
   // boot device with a corrupted json file in the filesystem
   auto client = createLiteClient(InitialVersion::kCorrupted2);
 
-  // verify that the initial version was corrupted
-  ASSERT_FALSE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  // verify that the `installed_version` json file was corrupted,
+  // it means that the current Target should be so-called "initial" target
+  const auto current{client->getCurrent()};
+  ASSERT_EQ(current.filename(), Target::InitialTarget);
+  ASSERT_EQ(getInitialTarget().filename(), Target::InitialTarget);
+  ASSERT_TRUE(targetsMatch(current, getInitialTarget()));
 
   // Create a new Target: update rootfs and commit it into Treehub's repo
   auto new_target = createTarget();
@@ -146,8 +152,6 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateInstalledVersionsCorrupted2) {
   ASSERT_EQ(req_headers["x-ats-target"], Target::InitialTarget);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
 
-  // verify the install
-  ASSERT_FALSE(targetsMatch(client->getCurrent(), getInitialTarget()));
   reboot(client);
   ASSERT_FALSE(new_target.MatchTarget(Uptane::Target::Unknown()));
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));

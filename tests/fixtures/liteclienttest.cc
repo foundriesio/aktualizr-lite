@@ -33,14 +33,7 @@ class ClientTest :virtual public ::testing::Test {
         device_gateway_{ostree_repo_, tuf_repo_, certs_dir},
         sysroot_hash_{sys_repo_.getRepo().commit(sys_rootfs_.path, sys_rootfs_.branch)},
         initial_target_{Uptane::Target::Unknown()} {
-
-
     sys_repo_.deploy(sysroot_hash_);
-    initial_target_ = {Target::InitialTarget, Uptane::EcuMap({{Uptane::EcuSerial("test_primary_ecu_serial_id"),
-                       Uptane::HardwareIdentifier(hw_id)}}), {Hash(Hash::Type::kSha256, sysroot_hash_)}, 0, "", "OSTREE"};
-    auto custom{initial_target_.custom_data()};
-    custom["hardwareIds"][0] = hw_id;
-    initial_target_.updateCustom(custom);
   }
 
   enum class InitialVersion { kOff, kOn, kCorrupted1, kCorrupted2 };
@@ -93,6 +86,24 @@ class ClientTest :virtual public ::testing::Test {
     conf.pacman.extra["ostree_update_block"] = "0";
     conf.import.base_path = test_dir_ / "import";
 
+    // set the initial Target if not set yet
+    if (!initial_target_.IsValid()) {
+      const std::string initial_ver{"1"};
+      Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
+      std::vector<Hash> hashes{Hash(Hash::Type::kSha256, sysroot_hash_)};
+      initial_target_ = Uptane::Target{initial_version == InitialVersion::kOn ? hw_id + "-lmp-" + initial_ver : Target::InitialTarget,
+                                       ecus, hashes, 0, "", "OSTREE"};
+      // emulate Foundries real Target, add custom.uri attribute
+      Json::Value custom_value{initial_target_.custom_data()};
+      custom_value["uri"] = "https://ci.foundries.io/projects/factory/lmp/builds/1097";
+      custom_value["targetFormat"] = "OSTREE";
+      custom_value["hardwareIds"][0] = hw_id;
+      custom_value["version"] = initial_ver;
+      initial_target_.updateCustom(custom_value);
+      getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, initial_ver);
+    }
+
+    // Add the `installed_versions` file
     if (initial_version == InitialVersion::kOn || initial_version == InitialVersion::kCorrupted1 ||
         initial_version == InitialVersion::kCorrupted2) {
       /*
@@ -139,23 +150,12 @@ class ClientTest :virtual public ::testing::Test {
           sysroot_hash_ + (initial_version == InitialVersion::kCorrupted1 ? "DEADBEEF" : "");
       installed_version["is_current"] = true;
       installed_version["custom"]["name"] = hw_id + "-" + os;
-      installed_version["custom"]["version"] = "1";
+      installed_version["custom"]["version"] = initial_target_.custom_version();
       installed_version["custom"]["hardwareIds"][0] = hw_id;
       installed_version["custom"]["targetFormat"] = "OSTREE";
       installed_version["custom"]["arch"] = "aarch64";
       installed_version["custom"]["image-file"] = "lmp-factory-image-raspberrypi4-64.wic.gz";
       installed_version["custom"]["tags"] = "master";
-
-      /* create the initial_target from the above json file: pass the root node
-       * name as a parameter
-       */
-      initial_target_ = Uptane::Target{hw_id + "-" + os + "-" + "1", installed_version};
-      // emulate Foundries real Target, add custom.uri attribute
-      Json::Value custom_value;
-      custom_value["uri"] = "https://ci.foundries.io/projects/factory/lmp/builds/1097";
-      custom_value["targetFormat"] = "OSTREE";
-      custom_value["hardwareIds"][0] = conf.provision.primary_ecu_hardware_id;
-      initial_target_.updateCustom(custom_value);
 
       Json::Value ins_ver;
       // set the root node name
@@ -165,31 +165,9 @@ class ClientTest :virtual public ::testing::Test {
                        (initial_version == InitialVersion::kCorrupted2) ? "deadbeef\t\ncorrupted file\n\n"
                                                                         : Utils::jsonToCanonicalStr(ins_ver),
                        true);
-
-      getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, "1");
     }
 
     tweakConf(conf);
-    switch (conf.bootloader.rollback_mode) {
-      case RollbackMode::kFioVB: {
-        boot_flag_mgr_ = std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string());
-        break;
-      }
-      case RollbackMode::kUbootMasked: {
-        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
-        std::string sink;
-        if (Utils::shell("fw_setenv bootfirmware_version 0.1", &sink) != 0) {
-          throw std::runtime_error("Failed to set bootfirmware_version");
-        }
-        break;
-       }
-      case RollbackMode::kUbootGeneric: {
-        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
-        break;
-      }
-      default:
-        break;
-    }
 
     auto client = std::make_shared<LiteClient>(conf, app_engine);
     // Recreate the report queue with the configuration needed for tests, specifically:
@@ -215,6 +193,28 @@ class ClientTest :virtual public ::testing::Test {
     if (finalize) {
       client->finalizeInstall();
     }
+
+    // initialize the bootloader flag manager and set current bootloader version
+    switch (conf.bootloader.rollback_mode) {
+      case RollbackMode::kFioVB: {
+        boot_flag_mgr_ = std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string());
+        break;
+      }
+      case RollbackMode::kUbootMasked: {
+        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
+        break;
+       }
+      case RollbackMode::kUbootGeneric: {
+        boot_flag_mgr_ = std::make_shared<UbootFlagMgr>((test_dir_.Path() / "uboot").string());
+        break;
+      }
+      default:
+        break;
+    }
+    const auto boot_fw_ver{bootloader::BootloaderLite::getVersion(sys_repo_.getDeploymentPath(), client->getCurrent().sha256Hash())};
+    if (!boot_fw_ver.empty()) {
+      boot_flag_mgr_->set("bootfirmware_version", boot_fw_ver);
+    }
     return client;
   }
 
@@ -224,18 +224,17 @@ class ClientTest :virtual public ::testing::Test {
   Uptane::Target createTarget(const std::vector<AppEngine::App>* apps = nullptr, std::string hwid = "",
                               const std::string& rootfs_path = "", boost::optional<TufRepoMock&> tuf_repo = boost::none,
                               const std::string& ver = "",
-                              const std::string& bootloader_ver = "bootfirmware_version:1.1") {
+                              const std::string& bootloader_ver = "") {
     auto& repo{!!tuf_repo?*tuf_repo:getTufRepo()};
     const auto& latest_target{repo.getLatest()};
-    std::string version{ver};
-    if (version.size() == 0) {
-      try {
-        version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
-      } catch (...) {
-        LOG_INFO << "No target available, preparing the first version";
-        version = "1";
-      }
+    std::string next_version;
+    try {
+      next_version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
+    } catch (...) {
+      LOG_INFO << "No target available, preparing the first version";
+      next_version = "1";
     }
+    const std::string version{ver.empty()?next_version:ver};
 
     // update rootfs and commit it into Treehub's repo
     const std::string unique_content = Utils::randomUuid();
@@ -245,7 +244,12 @@ class ClientTest :virtual public ::testing::Test {
       rootfs = getSysRootFs().path;
     }
     Utils::writeFile(rootfs + "/" + unique_file, unique_content, true);
-    Utils::writeFile(rootfs + bootloader::BootloaderLite::VersionFile, bootloader_ver, true);
+    std::string boot_fw_ver{bootloader_ver};
+    if (boot_fw_ver.empty()) {
+      boot_fw_ver = "bootfirmware_version=" + next_version;
+    }
+    Utils::writeFile(rootfs + bootloader::BootloaderLite::VersionFile, boot_fw_ver, true);
+
     auto hash = getOsTreeRepo().commit(rootfs, "lmp");
 
     Json::Value apps_json;
@@ -319,7 +323,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
 
       checkEvents(client, from, expected_install_code == data::ResultCode::Numeric::kNeedCompletion?UpdateType::kOstreeApply:UpdateType::kFailed, expected_download_result.description, expected_install_err_msg);
-      checkBootloaderFlags(client.config.bootloader.rollback_mode, expected_install_code != data::ResultCode::Numeric::kInstallFailed, expect_boot_firmware);
+      checkBootloaderFlags(client.config.bootloader.rollback_mode, client.isPendingTarget(to) && expected_install_code != data::ResultCode::Numeric::kInstallFailed, expect_boot_firmware);
     } else {
       checkEvents(client, from, UpdateType::kDownloadFailed, expected_download_result.description);
     }
@@ -419,7 +423,7 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method reboot
    */
-  void reboot(std::shared_ptr<LiteClient>& client, boost::optional<std::vector<std::string>> new_app_list = boost::none) {
+  void reboot(std::shared_ptr<LiteClient>& client, boost::optional<std::vector<std::string>> new_app_list = boost::none, bool reset_bootupgrade_available = true) {
     boost::filesystem::remove(test_dir_.Path() / "need_reboot");
     // make sure we tear down an existing instance of a client before a new one is created
     // otherwise we hit race condition with sending events by the report queue thread, the same event is sent twice
@@ -427,9 +431,11 @@ class ClientTest :virtual public ::testing::Test {
     if (!!new_app_list) {
       app_shortlist_ = new_app_list;
     }
-    boot_flag_mgr_->reset_bootupgrade_available();
+    if (reset_bootupgrade_available) {
+      boot_flag_mgr_->set("bootupgrade_available", "0");
+    }
     client = createLiteClient(InitialVersion::kOff, app_shortlist_);
-    ASSERT_EQ(0, boot_flag_mgr_->bootcount());
+    ASSERT_EQ(0, boot_flag_mgr_->get("bootcount"));
   }
 
   /**
@@ -477,7 +483,9 @@ class ClientTest :virtual public ::testing::Test {
         // TODO: check whether a value of ["event"]["details"] macthes the current Target
         // makes sense to represent it as a json string
         const auto event_details = rec_event_json["event"]["details"].asString();
-        ASSERT_TRUE(event_details.find("Apps running:") != std::string::npos);
+        if (client.config.pacman.type == ComposeAppManager::Name) {
+          ASSERT_TRUE(event_details.find("Apps running:") != std::string::npos);
+        }
         ASSERT_TRUE(event_details.find(install_failure_err_msg) != std::string::npos) << event_details;
       }
       if (event_type == "EcuDownloadCompleted") {
@@ -488,15 +496,15 @@ class ClientTest :virtual public ::testing::Test {
   }
 
   void checkBootloaderFlags(RollbackMode bootloader_mode, bool check_upgrade_available, bool expect_boot_firmware = true) {
-    ASSERT_EQ(0, boot_flag_mgr_->bootcount());
-    ASSERT_EQ(0, boot_flag_mgr_->rollback());
+    ASSERT_EQ(0, boot_flag_mgr_->get("bootcount"));
+    ASSERT_EQ(0, boot_flag_mgr_->get("rollback"));
 
     if (bootloader_mode == RollbackMode::kUbootMasked || bootloader_mode == RollbackMode::kFioVB) {
       if (check_upgrade_available) {
-        ASSERT_EQ(1, boot_flag_mgr_->upgrade_available());
+        ASSERT_EQ(1, boot_flag_mgr_->get("upgrade_available"));
       }
       if (expect_boot_firmware) {
-        ASSERT_EQ(1, boot_flag_mgr_->bootupgrade_available());
+        ASSERT_EQ(1, boot_flag_mgr_->get("bootupgrade_available"));
       }
     }
   }

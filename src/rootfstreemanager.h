@@ -45,6 +45,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   void getAdditionalRemotes(std::vector<Remote>& remotes, const std::string& target_name);
 
   void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys);
+  data::InstallationResult verifyBootloaderUpdate(const Uptane::Target& target) const;
 
   const KeyManager& keys_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;

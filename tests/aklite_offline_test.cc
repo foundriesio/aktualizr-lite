@@ -134,13 +134,18 @@ class AkliteOffline : public ::testing::Test {
   void setInitialTarget(const std::string& hash, bool known = true) {
     Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
     std::vector<Hash> hashes{Hash(Hash::Type::kSha256, hash)};
-    initial_target_ = Uptane::Target{known ? hw_id + "-lmp-0" : Target::InitialTarget, ecus, hashes, 0, "", "OSTREE"};
+    initial_target_ = Uptane::Target{known ? hw_id + "-lmp-1" : Target::InitialTarget, ecus, hashes, 0, "", "OSTREE"};
     // update the initial Target to add the hardware ID so Target::MatchTarget() works correctly
     auto custom{initial_target_.custom_data()};
     custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+    custom["version"] = "1";
     initial_target_.updateCustom(custom);
+    // set initial bootloader version
+    const auto boot_fw_ver{bootloader::BootloaderLite::getVersion(sys_repo_.getDeploymentPath(), hash)};
+    boot_flag_mgr_->set("bootfirmware_version", boot_fw_ver);
   }
-  Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false) {
+  Uptane::Target addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
+                           bool add_bootloader_update = false) {
     const auto& latest_target{tuf_repo_.getLatest()};
     std::string version;
     if (version.size() == 0) {
@@ -148,7 +153,7 @@ class AkliteOffline : public ::testing::Test {
         version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
       } catch (...) {
         LOG_INFO << "No target available, preparing the first version";
-        version = "1";
+        version = "2";
       }
     }
     auto hash{latest_target.IsValid() ? latest_target.sha256Hash() : initial_target_.sha256Hash()};
@@ -157,6 +162,10 @@ class AkliteOffline : public ::testing::Test {
       const std::string unique_content = Utils::randomUuid();
       const std::string unique_file = Utils::randomUuid();
       Utils::writeFile(sys_rootfs_.path + "/" + unique_file, unique_content, true);
+      if (add_bootloader_update) {
+        Utils::writeFile(sys_rootfs_.path + bootloader::BootloaderLite::VersionFile,
+                         std::string("bootfirmware_version=111"), true);
+      }
       hash = ostree_repo_.commit(sys_rootfs_.path, branch);
     }
     Json::Value apps_json;
@@ -178,7 +187,7 @@ class AkliteOffline : public ::testing::Test {
     for (const auto& app : apps) {
       apps_json[app.name]["uri"] = app.uri;
     }
-    tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-0", initial_target_.sha256Hash(),
+    tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-1", initial_target_.sha256Hash(),
                         cfg_.provision.primary_ecu_hardware_id, "0", apps_json);
 
     // content-based shortlisting
@@ -197,7 +206,7 @@ class AkliteOffline : public ::testing::Test {
       Json::Value custom;
       custom[Target::ComposeAppField] = apps_json;
       custom["name"] = cfg_.provision.primary_ecu_hardware_id + "-lmp";
-      custom["version"] = "0";
+      custom["version"] = "1";
       custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
       custom["targetFormat"] = "OSTREE";
       custom["arch"] = "arm64";
@@ -334,11 +343,11 @@ TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
   // and ostree for the bootloader, so it finalizes the boot fw update and resets `bootupgrade_available`.
   // Also, it may happen that `bootupgrade_available` is set by mistake.
   // The bootloader will detect such situation and reset `bootupgrade_available`.
-  boot_flag_mgr_->set_bootupgrade_available();
+  boot_flag_mgr_->set("bootupgrade_available");
 
   ASSERT_EQ(install(), offline::PostInstallAction::NeedRebootForBootFw);
   reboot();
-  boot_flag_mgr_->reset_bootupgrade_available();
+  boot_flag_mgr_->set("bootupgrade_available", "0");
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
@@ -346,16 +355,14 @@ TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
 }
 
 TEST_F(AkliteOffline, BootFwUpdate) {
-  const auto target{addTarget({createApp("app-01")})};
+  const auto target{addTarget({createApp("app-01")}, false, true)};
 
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
-  // emulate boot firmware update
-  boot_flag_mgr_->set_bootupgrade_available();
   ASSERT_EQ(run(), offline::PostRunAction::OkNeedReboot);
   reboot();
   // emulate boot firmware update confirmation
-  boot_flag_mgr_->reset_bootupgrade_available();
+  boot_flag_mgr_->set("bootupgrade_available", "0");
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
   ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }

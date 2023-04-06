@@ -73,8 +73,8 @@ add_aktualizr_test(NAME ostree
 )
 
 target_compile_definitions(t_ostree PRIVATE ${TEST_DEFS})
-target_include_directories(t_ostree PRIVATE ${TEST_INCS})
-target_link_libraries(t_ostree ${TEST_LIBS})
+target_include_directories(t_ostree PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/)
+target_link_libraries(t_ostree ${TEST_LIBS} testutilities)
 set_tests_properties(test_ostree PROPERTIES LABELS "aklite:ostree")
 
 add_aktualizr_test(NAME liteclient
