@@ -13,6 +13,7 @@ class BootFwUpdateStatus {
  public:
   using VersionType = uint64_t;  // clang-tidy prefers uint64_t over unsigned long long int
   using VersionNumbRes = std::tuple<VersionType, bool>;
+  using VersionStrRes = std::tuple<std::string, bool>;
   using RollbackVersionResult = std::tuple<VersionType, VersionType, bool>;
 
   BootFwUpdateStatus(const BootFwUpdateStatus&) = delete;
@@ -36,8 +37,8 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
 
   explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot);
 
-  VersionNumbRes getDeploymentVersion(const std::string& hash) const;
-  VersionNumbRes getCurrentVersion() const;
+  VersionStrRes getDeploymentVersion(const std::string& hash) const;
+  VersionStrRes getCurrentVersion() const;
 
   static std::string getVersion(const std::string& deployment_dir, const std::string& hash,
                                 const std::string& ver_file = VersionFile);

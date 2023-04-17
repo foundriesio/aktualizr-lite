@@ -60,12 +60,15 @@ class BootFlagMgmtTest : public fixtures::ClientTest {
 
     auto client =
         ClientTest::createLiteClient(app_engine_mock_, initial_version, apps, "", boost::none, true, finalize);
-    boot_flag_mgr_->set("rollback_protection");
+    boot_flag_mgr_->set("rollback_protection", rollback_protection_flag_);
     return client;
   }
 
   std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
   RollbackMode bootloader_type_{RollbackMode::kBootloaderNone};
+
+ protected:
+  std::string rollback_protection_flag_{"1"};
 
  private:
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
@@ -153,6 +156,47 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfBootloaderRollbacks) {
   } else {
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
+}
+
+TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfBootloaderVersionIsHash) {
+  rollback_protection_flag_ = "0";
+  // boot device
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target =
+      createTarget(nullptr, "", "", boost::none, "", "bootfirmware_version=\"0d18208adb8706f2270977126719d99d\"");
+  update(*client, getInitialTarget(), new_target);
+  if (bootloader_type_ != RollbackMode::kUbootGeneric) {
+    ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 1);
+    ASSERT_TRUE(client->isBootFwUpdateInProgress());
+  }
+
+  // reboot device, and don't reset the boot upgrade flag to emulate the bootloader A/B update
+  reboot(client, boost::none, false);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
+  if (bootloader_type_ == RollbackMode::kUbootGeneric) {
+    return;
+  }
+
+  // boot fw udpate is in progress
+  ASSERT_TRUE(client->isBootFwUpdateInProgress());
+  // make sure update is banned until a device is rebooted
+  auto new_target_01 =
+      createTarget(nullptr, "", "", boost::none, "", "bootfirmware_version=\"5ace7f3c81d728eb8669c00177d1aa0b\"");
+  update(*client, new_target, new_target_01);
+  // verify that the new target `new_target_01` was not actually applied and is not pending
+  ASSERT_FALSE(client->isPendingTarget(new_target_01));
+
+  // now, do reboot to confirm the boot fw update
+  reboot(client);
+  // and try the update again
+  update(*client, new_target, new_target_01);
+  ASSERT_EQ(boot_flag_mgr_->get("bootupgrade_available"), 1);
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target_01));
 }
 
 INSTANTIATE_TEST_SUITE_P(
