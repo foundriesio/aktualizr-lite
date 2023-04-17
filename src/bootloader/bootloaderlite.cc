@@ -90,8 +90,6 @@ BootloaderLite::VersionStrRes BootloaderLite::getDeploymentVersion(const std::st
   return {ver_str, !ver_str.empty()};
 }
 
-BootloaderLite::VersionStrRes BootloaderLite::getCurrentVersion() const { return getEnvVar("bootfirmware_version"); }
-
 std::string BootloaderLite::getVersion(const std::string& deployment_dir, const std::string& hash,
                                        const std::string& ver_file) {
   try {
@@ -155,36 +153,10 @@ bool BootloaderLite::isRollbackProtectionEnabled() const {
   return std::get<0>(rb_val) == "1";
 }
 
-BootFwUpdateStatus::RollbackVersionResult BootloaderLite::isRollbackVersion(const std::string& target_hash) const {
-  if (!isUpdateSupported()) {
-    // update is not supported by a given bootloader type, hence cannot be rollback version
-    LOG_DEBUG << "Update is not supported by a given bootloader type (" << config_.rollback_mode << "),"
-              << " assuming it is not a rollback version";
-    return {0, 0, false};
-  }
-
-  OSTree::Repo repo{sysroot_->path() + "/ostree/repo"};
-  std::string version_str;
-  try {
-    const std::string version_line{repo.readFile(target_hash, VersionFile)};
-    version_str = extractVersionValue(version_line);
-  } catch (const std::exception& exc) {
-    LOG_DEBUG << "Failed to get a bootloader version from the commit: " << target_hash;
-    return {0, 0, false};
-  }
-  const auto ver_res{verStrToNumber(version_str)};
-  if (!std::get<1>(ver_res)) {
-    return {0, 0, false};
-  }
-  const auto cur_ver_str_res{getCurrentVersion()};
-  if (!std::get<1>(cur_ver_str_res)) {
-    return {0, std::get<0>(ver_res), false};
-  }
-  const auto cur_ver_res{verStrToNumber(std::get<0>(cur_ver_str_res))};
-  if (!std::get<1>(cur_ver_res)) {
-    return {0, std::get<0>(ver_res), false};
-  }
-  return {std::get<0>(cur_ver_res), std::get<0>(ver_res), std::get<0>(ver_res) < std::get<0>(cur_ver_res)};
+std::string BootloaderLite::getTargetVersion(const std::string& target_hash) const {
+  const OSTree::Repo repo{sysroot_->path() + "/ostree/repo"};
+  const std::string version_line{repo.readFile(target_hash, VersionFile)};
+  return extractVersionValue(version_line);
 }
 
 std::tuple<std::string, bool> BootloaderLite::setEnvVar(const std::string& var_name, const std::string& var_val) const {

@@ -213,14 +213,56 @@ data::InstallationResult RootfsTreeManager::verifyBootloaderUpdate(const Uptane:
                    " before installation of a new Target with ostree/rootfs change";
     return data::InstallationResult(data::ResultCode::Numeric::kNeedCompletion, "bootlader update is in progress");
   }
-  if (boot_fw_update_status_->isRollbackProtectionEnabled()) {
-    const auto bootloader_ver_res{boot_fw_update_status_->isRollbackVersion(target.sha256Hash())};
-    if (std::get<2>(bootloader_ver_res)) {
-      const std::string err_msg{"bootloader rollback from version " + std::to_string(std::get<0>(bootloader_ver_res)) +
-                                " to " + std::to_string(std::get<1>(bootloader_ver_res)) + " has been detected"};
-      LOG_WARNING << "Rejecting the update: " << err_msg;
-      return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, err_msg);
-    }
+
+  if (!boot_fw_update_status_->isRollbackProtectionEnabled()) {
+    return data::InstallationResult(data::ResultCode::Numeric::kOk, "");
   }
+
+  std::string target_ver_str;
+  try {
+    target_ver_str = boot_fw_update_status_->getTargetVersion(target.sha256Hash());
+  } catch (const std::invalid_argument& exc) {
+    // Failure to parse the version file
+    LOG_WARNING << "Rejecting the update because a bootloader version file is malformed: " << exc.what();
+    return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, exc.what());
+  } catch (const std::exception& exc) {
+    LOG_INFO << "Failed to get bootloader version, assuming no bootloader update: " << exc.what();
+    return data::InstallationResult(data::ResultCode::Numeric::kOk, "");
+  }
+
+  uint64_t target_ver;
+  try {
+    target_ver = boost::lexical_cast<uint64_t>(target_ver_str);
+  } catch (const std::exception& exc) {
+    const std::string err_msg{"Invalid format of the bootloader version; value: " + target_ver_str +
+                              "; err: " + exc.what()};
+    LOG_ERROR << "Rejecting the update since the bootloader version has an invalid format; " << err_msg;
+    return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, exc.what());
+  }
+
+  uint64_t cur_ver{0};
+  std::string cur_ver_str;
+  bool is_current_ver_valid;
+  std::tie(cur_ver_str, is_current_ver_valid) = boot_fw_update_status_->getCurrentVersion();
+  if (!is_current_ver_valid) {
+    LOG_WARNING << "Failed to get current bootloader version: " << cur_ver_str;
+    LOG_WARNING << "Assuming that the current bootloader version is `0` and proceeding with the update further";
+    cur_ver_str = "0";
+  }
+  try {
+    cur_ver = boost::lexical_cast<uint64_t>(cur_ver_str);
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Invalid format of the current bootloader version; value: " << cur_ver_str
+                << "; err: " << exc.what();
+    LOG_WARNING << "Assuming that the current bootloader version is `0` and proceeding with the update further";
+  }
+
+  if (target_ver < cur_ver) {
+    const std::string err_msg{"bootloader rollback from version " + cur_ver_str + " to " + target_ver_str +
+                              " has been detected"};
+    LOG_WARNING << "Rejecting the update because " << err_msg;
+    return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, err_msg);
+  }
+
   return data::InstallationResult(data::ResultCode::Numeric::kOk, "");
 }

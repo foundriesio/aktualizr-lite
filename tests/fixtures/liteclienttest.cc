@@ -248,7 +248,12 @@ class ClientTest :virtual public ::testing::Test {
     if (boot_fw_ver.empty()) {
       boot_fw_ver = "bootfirmware_version=" + next_version;
     }
-    Utils::writeFile(rootfs + bootloader::BootloaderLite::VersionFile, boot_fw_ver, true);
+    if (boot_fw_ver != "-1") {
+      Utils::writeFile(rootfs + bootloader::BootloaderLite::VersionFile, boot_fw_ver, true);
+    } else  {
+      boost::system::error_code ec;
+      boost::filesystem::remove(rootfs + bootloader::BootloaderLite::VersionFile, ec);
+    }
 
     auto hash = getOsTreeRepo().commit(rootfs, "lmp");
 

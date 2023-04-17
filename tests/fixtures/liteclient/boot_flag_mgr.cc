@@ -34,6 +34,10 @@ class BootFlagMgr {
     Utils::writeFile(dir_/flag, val);
   }
 
+  void remove(const std::string& flag) {
+    boost::filesystem::remove(dir_/flag);
+  }
+
  private:
   const boost::filesystem::path dir_;
 };
