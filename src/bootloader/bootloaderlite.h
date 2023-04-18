@@ -13,6 +13,7 @@ class BootFwUpdateStatus {
  public:
   using VersionType = uint64_t;  // clang-tidy prefers uint64_t over unsigned long long int
   using VersionNumbRes = std::tuple<VersionType, bool>;
+  using VersionStrRes = std::tuple<std::string, bool>;
   using RollbackVersionResult = std::tuple<VersionType, VersionType, bool>;
 
   BootFwUpdateStatus(const BootFwUpdateStatus&) = delete;
@@ -23,7 +24,8 @@ class BootFwUpdateStatus {
   virtual bool isUpdateInProgress() const = 0;
   virtual bool isUpdateSupported() const = 0;
   virtual bool isRollbackProtectionEnabled() const = 0;
-  virtual RollbackVersionResult isRollbackVersion(const std::string& target_hash) const = 0;
+  virtual std::string getTargetVersion(const std::string& target_hash) const = 0;
+  virtual VersionStrRes getCurrentVersion() const = 0;
 
  protected:
   BootFwUpdateStatus() = default;
@@ -36,8 +38,7 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
 
   explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot);
 
-  VersionNumbRes getDeploymentVersion(const std::string& hash) const;
-  VersionNumbRes getCurrentVersion() const;
+  VersionStrRes getDeploymentVersion(const std::string& hash) const;
 
   static std::string getVersion(const std::string& deployment_dir, const std::string& hash,
                                 const std::string& ver_file = VersionFile);
@@ -47,7 +48,8 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
   bool isUpdateInProgress() const override;
   bool isUpdateSupported() const override { return !get_env_cmd_.empty(); }
   bool isRollbackProtectionEnabled() const override;
-  RollbackVersionResult isRollbackVersion(const std::string& target_hash) const override;
+  std::string getTargetVersion(const std::string& target_hash) const override;
+  VersionStrRes getCurrentVersion() const override { return getEnvVar("bootfirmware_version"); }
 
  private:
   std::tuple<std::string, bool> setEnvVar(const std::string& var_name, const std::string& var_val) const;
