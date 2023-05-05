@@ -9,7 +9,7 @@ CC ?= clang
 GTEST_FILTER ?= "*"
 
 
-TASKS = config build format tidy garage-tools
+TASKS = config build format tidy garage-tools custom-client
 .PHONY: $(TASKS) test
 
 

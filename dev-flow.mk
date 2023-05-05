@@ -32,9 +32,8 @@ install:
 	cmake --build ${BUILD_DIR} --target $@
 	cp -r aktualizr/third_party/jsoncpp/include/json /usr/include
 
-# requires `install` to be executed as `root`
 custom-client:
-	cmake -S examples/custom-client-cxx -B ${BUILD_DIR}-custom -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC}
+	cmake -S examples/custom-client-cxx -B ${BUILD_DIR}-custom -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-I $(CURDIR)/include -I $(CURDIR)/aktualizr/third_party/jsoncpp/include/ -L "$(CURDIR)/${BUILD_DIR}/aktualizr/src/libaktualizr/" -L $(CURDIR)/${BUILD_DIR}/src"
 	cmake --build ${BUILD_DIR}-custom --target all
 
 garage-tools:
