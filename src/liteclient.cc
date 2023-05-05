@@ -130,7 +130,10 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   sysroot_ = ostree_sysroot;
 }
 
-LiteClient::~LiteClient() {}  // NOLINT(modernize-use-equals-default, hicpp-use-equals-default)
+LiteClient::~LiteClient() {
+  // Make sure all events drained before fully destroying the liteclient instance.
+  report_queue.reset(nullptr);
+}  // NOLINT(modernize-use-equals-default, hicpp-use-equals-default)
 
 data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptane::Target>& target) {
   data::InstallationResult ret{data::ResultCode::Numeric::kNeedCompletion, ""};
