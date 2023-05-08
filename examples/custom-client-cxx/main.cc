@@ -1,5 +1,6 @@
 #include <thread>
 
+#include <boost/process.hpp>
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
@@ -41,7 +42,15 @@ static std::string get_reboot_cmd(const AkliteClient &client) {
 int main(int argc, char **argv) {
   boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
 
-  AkliteClient client(AkliteClient::CONFIG_DIRS);
+  std::vector<boost::filesystem::path> cfg_dirs;
+  auto env{boost::this_process::environment()};
+  if (env.end() != env.find("AKLITE_CONFIG_DIR")) {
+    cfg_dirs.emplace_back(env.get("AKLITE_CONFIG_DIR"));
+  } else {
+    cfg_dirs = AkliteClient::CONFIG_DIRS;
+  }
+
+  AkliteClient client(cfg_dirs);
   auto interval = client.GetConfig().get("uptane.polling_sec", 600);
   auto reboot_cmd = get_reboot_cmd(client);
 
