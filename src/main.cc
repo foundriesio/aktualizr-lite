@@ -248,8 +248,25 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
     std::string cor_id;
     std::tie(rc, dr, cor_id) = do_update(client, *find_target_res.second, reason);
 
-    return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
-                                                                                                      : EXIT_FAILURE;
+    int exit_code{EXIT_FAILURE};
+    switch (rc) {
+      case data::ResultCode::Numeric::kNeedCompletion: {
+        LOG_ERROR << "Update has been successfully downloaded and installed."
+                     " Please, reboot the device to complete the update";
+        exit_code = 100;
+        break;
+      }
+      case data::ResultCode::Numeric::kOk: {
+        LOG_ERROR << "Update succeeded";
+        exit_code = EXIT_SUCCESS;
+        break;
+      }
+      default:
+        LOG_ERROR << "Update failed";
+        break;
+    };
+    return exit_code;
+
   } else {
     LOG_INFO << "No Target found to update to; hw ID: " << hwid.ToString()
              << "; tags: " << boost::algorithm::join(client.tags, ",");
