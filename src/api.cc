@@ -11,6 +11,8 @@
 #include "libaktualizr/config.h"
 #include "liteclient.h"
 #include "primary/reportqueue.h"
+#include "storage/sqlstorage.h"
+#include "target.h"
 
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                         "/etc/sota/conf.d/"};
@@ -69,7 +71,7 @@ static void assert_lock() {
   }
 }
 
-void AkliteClient::Init(Config& config) {
+void AkliteClient::Init(Config& config, bool finalize) {
   if (!read_only_) {
     assert_lock();
     config.telemetry.report_network = !config.tls.server.empty();
@@ -78,20 +80,22 @@ void AkliteClient::Init(Config& config) {
   client_ = std::make_unique<LiteClient>(config, nullptr);
   if (!read_only_) {
     client_->importRootMetaIfNeededAndPresent();
-    client_->finalizeInstall();
+    if (finalize) {
+      client_->finalizeInstall();
+    }
   }
 }
 
-AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only) {
+AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only, bool finalize) {
   read_only_ = read_only;
   Config config(config_dirs);
-  Init(config);
+  Init(config, finalize);
 }
 
-AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_args, bool read_only) {
+AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_args, bool read_only, bool finalize) {
   read_only_ = read_only;
   Config config(cmdline_args);
-  Init(config);
+  Init(config, finalize);
 }
 
 AkliteClient::~AkliteClient() {
@@ -351,3 +355,11 @@ InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus
   secondary_hwids_ = std::move(hwids);
   return InstallResult{InstallResult::Status::Ok, ""};
 }
+
+TufTarget AkliteClient::GetPendingTarget() const {
+  boost::optional<Uptane::Target> pending;
+  client_->storage->loadInstalledVersions("", nullptr, &pending);
+  return !pending ? TufTarget() : Target::toTufTarget(*pending);
+}
+
+bool AkliteClient::CompleteInstallation() { return client_->finalizeInstall(); }

@@ -239,3 +239,17 @@ target_include_directories(t_boot_flag_mgmt PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR
 target_link_libraries(t_boot_flag_mgmt ${TEST_LIBS} uptane_generator_lib testutilities)
 add_dependencies(t_boot_flag_mgmt make_ostree_sysroot)
 set_tests_properties(test_boot_flag_mgmt PROPERTIES LABELS "aklite:boot")
+
+add_aktualizr_test(NAME cliclient
+  SOURCES $<TARGET_OBJECTS:${MAIN_TARGET_LIB}> cliclient_test.cc
+  PROJECT_WORKING_DIRECTORY
+  ARGS
+  ${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
+  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+)
+aktualizr_source_file_checks(cliclient_test.cc)
+target_compile_definitions(t_cliclient PRIVATE ${TEST_DEFS})
+target_include_directories(t_cliclient PRIVATE ${TEST_INCS} ${AKLITE_DIR}/include ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_cliclient aktualizr_lite ${TEST_LIBS} uptane_generator_lib testutilities)
+add_dependencies(t_cliclient make_ostree_sysroot)
+set_tests_properties(test_cliclient PROPERTIES LABELS "aklite:cliclient")

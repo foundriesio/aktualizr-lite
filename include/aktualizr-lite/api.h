@@ -14,6 +14,22 @@
 
 class Config;
 class LiteClient;
+class AkliteClient;
+
+namespace cli {
+
+enum class ExitCode {
+  UnknownError = -1,
+  Ok = 0,
+  InstallationInProgress = 10,
+  NoPendingInstallation = 20,
+  InstallNeedsReboot = 100
+};
+
+ExitCode Install(AkliteClient &client, int version = -1);
+ExitCode CompleteInstall(AkliteClient &client);
+
+}  // namespace cli
 
 /**
  * A high-level representation of a TUF Target in terms applicable to a
@@ -21,6 +37,7 @@ class LiteClient;
  */
 class TufTarget {
  public:
+  TufTarget() : name_{"unknown"} {}
   TufTarget(std::string name, std::string sha256, int version, Json::Value custom)
       : name_(std::move(name)), sha256_(std::move(sha256)), version_(version), custom_(std::move(custom)) {}
 
@@ -58,7 +75,7 @@ class TufTarget {
  private:
   std::string name_;
   std::string sha256_;
-  int version_;
+  int version_{-1};
   Json::Value custom_;
 };
 
@@ -193,16 +210,18 @@ class AkliteClient {
    * @param config_dirs The list of files/directories to parse sota toml from.
    * @param read_only Run this client in a read-write mode (can do updates)
    */
-  explicit AkliteClient(const std::vector<boost::filesystem::path> &config_dirs, bool read_only = false);
+  explicit AkliteClient(const std::vector<boost::filesystem::path> &config_dirs, bool read_only = false,
+                        bool finalize = true);
   /**
    * Construct a client instance with configuration generated from command line
    * arguments.
    * @param cmdline_args The map of commandline arguments.
    * @param read_only Run this client in a read-write mode (can do updates)
    */
-  explicit AkliteClient(const boost::program_options::variables_map &cmdline_args, bool read_only = false);
+  explicit AkliteClient(const boost::program_options::variables_map &cmdline_args, bool read_only = false,
+                        bool finalize = true);
   /**
-   * Used for unit-testing purposes.
+   * Used for the CLI client and unit-testing purposes.
    */
   explicit AkliteClient(std::shared_ptr<LiteClient> client) : client_(std::move(client)) {}
 
@@ -283,12 +302,24 @@ class AkliteClient {
   InstallResult SetSecondaries(const std::vector<SecondaryEcu> &ecus);
 
   /**
+   * @brief GetPendingTarget TODO
+   * @return
+   */
+  TufTarget GetPendingTarget() const;
+
+  /**
+   * @brief CompleteInstallation TODO
+   * @return
+   */
+  bool CompleteInstallation();
+
+  /**
    * Default files/paths to search for sota toml when configuration client.
    */
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  private:
-  void Init(Config &config);
+  void Init(Config &config, bool finalize = true);
 
   bool read_only_{false};
   std::shared_ptr<LiteClient> client_;

@@ -44,7 +44,7 @@ endif(BUILD_AKLITE_WITH_NERDCTL)
 
 add_executable(${TARGET_EXE} main.cc)
 add_library(${TARGET} OBJECT ${SRC})
-add_library(${TARGET_LIB} SHARED ${SRC} api.cc)
+add_library(${TARGET_LIB} SHARED ${SRC} api.cc cli.cc)
 set_property(TARGET ${TARGET_LIB} PROPERTY CXX_STANDARD 17)
 set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 17)
 
@@ -73,7 +73,7 @@ target_include_directories(${TARGET_LIB} PRIVATE ${AKLITE_DIR}/include ${INCS})
 
 target_link_libraries(${TARGET} aktualizr_lib)
 target_link_libraries(${TARGET_LIB} aktualizr_lib)
-target_link_libraries(${TARGET_EXE} ${TARGET})
+target_link_libraries(${TARGET_EXE} ${TARGET} ${TARGET_LIB})
 
 # TODO: consider cleaning up the overall "install" elements as it includes
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
@@ -82,6 +82,6 @@ install(TARGETS ${TARGET_LIB} LIBRARY DESTINATION lib COMPONENT ${TARGET_LIB})
 install(DIRECTORY ../include/aktualizr-lite DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
-aktualizr_source_file_checks(main.cc api.cc ../include/aktualizr-lite/api.h ${SRC} ${HEADERS})
+aktualizr_source_file_checks(main.cc api.cc cli.cc ../include/aktualizr-lite/api.h ${SRC} ${HEADERS})
 
 add_subdirectory(offline)

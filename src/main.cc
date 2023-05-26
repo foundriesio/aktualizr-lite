@@ -458,12 +458,35 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   return EXIT_SUCCESS;
 }
 
+static int cli_install(LiteClient& client, const bpo::variables_map& params) {
+  int version = -1;
+  if (params.count("update-name") > 0) {
+    const auto version_str = params["update-name"].as<std::string>();
+    version = std::stoi(version_str);
+  }
+
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  AkliteClient akclient{client_ptr};
+
+  return static_cast<int>(cli::Install(akclient, version));
+}
+
+static int complete_install(LiteClient& client, const bpo::variables_map& params) {
+  (void)params;
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  AkliteClient akclient{client_ptr};
+
+  return static_cast<int>(cli::CompleteInstall(akclient));
+}
+
 static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
     {"daemon", daemon_main},
     {"update", update_main},
     {"list", list_main},
     {"status", status_main},
-    {"finalize", status_finalize}};
+    {"finalize", status_finalize},
+    {"install", cli_install},
+    {"complete-install", complete_install}};
 
 void check_info_options(const bpo::options_description& description, const bpo::variables_map& vm) {
   if (vm.count("help") != 0 || (vm.count("command") == 0 && vm.count("version") == 0)) {
