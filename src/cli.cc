@@ -27,10 +27,19 @@ ExitCode Install(AkliteClient& client, int version) {
 
   LOG_INFO << "Found Target: " << target.Name();
   auto installer = client.Installer(target, "", "");
-  auto donwload_res = installer->Download();
-  // TODO
-  auto install_res = installer->Install();
 
+  auto donwload_res = installer->Download();
+  switch (donwload_res.status) {
+    case DownloadResult::Status::DownloadFailed: {
+      return ExitCode::DownloadFailure;
+      break;
+    }
+    default:
+      // TODO
+      break;
+  }
+
+  auto install_res = installer->Install();
   switch (install_res.status) {
     case InstallResult::Status::Ok: {
       exit_code = ExitCode::Ok;

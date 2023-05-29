@@ -23,6 +23,7 @@ enum class ExitCode {
   Ok = 0,
   InstallationInProgress = 10,
   NoPendingInstallation = 20,
+  DownloadFailure = 40,
   InstallNeedsReboot = 100
 };
 
