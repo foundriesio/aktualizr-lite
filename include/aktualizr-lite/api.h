@@ -21,10 +21,13 @@ namespace cli {
 enum class ExitCode {
   UnknownError = -1,
   Ok = 0,
-  InstallationInProgress = 10,
-  NoPendingInstallation = 20,
-  DownloadFailure = 40,
-  InstallNeedsReboot = 100
+  TufMetaPullFailure = 10,
+  TufTargetNotFound = 20,
+  InstallationInProgress = 30,
+  NoPendingInstallation = 40,
+  DownloadFailure = 50,
+  InstallNeedsRebootForBootFw = 90,
+  InstallNeedsReboot = 100,
 };
 
 ExitCode Install(AkliteClient &client, int version = -1);
@@ -72,6 +75,15 @@ class TufTarget {
    *     this device is getting from the device-gateway.
    */
   bool IsUnknown() const { return name_ == "unknown"; }
+
+  /**
+   * @brief TODO
+   * @param lhr
+   * @return
+   */
+  bool operator==(const TufTarget &lhr) const {
+    return lhr.name_ == name_ && lhr.sha256_ == sha256_ && lhr.version_ == version_;
+  }
 
  private:
   std::string name_;
@@ -312,7 +324,7 @@ class AkliteClient {
    * @brief CompleteInstallation TODO
    * @return
    */
-  bool CompleteInstallation();
+  InstallResult CompleteInstallation();
 
   /**
    * Default files/paths to search for sota toml when configuration client.

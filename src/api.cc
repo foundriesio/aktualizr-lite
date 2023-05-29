@@ -362,4 +362,15 @@ TufTarget AkliteClient::GetPendingTarget() const {
   return !pending ? TufTarget() : Target::toTufTarget(*pending);
 }
 
-bool AkliteClient::CompleteInstallation() { return client_->finalizeInstall(); }
+InstallResult AkliteClient::CompleteInstallation() {
+  auto install_completed{client_->finalizeInstall()};
+  InstallResult complete_install_res{InstallResult::Status::Failed, ""};
+  if (install_completed) {
+    if (!client_->isBootFwUpdateInProgress()) {
+      complete_install_res = {InstallResult::Status::Ok, ""};
+    } else {
+      complete_install_res = {InstallResult::Status::NeedsCompletion, ""};
+    }
+  }
+  return complete_install_res;
+}

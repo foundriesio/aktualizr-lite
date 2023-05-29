@@ -13,16 +13,27 @@ ExitCode Install(AkliteClient& client, int version) {
     return ExitCode::InstallationInProgress;
   }
 
-  const auto targets = client.CheckIn();
+  const CheckInResult get_tuf_res{client.CheckIn()};
+  if (get_tuf_res.status == CheckInResult::Status::Failed) {
+    return ExitCode::TufMetaPullFailure;
+  }
+
   if (version == -1) {
-    target = targets.GetLatest();
+    target = get_tuf_res.GetLatest();
   } else {
-    for (const auto& t : targets.Targets()) {
+    for (const auto& t : get_tuf_res.Targets()) {
       if (t.Version() == version) {
         target = t;
         break;
       }
     }
+  }
+
+  if (target.IsUnknown()) {
+    LOG_INFO << "No Target found; version: " << (version == -1 ? "latest" : std::to_string(version))
+             << ", hardware ID: " << client.GetConfig().get("provision.primary_ecu_hardware_id", "")
+             << ", tag: " << client.GetConfig().get("pacman.tags", "");
+    return ExitCode::TufTargetNotFound;
   }
 
   LOG_INFO << "Found Target: " << target.Name();
@@ -46,7 +57,13 @@ ExitCode Install(AkliteClient& client, int version) {
       break;
     }
     case InstallResult::Status::NeedsCompletion: {
-      exit_code = ExitCode::InstallNeedsReboot;
+      if (target == client.GetPendingTarget()) {
+        exit_code = ExitCode::InstallNeedsReboot;
+      } else {
+        // If the given Target is not pending it means that installation was rejected
+        // because the previous bootloader update require device rebooting to confirm the update.
+        exit_code = ExitCode::InstallNeedsRebootForBootFw;
+      }
       break;
     }
     default:
@@ -59,6 +76,7 @@ ExitCode Install(AkliteClient& client, int version) {
 }
 
 ExitCode CompleteInstall(AkliteClient& client) {
+  ExitCode exit_code{ExitCode::UnknownError};
   TufTarget target{client.GetPendingTarget()};
 
   if (target.IsUnknown()) {
@@ -66,12 +84,25 @@ ExitCode CompleteInstall(AkliteClient& client) {
     return ExitCode::NoPendingInstallation;
   }
 
-  if (client.CompleteInstallation()) {
-    return ExitCode::Ok;
+  auto install_res = client.CompleteInstallation();
+  switch (install_res.status) {
+    case InstallResult::Status::Ok: {
+      exit_code = ExitCode::Ok;
+      break;
+    }
+    case InstallResult::Status::NeedsCompletion: {
+      // Update of sotree and Apps have been completed successfully;
+      // bootloader was updated too and it requires device reboot to confirm its update.
+      exit_code = ExitCode::InstallNeedsRebootForBootFw;
+      break;
+    }
+    default:
+      // TODO
+      break;
   }
 
   // TODO
-  return ExitCode::UnknownError;
+  return exit_code;
 }
 
 }  // namespace cli

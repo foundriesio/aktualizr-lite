@@ -17,15 +17,23 @@
 class CliClient : public AkliteTest {
  protected:
   std::shared_ptr<AkliteClient> createAkClient() { return std::make_shared<AkliteClient>(createLiteClient()); }
-  void reboot(std::shared_ptr<AkliteClient>& client) {
+  void reboot(std::shared_ptr<AkliteClient>& client, bool reset_bootupgrade_flag = true) {
     client.reset();
     boost::filesystem::remove(ClientTest::test_dir_.Path() / "need_reboot");
+    if (reset_bootupgrade_flag) {
+      boot_flag_mgr_->set("bootupgrade_available", "0");
+    }
     client = std::make_shared<AkliteClient>(createLiteClient(InitialVersion::kOff, app_shortlist_, false));
   }
-  void tweakConf(Config& conf) override { conf.pacman.ostree_server = ostree_server_uri_; }
+  void tweakConf(Config& conf) override {
+    conf.pacman.ostree_server = ostree_server_uri_;
+    conf.uptane.repo_server = tuf_repo_server_;
+    conf.pacman.extra["ostree_update_block"] = "1";
+  }
 
  protected:
   std::string ostree_server_uri_{device_gateway_.getOsTreeUri()};
+  std::string tuf_repo_server_{device_gateway_.getTufRepoUri()};
 };
 
 TEST_P(CliClient, AppUpdate) {
@@ -53,6 +61,25 @@ TEST_P(CliClient, FullUpdate) {
   ASSERT_TRUE(akclient->GetPendingTarget().IsUnknown());
 }
 
+TEST_P(CliClient, TufMetaDownloadFailure) {
+  tuf_repo_server_ = device_gateway_.getTufRepoUri() + "/foobar";
+  auto akclient{createAkClient()};
+  auto target01 = createTarget();
+  ASSERT_EQ(cli::Install(*akclient, std::stoi(target01.custom_version())), cli::ExitCode::TufMetaPullFailure);
+}
+
+TEST_P(CliClient, TufTargetNotFoundInvalidHardwareId) {
+  auto akclient{createAkClient()};
+  auto target01 = createTarget(nullptr, "foobar-hwid");
+  ASSERT_EQ(cli::Install(*akclient, std::stoi(target01.custom_version())), cli::ExitCode::TufTargetNotFound);
+}
+
+TEST_P(CliClient, TufTargetNotFoundInvalidVersion) {
+  auto akclient{createAkClient()};
+  auto target01 = createTarget();
+  ASSERT_EQ(cli::Install(*akclient, 100), cli::ExitCode::TufTargetNotFound);
+}
+
 TEST_P(CliClient, OstreeDownloadFailure) {
   // Set invalid ostree server URI so the download fails
   ostree_server_uri_ = device_gateway_.getOsTreeUri() + "foobar";
@@ -67,6 +94,30 @@ TEST_P(CliClient, AppDownloadFailure) {
   auto akclient{createAkClient()};
   auto target01 = createAppTarget({app01});
   ASSERT_EQ(cli::Install(*akclient, std::stoi(target01.custom_version())), cli::ExitCode::DownloadFailure);
+}
+
+TEST_P(CliClient, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
+  auto akclient{createAkClient()};
+
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  std::vector<AppEngine::App> apps{app01};
+  auto target01 = Target::toTufTarget(createTarget(&apps));
+
+  {
+    boot_flag_mgr_->set("bootupgrade_available");
+    ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::InstallNeedsRebootForBootFw);
+  }
+  reboot(akclient);
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::InstallNeedsReboot);
+  reboot(akclient, false);
+  ASSERT_EQ(akclient->GetPendingTarget(), target01);
+  ASSERT_EQ(cli::CompleteInstall(*akclient), cli::ExitCode::InstallNeedsRebootForBootFw);
+  ASSERT_EQ(akclient->GetCurrent(), target01);
+  ASSERT_TRUE(akclient->GetPendingTarget().IsUnknown());
+  reboot(akclient);
+  ASSERT_EQ(akclient->GetCurrent(), target01);
+  ASSERT_TRUE(akclient->GetPendingTarget().IsUnknown());
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine", "ComposeAppEngine"));
