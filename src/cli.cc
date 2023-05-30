@@ -129,7 +129,33 @@ ExitCode CompleteInstall(AkliteClient& client) {
           exit_code = ExitCode::InstallRollbackOk;
         }
       } else {
+        const auto rollback_target{client.GetRollbackTarget()};
+        auto rollback_installer = client.Installer(rollback_target, "", "");
+        auto rollback_download_res = rollback_installer->Download();
         // TODO
+        auto rollback_install_res = rollback_installer->Install();
+        switch (rollback_install_res.status) {
+          case InstallResult::Status::Ok: {
+            exit_code = ExitCode::Ok;
+            break;
+          }
+          case InstallResult::Status::NeedsCompletion: {
+            if (rollback_target == client.GetPendingTarget()) {
+              exit_code = ExitCode::InstallRollbackNeedsReboot;
+            } else {
+              // TODO
+            }
+            break;
+          }
+          case InstallResult::Status::Failed: {
+            exit_code = ExitCode::InstallRollbackFailed;
+            break;
+          }
+          default: {
+            // TODO
+            break;
+          }
+        }
       }
       break;
     }

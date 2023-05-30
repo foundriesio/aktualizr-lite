@@ -29,6 +29,7 @@ enum class ExitCode {
   InstallNeedsRebootForBootFw = 90,
   InstallNeedsReboot = 100,
   InstallRollbackOk = 110,
+  InstallRollbackNeedsReboot = 120,
   InstallRollbackFailed = 130,
 };
 
