@@ -28,6 +28,8 @@ enum class ExitCode {
   DownloadFailure = 50,
   InstallNeedsRebootForBootFw = 90,
   InstallNeedsReboot = 100,
+  InstallRollbackOk = 110,
+  InstallRollbackFailed = 130,
 };
 
 ExitCode Install(AkliteClient &client, int version = -1);

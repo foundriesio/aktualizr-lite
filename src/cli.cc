@@ -13,6 +13,7 @@ ExitCode Install(AkliteClient& client, int version) {
     return ExitCode::InstallationInProgress;
   }
 
+  const auto current{client.GetCurrent()};
   const CheckInResult get_tuf_res{client.CheckIn()};
   if (get_tuf_res.status == CheckInResult::Status::Failed) {
     return ExitCode::TufMetaPullFailure;
@@ -66,9 +67,21 @@ ExitCode Install(AkliteClient& client, int version) {
       }
       break;
     }
-    default:
+    case InstallResult::Status::Failed: {
+      // do rollback
+      auto rollback_installer = client.Installer(current, "", "");
+      auto rollback_install_res = rollback_installer->Install();
+      if (rollback_install_res.status == InstallResult::Status::Ok) {
+        exit_code = ExitCode::InstallRollbackOk;
+      } else {
+        exit_code = ExitCode::InstallRollbackFailed;
+      }
+      break;
+    }
+    default: {
       // TODO
       break;
+    }
   }
 
   // TODO
@@ -94,6 +107,30 @@ ExitCode CompleteInstall(AkliteClient& client) {
       // Update of sotree and Apps have been completed successfully;
       // bootloader was updated too and it requires device reboot to confirm its update.
       exit_code = ExitCode::InstallNeedsRebootForBootFw;
+      break;
+    }
+    case InstallResult::Status::Failed: {
+      // do rollback
+      // check rollback type, bootloader (boot on the previous version) or App driven
+      const auto current{client.GetCurrent()};  // returns Target a device is booted on
+      if (current.Sha256Hash() != target.Sha256Hash()) {
+        // ostree rollback
+        auto rollback_installer = client.CheckAppsInSync();
+        if (rollback_installer) {
+          auto rollback_download_res = rollback_installer->Download();
+          // TODO
+          auto rollback_install_res = rollback_installer->Install();
+          if (rollback_install_res.status == InstallResult::Status::Ok) {
+            exit_code = ExitCode::InstallRollbackOk;
+          } else {
+            exit_code = ExitCode::InstallRollbackFailed;
+          }
+        } else {
+          exit_code = ExitCode::InstallRollbackOk;
+        }
+      } else {
+        // TODO
+      }
       break;
     }
     default:
