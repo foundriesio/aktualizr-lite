@@ -266,6 +266,14 @@ TEST_P(CliClient, AppDownloadNoSpace) {
   ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::DownloadFailureNoSpace);
 }
 
+TEST_P(CliClient, DownloadFailureWhileWhileInstalling) {
+  auto akclient{createAkClient()};
+  auto target01 = Target::toTufTarget(createAppTarget({registry.addApp(fixtures::ComposeApp::create("app-01"))}));
+  // inject image pull failure  during App installation for Restorable Apps
+  daemon_.setImagePullFailFlag(true);
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::InstallAppPullFailure);
+}
+
 INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine"));
 
 int main(int argc, char** argv) {

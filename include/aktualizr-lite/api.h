@@ -28,6 +28,7 @@ enum class ExitCode {
   DownloadFailure = 50,
   DownloadFailureNoSpace = 60,
   DownloadFailureVerificationFailed = 70,
+  InstallAppPullFailure = 80,
   InstallNeedsRebootForBootFw = 90,
   InstallNeedsReboot = 100,
   InstallRollbackOk = 110,

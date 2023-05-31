@@ -91,13 +91,15 @@ ExitCode Install(AkliteClient& client, int version) {
       }
       break;
     }
+    case InstallResult::Status::DownloadFailed: {
+      exit_code = ExitCode::InstallAppPullFailure;
+      break;
+    }
     default: {
-      // TODO
       break;
     }
   }
 
-  // TODO
   return exit_code;
 }
 
