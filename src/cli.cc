@@ -43,12 +43,25 @@ ExitCode Install(AkliteClient& client, int version) {
   auto donwload_res = installer->Download();
   switch (donwload_res.status) {
     case DownloadResult::Status::DownloadFailed: {
-      return ExitCode::DownloadFailure;
+      exit_code = ExitCode::DownloadFailure;
       break;
     }
-    default:
-      // TODO
+    case DownloadResult::Status::VerificationFailed: {
+      exit_code = ExitCode::DownloadFailureVerificationFailed;
       break;
+    }
+    case DownloadResult::Status::DownloadFailed_NoSpace: {
+      exit_code = ExitCode::DownloadFailureNoSpace;
+      break;
+    }
+    default: {
+      exit_code = ExitCode::UnknownError;
+      break;
+    }
+  }
+
+  if (!donwload_res) {
+    return exit_code;
   }
 
   auto install_res = installer->Install();

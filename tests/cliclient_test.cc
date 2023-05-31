@@ -233,7 +233,40 @@ TEST_P(CliClient, OstreeAndAppRollbackToInitialTarget) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine", "ComposeAppEngine"));
+TEST_P(CliClient, TargetVerificationFailure) {
+  // invalid service definition, `ports` value must be integer
+  const std::string AppInvalidServiceTemplate = R"(
+      %s:
+        image: %s
+        ports:
+          - foo:bar)";
+
+  auto akclient{createAkClient()};
+
+  auto app01 =
+      registry.addApp(fixtures::ComposeApp::create("app-01", "service-01", "image-02", AppInvalidServiceTemplate));
+  std::vector<AppEngine::App> apps{app01};
+  auto target01 = Target::toTufTarget(createTarget(&apps));
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::DownloadFailureVerificationFailed);
+}
+
+TEST_P(CliClient, OstreeDownloadNoSpace) {
+  sys_repo_.setMinFreeSpace("1TB");
+  auto akclient{createAkClient()};
+  auto target01 = Target::toTufTarget(createTarget());
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::DownloadFailureNoSpace);
+}
+
+TEST_P(CliClient, AppDownloadNoSpace) {
+  setAvailableStorageSpace(10);
+  auto akclient{createAkClient()};
+  auto target01 = Target::toTufTarget(createAppTarget({registry.addApp(fixtures::ComposeApp::create("app-01"))}));
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::DownloadFailureNoSpace);
+}
+
+INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine"));
 
 int main(int argc, char** argv) {
   if (argc != 3) {
