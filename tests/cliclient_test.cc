@@ -16,7 +16,9 @@
 
 class CliClient : public AkliteTest {
  protected:
-  std::shared_ptr<AkliteClient> createAkClient() { return std::make_shared<AkliteClient>(createLiteClient()); }
+  std::shared_ptr<AkliteClient> createAkClient(InitialVersion initial_version = InitialVersion::kOn) {
+    return std::make_shared<AkliteClient>(createLiteClient(initial_version));
+  }
   void reboot(std::shared_ptr<AkliteClient>& client, bool reset_bootupgrade_flag = true) {
     client.reset();
     boost::filesystem::remove(ClientTest::test_dir_.Path() / "need_reboot");
@@ -176,6 +178,59 @@ TEST_P(CliClient, FullUpdateAppDrivenRollback) {
   ASSERT_EQ(cli::CompleteInstall(*akclient), cli::ExitCode::InstallRollbackNeedsReboot);
   reboot(akclient);
   ASSERT_EQ(cli::CompleteInstall(*akclient), cli::ExitCode::Ok);
+}
+
+TEST_P(CliClient, OstreeRollbackToInitialTarget) {
+  for (const auto& init_ver_stat : std::vector<InitialVersion>{InitialVersion::kOff, InitialVersion::kOn}) {
+    auto akclient{createAkClient(init_ver_stat)};
+    const auto initial_target{akclient->GetCurrent()};
+    auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+    std::vector<AppEngine::App> apps{app01};
+    auto target01 = Target::toTufTarget(createTarget(&apps));
+    ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::InstallNeedsReboot);
+    // deploy the previous version/commit to emulate rollback
+    getSysRepo().deploy(initial_target.Sha256Hash());
+    reboot(akclient);
+    ASSERT_EQ(cli::CompleteInstall(*akclient), cli::ExitCode::InstallRollbackOk);
+    ASSERT_EQ(akclient->GetCurrent(), initial_target);
+    ASSERT_FALSE(app_engine->isRunning(app01));
+  }
+}
+
+TEST_P(CliClient, AppRollbackToInitialTarget) {
+  for (const auto& init_ver_stat : std::vector<InitialVersion>{InitialVersion::kOff, InitialVersion::kOn}) {
+    auto akclient{createAkClient(init_ver_stat)};
+    const auto initial_target{akclient->GetCurrent()};
+    auto app01 = registry.addApp(
+        fixtures::ComposeApp::create("app-01", "service-01", "image-01", fixtures::ComposeApp::ServiceTemplate,
+                                     Docker::ComposeAppEngine::ComposeFile, "compose-start-failure"));
+    auto target01 = Target::toTufTarget(createAppTarget({app01}));
+    ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::InstallRollbackOk);
+    ASSERT_EQ(akclient->GetCurrent(), initial_target);
+    ASSERT_FALSE(app_engine->isRunning(app01));
+  }
+}
+
+TEST_P(CliClient, OstreeAndAppRollbackToInitialTarget) {
+  setCreateContainersBeforeReboot(false);
+  // installed_versions is not generated and not imported, aklite deduces the initial target based
+  // on the ostree hash a device is booted on.
+  for (const auto& init_ver_stat : std::vector<InitialVersion>{InitialVersion::kOff, InitialVersion::kOn}) {
+    auto akclient{createAkClient(init_ver_stat)};
+    const auto initial_target{akclient->GetCurrent()};
+    auto app01 = registry.addApp(
+        fixtures::ComposeApp::create("app-01", "service-01", "image-01", fixtures::ComposeApp::ServiceTemplate,
+                                     Docker::ComposeAppEngine::ComposeFile, "compose-start-failure"));
+    std::vector<AppEngine::App> apps{app01};
+    auto target01 = Target::toTufTarget(createTarget(&apps));
+    ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::ExitCode::InstallNeedsReboot);
+    reboot(akclient);
+    ASSERT_EQ(cli::CompleteInstall(*akclient), cli::ExitCode::InstallRollbackNeedsReboot);
+    reboot(akclient);
+    ASSERT_EQ(cli::CompleteInstall(*akclient), cli::ExitCode::Ok);
+    ASSERT_EQ(akclient->GetCurrent(), initial_target);
+    ASSERT_FALSE(app_engine->isRunning(app01));
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine", "ComposeAppEngine"));
