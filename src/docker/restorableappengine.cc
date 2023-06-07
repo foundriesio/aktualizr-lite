@@ -8,6 +8,7 @@
 #include <boost/algorithm/hex.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/process.hpp>
 
 #include "crypto/crypto.h"
@@ -76,6 +77,25 @@ RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boo
       offline_{offline} {
   boost::filesystem::create_directories(apps_root_);
   boost::filesystem::create_directories(blobs_root_);
+  if (const char* max_par_pulls_str = std::getenv("SKOPEO_MAX_PARALLEL_PULLS")) {
+    try {
+      max_parallel_pulls_ = boost::lexical_cast<int>(max_par_pulls_str);
+      if (max_parallel_pulls_ > SkopeoMaxParallelPullsHighLimit) {
+        LOG_WARNING << "Value of SKOPEO_MAX_PARALLEL_PULLS env variable exceeds the maximum allowed; value: "
+                    << max_par_pulls_str << "; the maximum allowed: " << SkopeoMaxParallelPullsHighLimit;
+        max_parallel_pulls_ = SkopeoMaxParallelPullsHighLimit;
+      }
+      if (max_parallel_pulls_ < SkopeoMaxParallelPullsLowLimit) {
+        LOG_WARNING << "Value of SKOPEO_MAX_PARALLEL_PULLS env variable is lower than the minimum allowed; value: "
+                    << max_par_pulls_str << "; the minimum allowed: " << SkopeoMaxParallelPullsLowLimit;
+        max_parallel_pulls_ = SkopeoMaxParallelPullsLowLimit;
+      }
+      LOG_DEBUG << "Skopeo will pull layers concurently by " << max_parallel_pulls_ << " goroutines";
+    } catch (const boost::bad_lexical_cast& cast_err) {
+      LOG_ERROR << "Invalid value of SKOPEO_MAX_PARALLEL_PULLS env variable; value: " << max_par_pulls_str
+                << "; err: " << cast_err.what();
+    }
+  }
 }
 
 AppEngine::Result RestorableAppEngine::fetch(const App& app) {
@@ -488,7 +508,7 @@ void RestorableAppEngine::pullAppImages(const Uri& app_uri, const boost::filesys
 
     LOG_INFO << uri.app << ": downloading image from Registry if missing: " << image_uri << " --> " << image_dir;
     const std::string image_src{client_image_src_func_(app_uri, image_uri)};
-    pullImage(client_, image_src, image_dir, blobs_root_);
+    pullImage(client_, image_src, image_dir, blobs_root_, max_parallel_pulls_);
   }
 }
 
@@ -761,11 +781,18 @@ bool RestorableAppEngine::checkAppContainers(const App& app, const std::string& 
 
 void RestorableAppEngine::pullImage(const std::string& client, const std::string& src,
                                     const boost::filesystem::path& dst_dir,
-                                    const boost::filesystem::path& shared_blob_dir, const std::string& format) {
+                                    const boost::filesystem::path& shared_blob_dir, int max_parallel_pulls,
+                                    const std::string& format) {
   boost::filesystem::create_directories(dst_dir);
-  exec(boost::format{"%s copy -f %s --dest-shared-blob-dir %s %s oci:%s"} % client % format % shared_blob_dir.string() %
-           src % dst_dir.string(),
-       "failed to pull image", boost::this_process::environment());
+  if (-1 == max_parallel_pulls) {
+    exec(boost::format{"%s copy -f %s --dest-shared-blob-dir %s %s oci:%s"} % client % format %
+             shared_blob_dir.string() % src % dst_dir.string(),
+         "failed to pull image", boost::this_process::environment());
+  } else {
+    exec(boost::format{"%s copy --max-parallel-pulls %d -f %s --dest-shared-blob-dir %s %s oci:%s"} % client %
+             max_parallel_pulls % format % shared_blob_dir.string() % src % dst_dir.string(),
+         "failed to pull image", boost::this_process::environment());
+  }
 }
 
 void RestorableAppEngine::installImage(const std::string& client, const boost::filesystem::path& image_dir,
