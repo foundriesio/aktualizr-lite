@@ -81,6 +81,8 @@ class RestorableAppEngine : public AppEngine {
   static const int LowWatermarkLimit{20};
   static const int HighWatermarkLimit{95};
   static StorageSpaceFunc GetDefStorageSpaceFunc(int watermark = 80);
+  static const int SkopeoMaxParallelPullsHighLimit{10};
+  static const int SkopeoMaxParallelPullsLowLimit{1};
 
   RestorableAppEngine(
       boost::filesystem::path store_root, boost::filesystem::path install_root, boost::filesystem::path docker_root,
@@ -133,7 +135,8 @@ class RestorableAppEngine : public AppEngine {
 
   // functions specific to an image tranfer utility
   static void pullImage(const std::string& client, const std::string& src, const boost::filesystem::path& dst_dir,
-                        const boost::filesystem::path& shared_blob_dir, const std::string& format = "v2s2");
+                        const boost::filesystem::path& shared_blob_dir, int max_parallel_pulls = -1,
+                        const std::string& format = "v2s2");
 
   static void installImage(const std::string& client, const boost::filesystem::path& image_dir,
                            const boost::filesystem::path& shared_blob_dir, const std::string& docker_host,
@@ -174,6 +177,7 @@ class RestorableAppEngine : public AppEngine {
   ClientImageSrcFunc client_image_src_func_;
   bool create_containers_if_install_;
   bool offline_;
+  int max_parallel_pulls_{-1};
 };
 
 }  // namespace Docker
