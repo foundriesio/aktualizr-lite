@@ -77,6 +77,9 @@ RestorableAppEngine::RestorableAppEngine(boost::filesystem::path store_root, boo
       offline_{offline} {
   boost::filesystem::create_directories(apps_root_);
   boost::filesystem::create_directories(blobs_root_);
+
+  removeTmpFiles(apps_root_);
+
   if (const char* max_par_pulls_str = std::getenv("SKOPEO_MAX_PARALLEL_PULLS")) {
     try {
       max_parallel_pulls_ = boost::lexical_cast<int>(max_par_pulls_str);
@@ -945,6 +948,27 @@ std::tuple<uint64_t, bool> RestorableAppEngine::getPathVolumeID(const boost::fil
     return {0, false};
   } else {
     return {stvfsbuf.f_fsid, true};
+  }
+}
+
+void RestorableAppEngine::removeTmpFiles(const boost::filesystem::path& apps_root) {
+  static const auto* const tmp_file_prefix{"oci-put-blob"};
+  try {
+    std::vector<boost::filesystem::path> tmp_files_to_remove;
+    boost::filesystem::recursive_directory_iterator end;
+    boost::filesystem::recursive_directory_iterator apps_dir_it{apps_root};
+    for (; apps_dir_it != end; ++apps_dir_it) {
+      const auto p{apps_dir_it->path().filename().string()};
+      if (boost::starts_with(p, tmp_file_prefix)) {
+        tmp_files_to_remove.emplace_back(apps_dir_it->path());
+      }
+    }
+    for (const auto& f : tmp_files_to_remove) {
+      LOG_DEBUG << "Removing skopeo's tmp file: " << f;
+      boost::filesystem::remove(f);
+    }
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to find or remove skopeo's tmp files: " << exc.what();
   }
 }
 

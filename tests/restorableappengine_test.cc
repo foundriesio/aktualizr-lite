@@ -592,6 +592,39 @@ TEST_F(RestorableAppEngineTest, VerifyFailure) {
   ASSERT_FALSE(app_engine->verify(app));
 }
 
+TEST_F(RestorableAppEngineTest, VerifySkopeoTmpFileRemoval) {
+  const auto apps_root{skopeo_store_root_ / "apps"};
+
+  for (const auto& app_name : std::array<std::string, 2>{"app-01", "app-02"}) {
+    for (const auto& image_name : std::array<std::string, 2>{"image-01", "image-02"}) {
+      auto app = registry.addApp(fixtures::ComposeApp::create(app_name, "service-01", image_name));
+      ASSERT_TRUE(app_engine->fetch(app));
+
+      const Docker::Uri uri{Docker::Uri::parseUri(app.uri)};
+      const auto app_dir{apps_root / uri.app / uri.digest.hash()};
+      const auto app_compose_file{app_dir / "docker-compose.yml"};
+      const auto compose{Docker::ComposeInfo(app_compose_file.string())};
+      for (const auto& service : compose.getServices()) {
+        const auto image_uri = compose.getImage(service);
+        const Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
+        const auto image_dir{app_dir / "images" / uri.registryHostname / uri.repo / uri.digest.hash()};
+        Utils::writeFile(image_dir / ("oci-put-blob" + Utils::randomUuid()),
+                         std::string("some content:" + app_name + ":" + image_name));
+      }
+    }
+  }
+
+  Docker::RestorableAppEngine::removeTmpFiles(apps_root);
+
+  boost::filesystem::recursive_directory_iterator end;
+  const auto it = std::find_if(boost::filesystem::recursive_directory_iterator(apps_root), end,
+                               [](const boost::filesystem::directory_entry& d) {
+                                 const auto p{d.path().filename().string()};
+                                 return boost::starts_with(p, "oci-put-blob");
+                               });
+  ASSERT_TRUE(it == end);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   logger_init();
