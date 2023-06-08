@@ -910,7 +910,14 @@ void RestorableAppEngine::checkAvailableStorageInStores(const std::string& app_n
     }
   };
 
-  checkRoomInStore("skopeo", skopeo_required_storage, store_root_);
+  try {
+    checkRoomInStore("skopeo", skopeo_required_storage, store_root_);
+  } catch (const InsufficientSpaceError& exc) {
+    // maybe the skopeo store is filled with the tmp files, let's remove them and try again
+    removeTmpFiles(apps_root_);
+    checkRoomInStore("skopeo", skopeo_required_storage, store_root_);
+  }
+
   checkRoomInStore("docker", docker_required_storage, docker_root_);
 
   if (docker_and_skopeo_same_volume_) {
@@ -920,7 +927,14 @@ void RestorableAppEngine::checkAvailableStorageInStores(const std::string& app_n
       throw std::overflow_error("Sum of skopeo and docker update sizes exceeds the maximum allowed value: " +
                                 std::to_string(std::numeric_limits<uint64_t>::max()));
     }
-    checkRoomInStore("skopeo & docker", combined_total_required_size, store_root_);
+
+    try {
+      checkRoomInStore("skopeo & docker", combined_total_required_size, store_root_);
+    } catch (const InsufficientSpaceError& exc) {
+      // maybe the skopeo store is filled with the tmp files, let's remove them and try again
+      removeTmpFiles(apps_root_);
+      checkRoomInStore("skopeo & docker", combined_total_required_size, store_root_);
+    }
   }
 }
 
