@@ -16,6 +16,7 @@ set(SRC helpers.cc
         yaml2json.cc
         target.cc
         appengine.cc
+        cli/cli.cc
         api.cc)
 
 set(HEADERS helpers.h
@@ -35,8 +36,8 @@ set(HEADERS helpers.h
         target.h
         downloader.h
         exec.h
+        cli/cli.h
         ../include/aktualizr-lite/api.h)
-
 
 if (BUILD_AKLITE_WITH_NERDCTL)
   set(SRC ${SRC} containerd/client.cc containerd/engine.cc)

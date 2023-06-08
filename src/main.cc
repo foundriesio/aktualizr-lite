@@ -10,6 +10,7 @@
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/program_options.hpp>
 
+#include "cli/cli.h"
 #include "crypto/keymanager.h"
 #include "helpers.h"
 #include "http/httpclient.h"
@@ -458,7 +459,31 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   return EXIT_SUCCESS;
 }
 
+static int cli_install(LiteClient& client, const bpo::variables_map& params) {
+  int version = -1;
+  if (params.count("update-name") > 0) {
+    const auto version_str = params["update-name"].as<std::string>();
+    version = std::stoi(version_str);
+  }
+
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  AkliteClient akclient{client_ptr};
+
+  return static_cast<int>(cli::Install(akclient, version));
+}
+
+static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
+  (void)params;
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  AkliteClient akclient{client_ptr};
+
+  return static_cast<int>(cli::CompleteInstall(akclient));
+}
+
 static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
+    {"install", cli_install},  // the current `update` command will be replaced with this command in the last commit
+    {"complete-install",
+     cli_complete_install},  // the current `finalize` command will be replaced with this command in the last commit
     {"daemon", daemon_main},
     {"update", update_main},
     {"list", list_main},
