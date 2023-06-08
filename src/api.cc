@@ -11,6 +11,7 @@
 #include "libaktualizr/config.h"
 #include "liteclient.h"
 #include "primary/reportqueue.h"
+#include "target.h"
 
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                         "/etc/sota/conf.d/"};
@@ -163,17 +164,7 @@ boost::property_tree::ptree AkliteClient::GetConfig() const {
   return pt;
 }
 
-static TufTarget convertTarget(const Uptane::Target& target) {
-  int ver = -1;
-  try {
-    ver = std::stoi(target.custom_version(), nullptr, 0);
-  } catch (const std::invalid_argument& exc) {
-    LOG_ERROR << "Invalid version number format: " << target.custom_version();
-  }
-  return TufTarget(target.filename(), target.sha256Hash(), ver, target.custom_data());
-}
-
-TufTarget AkliteClient::GetCurrent() const { return convertTarget(client_->getCurrent()); }
+TufTarget AkliteClient::GetCurrent() const { return Target::toTufTarget(client_->getCurrent()); }
 
 DeviceResult AkliteClient::GetDevice() const {
   DeviceResult res{DeviceResult::Status::Failed};
@@ -319,7 +310,7 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   return std::make_unique<LiteInstall>(client_, std::move(target), reason);
 }
 
-TufTarget AkliteClient::GetRollbackTarget() const { return convertTarget(client_->getRollbackTarget()); }
+TufTarget AkliteClient::GetRollbackTarget() const { return Target::toTufTarget(client_->getRollbackTarget()); }
 
 bool AkliteClient::IsRollback(const TufTarget& t) const {
   Json::Value target_json;

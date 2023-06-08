@@ -20,6 +20,12 @@ class CliClient : public AkliteTest {
     return std::make_shared<AkliteClient>(createLiteClient(initial_version));
   }
 
+  TufTarget createTufTarget() {
+    auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+    std::vector<AppEngine::App> apps{app01};
+    return Target::toTufTarget(createTarget(&apps));
+  }
+
   void reboot(std::shared_ptr<AkliteClient>& client, bool reset_bootupgrade_flag = true) {
     client.reset();
     boost::filesystem::remove(ClientTest::test_dir_.Path() / "need_reboot");
@@ -32,12 +38,9 @@ class CliClient : public AkliteTest {
 
 TEST_P(CliClient, FullUpdate) {
   auto akclient{createAkClient()};
+  const auto target01{createTufTarget()};
 
-  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
-  std::vector<AppEngine::App> apps{app01};
-  auto target01 = createTarget(&apps);
-
-  ASSERT_EQ(cli::Install(*akclient, std::stoi(target01.custom_version())),
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()),
             cli::StatusCode::
                 UnknownError /*TBD: replace with the correct status code, currently just the code stub is invoked*/);
   reboot(akclient);
