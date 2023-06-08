@@ -106,6 +106,8 @@ class RestorableAppEngine : public AppEngine {
   Json::Value getRunningAppsInfo() const override;
   void prune(const Apps& app_shortlist) override;
 
+  static void removeTmpFiles(const boost::filesystem::path& apps_root);
+
  private:
   // pull App&Images
   void pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
