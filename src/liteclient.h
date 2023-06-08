@@ -72,7 +72,8 @@ class LiteClient {
   std::tuple<bool, boost::filesystem::path> isRootMetaImportNeeded();
   bool importRootMeta(const boost::filesystem::path& src, Uptane::Version max_ver = Uptane::Version());
   void importRootMetaIfNeededAndPresent();
-  bool isPendingTarget(const Uptane::Target& target);
+  bool isPendingTarget(const Uptane::Target& target) const;
+  Uptane::Target getPendingTarget() const;
   bool isBootFwUpdateInProgress() const;
 
  private:

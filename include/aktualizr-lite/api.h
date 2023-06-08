@@ -21,6 +21,7 @@ class LiteClient;
  */
 class TufTarget {
  public:
+  explicit TufTarget() : name_{"unknown"} {}
   TufTarget(std::string name, std::string sha256, int version, Json::Value custom)
       : name_(std::move(name)), sha256_(std::move(sha256)), version_(version), custom_(std::move(custom)) {}
 
@@ -55,10 +56,19 @@ class TufTarget {
    */
   bool IsUnknown() const { return name_ == "unknown"; }
 
+  /**
+   * @brief Compares the given target with the other target
+   * @param other - the other target to compare with
+   * @return true if the targets match, otherwise false
+   */
+  bool operator==(const TufTarget &other) const {
+    return other.name_ == name_ && other.sha256_ == sha256_ && other.version_ == version_;
+  }
+
  private:
   std::string name_;
   std::string sha256_;
-  int version_;
+  int version_{-1};
   Json::Value custom_;
 };
 
@@ -94,12 +104,18 @@ class InstallResult {
  public:
   enum class Status {
     Ok = 0,
+    OkBootFwNeedsCompletion,
     NeedsCompletion,
+    BootFwNeedsCompletion,
     Failed,
     DownloadFailed,
+
   };
   Status status;
   std::string description;
+
+  // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
+  operator bool() const { return status == Status::Ok || status == Status::NeedsCompletion; }
 };
 
 /**
@@ -192,15 +208,19 @@ class AkliteClient {
    *
    * @param config_dirs The list of files/directories to parse sota toml from.
    * @param read_only Run this client in a read-write mode (can do updates)
+   * @param finalize Complete/finalize a pending installation in the ctor scope
    */
-  explicit AkliteClient(const std::vector<boost::filesystem::path> &config_dirs, bool read_only = false);
+  explicit AkliteClient(const std::vector<boost::filesystem::path> &config_dirs, bool read_only = false,
+                        bool finalize = true);
   /**
    * Construct a client instance with configuration generated from command line
    * arguments.
    * @param cmdline_args The map of commandline arguments.
    * @param read_only Run this client in a read-write mode (can do updates)
+   * @param finalize Complete/finalize a pending installation in the ctor scope
    */
-  explicit AkliteClient(const boost::program_options::variables_map &cmdline_args, bool read_only = false);
+  explicit AkliteClient(const boost::program_options::variables_map &cmdline_args, bool read_only = false,
+                        bool finalize = true);
   /**
    * Used for unit-testing purposes.
    */
@@ -212,6 +232,24 @@ class AkliteClient {
   AkliteClient(AkliteClient &&) = delete;
   AkliteClient &operator=(const AkliteClient &) = delete;
   AkliteClient &operator=(AkliteClient &&) = delete;
+
+  /**
+   * @brief Checks whether there is ongoing installation
+   *
+   * Checks whether there is pending installation that has to be completed.
+   * To complete installation a device should be rebooted and/or `CompleteInstallation()` called.
+   * @return true if there is ongoing installation, otherwise false
+   */
+  bool IsInstallationInProgress() const;
+
+  /**
+   * @brief Returns a pending Target if any
+   *
+   * Checks whether there is ongoing installation to be completed and returns corresponding Target.
+   *
+   * @return Pending Target, or "unknown" Target if there is no pending Target
+   */
+  TufTarget GetPendingTarget() const;
 
   /**
    * This method can be run at start up to ensure the correct compose apps
@@ -269,6 +307,24 @@ class AkliteClient {
                                             std::string correlation_id = "") const;
 
   /**
+   * @brief Complete a pending installation
+   *
+   * Runs functionality required to complete/finalize installation after a device reboot:
+   * 1) Checks whether a device is booted on the updated ostree-based rootfs.
+   * 2) Starts the updated Apps if the boot on the updated rootfs is successful.
+   * If #1 or #2 is not successful then marks the given Target as "failing" Target,
+   * and returns InstallResult::Failed error.
+   *
+   * @return Returns:
+   *  - InstallResult::Ok on successful installation completion
+   *  - InstallResult::OkBootFwNeedsCompletion on successful installation completion; boot fw was updated and require
+   * reboot to confirm the update.
+   *  - InstallResult::NeedsCompletion if a device was not rebooted after installation
+   *  - InstallResult::Failed on failure (see above)
+   */
+  InstallResult CompleteInstallation();
+
+  /**
    * Check if the Target has been installed but failed to boot. This would
    * make this be considered a "rollback target" and one we shouldn't consider
    * installing.
@@ -288,7 +344,7 @@ class AkliteClient {
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  private:
-  void Init(Config &config);
+  void Init(Config &config, bool finalize = true);
 
   bool read_only_{false};
   std::shared_ptr<LiteClient> client_;

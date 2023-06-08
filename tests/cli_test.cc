@@ -40,13 +40,11 @@ TEST_P(CliClient, FullUpdate) {
   auto akclient{createAkClient()};
   const auto target01{createTufTarget()};
 
-  ASSERT_EQ(cli::Install(*akclient, target01.Version()),
-            cli::StatusCode::
-                UnknownError /*TBD: replace with the correct status code, currently just the code stub is invoked*/);
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::InstallNeedsReboot);
   reboot(akclient);
-  ASSERT_EQ(cli::CompleteInstall(*akclient),
-            cli::StatusCode::
-                UnknownError /*TBD: replace with the correct status code, currently just the code stub is invoked*/);
+  ASSERT_TRUE(akclient->IsInstallationInProgress());
+  ASSERT_EQ(akclient->GetPendingTarget(), target01);
+  ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::Ok);
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine"));

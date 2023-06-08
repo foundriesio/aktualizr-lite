@@ -90,9 +90,11 @@ Uptane::Target Target::fromTufTarget(const TufTarget& target) {
 TufTarget Target::toTufTarget(const Uptane::Target& target) {
   int ver = -1;
   try {
-    ver = std::stoi(target.custom_version(), nullptr, 0);
+    if (!isInitial(target)) {
+      ver = std::stoi(target.custom_version(), nullptr, 0);
+    }
   } catch (const std::invalid_argument& exc) {
-    LOG_ERROR << "Invalid version number format; version value: " << target.custom_version() << ", err: " << exc.what();
+    LOG_ERROR << "Invalid version number format: " << exc.what();
   }
 
   return TufTarget{target.filename(), target.sha256Hash(), ver, target.custom_data()};

@@ -350,15 +350,15 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
   }
 }
 
-bool LiteClient::isPendingTarget(const Uptane::Target& target) {
+bool LiteClient::isPendingTarget(const Uptane::Target& target) const {
+  return target.sha256Hash() == getPendingTarget().sha256Hash();
+}
+
+Uptane::Target LiteClient::getPendingTarget() const {
   boost::optional<Uptane::Target> pending;
-
   storage->loadInstalledVersions("", nullptr, &pending);
-  if (!pending) {
-    return false;
-  }
 
-  return target.sha256Hash() == pending->sha256Hash();
+  return !pending ? Uptane::Target::Unknown() : *pending;
 }
 
 bool LiteClient::isBootFwUpdateInProgress() const {
