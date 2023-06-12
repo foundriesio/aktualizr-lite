@@ -1,6 +1,5 @@
 set(TARGET_EXE aktualizr-lite)
-set(TARGET_LIB aktualizr_lite)
-set(TARGET ${MAIN_TARGET_LIB})
+set(TARGET_LIB ${MAIN_TARGET_LIB})
 
 set(SRC helpers.cc
         composeappmanager.cc
@@ -16,7 +15,8 @@ set(SRC helpers.cc
         liteclient.cc
         yaml2json.cc
         target.cc
-        appengine.cc)
+        appengine.cc
+        api.cc)
 
 set(HEADERS helpers.h
         composeappmanager.h
@@ -34,7 +34,9 @@ set(HEADERS helpers.h
         yaml2json.h
         target.h
         downloader.h
-        exec.h)
+        exec.h
+        ../include/aktualizr-lite/api.h)
+
 
 if (BUILD_AKLITE_WITH_NERDCTL)
   set(SRC ${SRC} containerd/client.cc containerd/engine.cc)
@@ -43,16 +45,13 @@ if (BUILD_AKLITE_WITH_NERDCTL)
 endif(BUILD_AKLITE_WITH_NERDCTL)
 
 add_executable(${TARGET_EXE} main.cc)
-add_library(${TARGET} OBJECT ${SRC})
-add_library(${TARGET_LIB} SHARED ${SRC} api.cc)
+add_library(${TARGET_LIB} SHARED ${SRC})
 set_property(TARGET ${TARGET_LIB} PROPERTY CXX_STANDARD 17)
-set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 17)
 
 if(ALLOW_MANUAL_ROLLBACK)
   add_definitions(-DALLOW_MANUAL_ROLLBACK)
 endif(ALLOW_MANUAL_ROLLBACK)
 
-target_compile_definitions(${TARGET} PRIVATE BOOST_LOG_DYN_LINK)
 target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 
 set(INCS
@@ -67,13 +66,11 @@ set(INCS
   ${LIBOSTREE_INCLUDE_DIRS}
 )
 
-target_include_directories(${TARGET} PRIVATE ${INCS})
 target_include_directories(${TARGET_EXE} PRIVATE ${INCS})
 target_include_directories(${TARGET_LIB} PRIVATE ${AKLITE_DIR}/include ${INCS})
 
-target_link_libraries(${TARGET} aktualizr_lib)
 target_link_libraries(${TARGET_LIB} aktualizr_lib)
-target_link_libraries(${TARGET_EXE} ${TARGET})
+target_link_libraries(${TARGET_EXE} ${TARGET_LIB})
 
 # TODO: consider cleaning up the overall "install" elements as it includes
 # redundant targets (e.g aktualizr-secondary, aktualizr-cert-provider, etc)
@@ -82,6 +79,6 @@ install(TARGETS ${TARGET_LIB} LIBRARY DESTINATION lib COMPONENT ${TARGET_LIB})
 install(DIRECTORY ../include/aktualizr-lite DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
-aktualizr_source_file_checks(main.cc api.cc ../include/aktualizr-lite/api.h ${SRC} ${HEADERS})
+aktualizr_source_file_checks(main.cc ${SRC} ${HEADERS})
 
 add_subdirectory(offline)
