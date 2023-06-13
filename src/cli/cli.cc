@@ -106,8 +106,7 @@ StatusCode CompleteInstall(AkliteClient &client) {
     LOG_ERROR << "Failed to finalize pending installation; target: " << pending.Name() << ", err: " << ir;
 
     // check rollback type, the bootloader or App driven
-    const auto current{client.GetCurrent()};        // returns Target a device is booted on
-    const auto pending{client.GetPendingTarget()};  // returns Target that a device was supposed to boot on
+    const auto current{client.GetCurrent()};  // returns Target a device is booted on
     if (current.Sha256Hash() != pending.Sha256Hash()) {
       // ostree rollback, aka the bootloader driven rollback
       auto ri = client.CheckAppsInSync();
@@ -118,7 +117,15 @@ StatusCode CompleteInstall(AkliteClient &client) {
         return StatusCode::InstallRollbackFailed;
       }
     } else {
-      // TODO
+      const auto rollback_target = client.GetRollbackTarget();
+      if (rollback_target.IsUnknown()) {
+        return StatusCode::InstallRollbackFailed;
+      }
+      auto ri = client.Installer(rollback_target);
+      const auto rir = ri->Install();
+      if (rir.status == InstallResult::Status::NeedsCompletion) {
+        return StatusCode::InstallRollbackNeedsReboot;
+      }
       return StatusCode::InstallRollbackFailed;
     }
   }

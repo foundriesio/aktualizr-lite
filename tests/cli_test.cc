@@ -159,6 +159,33 @@ TEST_P(CliClient, OstreeUpdateRollback) {
   ASSERT_EQ(akclient->CheckAppsInSync(), nullptr);
 }
 
+TEST_P(CliClient, FullUpdateAppDrivenRollback) {
+  // setCreateContainersBeforeReboot(false);
+  auto akclient{createAkClient()};
+
+  // do initial to update to run some Apps
+  const auto target01 = createTufTarget(nullptr, "", true);
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::Ok);
+  ASSERT_EQ(akclient->GetCurrent(), target01);
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::Ok);
+  ASSERT_EQ(akclient->GetCurrent(), target01);
+
+  auto app01 = registry.addApp(
+      fixtures::ComposeApp::create("app-01", "service-01", "image-01", fixtures::ComposeApp::ServiceTemplate,
+                                   Docker::ComposeAppEngine::ComposeFile, "compose-start-failure"));
+  const auto target02 = createTufTarget(&app01);
+
+  ASSERT_EQ(cli::Install(*akclient, target02.Version()), cli::StatusCode::InstallNeedsReboot);
+  reboot(akclient);
+  ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::InstallRollbackNeedsReboot);
+  reboot(akclient);
+  ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::Ok);
+  ASSERT_TRUE(akclient->IsRollback(target02));
+  ASSERT_EQ(akclient->GetCurrent(), target01);
+  ASSERT_EQ(akclient->CheckAppsInSync(), nullptr);
+}
+
 INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine"));
 
 int main(int argc, char** argv) {
