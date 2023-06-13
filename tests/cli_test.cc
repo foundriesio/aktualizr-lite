@@ -20,14 +20,15 @@ class CliClient : public AkliteTest {
     return std::make_shared<AkliteClient>(createLiteClient(initial_version));
   }
 
-  TufTarget createTufTarget(AppEngine::App* app = nullptr, const std::string& hwid = "") {
+  TufTarget createTufTarget(AppEngine::App* app = nullptr, const std::string& hwid = "", bool just_app_target = false) {
     std::vector<AppEngine::App> apps;
     if (!app) {
       apps.emplace_back(registry.addApp(fixtures::ComposeApp::create("app-01")));
     } else {
       apps.push_back(*app);
     }
-    return Target::toTufTarget(createTarget(&apps, hwid));
+    return just_app_target ? Target::toTufTarget(createAppTarget(apps))
+                           : Target::toTufTarget(createTarget(&apps, hwid));
   }
 
   void reboot(std::shared_ptr<AkliteClient>& client, bool reset_bootupgrade_flag = true) {
@@ -122,6 +123,19 @@ TEST_P(CliClient, UpdateIfBootFwUpdateRequiresReboot) {
   ASSERT_TRUE(akclient->IsInstallationInProgress());
   ASSERT_EQ(akclient->GetPendingTarget(), target01);
   ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::OkNeedsRebootForBootFw);
+}
+
+TEST_P(CliClient, AppUpdateRollback) {
+  auto akclient{createAkClient()};
+  auto initial_target{akclient->GetCurrent()};
+  auto app01 = registry.addApp(
+      fixtures::ComposeApp::create("app-01", "service-01", "image-01", fixtures::ComposeApp::ServiceTemplate,
+                                   Docker::ComposeAppEngine::ComposeFile, "compose-start-failure"));
+  const auto target01 = createTufTarget(&app01, "", true);
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::InstallRollbackOk);
+  ASSERT_EQ(akclient->GetCurrent(), initial_target);
+  ASSERT_TRUE(akclient->CheckAppsInSync() == nullptr);
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine"));

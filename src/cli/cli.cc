@@ -74,9 +74,22 @@ StatusCode Install(AkliteClient &client, int version) {
     return res2StatusCode<DownloadResult::Status>(d2s, dr.status);
   }
 
-  const auto ir = installer->Install();
+  auto ir = installer->Install();
   if (!ir) {
     LOG_ERROR << "Failed to install Target; target: " << target.Name() << ", err: " << ir;
+    if (ir.status == InstallResult::Status::Failed) {
+      LOG_INFO << "Rolling back to the previous target: " << current.Name() << "...";
+      const auto installer = client.Installer(current);
+      ir = installer->Install();
+      if (!ir) {
+        LOG_ERROR << "Failed to rollback to " << current.Name() << ", err: " << ir;
+      }
+      if (ir.status == InstallResult::Status::Ok) {
+        return StatusCode::InstallRollbackOk;
+      } else {
+        return StatusCode::InstallRollbackFailed;
+      }
+    }
   }
 
   return res2StatusCode<InstallResult::Status>(i2s, ir.status);
