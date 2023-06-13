@@ -39,7 +39,10 @@ class CliClient : public AkliteTest {
     client = std::make_shared<AkliteClient>(createLiteClient(InitialVersion::kOff, app_shortlist_, false));
   }
 
-  void tweakConf(Config& conf) override { conf.uptane.repo_server = tuf_repo_server_; }
+  void tweakConf(Config& conf) override {
+    conf.pacman.ostree_server = ostree_server_uri_;
+    conf.uptane.repo_server = tuf_repo_server_;
+  }
 
  protected:
   std::string tuf_repo_server_{device_gateway_.getTufRepoUri()};
@@ -78,6 +81,24 @@ TEST_P(CliClient, TufTargetNotFoundInvalidVersion) {
   auto target01 = createTufTarget(nullptr, "foobar-hwid");
 
   ASSERT_EQ(cli::Install(*akclient, 100), cli::StatusCode::TufTargetNotFound);
+}
+
+TEST_P(CliClient, OstreeDownloadFailure) {
+  // Set invalid ostree server URI so the download fails
+  ostree_server_uri_ = device_gateway_.getOsTreeUri() + "foobar";
+  auto akclient{createAkClient()};
+  const auto target01{createTufTarget()};
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::DownloadFailure);
+}
+
+TEST_P(CliClient, AppDownloadFailure) {
+  auto app01 = registry.addApp(fixtures::ComposeApp::create(
+      "app-01", "service-01", "image-02", fixtures::ComposeApp::ServiceTemplate, "incorrect-compose-file.yml"));
+  auto akclient{createAkClient()};
+  const auto target01{createTufTarget(&app01)};
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::DownloadFailure);
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine"));
