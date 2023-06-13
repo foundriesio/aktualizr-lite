@@ -25,7 +25,7 @@ static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {
 
 static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::Ok, StatusCode::Ok},
-    {InstallResult::Status::OkBootFwNeedsCompletion, StatusCode::InstallNeedsRebootForBootFw},
+    {InstallResult::Status::OkBootFwNeedsCompletion, StatusCode::OkNeedsRebootForBootFw},
     {InstallResult::Status::NeedsCompletion, StatusCode::InstallNeedsReboot},
     {InstallResult::Status::BootFwNeedsCompletion, StatusCode::InstallNeedsRebootForBootFw},
     {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
@@ -91,10 +91,9 @@ StatusCode CompleteInstall(AkliteClient &client) {
   const auto ir = client.CompleteInstallation();
   if (!ir) {
     LOG_ERROR << "Failed to finalize pending installation; target: " << pending.Name() << ", err: " << ir;
-    return res2StatusCode<InstallResult::Status>(i2s, ir.status);
   }
 
-  return StatusCode::Ok;
+  return res2StatusCode<InstallResult::Status>(i2s, ir.status);
 }
 
 }  // namespace cli

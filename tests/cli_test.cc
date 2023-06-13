@@ -42,6 +42,7 @@ class CliClient : public AkliteTest {
   void tweakConf(Config& conf) override {
     conf.pacman.ostree_server = ostree_server_uri_;
     conf.uptane.repo_server = tuf_repo_server_;
+    conf.pacman.extra["ostree_update_block"] = "1";
   }
 
  protected:
@@ -99,6 +100,28 @@ TEST_P(CliClient, AppDownloadFailure) {
   const auto target01{createTufTarget(&app01)};
 
   ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::DownloadFailure);
+}
+
+TEST_P(CliClient, UpdateIfBootFwUpdateRequiresReboot) {
+  auto akclient{createAkClient()};
+  const auto target01{createTufTarget()};
+
+  // make the client think that there is pending boot fw update that requires reboot to be confirmed
+  boot_flag_mgr_->set("bootupgrade_available");
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::InstallNeedsRebootForBootFw);
+  // make sure that the istallation hasn't happened
+  ASSERT_FALSE(akclient->IsInstallationInProgress());
+  reboot(akclient);
+  // make sure the client can install a target after the boot fw update confirmation (reboot)
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::InstallNeedsReboot);
+  ASSERT_TRUE(akclient->IsInstallationInProgress());
+  ASSERT_EQ(akclient->GetPendingTarget(), target01);
+  // reboot a device and emulate the complex boot fw update that requires additional reboot after successful ostree and
+  // App update
+  reboot(akclient, false);
+  ASSERT_TRUE(akclient->IsInstallationInProgress());
+  ASSERT_EQ(akclient->GetPendingTarget(), target01);
+  ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::OkNeedsRebootForBootFw);
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiEngine, CliClient, ::testing::Values("RestorableAppEngine"));

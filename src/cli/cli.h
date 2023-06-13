@@ -10,6 +10,7 @@ namespace cli {
 enum class StatusCode {
   UnknownError = EXIT_FAILURE,
   Ok = EXIT_SUCCESS,
+  OkNeedsRebootForBootFw = 5,
   TufMetaPullFailure = 10,
   TufTargetNotFound = 20,
   InstallationInProgress = 30,

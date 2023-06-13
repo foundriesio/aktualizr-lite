@@ -115,7 +115,9 @@ class InstallResult {
   std::string description;
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
-  operator bool() const { return status == Status::Ok || status == Status::NeedsCompletion; }
+  operator bool() const {
+    return status == Status::Ok || status == Status::OkBootFwNeedsCompletion || status == Status::NeedsCompletion;
+  }
 };
 
 /**
