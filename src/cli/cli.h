@@ -2,6 +2,7 @@
 #define AKTUALIZR_LITE_CLI_H_
 
 #include <cstdlib>
+#include <string>
 
 class AkliteClient;
 
@@ -26,7 +27,7 @@ enum class StatusCode {
   InstallRollbackFailed = 130,
 };
 
-StatusCode Install(AkliteClient &client, int version = -1);
+StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "");
 StatusCode CompleteInstall(AkliteClient &client);
 
 }  // namespace cli

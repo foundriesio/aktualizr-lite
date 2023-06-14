@@ -460,16 +460,23 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 }
 
 static int cli_install(LiteClient& client, const bpo::variables_map& params) {
+  std::string target_name;
   int version = -1;
   if (params.count("update-name") > 0) {
     const auto version_str = params["update-name"].as<std::string>();
-    version = std::stoi(version_str);
+    try {
+      version = std::stoi(version_str);
+    } catch (const std::invalid_argument& exc) {
+      LOG_INFO << "Failed to convert the input target version to integer, consider it as a name of Target: "
+               << exc.what();
+      target_name = version_str;
+    }
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClient akclient{client_ptr};
 
-  return static_cast<int>(cli::Install(akclient, version));
+  return static_cast<int>(cli::Install(akclient, version, target_name));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
@@ -481,14 +488,11 @@ static int cli_complete_install(LiteClient& client, const bpo::variables_map& pa
 }
 
 static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
-    {"install", cli_install},  // the current `update` command will be replaced with this command in the last commit
-    {"complete-install",
-     cli_complete_install},  // the current `finalize` command will be replaced with this command in the last commit
     {"daemon", daemon_main},
-    {"update", update_main},
+    {"update", cli_install},
     {"list", list_main},
     {"status", status_main},
-    {"finalize", status_finalize}};
+    {"finalize", cli_complete_install}};
 
 void check_info_options(const bpo::options_description& description, const bpo::variables_map& vm) {
   if (vm.count("help") != 0 || (vm.count("command") == 0 && vm.count("version") == 0)) {

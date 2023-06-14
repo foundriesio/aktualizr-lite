@@ -31,7 +31,7 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
 };
 
-StatusCode Install(AkliteClient &client, int version) {
+StatusCode Install(AkliteClient &client, int version, const std::string &target_name) {
   // Check if a device is in a correct state to start a new update
   if (client.IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
@@ -47,11 +47,11 @@ StatusCode Install(AkliteClient &client, int version) {
   }
 
   TufTarget target;
-  if (version == -1) {
+  if (version == -1 && target_name.empty()) {
     target = cr.GetLatest();
   } else {
     for (const auto &t : cr.Targets()) {
-      if (t.Version() == version) {
+      if (t.Version() == version || t.Name() == target_name) {
         target = t;
         break;
       }
@@ -65,7 +65,9 @@ StatusCode Install(AkliteClient &client, int version) {
   }
 
   // Run the target installation
-  LOG_INFO << "Found Target: " << target.Name();
+  LOG_INFO << "Updating Active Target: " << current.Name();
+  LOG_INFO << "To New Target: " << target.Name();
+
   const auto installer = client.Installer(target);
 
   auto dr = installer->Download();

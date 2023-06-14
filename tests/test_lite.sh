@@ -143,10 +143,11 @@ sha=$(echo $update | cut -d\  -f2 | sed 's/\.0$//')
 echo "Adding new target: $version $name / $sha"
 add_target $version $name $sha
 
+
 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update --update-name $name
 ostree admin status
 
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: $version"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: $name"
 
 out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml status)
 if [[ ! "$out" =~ "Active image is: $version	sha256:$sha" ]] ; then
@@ -168,7 +169,7 @@ cat >$sota_dir/callback.sh <<EOF
 env >> ${sota_dir}/\$MESSAGE.log
 EOF
 chmod +x $sota_dir/callback.sh
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: $promoted_version"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: $name"
 for callback in download-pre download-post install-pre ; do
   if [ -f ${sota_dir}/${callback}.log ] ; then
     grep "INSTALL_TARGET_NAME=promoted-zlast" ${sota_dir}/${callback}.log
