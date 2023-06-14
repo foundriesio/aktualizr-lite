@@ -110,6 +110,11 @@ StatusCode CompleteInstall(AkliteClient &client) {
     if (current.Sha256Hash() != pending.Sha256Hash()) {
       // ostree rollback, aka the bootloader driven rollback
       auto ri = client.CheckAppsInSync();
+      if (!ri) {
+        // ostree rollback and no need to sync Apps since the rollback target eithe doesn't have Apps or
+        // its Apps were not updated hence are already running.
+        return StatusCode::InstallRollbackOk;
+      }
       const auto rir = ri->Install();
       if (rir.status == InstallResult::Status::Ok) {
         return StatusCode::InstallRollbackOk;
