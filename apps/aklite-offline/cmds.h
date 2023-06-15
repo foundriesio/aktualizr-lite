@@ -43,7 +43,7 @@ class InstallCmd : public Cmd {
   int operator()(const po::variables_map& vm) const override {
     try {
       Config cfg_in{vm};
-      return installUpdate(cfg_in, vm["src-dir"].as<boost::filesystem::path>());
+      return installUpdate(cfg_in, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()));
     } catch (const std::exception& exc) {
       LOG_ERROR << "Failed to list Apps: " << exc.what();
       return EXIT_FAILURE;
