@@ -418,16 +418,17 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
     } else {
       post_install_action = PostInstallAction::NeedRebootForBootFw;
     }
-  } else if (client->config.pacman.type == ComposeAppManager::Name) {
+  } else if (client->config.pacman.type != ComposeAppManager::Name || client->appsInSync(target)) {
+    post_install_action = PostInstallAction::AlreadyInstalled;
+  } else {
     // don't `install` since it will create/run containers and we don't want to do it
     // before we register images and restart dockerd
     client->storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
     post_install_action = PostInstallAction::NeedDockerRestart;
-  } else {
-    post_install_action = PostInstallAction::AlreadyInstalled;
   }
 
-  if (client->config.pacman.type == ComposeAppManager::Name) {
+  if (client->config.pacman.type == ComposeAppManager::Name &&
+      post_install_action != PostInstallAction::AlreadyInstalled) {
     const auto pacman_cfg{ComposeAppManager::Config(cfg_in.pacman)};
     registerApps(target, pacman_cfg.reset_apps_root, pacman_cfg.images_data_root);
   }
@@ -453,7 +454,7 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   client->storage->loadInstalledVersions("", nullptr, &pending);
   if (!pending) {
     LOG_INFO << "No pending installations found";
-    return PostRunAction::Ok;
+    return PostRunAction::OkNoPendingInstall;
   }
 
   data::ResultCode::Numeric install_res{data::ResultCode::Numeric::kUnknown};

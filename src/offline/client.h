@@ -29,7 +29,8 @@ enum class PostRunAction {
   RollbackNeedReboot,
   RollbackToUnknown,
   RollbackToUnknownIfAppFailed,
-  RollbackFailed
+  RollbackFailed,
+  OkNoPendingInstall,
 };
 
 class MetaFetcher : public Uptane::IMetadataFetcher {

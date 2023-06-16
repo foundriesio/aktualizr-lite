@@ -61,6 +61,12 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
         ret_code = 0;
         break;
       }
+      case offline::PostRunAction::OkNoPendingInstall: {
+        LOG_INFO << "No pending installation to run/finalize has been found."
+                 << " Make sure you called `install` before `run`.";
+        ret_code = 0;
+        break;
+      }
       case offline::PostRunAction::OkNeedReboot: {
         LOG_INFO << "Successfully applied new version of rootfs and started Apps if present.";
         LOG_INFO << "Please, optionally reboot a device to confirm the boot firmware update;"
