@@ -103,6 +103,10 @@ AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_
   Init(config, finalize);
 }
 
+AkliteClient::AkliteClient(std::shared_ptr<LiteClient> client) : client_(std::move(client)) {
+  client_->importRootMetaIfNeededAndPresent();
+}
+
 AkliteClient::~AkliteClient() {
   // Release the lock to allow reobtaining with another instance.
   unlink("/var/lock/aklite.lock");

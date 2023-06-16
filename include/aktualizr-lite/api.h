@@ -226,7 +226,7 @@ class AkliteClient {
   /**
    * Used for unit-testing purposes.
    */
-  explicit AkliteClient(std::shared_ptr<LiteClient> client) : client_(std::move(client)) {}
+  explicit AkliteClient(std::shared_ptr<LiteClient> client);
 
   ~AkliteClient();
 
