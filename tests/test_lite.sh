@@ -147,7 +147,8 @@ add_target $version $name $sha
 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update --update-name $name
 ostree admin status
 
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: $name"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "The specified Target is already installed"
+
 
 out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml status)
 if [[ ! "$out" =~ "Active image is: $version	sha256:$sha" ]] ; then

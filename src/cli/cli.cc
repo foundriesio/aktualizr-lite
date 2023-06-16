@@ -64,9 +64,16 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     return StatusCode::TufTargetNotFound;
   }
 
-  // Run the target installation
-  LOG_INFO << "Updating Active Target: " << current.Name();
-  LOG_INFO << "To New Target: " << target.Name();
+  // Check whether the given target is already installed and synced/running
+  if (current == target && client.CheckAppsInSync() == nullptr) {
+    LOG_INFO
+        << "The specified Target is already installed, enforcing installation to make sure it's synced and running: "
+        << target.Name();
+  } else {
+    // Run the target installation
+    LOG_INFO << "Updating Active Target: " << current.Name();
+    LOG_INFO << "To New Target: " << target.Name();
+  }
 
   const auto installer = client.Installer(target);
 
