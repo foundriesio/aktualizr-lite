@@ -142,6 +142,10 @@ StatusCode CompleteInstall(AkliteClient &client) {
       }
       return StatusCode::InstallRollbackFailed;
     }
+  } else if (ir.status == InstallResult::Status::OkBootFwNeedsCompletion) {
+    LOG_INFO << "Finalization was successful, reboot is required to confirm boot fw update";
+  } else if (ir.status == InstallResult::Status::NeedsCompletion) {
+    LOG_INFO << "Install finalization wasn't invoked, device reboot is required";
   }
 
   return res2StatusCode<InstallResult::Status>(i2s, ir.status);
