@@ -329,7 +329,8 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
 }
 
 InstallResult AkliteClient::CompleteInstallation() {
-  auto install_completed{client_->finalizeInstall()};
+  data::InstallationResult ir;
+  auto install_completed{client_->finalizeInstall(&ir)};
   InstallResult complete_install_res{InstallResult::Status::Failed, ""};
   if (install_completed) {
     if (!client_->isBootFwUpdateInProgress()) {
@@ -337,6 +338,10 @@ InstallResult AkliteClient::CompleteInstallation() {
     } else {
       complete_install_res = {InstallResult::Status::OkBootFwNeedsCompletion, ""};
     }
+  } else if (ir.needCompletion()) {
+    complete_install_res = {InstallResult::Status::NeedsCompletion, ir.description};
+  } else {
+    complete_install_res = {InstallResult::Status::Failed, ir.description};
   }
   return complete_install_res;
 }

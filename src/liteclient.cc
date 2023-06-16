@@ -169,7 +169,7 @@ data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptan
   return ret;
 }
 
-bool LiteClient::finalizeInstall() {
+bool LiteClient::finalizeInstall(data::InstallationResult* ir) {
   data::InstallationResult ret{data::ResultCode::Numeric::kOk, ""};
   boost::optional<Uptane::Target> pending;
 
@@ -192,6 +192,9 @@ bool LiteClient::finalizeInstall() {
     notifyInstallFinished(*pending, ret);
   }
 
+  if (ir != nullptr) {
+    *ir = ret;
+  }
   return ret.result_code.num_code == data::ResultCode::Numeric::kOk;
 }
 

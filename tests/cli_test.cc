@@ -56,6 +56,7 @@ TEST_P(CliClient, FullUpdate) {
   const auto target01{createTufTarget()};
 
   ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::InstallNeedsReboot);
+  ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::InstallNeedsReboot);
   reboot(akclient);
   ASSERT_TRUE(akclient->IsInstallationInProgress());
   ASSERT_EQ(akclient->GetPendingTarget(), target01);
