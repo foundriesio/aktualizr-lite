@@ -454,7 +454,7 @@ PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_cl
   client->storage->loadInstalledVersions("", nullptr, &pending);
   if (!pending) {
     LOG_INFO << "No pending installations found";
-    return PostRunAction::Ok;
+    return PostRunAction::OkNoPendingInstall;
   }
 
   data::ResultCode::Numeric install_res{data::ResultCode::Numeric::kUnknown};

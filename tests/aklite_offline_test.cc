@@ -363,7 +363,7 @@ TEST_F(AkliteOffline, BootFwUpdate) {
   reboot();
   // emulate boot firmware update confirmation
   boot_flag_mgr_->set("bootupgrade_available", "0");
-  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_EQ(run(), offline::PostRunAction::OkNoPendingInstall);
   ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
