@@ -169,7 +169,7 @@ data::InstallationResult LiteClient::finalizePendingUpdate(boost::optional<Uptan
   return ret;
 }
 
-bool LiteClient::finalizeInstall() {
+bool LiteClient::finalizeInstall(data::InstallationResult* ir) {
   data::InstallationResult ret{data::ResultCode::Numeric::kOk, ""};
   boost::optional<Uptane::Target> pending;
 
@@ -192,6 +192,9 @@ bool LiteClient::finalizeInstall() {
     notifyInstallFinished(*pending, ret);
   }
 
+  if (ir != nullptr) {
+    *ir = ret;
+  }
   return ret.result_code.num_code == data::ResultCode::Numeric::kOk;
 }
 
@@ -350,15 +353,15 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
   }
 }
 
-bool LiteClient::isPendingTarget(const Uptane::Target& target) {
+bool LiteClient::isPendingTarget(const Uptane::Target& target) const {
+  return target.sha256Hash() == getPendingTarget().sha256Hash();
+}
+
+Uptane::Target LiteClient::getPendingTarget() const {
   boost::optional<Uptane::Target> pending;
-
   storage->loadInstalledVersions("", nullptr, &pending);
-  if (!pending) {
-    return false;
-  }
 
-  return target.sha256Hash() == pending->sha256Hash();
+  return !pending ? Uptane::Target::Unknown() : *pending;
 }
 
 bool LiteClient::isBootFwUpdateInProgress() const {

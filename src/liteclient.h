@@ -39,7 +39,7 @@ class LiteClient {
   bool checkForUpdatesBegin();
   void checkForUpdatesEnd(const Uptane::Target& target);
   void checkForUpdatesEndWithFailure(const std::string& err);
-  bool finalizeInstall();
+  bool finalizeInstall(data::InstallationResult* ir = nullptr);
   Uptane::Target getRollbackTarget();
   DownloadResult download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
@@ -72,7 +72,8 @@ class LiteClient {
   std::tuple<bool, boost::filesystem::path> isRootMetaImportNeeded();
   bool importRootMeta(const boost::filesystem::path& src, Uptane::Version max_ver = Uptane::Version());
   void importRootMetaIfNeededAndPresent();
-  bool isPendingTarget(const Uptane::Target& target);
+  bool isPendingTarget(const Uptane::Target& target) const;
+  Uptane::Target getPendingTarget() const;
   bool isBootFwUpdateInProgress() const;
 
  private:

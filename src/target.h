@@ -34,6 +34,7 @@ class Target {
   static TufTarget toTufTarget(const Uptane::Target& target);
   static bool isUnknown(const Uptane::Target& target);
   static Uptane::Target toInitial(const Uptane::Target& target, const std::string& hw_id);
+  static bool isInitial(const Uptane::Target& target) { return target.filename() == InitialTarget; }
 
   class Apps {
    public:

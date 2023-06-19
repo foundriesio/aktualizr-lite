@@ -113,6 +113,10 @@ int main(int argc, char **argv) {
         if (ires.status == InstallResult::Status::Ok) {
           current = latest;
           continue;
+        } else if (ires.status == InstallResult::Status::BootFwNeedsCompletion) {
+          LOG_ERROR << "Cannot start installation since the previous boot fw update requires device rebooting; "
+                    << "the client will start the target installation just after reboot.";
+          reboot(reboot_cmd);
         } else if (ires.status == InstallResult::Status::NeedsCompletion) {
           reboot(reboot_cmd);
           break;

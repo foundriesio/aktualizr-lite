@@ -11,6 +11,7 @@
 #include "libaktualizr/config.h"
 #include "liteclient.h"
 #include "primary/reportqueue.h"
+#include "target.h"
 
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                         "/etc/sota/conf.d/"};
@@ -35,6 +36,8 @@ std::ostream& operator<<(std::ostream& os, const DownloadResult& res) {
     os << "DownloadFailed/";
   } else if (res.status == DownloadResult::Status::VerificationFailed) {
     os << "VerificationFailed/";
+  } else if (res.status == DownloadResult::Status::DownloadFailed_NoSpace) {
+    os << "DownloadFailed_NoSpace/";
   }
   os << res.description;
   return os;
@@ -43,8 +46,12 @@ std::ostream& operator<<(std::ostream& os, const DownloadResult& res) {
 std::ostream& operator<<(std::ostream& os, const InstallResult& res) {
   if (res.status == InstallResult::Status::Ok) {
     os << "Ok/";
+  } else if (res.status == InstallResult::Status::OkBootFwNeedsCompletion) {
+    os << "OkBootFwNeedsCompletion/";
   } else if (res.status == InstallResult::Status::NeedsCompletion) {
     os << "NeedsCompletion/";
+  } else if (res.status == InstallResult::Status::BootFwNeedsCompletion) {
+    os << "BootFwNeedsCompletion/";
   } else if (res.status == InstallResult::Status::Failed) {
     os << "Failed/";
   } else if (res.status == InstallResult::Status::DownloadFailed) {
@@ -69,7 +76,7 @@ static void assert_lock() {
   }
 }
 
-void AkliteClient::Init(Config& config) {
+void AkliteClient::Init(Config& config, bool finalize) {
   if (!read_only_) {
     assert_lock();
     config.telemetry.report_network = !config.tls.server.empty();
@@ -78,20 +85,26 @@ void AkliteClient::Init(Config& config) {
   client_ = std::make_unique<LiteClient>(config, nullptr);
   if (!read_only_) {
     client_->importRootMetaIfNeededAndPresent();
-    client_->finalizeInstall();
+    if (finalize) {
+      client_->finalizeInstall();
+    }
   }
 }
 
-AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only) {
+AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only, bool finalize) {
   read_only_ = read_only;
   Config config(config_dirs);
-  Init(config);
+  Init(config, finalize);
 }
 
-AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_args, bool read_only) {
+AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_args, bool read_only, bool finalize) {
   read_only_ = read_only;
   Config config(cmdline_args);
-  Init(config);
+  Init(config, finalize);
+}
+
+AkliteClient::AkliteClient(std::shared_ptr<LiteClient> client) : client_(std::move(client)) {
+  client_->importRootMetaIfNeededAndPresent();
 }
 
 AkliteClient::~AkliteClient() {
@@ -163,17 +176,7 @@ boost::property_tree::ptree AkliteClient::GetConfig() const {
   return pt;
 }
 
-static TufTarget convertTarget(const Uptane::Target& target) {
-  int ver = -1;
-  try {
-    ver = std::stoi(target.custom_version(), nullptr, 0);
-  } catch (const std::invalid_argument& exc) {
-    LOG_ERROR << "Invalid version number format: " << target.custom_version();
-  }
-  return TufTarget(target.filename(), target.sha256Hash(), ver, target.custom_data());
-}
-
-TufTarget AkliteClient::GetCurrent() const { return convertTarget(client_->getCurrent()); }
+TufTarget AkliteClient::GetCurrent() const { return Target::toTufTarget(client_->getCurrent()); }
 
 DeviceResult AkliteClient::GetDevice() const {
   DeviceResult res{DeviceResult::Status::Failed};
@@ -206,7 +209,13 @@ class LiteInstall : public InstallContext {
     auto rc = client_->install(*target_);
     auto status = InstallResult::Status::Failed;
     if (rc == data::ResultCode::Numeric::kNeedCompletion) {
-      status = InstallResult::Status::NeedsCompletion;
+      if (client_->isPendingTarget(*target_)) {
+        status = InstallResult::Status::NeedsCompletion;
+      } else {
+        // If the install returns `kNeedCompletion` and the target being installed is not pending,
+        // then it means that the previous boot fw update requires reboot prior to running the new target update
+        status = InstallResult::Status::BootFwNeedsCompletion;
+      }
     } else if (rc == data::ResultCode::Numeric::kOk) {
       client_->http_client->updateHeader("x-ats-target", target_->filename());
       status = InstallResult::Status::Ok;
@@ -276,6 +285,10 @@ class LiteInstall : public InstallContext {
   std::string reason_;
 };
 
+bool AkliteClient::IsInstallationInProgress() const { return client_->getPendingTarget().IsValid(); }
+
+TufTarget AkliteClient::GetPendingTarget() const { return Target::toTufTarget(client_->getPendingTarget()); }
+
 std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
   std::unique_ptr<InstallContext> installer = nullptr;
   auto target = std::make_unique<Uptane::Target>(client_->getCurrent());
@@ -319,7 +332,25 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   return std::make_unique<LiteInstall>(client_, std::move(target), reason);
 }
 
-TufTarget AkliteClient::GetRollbackTarget() const { return convertTarget(client_->getRollbackTarget()); }
+InstallResult AkliteClient::CompleteInstallation() {
+  data::InstallationResult ir;
+  auto install_completed{client_->finalizeInstall(&ir)};
+  InstallResult complete_install_res{InstallResult::Status::Failed, ""};
+  if (install_completed) {
+    if (!client_->isBootFwUpdateInProgress()) {
+      complete_install_res = {InstallResult::Status::Ok, ""};
+    } else {
+      complete_install_res = {InstallResult::Status::OkBootFwNeedsCompletion, ""};
+    }
+  } else if (ir.needCompletion()) {
+    complete_install_res = {InstallResult::Status::NeedsCompletion, ir.description};
+  } else {
+    complete_install_res = {InstallResult::Status::Failed, ir.description};
+  }
+  return complete_install_res;
+}
+
+TufTarget AkliteClient::GetRollbackTarget() const { return Target::toTufTarget(client_->getRollbackTarget()); }
 
 bool AkliteClient::IsRollback(const TufTarget& t) const {
   Json::Value target_json;
