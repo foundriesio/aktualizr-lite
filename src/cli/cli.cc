@@ -32,7 +32,7 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
 };
 
 StatusCode Install(AkliteClient &client, int version, const std::string &target_name) {
-  // Check if a device is in a correct state to start a new update
+  // Check if the device is in a correct state to start a new update
   if (client.IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
               << client.GetPendingTarget().Name();
@@ -109,37 +109,50 @@ StatusCode CompleteInstall(AkliteClient &client) {
     LOG_ERROR << "There is no pending installation to complete";
     return StatusCode::NoPendingInstallation;
   }
-  const auto pending{client.GetPendingTarget()};  // returns Target that a device was supposed to boot on
+  const auto pending{client.GetPendingTarget()};  // returns Target that the device was supposed to boot on
   const auto ir = client.CompleteInstallation();
   if (!ir) {
     LOG_ERROR << "Failed to finalize pending installation; target: " << pending.Name() << ", err: " << ir;
 
     // check rollback type, the bootloader or App driven
-    const auto current{client.GetCurrent()};  // returns Target a device is booted on
+    const auto current{client.GetCurrent()};  // returns Target the device is booted on
     if (current.Sha256Hash() != pending.Sha256Hash()) {
       // ostree rollback, aka the bootloader driven rollback
+      LOG_INFO << "Installation has failed, device was rolled back to " << current.Name();
+      LOG_INFO << "Syncing Apps with the Target that device was rolled back to if needed...";
       auto ri = client.CheckAppsInSync();
       if (!ri) {
         // ostree rollback and no need to sync Apps since the rollback target eithe doesn't have Apps or
         // its Apps were not updated hence are already running.
+        LOG_INFO << "No Apps to sync, rollback to " << current.Name() << " completed";
         return StatusCode::InstallRollbackOk;
       }
       const auto rir = ri->Install();
       if (rir.status == InstallResult::Status::Ok) {
+        LOG_INFO << "Apps have been synced, rollback to " << current.Name() << " completed";
         return StatusCode::InstallRollbackOk;
       } else {
+        LOG_ERROR << "Failed to sync Apps, rollback to " << current.Name() << " failed";
+        LOG_ERROR << "Try to install the current Target again: " << current.Name();
         return StatusCode::InstallRollbackFailed;
       }
     } else {
+      LOG_INFO << "Installation has failed, device was successfully booted on the updated rootfs but failed to start "
+                  "the updated Apps";
+      LOG_INFO << "Looking for Target to rollback to...";
       const auto rollback_target = client.GetRollbackTarget();
       if (rollback_target.IsUnknown()) {
+        LOG_ERROR << "Failed to find the Target to rollback to, try to install another Target";
         return StatusCode::InstallRollbackFailed;
       }
+      LOG_INFO << "Rolling back to " << rollback_target.Name() << "...";
       auto ri = client.Installer(rollback_target);
       const auto rir = ri->Install();
       if (rir.status == InstallResult::Status::NeedsCompletion) {
+        LOG_INFO << "Successfully installed the rollback Target, reboot is required to complete it";
         return StatusCode::InstallRollbackNeedsReboot;
       }
+      LOG_ERROR << "Failed to rollback to " << rollback_target.Name() << " try to install another Target";
       return StatusCode::InstallRollbackFailed;
     }
   } else if (ir.status == InstallResult::Status::OkBootFwNeedsCompletion) {
