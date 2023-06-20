@@ -10,7 +10,7 @@ class RootCaPKI {
   RootCaPKI(std::string path, std::string key, std::string crt)
       : key_(path + std::move(key)), crt_(path + std::move(crt)) {
     try {
-      boost::format generatePrivateKey("openssl genrsa -out %s 4096");
+      boost::format generatePrivateKey("openssl ecparam -name prime256v1 -genkey -noout -out %s");
       cmd = boost::str(generatePrivateKey % key_);
       if (Utils::shell(cmd, &out, true) != EXIT_SUCCESS) {
         throw std::runtime_error(cmd.c_str());
