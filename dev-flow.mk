@@ -23,7 +23,7 @@ format:
 	cmake --build ${BUILD_DIR} --target $@
 
 tidy:
-	cmake --build $(BUILD_DIR) --target $(shell cmake --build build --target help | grep aktualizr_clang_tidy-src- | cut -d: -f1)
+	cmake --build $(BUILD_DIR) --target $(shell cmake --build $(BUILD_DIR) --target help | grep aktualizr_clang_tidy-src- | cut -d: -f1)
 
 
 test:
