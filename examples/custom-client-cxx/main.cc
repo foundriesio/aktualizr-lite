@@ -50,9 +50,16 @@ int main(int argc, char **argv) {
     cfg_dirs = AkliteClient::CONFIG_DIRS;
   }
 
-  AkliteClient client(cfg_dirs);
-  auto interval = client.GetConfig().get("uptane.polling_sec", 600);
-  auto reboot_cmd = get_reboot_cmd(client);
+  std::unique_ptr<AkliteClient> client;
+  try {
+    client = std::make_unique<AkliteClient>(cfg_dirs);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to initialize the client: " << exc.what();
+    return EXIT_FAILURE;
+  }
+
+  auto interval = client->GetConfig().get("uptane.polling_sec", 600);
+  auto reboot_cmd = get_reboot_cmd(*client);
 
   if (access(reboot_cmd.c_str(), X_OK) != 0) {
     LOG_ERROR << "Reboot command: " << reboot_cmd << " is not executable";
@@ -61,13 +68,13 @@ int main(int argc, char **argv) {
 
   LOG_INFO << "Starting aklite client with " << interval << " second interval";
 
-  auto current = client.GetCurrent();
+  auto current = client->GetCurrent();
   while (true) {
     LOG_INFO << "Active Target: " << current.Name() << ", sha256: " << current.Sha256Hash();
     LOG_INFO << "Checking for a new Target...";
 
     try {
-      auto res = client.CheckIn();
+      auto res = client->CheckIn();
       if (res.status != CheckInResult::Status::Ok && res.status != CheckInResult::Status::OkCached) {
         LOG_WARNING << "Unable to update latest metadata, going to sleep for " << interval
                     << " seconds before starting a new update cycle";
@@ -76,17 +83,17 @@ int main(int argc, char **argv) {
       }
 
       auto latest = res.GetLatest();
-      if (client.IsRollback(latest)) {
+      if (client->IsRollback(latest)) {
         LOG_INFO << "Latest Target is marked for causing a rollback and won't be installed: " << latest.Name();
       } else {
         LOG_INFO << "Found Latest Target: " << latest.Name();
       }
 
-      if (client.IsRollback(latest) && current.Name() == latest.Name()) {
+      if (client->IsRollback(latest) && current.Name() == latest.Name()) {
         // Handle the case when Apps failed to start on boot just after an update.
         // This is only possible with `pacman.create_containers_before_reboot = 0`.
         LOG_INFO << "The currently booted Target is a failing Target, finding Target to rollback to...";
-        const TufTarget rollback_target = client.GetRollbackTarget();
+        const TufTarget rollback_target = client->GetRollbackTarget();
         if (rollback_target.IsUnknown()) {
           LOG_ERROR << "Failed to find Target to rollback to after failure to start Apps at boot of a new sysroot";
           std::this_thread::sleep_for(std::chrono::seconds(interval));
@@ -96,9 +103,9 @@ int main(int argc, char **argv) {
         LOG_INFO << "Rollback Target is " << latest.Name();
       }
 
-      if (latest.Name() != current.Name() && !client.IsRollback(latest)) {
+      if (latest.Name() != current.Name() && !client->IsRollback(latest)) {
         std::string reason = "Updating from " + current.Name() + " to " + latest.Name();
-        auto installer = client.Installer(latest, reason);
+        auto installer = client->Installer(latest, reason);
         if (!installer) {
           LOG_ERROR << "Found latest Target but failed to retrieve its metadata from DB, skipping update";
           std::this_thread::sleep_for(std::chrono::seconds(interval));
@@ -124,7 +131,7 @@ int main(int argc, char **argv) {
           LOG_ERROR << "Unable to install target: " << ires;
         }
       } else {
-        auto installer = client.CheckAppsInSync();
+        auto installer = client->CheckAppsInSync();
         if (installer != nullptr) {
           LOG_INFO << "Syncing Active Target Apps";
           auto dres = installer->Download();
