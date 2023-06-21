@@ -40,7 +40,8 @@ void Repo::init(bool create) {
   }
 
   g_assert(repo_ == nullptr);
-  repo_ = reinterpret_cast<OstreeRepo*> g_steal_pointer(&repo);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
+  repo_ = reinterpret_cast<OstreeRepo*>(g_steal_pointer(&repo));
 }
 
 void Repo::addRemote(const std::string& name, const std::string& url, const std::string& ca, const std::string& cert,

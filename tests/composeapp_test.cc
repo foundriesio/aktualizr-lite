@@ -218,7 +218,7 @@ struct TestClient {
     config.pacman.extra["compose_apps_tree"] = (tempdir->Path() / "apps-tree").string();
     config.pacman.extra["docker_images_reload_cmd"] = "/bin/true";
     config.pacman.extra["docker_compose_bin"] = "tests/compose_fake.sh";
-    boost::filesystem::copy("tests/docker_fake.sh", tempdir->Path() / "docker_fake.sh");
+    Utils::shell("cp tests/docker_fake.sh " + (tempdir->Path() / "docker_fake.sh").string(), nullptr);
     config.pacman.extra["docker_bin"] = (tempdir->Path() / "docker_fake.sh").string();
     config.pacman.extra["docker_prune"] = "0";
     config.pacman.extra["force_update"] = force_update?"1":"0";

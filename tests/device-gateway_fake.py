@@ -13,6 +13,7 @@ logger = logging.getLogger("Fake Device Gateway")
 
 
 class Handler(SimpleHTTPRequestHandler):
+    DownloadUrlPath = "/treehub/download-urls"
     TreehubPrefix = "/treehub/"
     TufRepoPrefix = "/repo/"
     AuthPrefix = "/hub-creds/"
@@ -53,7 +54,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        if self.path.startswith(self.EventPrefix):
+        if self.path.startswith(self.DownloadUrlPath):
+            self.send_response(404)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+        elif self.path.startswith(self.EventPrefix):
             self.event_handler()
         else:
             self.send_response(200)
@@ -78,6 +83,7 @@ class Handler(SimpleHTTPRequestHandler):
         path = os.path.join(self._ostree_repo(), self.path[len(self.TreehubPrefix):])
         if os.path.exists(path):
             self.send_response_only(200)
+            self.send_header('Content-Length', str(os.path.getsize(path)))
             self.end_headers()
             with open(path, 'rb') as source:
                 while True:
@@ -87,6 +93,7 @@ class Handler(SimpleHTTPRequestHandler):
                     self.wfile.write(data)
         else:
             self.send_response_only(404)
+            self.send_header('Content-Length', '0')
             self.end_headers()
 
     def auth_handler(self):
@@ -118,10 +125,12 @@ class Handler(SimpleHTTPRequestHandler):
         path = os.path.join(self._tuf_repo(), self.path[1:])
         if not os.path.exists(path):
             self.send_response(404)
+            self.send_header('Content-Length', '0')
             self.end_headers()
         else:
             self._tuf_dump_headers()
             self.send_response(200)
+            self.send_header('Content-Length', str(os.path.getsize(path)))
             self.end_headers()
             self._tuf_serve_metadata_file(path)
 
@@ -129,6 +138,7 @@ class Handler(SimpleHTTPRequestHandler):
         logger.info("Device Gateway: POST /events request %s" % self.path)
         self._dump_event()
         self.send_response(200)
+        self.send_header('Content-Length', '0')
         self.end_headers()
 
     def _tuf_serve_metadata_file(self, uri):
@@ -191,9 +201,9 @@ class FakeDeviceGateway(HTTPServer):
             ca_cert = os.path.join(mtls, "ca.crt")
             # make Device Gateway check a device/client certificate
             tls_param = ssl.CERT_REQUIRED
-
-            self.socket = ssl.wrap_socket(self.socket, certfile=server_cert, keyfile=server_key, ca_certs=ca_cert,
-                                          server_side=True, cert_reqs=tls_param)
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER, cafile=ca_cert)
+            context.load_cert_chain(server_cert, keyfile=server_key)
+            self.socket = context.wrap_socket(self.socket, server_side=True)
 
 
 def main():

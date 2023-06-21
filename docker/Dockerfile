@@ -1,4 +1,4 @@
-FROM ubuntu:focal
+FROM ubuntu:jammy
 LABEL Description="Aktualizr testing dockerfile for Ubuntu Focal with static checks"
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -90,8 +90,8 @@ RUN ldconfig
 #  This allows ostree calls to libcurl to be able to keys controlled by pkcs11
 WORKDIR /tmp
 RUN mkdir ostree && cd ostree && git init && git remote add origin https://github.com/ostreedev/ostree && \
-    git fetch origin v2020.7 && git checkout FETCH_HEAD && \
-    ./autogen.sh CFLAGS='-Wno-error=missing-prototypes' \
+    git fetch origin v2021.6 && git checkout FETCH_HEAD && \
+    ./autogen.sh CC="clang" CFLAGS='-Wno-error=missing-prototypes' \
     --with-libarchive \
     --disable-man \
     --with-builtin-grub2-mkconfig \

@@ -14,7 +14,7 @@ class ServerPKI {
     key = path + key;
     std::string xtr = path + "/altname.txt";
 
-    boost::format generatePrivateKey("openssl genrsa -out %s 2048");
+    boost::format generatePrivateKey("openssl ecparam -name prime256v1 -genkey -noout -out %s");
     cmd = boost::str(generatePrivateKey % key);
     if (Utils::shell(cmd, &out, true) != EXIT_SUCCESS) {
       LOG_INFO << "Error: " << out;
