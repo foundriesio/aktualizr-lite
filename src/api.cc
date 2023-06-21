@@ -76,13 +76,17 @@ static void assert_lock() {
   }
 }
 
-void AkliteClient::Init(Config& config, bool finalize) {
+void AkliteClient::Init(Config& config, bool finalize, bool apply_lock) {
   if (!read_only_) {
-    assert_lock();
+    if (apply_lock) {
+      assert_lock();
+    }
     config.telemetry.report_network = !config.tls.server.empty();
     config.telemetry.report_config = !config.tls.server.empty();
   }
-  client_ = std::make_unique<LiteClient>(config, nullptr);
+  if (client_ == nullptr) {
+    client_ = std::make_unique<LiteClient>(config, nullptr);
+  }
   if (!read_only_) {
     client_->importRootMetaIfNeededAndPresent();
     if (finalize) {
@@ -103,8 +107,9 @@ AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_
   Init(config, finalize);
 }
 
-AkliteClient::AkliteClient(std::shared_ptr<LiteClient> client) : client_(std::move(client)) {
-  client_->importRootMetaIfNeededAndPresent();
+AkliteClient::AkliteClient(std::shared_ptr<LiteClient> client, bool read_only, bool apply_lock)
+    : read_only_{read_only}, client_(std::move(client)) {
+  Init(client_->config, false, apply_lock);
 }
 
 AkliteClient::~AkliteClient() {

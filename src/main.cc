@@ -460,6 +460,12 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 }
 
 static int cli_install(LiteClient& client, const bpo::variables_map& params) {
+  // Make sure no any other update instances are running, i.e. neither the daemon or the other CLI update/finalize is
+  // running
+  // The API's AkliteClient uses different type of file locking, so it cannot be used for syncing of the daemon and the
+  // CLI command running. Specifically, the API's lock relies on "#define LOCK_EX 2 /* Exclusive lock.  */" while the
+  // daemon's lock is based on "# define F_WRLCK 1 /* Write lock.  */"
+  FileLock lock;
   std::string target_name;
   int version = -1;
   if (params.count("update-name") > 0) {
@@ -474,15 +480,20 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClient akclient{client_ptr};
+  AkliteClient akclient{client_ptr, false, true};
 
   return static_cast<int>(cli::Install(akclient, version, target_name));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
+  // Make sure no any other update instances are running, i.e. neither the daemon or the other CLI update/finalize is
+  // running The API's AkliteClient uses different type of file locking, so it cannot be used for syncing of the daemon
+  // and the CLI command running. Specifically, the API's lock relies on "#define LOCK_EX 2 /* Exclusive lock.  */"
+  // while the daemon's lock is based on "# define F_WRLCK 1 /* Write lock.  */"
+  FileLock lock;
   (void)params;
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClient akclient{client_ptr};
+  AkliteClient akclient{client_ptr, false, true};
 
   return static_cast<int>(cli::CompleteInstall(akclient));
 }
