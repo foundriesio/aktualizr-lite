@@ -97,7 +97,7 @@ TEST_F(ApiClientTest, GetDevice) {
 }
 
 TEST_F(ApiClientTest, CheckIn) {
-  AkliteClient client(createLiteClient(InitialVersion::kOff));
+  AkliteClient client(createLiteClient(InitialVersion::kOn));
 
   auto result = client.CheckIn();
 
@@ -120,6 +120,32 @@ TEST_F(ApiClientTest, CheckIn) {
   ASSERT_EQ(2, result.Targets().size());
   ASSERT_EQ(new_target.filename(), result.Targets()[1].Name());
   ASSERT_EQ(new_target.sha256Hash(), result.Targets()[1].Sha256Hash());
+}
+
+TEST_F(ApiClientTest, CheckInWithoutTargetImport) {
+  AkliteClient client(createLiteClient(InitialVersion::kOff));
+
+  auto result = client.CheckIn();
+
+  auto events = getDeviceGateway().getEvents();
+  ASSERT_EQ(2, events.size());
+  auto val = getDeviceGateway().readSotaToml();
+  ASSERT_NE(std::string::npos, val.find("[pacman]"));
+
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(0, result.Targets().size());
+
+  ASSERT_TRUE(getDeviceGateway().resetSotaToml());
+  ASSERT_TRUE(getDeviceGateway().resetEvents());
+
+  auto new_target = createTarget();
+  result = client.CheckIn();
+  ASSERT_EQ(0, getDeviceGateway().getEvents().size());
+  ASSERT_EQ("", getDeviceGateway().readSotaToml());
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(1, result.Targets().size());
+  ASSERT_EQ(new_target.filename(), result.Targets()[0].Name());
+  ASSERT_EQ(new_target.sha256Hash(), result.Targets()[0].Sha256Hash());
 }
 
 TEST_F(ApiClientTest, Rollback) {
@@ -213,7 +239,7 @@ TEST_F(ApiClientTest, Secondaries) {
   auto result = client.CheckIn();
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);
 
-  ASSERT_EQ(3, result.Targets().size());
+  ASSERT_EQ(2, result.Targets().size());
   ASSERT_EQ(new_target.filename(), result.GetLatest().Name());
   ASSERT_EQ(secondary_target.filename(), result.GetLatest("riscv").Name());
 }

@@ -374,6 +374,14 @@ bool LiteClient::isBootFwUpdateInProgress() const {
   return rootfs_pacman->bootFwUpdateStatus().isUpdateInProgress();
 }
 
+bool LiteClient::wasTargetInstalled(const Uptane::Target& target) const {
+  std::vector<Uptane::Target> log;
+  storage->loadInstallationLog(config.provision.primary_ecu_serial, &log, true);
+  return log.end() != std::find_if(log.begin(), log.end(), [&target](const Uptane::Target& t) {
+           return target.filename() == t.filename() && target.sha256Hash() == t.sha256Hash();
+         });
+}
+
 class DetailedDownloadReport : public EcuDownloadStartedReport {
  public:
   DetailedDownloadReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, const std::string& details)

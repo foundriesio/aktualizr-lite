@@ -313,9 +313,9 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
+  std::unique_ptr<Uptane::Target> target;
   // Make sure the metadata is loaded from storage and valid.
   client_->checkImageMetaOffline();
-  std::unique_ptr<Uptane::Target> target;
   for (const auto& tt : client_->allTargets()) {
     if (tt.filename() == t.Name()) {
       target = std::make_unique<Uptane::Target>(tt);
@@ -323,7 +323,15 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
     }
   }
   if (target == nullptr) {
-    return nullptr;
+    const auto uptane_target{Target::fromTufTarget(t)};
+    if (Target::isInitial(uptane_target) && client_->wasTargetInstalled(uptane_target)) {
+      // if it's "initial target" that is not found in the TUF DB, then check if it's not a fake initial target by
+      // verifying that this target has been installed on a device before (the initial target that device is booted on
+      // and not installed_versions)
+      target = std::make_unique<Uptane::Target>(uptane_target);
+    } else {
+      return nullptr;
+    }
   }
   if (correlation_id.empty()) {
     boost::uuids::uuid tmp = boost::uuids::random_generator()();

@@ -100,7 +100,9 @@ class ClientTest :virtual public ::testing::Test {
       custom_value["hardwareIds"][0] = hw_id;
       custom_value["version"] = initial_ver;
       initial_target_.updateCustom(custom_value);
-      getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, initial_ver);
+      if (initial_version != InitialVersion::kOff) {
+        getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, initial_ver);
+      }
     }
 
     // Add the `installed_versions` file
@@ -282,7 +284,7 @@ class ClientTest :virtual public ::testing::Test {
       base = getTufRepo().getLatest();
     }
 
-    const std::string version = std::to_string(std::stoi(base.custom_version()) + 1);
+    const std::string version = std::to_string(std::stoi(base.IsValid()?base.custom_version():"0") + 1);
     Json::Value apps_json;
     for (const auto& app : apps) {
       apps_json[app.name]["uri"] = app.uri;
@@ -290,7 +292,7 @@ class ClientTest :virtual public ::testing::Test {
 
     // add new target to TUF repo
     const std::string name = hw_id + "-" + os + "-" + version;
-    return getTufRepo().addTarget(name, base.sha256Hash(), hw_id, version, apps_json);
+    return getTufRepo().addTarget(name, base.IsValid()?base.sha256Hash():initial_target_.sha256Hash(), hw_id, version, apps_json);
   }
 
   /**
