@@ -75,6 +75,7 @@ class LiteClient {
   bool isPendingTarget(const Uptane::Target& target) const;
   Uptane::Target getPendingTarget() const;
   bool isBootFwUpdateInProgress() const;
+  bool wasTargetInstalled(const Uptane::Target& target) const;
 
  private:
   FRIEND_TEST(helpers, locking);

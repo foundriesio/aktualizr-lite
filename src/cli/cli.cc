@@ -76,6 +76,10 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
   }
 
   const auto installer = client.Installer(target);
+  if (installer == nullptr) {
+    LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
+    return StatusCode::UnknownError;
+  }
 
   auto dr = installer->Download();
   if (!dr) {
@@ -89,6 +93,10 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     if (ir.status == InstallResult::Status::Failed) {
       LOG_INFO << "Rolling back to the previous target: " << current.Name() << "...";
       const auto installer = client.Installer(current);
+      if (installer == nullptr) {
+        LOG_ERROR << "Failed to find the previous target in the TUF Targets DB";
+        return StatusCode::InstallRollbackFailed;
+      }
       ir = installer->Install();
       if (!ir) {
         LOG_ERROR << "Failed to rollback to " << current.Name() << ", err: " << ir;
@@ -147,6 +155,11 @@ StatusCode CompleteInstall(AkliteClient &client) {
       }
       LOG_INFO << "Rolling back to " << rollback_target.Name() << "...";
       auto ri = client.Installer(rollback_target);
+      if (ri == nullptr) {
+        LOG_ERROR
+            << "Unexpected error: installer couldn't find the rollback Target in the DB; try to install another Target";
+        return StatusCode::UnknownError;
+      }
       const auto rir = ri->Install();
       if (rir.status == InstallResult::Status::NeedsCompletion) {
         LOG_INFO << "Successfully installed the rollback Target, reboot is required to complete it";

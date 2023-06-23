@@ -224,9 +224,9 @@ class AkliteClient {
   explicit AkliteClient(const boost::program_options::variables_map &cmdline_args, bool read_only = false,
                         bool finalize = true);
   /**
-   * Used for unit-testing purposes.
+   * Used for unit-testing purposes and the CLI.
    */
-  explicit AkliteClient(std::shared_ptr<LiteClient> client);
+  explicit AkliteClient(std::shared_ptr<LiteClient> client, bool read_only = false, bool apply_lock = false);
 
   ~AkliteClient();
 
@@ -346,7 +346,7 @@ class AkliteClient {
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  private:
-  void Init(Config &config, bool finalize = true);
+  void Init(Config &config, bool finalize = true, bool apply_lock = true);
 
   bool read_only_{false};
   std::shared_ptr<LiteClient> client_;

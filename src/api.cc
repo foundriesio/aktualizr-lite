@@ -76,13 +76,17 @@ static void assert_lock() {
   }
 }
 
-void AkliteClient::Init(Config& config, bool finalize) {
+void AkliteClient::Init(Config& config, bool finalize, bool apply_lock) {
   if (!read_only_) {
-    assert_lock();
+    if (apply_lock) {
+      assert_lock();
+    }
     config.telemetry.report_network = !config.tls.server.empty();
     config.telemetry.report_config = !config.tls.server.empty();
   }
-  client_ = std::make_unique<LiteClient>(config, nullptr);
+  if (client_ == nullptr) {
+    client_ = std::make_unique<LiteClient>(config, nullptr);
+  }
   if (!read_only_) {
     client_->importRootMetaIfNeededAndPresent();
     if (finalize) {
@@ -103,8 +107,9 @@ AkliteClient::AkliteClient(const boost::program_options::variables_map& cmdline_
   Init(config, finalize);
 }
 
-AkliteClient::AkliteClient(std::shared_ptr<LiteClient> client) : client_(std::move(client)) {
-  client_->importRootMetaIfNeededAndPresent();
+AkliteClient::AkliteClient(std::shared_ptr<LiteClient> client, bool read_only, bool apply_lock)
+    : read_only_{read_only}, client_(std::move(client)) {
+  Init(client_->config, false, apply_lock);
 }
 
 AkliteClient::~AkliteClient() {
@@ -308,9 +313,9 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
+  std::unique_ptr<Uptane::Target> target;
   // Make sure the metadata is loaded from storage and valid.
   client_->checkImageMetaOffline();
-  std::unique_ptr<Uptane::Target> target;
   for (const auto& tt : client_->allTargets()) {
     if (tt.filename() == t.Name()) {
       target = std::make_unique<Uptane::Target>(tt);
@@ -318,7 +323,15 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
     }
   }
   if (target == nullptr) {
-    return nullptr;
+    const auto uptane_target{Target::fromTufTarget(t)};
+    if (Target::isInitial(uptane_target) && client_->wasTargetInstalled(uptane_target)) {
+      // if it's "initial target" that is not found in the TUF DB, then check if it's not a fake initial target by
+      // verifying that this target has been installed on a device before (the initial target that device is booted on
+      // and not installed_versions)
+      target = std::make_unique<Uptane::Target>(uptane_target);
+    } else {
+      return nullptr;
+    }
   }
   if (correlation_id.empty()) {
     boost::uuids::uuid tmp = boost::uuids::random_generator()();
