@@ -315,6 +315,27 @@ TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const
 }
 
 data::InstallationResult ComposeAppManager::install(const Uptane::Target& target) const {
+  // Stopping disabled apps before creating or starting new apps
+  // because they may interfere with each other (e.g., using the same port).
+  // It is advisable to stop the disabled apps before performing ostree installation.
+  // Otherwise, they will be automatically started by dockerd during boot if the device
+  // is shut down immediately after a successful ostree installation and before the disabled apps are stopped.
+  // The probability of ostree installation failure is very low. Even if it occurs,
+  // the subsequent "sync target" process will restart the apps (excluding those removed from the configuration).
+  stopDisabledComposeApps(target);
+
+  // Stopping the Apps that is about to be updated so they are not started automatically by dockerd just after reboot.
+  // If ostree is not updated then the updated Apps will be started in this context.
+  // If ostree is updated and a device is suddenly rebooted before Apps installation, then
+  // it ensures that the previous version Apps are not automatically started on boot.
+  // If an installation failure happens, then the following "sync target" process will re-start
+  //  the stopped Apps (app only rollback).
+  for (const auto& pair : cur_apps_to_fetch_and_update_) {
+    LOG_INFO << "Stopping App before updating it; " << pair.first << " -> " << pair.second;
+    auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
+    non_const_app_engine->stop({pair.first, pair.second});
+  }
+
   data::InstallationResult res{RootfsTreeManager::install(target)};
   if (res.result_code.num_code == data::ResultCode::Numeric::kInstallFailed) {
     LOG_ERROR << "OSTree target installation has failed, skipping Docker Compose Apps";
@@ -326,9 +347,6 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;  // system update
 
   if (!just_install || cfg_.create_containers_before_reboot) {
-    // Stop disabled Apps before creating or starting new Apps since they may interfere with each other (e.g. the same
-    // port is used).
-    stopDisabledComposeApps(target);
     // make sure we install what we fetched
     if (!cur_apps_to_fetch_and_update_.empty()) {
       res.description += "\n# Apps installed:";
@@ -356,19 +374,8 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
 
   } else {
-    // If both ostree and Apps are updated and the `create_containers_before_reboot` param is set to 0/false, then
-    // stop disabled and updated Apps
-    stopDisabledComposeApps(target);
-    // We are stopping the updated containers so they are not started automatically by dockerd just after reboot,
-    // aklite is going to re-create and start them (valid for the `create_containers_before_reboot=0` case).
-    for (const auto& pair : cur_apps_to_fetch_and_update_) {
-      LOG_INFO << "Stopping the updated container " << pair.first << " -> " << pair.second;
-      auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
-      non_const_app_engine->stop({pair.first, pair.second});
-    }
-
-    LOG_INFO << "Apps' containers will be re-created and started just after successful boot on the new ostree version";
-    res.description += "\n# Fetched Apps' containers will be created and started after reboot\n";
+    LOG_INFO << "Apps' containers will be re-created and started just after succesfull boot on the new ostree version";
+    res.description += "\n# Fecthed Apps' containers will be created and started after reboot\n";
     // don't prune Compose Apps' images because new images are not used by any containers and can be removed as a
     // result of pruning.
     prune_images = false;
