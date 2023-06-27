@@ -402,7 +402,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
 }
 
 data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target& target) {
-  auto ir = RootfsTreeManager::finalizeInstall(target);
+  auto ir = OstreeManager::finalizeInstall(target);
 
   if (ir.result_code.num_code == data::ResultCode::Numeric::kOk) {
     // Stop disabled Apps before creating or starting new Apps since they may interfere with each other (e.g. the same
