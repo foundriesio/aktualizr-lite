@@ -35,7 +35,6 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   virtual void completeInitialTarget(Uptane::Target& init_target){};
   void installNotify(const Uptane::Target& target) override;
   data::InstallationResult install(const Uptane::Target& target) const override;
-  data::InstallationResult finalizeInstall(const Uptane::Target& target) override;
   const std::shared_ptr<OSTree::Sysroot>& sysroot() const { return sysroot_; }
 
  private:

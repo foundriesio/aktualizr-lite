@@ -151,26 +151,6 @@ data::InstallationResult RootfsTreeManager::install(const Uptane::Target& target
   return res;
 }
 
-data::InstallationResult RootfsTreeManager::finalizeInstall(const Uptane::Target& target) {
-  // Try to finalize installation of the pending target
-  auto ir = OstreeManager::finalizeInstall(target);
-  const std::string current_hash{RootfsTreeManager::getCurrentHash()};
-  if (ir.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion && current_hash == target.sha256Hash()) {
-    // If a reboot is not detected ("need completion" is received) and the pending target's hash is equal to
-    // the current hash then it means that a device is already booted on the pending target's rootfs/ostree.
-    // Therefore, "Ok" is returned in this case.
-    // Usually it happens during finalization of a "just Apps" offline update right after a docker engine restart.
-    //
-    // Also, it may happen during online update (aklite daemon) if a device is rebooted in the middle of finalization,
-    // specifically, just after the reboot flag is cleared and before the pending target is marked as current.
-    // So, during the following finalization, the target is still pending, but a device is already booted on the right
-    // ostree version and the reboot is not detected because the reboot flag is removed, as result we end up
-    // in the given situation (no reboot is required but `OstreeManager::finalizeInstall` returns the "need reboot").
-    return data::InstallationResult(data::ResultCode::Numeric::kOk, "Already booted on the required version");
-  }
-  return ir;
-}
-
 void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const std::string& target_name) {
   const auto resp = http_client_->post(gateway_url_ + "/download-urls", Json::Value::null);
 
