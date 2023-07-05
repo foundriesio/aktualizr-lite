@@ -20,6 +20,7 @@ option(BUILD_OSTREE "Set to ON to compile with ostree support" ON)
 option(ALLOW_MANUAL_ROLLBACK "Set to ON to build with support of manual rollbacks" OFF)
 option(BUILD_AKLITE_OFFLINE "Set to ON to build cli command for an offline update" OFF)
 option(BUILD_AKLITE_WITH_NERDCTL "Set to ON to build with support of nerdctl/containerd" OFF)
+option(BUILD_AKLITE_APPS "Set to ON to build cli command for Apps management" ON)
 
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
@@ -54,7 +55,9 @@ if(BUILD_AKLITE)
   include(CTest)
   add_subdirectory(tests EXCLUDE_FROM_ALL)
 
-  add_subdirectory(apps/aklite-apps)
+  if(BUILD_AKLITE_APPS)
+    add_subdirectory(apps/aklite-apps)
+  endif(BUILD_AKLITE_APPS)
   if(BUILD_AKLITE_OFFLINE)
     add_subdirectory(apps/aklite-offline)
   endif(BUILD_AKLITE_OFFLINE)
@@ -68,3 +71,4 @@ message(STATUS "BUILD_SOTA_TOOLS: ${BUILD_SOTA_TOOLS}")
 message(STATUS "ALLOW_MANUAL_ROLLBACK: ${ALLOW_MANUAL_ROLLBACK}")
 message(STATUS "BUILD_AKLITE_OFFLINE: ${BUILD_AKLITE_OFFLINE}")
 message(STATUS "BUILD_AKLITE_WITH_NERDCTL: ${BUILD_AKLITE_WITH_NERDCTL}")
+message(STATUS "BUILD_AKLITE_APPS: ${BUILD_AKLITE_APPS}")
