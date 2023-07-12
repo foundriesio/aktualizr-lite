@@ -156,6 +156,8 @@ class RestorableAppEngine : public AppEngine {
   static uint64_t getAppUpdateSize(const Json::Value& app_layers, const boost::filesystem::path& blob_dir);
   static uint64_t getDockerStoreSizeForAppUpdate(const uint64_t& compressed_update_size,
                                                  uint32_t average_compression_ratio);
+  static std::tuple<uint64_t, uint64_t> getPreciseAppUpdateSize(const Json::Value& app_layers,
+                                                                const boost::filesystem::path& blob_dir);
 
   void checkAvailableStorageInStores(const std::string& app_name, const uint64_t& skopeo_required_storage,
                                      const uint64_t& docker_required_storage) const;
