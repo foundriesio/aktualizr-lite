@@ -42,6 +42,14 @@ struct Uri {
   const std::string registryHostname;
 };
 
+struct Descriptor {
+  std::string digest;
+  int64_t size;
+
+  // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
+  operator bool() const { return !(digest.empty() && size == 0); }
+};
+
 struct Manifest : Json::Value {
   static constexpr const char* const Format{"application/vnd.oci.image.manifest.v1+json"};
   static constexpr const char* const IndexFormat{"application/vnd.oci.image.index.v1+json"};
@@ -96,6 +104,32 @@ struct Manifest : Json::Value {
 
     LOG_WARNING << "App manifest doesn't include a layers manifest of a given architecture: " << arch;
     return Json::Value();
+  }
+
+  Descriptor layersMetaDescr() const {
+    if ((*this)["layers"].size() < 2) {
+      LOG_DEBUG << "No layers metadata are found in the App manifest";
+      return Descriptor{};
+    }
+    const auto desc_json{(*this)["layers"][1]};
+    if (!desc_json.isMember("annotations") || (!desc_json["annotations"].isMember("layers-meta")) ||
+        (desc_json["annotations"]["layers-meta"].asString() != "v1")) {
+      LOG_DEBUG << "No layers metadata are found in the App manifest";
+      return Descriptor{};
+    }
+    if (!(desc_json.isMember("digest") && desc_json.isMember("size"))) {
+      throw std::runtime_error(
+          "Got invalid App manifest; no `size` or `digest` is found"
+          " in App layers metadata: " +
+          Utils::jsonToCanonicalStr(*this));
+    }
+    auto digest{desc_json["digest"].asString()};
+    if (digest.empty()) {
+      throw std::runtime_error("Got invalid App manifest; failed to parse App layers metadata: " +
+                               Utils::jsonToCanonicalStr(*this));
+    }
+    auto size{desc_json["size"].asInt64()};
+    return Descriptor{digest, size};
   }
 };
 

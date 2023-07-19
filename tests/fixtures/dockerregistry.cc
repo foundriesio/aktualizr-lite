@@ -44,14 +44,17 @@ class DockerRegistry {
     };
   }
 
-  AppEngine::App addApp(const ComposeApp::Ptr& app) {
+  AppEngine::App addApp(const ComposeApp::Ptr& app, bool add_layers_meta = true) {
     hash2manifest_.emplace("sha256:" + app->layersHash(), app->layersManifest());
     manifest2pull_numb_.emplace("sha256:" + app->layersHash(), 0);
 
     auto app_uri = base_url_ + '/' + repo_ + '/' + app->name() + '@' + "sha256:" + app->hash();
     hash2manifest_.emplace("sha256:" + app->hash(), app->manifest());
     manifest2pull_numb_.emplace("sha256:" + app->hash(), 0);
-    blob2app_.emplace("sha256:" + app->archHash(), app);
+    blob2app_.emplace("sha256:" + app->archHash(), app->archive());
+    if (add_layers_meta) {
+      blob2app_.emplace("sha256:" + app->layersMetaHash(), app->layersMeta());
+    }
 
     Utils::writeFile(dir_ / app->image().name() / "blobs" / app->image().layerBlob().hash, app->image().layerBlob().data);
     Utils::writeFile(dir_ / app->image().name() / "blobs" / app->image().config().hash, app->image().config().data);
@@ -76,12 +79,12 @@ class DockerRegistry {
     return manifest2pull_numb_.at(uri.digest());
   }
 
-  std::string getAppArchive(const std::string &url) const {
+  std::string getBlob(const std::string &url) const {
     auto digest = parseUrl(url, "blobs");
     if (blob2app_.count(digest) == 0) {
       return ""; //TODO: throw exception
     }
-    return blob2app_.at(digest)->archive();
+    return blob2app_.at(digest);
   }
 
   const std::string& authURL() const { return auth_url_; }
@@ -160,7 +163,10 @@ class DockerRegistry {
           }
       }
 
-      std::string data{registry_.getAppArchive(url)};
+      std::string data{registry_.getBlob(url)};
+      if (data.empty()) {
+        return HttpResponse("", 404, CURLE_OK, "Not Found");
+      }
       write_cb(const_cast<char*>(data.c_str()), data.size(), 1, userp);
 
       return HttpResponse("resp", 200, CURLE_OK, "");
@@ -222,7 +228,7 @@ class DockerRegistry {
 
   std::unordered_map<std::string, std::string> hash2manifest_;
   std::unordered_map<std::string, int> manifest2pull_numb_;
-  std::unordered_map<std::string, ComposeApp::Ptr> blob2app_;
+  std::unordered_map<std::string, std::string> blob2app_;
 
   bool no_auth_;
   std::function<std::string(const std::string&)> www_auth_func_;

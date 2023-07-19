@@ -377,6 +377,33 @@ TEST_P(RestorableAppEngineTestParameterized, FetchAndCheckSizeInsufficientSpace)
 INSTANTIATE_TEST_SUITE_P(CheckSizeTests, RestorableAppEngineTestParameterized,
                          ::testing::Values("", "/var/non-existing-dir/docker"));
 
+TEST_F(RestorableAppEngineTest, FetchAndCheckSizeNoLayersMeta) {
+  // Check App update if the layers metadata containing precise size/usage are missing.
+  // The restorableappengine is supposed to fallback to the estimated App update size calculation
+
+  {
+    // App update fits into a disk
+    auto app = registry.addApp(fixtures::ComposeApp::create("app-01"), false);
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
+
+  {
+    // App update doesn't fit into a disk
+    const auto layer_size{1024};
+    Json::Value layers;
+    layers["layers"][0]["digest"] =
+        "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+    layers["layers"][0]["size"] = layer_size;
+    auto app = registry.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-02", layers), false);
+
+    setAvailableStorageSpace(layer_size * 1.5);
+    ASSERT_FALSE(app_engine->fetch(app));
+    ASSERT_FALSE(app_engine->isFetched(app));
+  }
+}
+
 TEST_F(RestorableAppEngineTest, FetchAndCheckSizeOverflowLayerSize) {
   // generate a list of layers an overall size of which exceeds std::uint64_t/std::size_t
   // layer sizes must be correct, i.e. int64, so we need 2 layers with int64::max + 2

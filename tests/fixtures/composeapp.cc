@@ -81,7 +81,7 @@ class ComposeApp {
     Json::Value layers_json{layers};
     if (layers_json.isNull()) {
       std::random_device rand_dev;
-      std::uniform_int_distribution<std::int64_t> dist{1024, std::numeric_limits<std::uint32_t>::max()};
+      std::uniform_int_distribution<std::int64_t> dist{1024, std::numeric_limits<std::int16_t>::max()};
       for (int ii = 0; ii < 3; ++ii) {
         layers_json["layers"][ii]["digest"] = "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
         layers_json["layers"][ii]["size"] = dist(rand_dev);
@@ -116,6 +116,8 @@ class ComposeApp {
   const Image& image() const { return image_; }
   const std::string& layersManifest() const { return layers_manifest_; }
   const std::string& layersHash() const { return layers_hash_; }
+  const std::string& layersMeta() const { return layers_meta_; }
+  const std::string& layersMetaHash() const { return layers_meta_hash_; }
 
 
  private:
@@ -142,10 +144,12 @@ class ComposeApp {
     Json::Value layers_json{layers};
     if (layers_json.isNull()) {
       std::random_device rand_dev;
-      std::uniform_int_distribution<std::int64_t> dist{1024, std::numeric_limits<std::uint32_t>::max()};
+      std::uniform_int_distribution<std::int64_t> dist{1024, std::numeric_limits<std::int16_t>::max()};
       for (int ii = 0; ii < 3; ++ii) {
-        layers_json["layers"][ii]["digest"] = "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
-        layers_json["layers"][ii]["size"] = dist(rand_dev);
+        const auto digest{"sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())))};
+        const int64_t layer_archive_size{dist(rand_dev)};
+        layers_json["layers"][ii]["digest"] = digest;
+        layers_json["layers"][ii]["size"] = layer_archive_size;
       }
     }
 
@@ -163,6 +167,29 @@ class ComposeApp {
       manifest["manifests"][0]["digest"] = "sha256:" + layers_hash_;
       manifest["manifests"][0]["platform"]["architecture"] = "amd64";
       manifest["manifests"][0]["platform"]["os"] = "linux";
+
+      // layers metadata with precise size and disk usage
+      Json::Value layers_meta;
+      layers_meta["amd64"]["fs_block_size"] = 4096;
+      for (Json::ValueConstIterator ii = layers_json["layers"].begin(); ii != layers_json["layers"].end(); ++ii) {
+        const auto& digest{(*ii)["digest"].asString()};
+        const auto& layer_archive_size{((*ii)["size"]).is<std::uint64_t>()?(*ii)["size"].asUInt64():(*ii)["size"].asInt64()};
+        // layers metadata with precise size and disk usage
+        layers_meta["amd64"]["layers"][digest]["archive_size"] = layer_archive_size;
+        layers_meta["amd64"]["layers"][digest]["size"] = layer_archive_size * 3;
+        layers_meta["amd64"]["layers"][digest]["usage"] = layer_archive_size * 4;
+      }
+      layers_meta_ = Utils::jsonToCanonicalStr(layers_meta);
+      layers_meta_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(layers_meta_)));
+      // update the App manifest with a reference to the layer with size/usage data
+      manifest["layers"][1]["digest"] = "sha256:" + layers_meta_hash_;
+      if (!!layer_man_size && *layer_man_size != layers_manifest_.size()) {
+        // This is the failure case, we need to invalidate the layers meta too
+        manifest["layers"][1]["size"] = layers_meta_.size() - 1;
+      } else {
+        manifest["layers"][1]["size"] = layers_meta_.size();
+      }
+      manifest["layers"][1]["annotations"]["layers-meta"] = "v1";
     }
     // emulate compose-publish work, i.e. calculate hash on a manifest json as it is,
     // no need to normalize it to a canonical representation
@@ -181,6 +208,8 @@ class ComposeApp {
   std::string arch_hash_;
   std::string manifest_;
   std::string hash_;
+  std::string layers_meta_;
+  std::string layers_meta_hash_;
   std::string layers_manifest_;
   std::string layers_hash_;
 };

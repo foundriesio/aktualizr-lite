@@ -456,32 +456,59 @@ void RestorableAppEngine::checkAppUpdateSize(const Uri& uri, const boost::filesy
     return;
   }
 
-  const auto layers_manifest{manifest.layersManifest(arch)};
-  if (!layers_manifest.isObject()) {
-    LOG_WARNING << "App layers' manifest is missing, skip checking an App update size";
-    return;
+  uint64_t skopeo_total_update_size;
+  uint64_t docker_total_update_size;
+  bool fallback_to_estimated_update_size_calculation{true};
+
+  const auto layers_meta_desc{manifest.layersMetaDescr()};
+  if (layers_meta_desc) {
+    try {
+      const Docker::Uri layers_meta_uri{uri.createUri(HashedDigest(layers_meta_desc.digest))};
+      const auto layers_meta_path{app_dir / layers_meta_desc.digest};
+      registry_client_->downloadBlob(layers_meta_uri, layers_meta_path, layers_meta_desc.size);
+      const auto layers_meta{Utils::parseJSONFile(layers_meta_path)};
+      if (!layers_meta.isMember(arch)) {
+        throw std::runtime_error("No layers metadata for the given arch: " + arch);
+      }
+      LOG_INFO << "Checking for App's layers to be pulled...";
+      std::tie(skopeo_total_update_size, docker_total_update_size) =
+          getPreciseAppUpdateSize(layers_meta[arch]["layers"], blobs_root_ / "sha256");
+      fallback_to_estimated_update_size_calculation = false;
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to retrieve or utilize App layers metadata containing precise disk usage: " << exc.what();
+    }
+  } else {
+    LOG_INFO << "No App layers metadata with precise disk usage has been found";
   }
 
-  if (!(layers_manifest.isMember("digest") && layers_manifest["digest"].isString())) {
-    throw std::invalid_argument("Got invalid layers manifest, missing or incorrect `digest` field");
+  if (fallback_to_estimated_update_size_calculation) {
+    LOG_INFO << "Falling back to the approximate estimation of the app update size....";
+    const auto layers_manifest{manifest.layersManifest(arch)};
+    if (!layers_manifest.isObject()) {
+      LOG_WARNING << "App layers' manifest is missing, skip checking an App update size";
+      return;
+    }
+
+    if (!(layers_manifest.isMember("digest") && layers_manifest["digest"].isString())) {
+      throw std::invalid_argument("Got invalid layers manifest, missing or incorrect `digest` field");
+    }
+
+    if (!(layers_manifest.isMember("size") && layers_manifest["size"].isInt64())) {
+      throw std::invalid_argument("Got invalid layers manifest, missing or incorrect `size` field");
+    }
+
+    const Docker::Uri layers_manifest_uri{uri.createUri(HashedDigest(layers_manifest["digest"].asString()))};
+    const std::int64_t layers_manifest_size{layers_manifest["size"].asInt64()};
+
+    const std::string man_str{
+        registry_client_->getAppManifest(layers_manifest_uri, Manifest::IndexFormat, layers_manifest_size)};
+    const auto man{Utils::parseJSON(man_str)};
+
+    LOG_INFO << "Checking for App's new layers...";
+    skopeo_total_update_size = getAppUpdateSize(man["layers"], blobs_root_ / "sha256");
+    const uint32_t average_compression_ratio{5} /* gzip layer compression ratio */;
+    docker_total_update_size = getDockerStoreSizeForAppUpdate(skopeo_total_update_size, average_compression_ratio);
   }
-
-  if (!(layers_manifest.isMember("size") && layers_manifest["size"].isInt64())) {
-    throw std::invalid_argument("Got invalid layers manifest, missing or incorrect `size` field");
-  }
-
-  const Docker::Uri layers_manifest_uri{uri.createUri(HashedDigest(layers_manifest["digest"].asString()))};
-  const std::int64_t layers_manifest_size{layers_manifest["size"].asInt64()};
-
-  const std::string man_str{
-      registry_client_->getAppManifest(layers_manifest_uri, Manifest::IndexFormat, layers_manifest_size)};
-  const auto man{Utils::parseJSON(man_str)};
-
-  LOG_INFO << "Checking for App's new layers...";
-  uint64_t skopeo_total_update_size{getAppUpdateSize(man["layers"], blobs_root_ / "sha256")};
-  const uint32_t average_compression_ratio{5} /* gzip layer compression ratio */;
-  uint64_t docker_total_update_size{
-      getDockerStoreSizeForAppUpdate(skopeo_total_update_size, average_compression_ratio)};
 
   LOG_INFO << "Checking if there is sufficient amount of storage available for App update...";
   checkAvailableStorageInStores(uri.app, skopeo_total_update_size, docker_total_update_size);
@@ -891,6 +918,63 @@ uint64_t RestorableAppEngine::getDockerStoreSizeForAppUpdate(const uint64_t& com
                               std::to_string(std::numeric_limits<uint64_t>::max()));
   }
   return docker_total_update_size;
+}
+
+std::tuple<uint64_t, uint64_t> RestorableAppEngine::getPreciseAppUpdateSize(const Json::Value& app_layers,
+                                                                            const boost::filesystem::path& blob_dir) {
+  std::unordered_set<std::string> store_blobs;
+
+  if (boost::filesystem::exists(blob_dir)) {
+    for (const boost::filesystem::directory_entry& entry : boost::filesystem::directory_iterator(blob_dir)) {
+      store_blobs.emplace(entry.path().filename().string());
+    }
+  }
+
+  // It can happen that one or more currently stored blobs/layers are not needed for the new App
+  // and they will be purged after an update completion therefore we actually will need less than
+  // `total_update_size` additional storage to accomodate a new App. Moreover, a new App even might
+  // occupy even less space than the current App.
+  // But, during an update process there is a moment at which a sum of both the current's and new App's layers
+  // are stored on storage, thus we need to make sure that underlying storage can accomodate the sum of the Apps'
+  // layers set/list.
+
+  uint64_t skopeo_total_update_size{0};
+  uint64_t docker_total_update_size{0};
+
+  for (Json::ValueConstIterator ii = app_layers.begin(); ii != app_layers.end(); ++ii) {
+    const HashedDigest digest{ii.key().asString()};
+    if (store_blobs.count(digest.hash()) == 1) {
+      LOG_INFO << "\t" << digest.hash() << " -> exists";
+      continue;
+    }
+    if (!(*ii).isMember("usage")) {
+      throw std::range_error("Invalid layers metadata; `usage` field is missing: " + (*ii).asString());
+    }
+    if (!(*ii)["usage"].isInt64()) {
+      throw std::range_error("Invalid value of a layer usage, must be int64, got: " + (*ii)["usage"].asString());
+    }
+    const std::int64_t size{(*ii)["size"].asInt64()};
+    const std::int64_t usage{(*ii)["usage"].asInt64()};
+    const std::int64_t archive_size{(*ii)["archive_size"].asInt64()};
+
+    const uint64_t new_skopeo_total_update_size = skopeo_total_update_size + archive_size;
+    if (new_skopeo_total_update_size < skopeo_total_update_size || new_skopeo_total_update_size < archive_size) {
+      throw std::overflow_error("Sum of layer sizes exceeded the maximum allowed value: " +
+                                std::to_string(std::numeric_limits<uint64_t>::max()));
+    }
+
+    const uint64_t new_docker_total_update_size = docker_total_update_size + usage;
+    if (new_docker_total_update_size < docker_total_update_size || new_docker_total_update_size < usage) {
+      throw std::overflow_error("Sum of layer sizes exceeded the maximum allowed value: " +
+                                std::to_string(std::numeric_limits<uint64_t>::max()));
+    }
+
+    LOG_INFO << "\t" << digest.hash() << " -> missing; to be downloaded; blob size: " << archive_size
+             << ", diff size: " << size << ", disk usage: " << usage;
+    skopeo_total_update_size = new_skopeo_total_update_size;
+    docker_total_update_size = new_docker_total_update_size;
+  }
+  return {skopeo_total_update_size, docker_total_update_size};
 }
 
 void RestorableAppEngine::checkAvailableStorageInStores(const std::string& app_name,
