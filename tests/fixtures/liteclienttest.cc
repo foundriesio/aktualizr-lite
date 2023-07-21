@@ -312,7 +312,7 @@ class ClientTest :virtual public ::testing::Test {
   void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
               data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kNeedCompletion,
               DownloadResult expected_download_result = {DownloadResult::Status::Ok, ""}, const std::string& expected_install_err_msg = "", bool expect_boot_firmware = true) {
-    device_gateway_.resetEvents();
+    device_gateway_.resetEvents(client.http_client);
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
@@ -345,7 +345,7 @@ class ClientTest :virtual public ::testing::Test {
                   const std::string& download_err_msg = "",
                   data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kOk,
                   const std::string& install_err_msg = "") {
-    device_gateway_.resetEvents();
+    device_gateway_.resetEvents(client.http_client);
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 

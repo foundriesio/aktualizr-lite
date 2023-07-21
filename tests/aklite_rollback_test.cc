@@ -391,7 +391,7 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFails) {
 
   {
     boost::filesystem::remove(fixtures::ClientTest::test_dir_.Path() / "need_reboot");
-    device_gateway_.resetEvents();
+    device_gateway_.resetEvents(client->http_client);
     client = createLiteClient(InitialVersion::kOff, boost::none, false);
 
     ASSERT_FALSE(client->finalizeInstall());
