@@ -136,7 +136,10 @@ class Handler(SimpleHTTPRequestHandler):
 
     def event_handler(self):
         logger.info("Device Gateway: POST /events request %s" % self.path)
-        self._dump_event()
+        if self.path.startswith(os.path.join(self.EventPrefix, "reset")):
+            self._reset_events()
+        else:
+            self._dump_event()
         self.send_response(200)
         self.send_header('Content-Length', '0')
         self.end_headers()
@@ -184,6 +187,10 @@ class Handler(SimpleHTTPRequestHandler):
                     cur_events.append(e)
                     event_ids.add(e["id"])
             json.dump(cur_events, f)
+
+    def _reset_events(self):
+        if os.path.exists(self.server.events_file):
+            os.remove(self.server.events_file)
 
 
 class FakeDeviceGateway(HTTPServer):

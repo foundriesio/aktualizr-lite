@@ -165,6 +165,7 @@ class RestorableAppEngine : public AppEngine {
   static bool areDockerAndSkopeoOnTheSameVolume(const boost::filesystem::path& skopeo_path,
                                                 const boost::filesystem::path& docker_path);
   static std::tuple<uint64_t, bool> getPathVolumeID(const boost::filesystem::path& path);
+  static std::string extractComposeFile(const boost::filesystem::path& archive_path);
 
   const boost::filesystem::path store_root_;
   const boost::filesystem::path install_root_;

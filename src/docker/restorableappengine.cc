@@ -144,17 +144,10 @@ AppEngine::Result RestorableAppEngine::verify(const App& app) {
   try {
     const Uri uri{Uri::parseUri(app.uri)};
     const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
-    const Manifest manifest{Utils::parseJSONFile(app_dir / Manifest::Filename)};
-    const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
-    TemporaryDirectory app_tmp_dir;
 
-    // extract the compose file (i.e. docker-compose.yml) to a temporary directory to verify it.
-    exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "no compose file found in archive",
-         boost::process::start_dir = app_tmp_dir.Path());
-
-    LOG_DEBUG << app.name << ": verifying App: " << app_dir << " --> " << app_tmp_dir.Path();
+    LOG_DEBUG << app.name << ": verifying App: " << app_dir << " --> " << app_dir;
     exec(boost::format("%s config %s") % compose_cmd_ % "-q", "compose file verification failed",
-         boost::process::start_dir = app_tmp_dir.Path());
+         boost::process::start_dir = app_dir);
   } catch (const std::exception& exc) {
     LOG_ERROR << "failed to verify App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
     res = {false, exc.what()};
@@ -443,9 +436,9 @@ void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path&
   registry_client_->downloadBlob(archive_uri, archive_full_path, manifest.archiveSize());
   Utils::writeFile(app_dir / Manifest::Filename, manifest_str);
   Utils::writeFile(app_dir / "uri", uri.registryHostname + "/" + uri.repo + "@" + uri.digest());
-  // extract docker-compose.yml, temporal hack, we don't need to extract it
-  exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile, "no compose file found in archive",
-       boost::process::start_dir = app_dir);
+  // Extract docker-compose.yml and safely persist it so the follow-up functionality doesn't need to do it again.
+  const auto compose{extractComposeFile(archive_full_path)};
+  Utils::writeFile(app_dir / ComposeFile, compose);
 }
 
 void RestorableAppEngine::checkAppUpdateSize(const Uri& uri, const boost::filesystem::path& app_dir) const {
@@ -617,18 +610,11 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
       break;
     }
 
-    // TODO: we actually should extract a compose file from the app archive, otherwise
-    // it won't be merkle tree like verification since this compose file can be hacked
-    // because it doesn't have any hash to be verified for.
-    // As an alternative we might consider adding a new attribute to an App root manifest that denotes a hash of a
-    // compose file. Or, a compose yaml should be excluded from an App's archive and considered as App config that is
-    // referenced by ["config"]["digest"] element of an App manifest. (currently this digest is equal to the hash of
-    // empty string)
-    const auto compose_file{app_dir / ComposeFile};
-    if (!boost::filesystem::exists(compose_file)) {
-      LOG_DEBUG << app.name << ": missing App compose file: " << compose_file;
-      break;
-    }
+    // Extract docker-compose.yml from the verified App archive regardless whether it has been extracted and stored on a
+    // file system before. We do it to make sure that the compose file from the verified archive is used by the
+    // follow-up functionality.
+    const auto compose{extractComposeFile(archive_full_path)};
+    Utils::writeFile(app_dir / ComposeFile, compose);
 
     // No need to check hashes of a Merkle tree of each App image since skopeo does it internally within in the `skopeo
     // copy` command. While the above statement is true there is still a need in traversing App's merkle tree at the
@@ -743,12 +729,7 @@ bool RestorableAppEngine::isAppInstalled(const App& app) const {
     const Manifest manifest{Utils::parseJSONFile(manifest_file)};
     const auto archive_manifest_hash{HashedDigest(manifest.archiveDigest()).hash()};
     const auto archive_full_path{app_dir / (archive_manifest_hash + Manifest::ArchiveExt)};
-
-    exec(boost::format{"tar -xzf %s %s"} % archive_full_path % ComposeFile,
-         app.name + ": failed to extract a compose file from the compose app archive",
-         boost::this_process::environment(), boost::process::start_dir = app_dir);
-
-    const auto compose_file_str = Utils::readFile(app_dir / ComposeFile);
+    const auto compose_file_str{extractComposeFile(archive_full_path)};
     const auto compose_file_hash =
         boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(compose_file_str)));
     const auto installed_compose_file_str = Utils::readFile(app_install_dir / ComposeFile);
@@ -1068,6 +1049,15 @@ void RestorableAppEngine::removeTmpFiles(const boost::filesystem::path& apps_roo
   } catch (const std::exception& exc) {
     LOG_ERROR << "Failed to find or remove skopeo's tmp files: " << exc.what();
   }
+}
+
+std::string RestorableAppEngine::extractComposeFile(const boost::filesystem::path& archive_path) {
+  const auto extract_compose_cmd{"tar --to-stdout -xzf " + archive_path.string() + " " + ComposeFile};
+  std::string compose;
+  if (Utils::shell(extract_compose_cmd, &compose, true) != EXIT_SUCCESS) {
+    throw std::runtime_error("Failed to extract " + ComposeFile + " from the App archive: " + compose);
+  }
+  return compose;
 }
 
 }  // namespace Docker

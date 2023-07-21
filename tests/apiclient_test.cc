@@ -66,13 +66,16 @@ class ApiClientTest : public fixtures::ClientTest {
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                bool finalize = true) override {
     app_engine_mock_ = std::make_shared<NiceMock<MockAppEngine>>();
-    return ClientTest::createLiteClient(app_engine_mock_, initial_version, apps);
+    lite_client_ = ClientTest::createLiteClient(app_engine_mock_, initial_version, apps);
+    return lite_client_;
   }
 
   std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
+  bool resetEvents() { return getDeviceGateway().resetEvents(lite_client_->http_client); }
 
  private:
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
+  std::shared_ptr<LiteClient> lite_client_;
 };
 
 TEST_F(ApiClientTest, GetConfig) {
@@ -110,7 +113,7 @@ TEST_F(ApiClientTest, CheckIn) {
   ASSERT_EQ(1, result.Targets().size());
 
   ASSERT_TRUE(getDeviceGateway().resetSotaToml());
-  ASSERT_TRUE(getDeviceGateway().resetEvents());
+  ASSERT_TRUE(resetEvents());
 
   auto new_target = createTarget();
   result = client.CheckIn();
@@ -136,7 +139,7 @@ TEST_F(ApiClientTest, CheckInWithoutTargetImport) {
   ASSERT_EQ(0, result.Targets().size());
 
   ASSERT_TRUE(getDeviceGateway().resetSotaToml());
-  ASSERT_TRUE(getDeviceGateway().resetEvents());
+  ASSERT_TRUE(resetEvents());
 
   auto new_target = createTarget();
   result = client.CheckIn();
@@ -208,7 +211,7 @@ TEST_F(ApiClientTest, InstallWithCorrelationId) {
 
   auto latest = result.GetLatest();
 
-  getDeviceGateway().resetEvents();
+  resetEvents();
 
   auto installer = client.Installer(latest, "", "this-is-random");
   ASSERT_NE(nullptr, installer);

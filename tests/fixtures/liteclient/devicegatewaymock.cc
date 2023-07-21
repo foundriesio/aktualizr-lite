@@ -51,7 +51,10 @@ class DeviceGatewayMock {
   const std::string& getPort() const { return port_; }
   Json::Value getReqHeaders() const { return Utils::parseJSONFile(req_headers_file_); }
   Json::Value getEvents() const { return Utils::parseJSONFile(events_file_); }
-  bool resetEvents() const { return boost::filesystem::remove(events_file_); }
+  bool resetEvents(std::shared_ptr<HttpClient> http_client) const {
+    const HttpResponse r = http_client->post(url_ + "/events/reset", Json::nullValue);
+    return r.isOk();
+  }
   std::string readSotaToml() const { return Utils::readFile(sota_toml_file_); }
   bool resetSotaToml() const { return boost::filesystem::remove(sota_toml_file_); }
 
