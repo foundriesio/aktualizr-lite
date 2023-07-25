@@ -329,7 +329,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     // Stop disabled Apps before creating or starting new Apps since they may interfere with each other (e.g. the same
     // port is used).
     stopDisabledComposeApps(target);
-    // make sure we install what we fecthed
+    // make sure we install what we fetched
     if (!cur_apps_to_fetch_and_update_.empty()) {
       res.description += "\n# Apps installed:";
     }
@@ -367,16 +367,16 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
       non_const_app_engine->stop({pair.first, pair.second});
     }
 
-    LOG_INFO << "Apps' containers will be re-created and started just after succesfull boot on the new ostree version";
-    res.description += "\n# Fecthed Apps' containers will be created and started after reboot\n";
+    LOG_INFO << "Apps' containers will be re-created and started just after successful boot on the new ostree version";
+    res.description += "\n# Fetched Apps' containers will be created and started after reboot\n";
     // don't prune Compose Apps' images because new images are not used by any containers and can be removed as a
-    // result of prunning.
+    // result of pruning.
     prune_images = false;
   }
 
   if (res.isSuccess()) {
     // if App successfully started then clean uninstalled/disabled Apps,
-    // otherwise do it just after successfull finalization
+    // otherwise do it just after successful finalization
     handleRemovedApps(target);
 
     if (prune_images) {

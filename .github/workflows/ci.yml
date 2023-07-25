@@ -28,7 +28,7 @@ jobs:
         run: make -f dev-flow.mk tidy
 
   custom-client:
-    name: Install Akite and Build Custom Client
+    name: Install Aklite and Build Custom Client
     runs-on: ubuntu-latest
     container:
       image: foundries/aklite-dev

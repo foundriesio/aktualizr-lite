@@ -483,7 +483,7 @@ class ClientTest :virtual public ::testing::Test {
       ASSERT_EQ(*expected_event_it, event_type);
       ++expected_event_it;
       if (event_type == "EcuInstallationCompleted") {
-        // TODO: check whether a value of ["event"]["details"] macthes the current Target
+        // TODO: check whether a value of ["event"]["details"] matches the current Target
         // makes sense to represent it as a json string
         const auto event_details = rec_event_json["event"]["details"].asString();
         if (client.config.pacman.type == ComposeAppManager::Name) {

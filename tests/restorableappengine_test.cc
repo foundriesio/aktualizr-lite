@@ -362,8 +362,8 @@ TEST_P(RestorableAppEngineTestParameterized, FetchAndCheckSizeInsufficientSpace)
   layers["layers"][0]["size"] = layer_size;
 
   const auto compose_app{fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers)};
-  // storage size sufficient to accomodate a layer in the skopeo store
-  // but not sufficient to accomodate an uncompressed layer in the docker data root (store)
+  // storage size sufficient to accommodate a layer in the skopeo store
+  // but not sufficient to accommodate an uncompressed layer in the docker data root (store)
   setAvailableStorageSpace(layer_size * 1.5);
   auto app = registry.addApp(compose_app);
   ASSERT_TRUE(app_engine->fetch(app).noSpace());

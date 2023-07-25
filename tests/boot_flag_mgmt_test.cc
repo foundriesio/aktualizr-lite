@@ -110,7 +110,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdate) {
     return;
   }
 
-  // boot fw udpate is in progress
+  // boot fw update is in progress
   ASSERT_TRUE(client->isBootFwUpdateInProgress());
   // make sure update is banned until a device is rebooted
   auto new_target_01 = createTarget();
@@ -149,7 +149,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfBootloaderRollbacks) {
 
   reboot(client);
   if (bootloader_type_ == RollbackMode::kUbootGeneric) {
-    // installation should be successfull for the generic bootloader since it doesn't support
+    // installation should be successful for the generic bootloader since it doesn't support
     // update and there is no "bootloader rollback".
     ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
     checkHeaders(*client, new_target);
@@ -181,7 +181,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfBootloaderVersionIsHash) {
     return;
   }
 
-  // boot fw udpate is in progress
+  // boot fw update is in progress
   ASSERT_TRUE(client->isBootFwUpdateInProgress());
   // make sure update is banned until a device is rebooted
   auto new_target_01 =
@@ -221,7 +221,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfMalformedBootloaderVersion0) {
 
   reboot(client);
   if (bootloader_type_ == RollbackMode::kUbootGeneric) {
-    // installation should be successfull for the generic bootloader since it doesn't support
+    // installation should be successful for the generic bootloader since it doesn't support
     // update and there is no "bootloader rollback".
     ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
     checkHeaders(*client, new_target);
@@ -251,7 +251,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfMalformedBootloaderVersion1) {
 
   reboot(client);
   if (bootloader_type_ == RollbackMode::kUbootGeneric) {
-    // installation should be successfull for the generic bootloader since it doesn't support
+    // installation should be successful for the generic bootloader since it doesn't support
     // update and there is no "bootloader rollback".
     ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
     checkHeaders(*client, new_target);
@@ -282,7 +282,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfInvalidCurrentVersion0) {
     return;
   }
 
-  // boot fw udpate is in progress
+  // boot fw update is in progress
   ASSERT_TRUE(client->isBootFwUpdateInProgress());
   // make sure update is banned until a device is rebooted
   auto new_target_01 = createTarget();
@@ -322,7 +322,7 @@ TEST_P(BootFlagMgmtTestSuite, OstreeUpdateIfInvalidCurrentVersion1) {
     return;
   }
 
-  // boot fw udpate is in progress
+  // boot fw update is in progress
   ASSERT_TRUE(client->isBootFwUpdateInProgress());
   // make sure update is banned until a device is rebooted
   auto new_target_01 = createTarget();

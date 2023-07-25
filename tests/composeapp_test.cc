@@ -933,7 +933,7 @@ TEST(ComposeApp, DISABLED_resumeAppUpdate) {
 
     // just after a reboot aklite does a full check but it's a pain to emulate it properly
     // so we fake it by doing not a full check, which just checks is the app dir and file exists
-    // Thus is this case app1 will detecetd as running and app2 is not so an update only for app2 is required
+    // Thus is this case app1 will be detected as running and app2 is not so an update only for app2 is required
     client.pacman->checkForAppsToUpdate(target_to_install);
     // try to fetch and install app2 this time, docker-compose pull is supposed to fail for app2
     Utils::writeFile(client.apps_root / "app2"/ "pull.res", std::string("1"));
@@ -963,7 +963,7 @@ TEST(ComposeApp, DISABLED_resumeAppUpdate) {
     Utils::writeFile(client.apps_root / "app2"/ "pull.res", std::string("0"));
 
     ASSERT_TRUE(client.pacman->fetchTarget(target_to_install, *(client.fetcher), *(client.keys), nullptr, nullptr));
-    // make sure app1 was not fetched since it has beel already fecthed and installed
+    // make sure app1 was not fetched since it has been already fetched and installed
     ASSERT_FALSE(boost::filesystem::exists(client.tempdir->Path() / "apps/app1/pull.log"));
     // make sure app2 was fetched
     ASSERT_TRUE(boost::filesystem::exists(client.tempdir->Path() / "apps/app2/pull.log"));
