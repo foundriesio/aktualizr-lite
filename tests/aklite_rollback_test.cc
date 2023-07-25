@@ -158,7 +158,7 @@ TEST_P(AkliteTest, RollbackIfOstreeInstallFails) {
     ASSERT_TRUE(client->isRollback(target_02));
     const auto app_engine_type{GetParam()};
     if (app_engine_type == "RestorableAppEngine") {
-      // a download process doesn't "break" currently installed and running retsorable apps
+      // a download process doesn't "break" currently installed and running restorable apps
       // appsInSync cleans any unneeded layers stored in the skopeo/OCI store
       ASSERT_TRUE(client->appsInSync(client->getCurrent()));
     } else {
@@ -208,7 +208,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFails) {
 
     // try to update to the latest version, it must fail because App is invalid
     update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed);
-    // since new sysroot (target_02) was installed (deployed) succeesfully then we expect that
+    // since new sysroot (target_02) was installed (deployed) successfully then we expect that
     // there is a corresponding pending deployment
     ASSERT_EQ(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending), target_02.sha256Hash());
 
@@ -327,7 +327,7 @@ TEST_P(AkliteTest, AppRollbackIfAppsInstallFails) {
 }
 
 /**
- * @brief Test rollback if new version App failed to start just after succcessful boot on a new sysroot version
+ * @brief Test rollback if new version App failed to start just after successful boot on a new sysroot version
  *
  * 1. Initiate an update to a new Target that includes both sysroot/ostree and App update
  * 2. Download and install steps are successful
@@ -365,7 +365,7 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFails) {
   }
 
   // create a new "bad" Target, it includes both an ostree and app update, App is invalid,
-  // specifically its creation is succesful but it fails to start after reboot caused by the ostree update
+  // specifically its creation is successful but it fails to start after reboot caused by the ostree update
   auto app01_updated = registry.addApp(
       fixtures::ComposeApp::create("app-01", "service-01", "image-02", fixtures::ComposeApp::ServiceTemplate,
                                    Docker::ComposeAppEngine::ComposeFile, "compose-start-failure"));
@@ -378,7 +378,7 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFails) {
 
     // make sure that target_01 is still current because a reboot is required to apply target_01
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
-    // app01 should be stopped at this point since its containers re-creation had happenned
+    // app01 should be stopped at this point since its containers re-creation had happened
     ASSERT_FALSE(app_engine->isRunning(app01));
 
     // Both App version should be fetched/present until the new version is successfully started or rollback
@@ -440,7 +440,7 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFails) {
 }
 
 /**
- * @brief Test rollback if new version App failed to start just after succcessful
+ * @brief Test rollback if new version App failed to start just after successful
  *        boot on a new sysroot version and power cut occurs
  *
  * 1. Initiate an update to a new Target that includes both sysroot/ostree and App update

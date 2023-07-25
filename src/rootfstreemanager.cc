@@ -159,7 +159,7 @@ void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const
   const auto resp = http_client_->post(gateway_url_ + "/download-urls", Json::Value::null);
 
   if (!resp.isOk()) {
-    LOG_WARNING << "Failed to obtain download URLs from Gateway, fallback to dowload via gateway/proxy server: "
+    LOG_WARNING << "Failed to obtain download URLs from Gateway, fallback to download via gateway/proxy server: "
                 << resp.getStatusStr();
     return;
   }

@@ -50,15 +50,15 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsAndPowerCut) {
 
     // try to update to the latest version, it must fail because App is invalid
     update(*client, target_01, target_02, data::ResultCode::Numeric::kInstallFailed);
-    // since new sysroot (target_02) was installed (deployed) succeesfully then we expect that
+    // since new sysroot (target_02) was installed (deployed) successfully then we expect that
     // there is a corresponding pending deployment
     ASSERT_EQ(client->sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending), target_02.sha256Hash());
 
     // emulate power cut
     reboot(client);
-    // getCurrent() "thinks" that target_02 is current beacuse a device is booted on it.
+    // getCurrent() "thinks" that target_02 is current because a device is booted on it.
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_02));
-    // but it's also a failing Target since its installation had failed before the power cut occured
+    // but it's also a failing Target since its installation had failed before the power cut occurred
     ASSERT_TRUE(client->isRollback(client->getCurrent()));
     ASSERT_TRUE(client->isRollback(target_02));
     // emulate rollback triggered by daemon_main
@@ -164,7 +164,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsNoContainer) {
 }
 
 /**
- * @brief Test rollback if new version App failed to start just after succcessful
+ * @brief Test rollback if new version App failed to start just after successful
  *        boot on a new sysroot version and power cut occurs
  *
  * 1. Initiate an update to a new Target that includes both sysroot/ostree and App update
@@ -176,7 +176,7 @@ TEST_P(AkliteTest, RollbackIfAppsInstallFailsNoContainer) {
  * 6. Boot again
  * 7. Since finalization has been completed before the power cut then no finalization anymore
  * 8. The current target is marked as a failing Target hence a rollback to the previous version is initiated
- * 9. Reboot again and do a normal/succesful finalization of the initial valid Target
+ * 9. Reboot again and do a normal/successful finalization of the initial valid Target
  */
 
 TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFailsAndPowerCut) {
@@ -206,7 +206,7 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFailsAndPowerCut) {
   }
 
   // create a new "bad" Target, it includes both an ostree and app update, App is invalid,
-  // specifically its creation is succesful but it fails to start after reboot caused by the ostree update
+  // specifically its creation is successful but it fails to start after reboot caused by the ostree update
   auto app01_updated = registry.addApp(
       fixtures::ComposeApp::create("app-01", "service-01", "image-02", fixtures::ComposeApp::ServiceTemplate,
                                    Docker::ComposeAppEngine::ComposeFile, "compose-start-failure"));
@@ -219,7 +219,7 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFailsAndPowerCut) {
 
     // make sure that target_01 is still current because a reboot is required to apply target_01
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01));
-    // app01 should be stopped at this point since its containers re-creation had happenned
+    // app01 should be stopped at this point since its containers re-creation had happened
     ASSERT_FALSE(app_engine->isRunning(app01));
 
     // Both App version should be fetched until the new version is successfully started or rollback
@@ -287,7 +287,7 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFailsAndPowerCut) {
     checkHeaders(*client, target_01);
     checkEvents(*client, target_01, UpdateType::kOstree);
 
-    // now onlye one version of App is stored/fetched for both types of Apps
+    // now only one version of App is stored/fetched for both types of Apps
     ASSERT_TRUE(app_engine->isFetched(app01));
     ASSERT_FALSE(app_engine->isFetched(app01_updated));
 

@@ -362,7 +362,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // This is a workaround for finding and avoiding bad updates after a rollback.
       // Rollback sets the installed version state to none instead of broken, so there is no
       // easy way to find just the bad versions without api/storage changes. As a workaround we
-      // just check if the version is not current nor pending nor known (old hash) and never been succesfully installed,
+      // just check if the version is not current nor pending nor known (old hash) and never been successfully installed,
       // if so then skip an update to the such version/Target
       bool is_rollback_target = client.isRollback(target_to_install);
 

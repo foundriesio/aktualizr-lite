@@ -22,7 +22,7 @@ static void exec(const std::string& cmd, const std::string& err_msg_prefix, Args
 
     bool wait_successfull = child_process.wait_for(std::chrono::seconds(900));
     if (!wait_successfull) {
-      throw std::runtime_error("Timeout occured while waiting for a child process completion");
+      throw std::runtime_error("Timeout occurred while waiting for a child process completion");
     }
 
   } catch (const std::exception& exc) {

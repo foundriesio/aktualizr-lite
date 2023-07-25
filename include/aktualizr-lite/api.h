@@ -265,7 +265,7 @@ class AkliteClient {
   /**
    * Performs a "check-in" with the device-gateway. A check-in consists of:
    *  1) Report sota.toml. Only do once.
-   *  2) Report network info. Only done once unless it changes aftert startup
+   *  2) Report network info. Only done once unless it changes after startup
    *  3) Report hardware info. Only done once.
    *  4) Report Apps state, if Compose App package manager is used
    *  5) ask device-gateway for a new root.json - normally a 404.

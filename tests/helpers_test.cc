@@ -302,7 +302,7 @@ TEST(helpers, rollback_versions) {
   client.storage->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kPending);
   ASSERT_EQ(known_but_not_installed_versions.size(), 0);
 
-  // a device is succesfully rebooted on the new Target, so we still have zero "known but not installed"
+  // a device is successfully rebooted on the new Target, so we still have zero "known but not installed"
   client.storage->savePrimaryInstalledVersion(target_01, InstalledVersionUpdateMode::kCurrent);
   get_known_but_not_installed_versions(client, known_but_not_installed_versions);
   ASSERT_EQ(known_but_not_installed_versions.size(), 0);
@@ -317,7 +317,7 @@ TEST(helpers, rollback_versions) {
   client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kPending);
   ASSERT_EQ(known_but_not_installed_versions.size(), 0);
 
-  // a device is succesfully rebooted on the new Target, so we still have zero "known but not installed"
+  // a device is successfully rebooted on the new Target, so we still have zero "known but not installed"
   client.storage->savePrimaryInstalledVersion(target_02, InstalledVersionUpdateMode::kCurrent);
   get_known_but_not_installed_versions(client, known_but_not_installed_versions);
   ASSERT_EQ(known_but_not_installed_versions.size(), 0);

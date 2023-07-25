@@ -61,14 +61,14 @@ void Client::pruneImages() {
   // https://github.com/containerd/nerdctl/issues/648
   // Allegedly the prune cmd is supported in nerdctl v0.22.0, currently, LmP runs 0.18.0
   // Also, I tried v0.22.0 and it doesn't work for me...
-  LOG_ERROR << "Image prunning is not supported in nerdctl";
+  LOG_ERROR << "Image pruning is not supported in nerdctl";
 }
 
 void Client::pruneContainers() {
   // https://github.com/containerd/nerdctl/issues/648
   // Allegedly the prune cmd is supported in nerdctl v0.22.0, currently, LmP runs 0.18.0
   // Also, I tried v0.22.0 and it doesn't work for me...
-  LOG_ERROR << "Container prunning is not supported in nerdctl";
+  LOG_ERROR << "Container pruning is not supported in nerdctl";
 }
 
 Json::Value Client::getRunningApps(const std::function<void(const std::string&, Json::Value&)>& /* ext_func */) {
