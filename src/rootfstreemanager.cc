@@ -56,9 +56,13 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
 
     LOG_ERROR << "Failed to fetch from " + remote.baseUrl + ", err: " + pull_err.description;
 
-    if (pull_err.description.find("would be exceeded, at least") != std::string::npos &&
-        (pull_err.description.find("min-free-space-size") != std::string::npos ||
-         pull_err.description.find("min-free-space-percent") != std::string::npos)) {
+    if (  // not enough storage space in the case of a regular pull (pulling objects/files)
+        (pull_err.description.find("would be exceeded, at least") != std::string::npos &&
+         (pull_err.description.find("min-free-space-size") != std::string::npos ||
+          pull_err.description.find("min-free-space-percent") != std::string::npos)) ||
+        // not enough storage space in the case of a static delta pull (pulling the delta parts/files)
+        (pull_err.description.find("Delta requires") != std::string::npos &&
+         pull_err.description.find("free space, but only") != std::string::npos)) {
       res = {DownloadResult::Status::DownloadFailed_NoSpace,
              "Insufficient storage available; path: " + config.sysroot.string() + "; err: " + pull_err.description,
              sysroot_->path()};
