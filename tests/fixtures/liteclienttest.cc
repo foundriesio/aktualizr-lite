@@ -102,6 +102,7 @@ class ClientTest :virtual public ::testing::Test {
       initial_target_.updateCustom(custom_value);
       if (initial_version != InitialVersion::kOff) {
         getTufRepo().addTarget(initial_target_.filename(), initial_target_.sha256Hash(), hw_id, initial_ver);
+        getOsTreeRepo().pullLocal(sys_repo_.getRepo().getPath(), sysroot_hash_);
       }
     }
 
