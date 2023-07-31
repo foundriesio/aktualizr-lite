@@ -21,6 +21,12 @@ class OSTreeRepoMock {
     executeCmd("ostree", { "config", "--repo", path_, "set", "core.mode", mode }, "set mode for repo " + path_);
   }
 
+  void generate_delta(const std::string& from, const std::string& to) {
+    executeCmd("ostree", {"static-delta", "generate", "--repo", path_, "--from", from, "--to", to},
+               "generate static delta between " + from + " and " + to);
+    executeCmd("ostree", {"summary", "--repo", path_, "-u"}, "update summary with delta indexes");
+  }
+
   const std::string& getPath() const { return path_; }
 
  private:
