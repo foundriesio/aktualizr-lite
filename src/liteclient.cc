@@ -184,8 +184,8 @@ bool LiteClient::finalizeInstall(data::InstallationResult* ir) {
 
   // write current to /var/sota
   const auto current = getCurrent();
-  update_request_headers(http_client, current, config.pacman);
   writeCurrentTarget(current);
+  updateRequestHeaders();
 
   // notify the backend about pending Target installation
   if (!!pending && !ret.needCompletion()) {
@@ -669,6 +669,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+    updateRequestHeaders();
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kDownloadFailed) {
     LOG_INFO << "Apps installation failed while the install process was trying to fetch App images data,"
                 " will try the install again at the next update cycle.";
@@ -730,11 +731,12 @@ void LiteClient::add_apps_header(std::vector<std::string>& headers, PackageConfi
   }
 }
 
-void LiteClient::update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
-                                        PackageConfig& config) {
-  http_client->updateHeader("x-ats-target", target.filename());
-  if (config.type == ComposeAppManager::Name) {
-    http_client->updateHeader("x-ats-dockerapps", Target::appsStr(target, ComposeAppManager::Config(config).apps));
+void LiteClient::updateRequestHeaders() {
+  const auto current(getCurrent());
+  http_client->updateHeader("x-ats-target", current.filename());
+  if (config.pacman.type == ComposeAppManager::Name) {
+    http_client->updateHeader("x-ats-dockerapps",
+                              Target::appsStr(current, ComposeAppManager::Config(config.pacman).apps));
   }
 }
 

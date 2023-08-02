@@ -222,7 +222,6 @@ class LiteInstall : public InstallContext {
         status = InstallResult::Status::BootFwNeedsCompletion;
       }
     } else if (rc == data::ResultCode::Numeric::kOk) {
-      client_->http_client->updateHeader("x-ats-target", target_->filename());
       status = InstallResult::Status::Ok;
     } else if (rc == data::ResultCode::Numeric::kDownloadFailed) {
       status = InstallResult::Status::DownloadFailed;

@@ -377,11 +377,6 @@ class ClientTest :virtual public ::testing::Test {
       // make sure that the new Target has been applied
       ASSERT_EQ(client.getCurrent().sha256Hash(), to.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), to.filename());
-      // TODO: the daemon_main is emulated,
-      // see
-      // https://github.com/foundriesio/aktualizr-lite/blob/7ab6998920d57605601eda16f9bebedf00cc1f7f/src/main.cc#L264
-      // once the daemon_main is "cleaned" the updateHeader can be removed from the test.
-      LiteClient::update_request_headers(client.http_client, to, client.config.pacman);
       checkHeaders(client, to);
       checkEvents(client, to, UpdateType::kApp);
     } else {
