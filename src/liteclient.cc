@@ -669,6 +669,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     LOG_INFO << "Update complete. No reboot needed";
     storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+    writeCurrentTarget(target);
     updateRequestHeaders();
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kDownloadFailed) {
     LOG_INFO << "Apps installation failed while the install process was trying to fetch App images data,"
