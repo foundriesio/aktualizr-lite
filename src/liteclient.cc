@@ -74,30 +74,16 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   }
   primary_ecu = ecu_serials[0];
 
-  std::vector<std::string> headers;
-
   auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), config.pacman.booted,
                                                           config.pacman.os.empty() ? "lmp" : config.pacman.os);
-  auto cur_hash = ostree_sysroot->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent);
 
-  std::string header("x-ats-ostreehash: ");
-  if (!cur_hash.empty()) {
-    header += cur_hash;
-  } else {
-    header += "?";
-  }
-  headers.push_back(header);
-  headers.emplace_back("x-ats-target: unknown");
-  add_apps_header(headers, config.pacman);
-
-  if (!config.telemetry.report_network) {
-    // Provide the random primary ECU serial so our backend will have some
-    // idea of the number of unique devices using the system
-    headers.emplace_back("x-ats-primary: " + primary_ecu.first.ToString());
-  }
-
-  headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
-
+  std::vector<std::string> headers;
+  // Add all required request headers to the http client and set them to default values.
+  // The current Target related headers are updated after the package manager is initialized
+  // and the current Target is determined. At this point they just set to "initial/unknown" value.
+  // We have to set all headers at this point because the http client API doesn't allow adding new
+  // headers after its initialization, headers can be only modified.
+  initRequestHeaders(headers);
   http_client = std::make_shared<HttpClient>(&headers);
 
   key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig(), p11);
@@ -122,6 +108,9 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   }
   basepacman->setInitialTargetIfNeeded(config.provision.primary_ecu_hardware_id);
   package_manager_ = basepacman;
+  // After running `setInitialTargetIfNeeded` details of the current target are available, so
+  // we should update value of the request headers that are related to the current Target description
+  updateRequestHeaders();
 
   downloader_ = std::dynamic_pointer_cast<Downloader>(package_manager_);
   if (!downloader_) {
@@ -730,6 +719,20 @@ void LiteClient::add_apps_header(std::vector<std::string>& headers, PackageConfi
       headers.emplace_back("x-ats-dockerapps: ");
     }
   }
+}
+
+void LiteClient::initRequestHeaders(std::vector<std::string>& headers) const {
+  headers.emplace_back("x-ats-ostreehash: unknown");
+  headers.emplace_back("x-ats-target: unknown");
+  if (config.pacman.type == ComposeAppManager::Name) {
+    headers.emplace_back("x-ats-dockerapps: unknown");
+  }
+  if (!config.telemetry.report_network) {
+    // Provide the random primary ECU serial so our backend will have some
+    // idea of the number of unique devices using the system
+    headers.emplace_back("x-ats-primary: " + primary_ecu.first.ToString());
+  }
+  headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
 }
 
 void LiteClient::updateRequestHeaders() {
