@@ -735,6 +735,7 @@ void LiteClient::add_apps_header(std::vector<std::string>& headers, PackageConfi
 void LiteClient::updateRequestHeaders() {
   const auto current(getCurrent());
   http_client->updateHeader("x-ats-target", current.filename());
+  http_client->updateHeader("x-ats-ostreehash", current.sha256Hash());
   if (config.pacman.type == ComposeAppManager::Name) {
     http_client->updateHeader("x-ats-dockerapps",
                               Target::appsStr(current, ComposeAppManager::Config(config.pacman).apps));
