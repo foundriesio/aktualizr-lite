@@ -727,11 +727,6 @@ void LiteClient::initRequestHeaders(std::vector<std::string>& headers) const {
   if (config.pacman.type == ComposeAppManager::Name) {
     headers.emplace_back("x-ats-dockerapps: unknown");
   }
-  if (!config.telemetry.report_network) {
-    // Provide the random primary ECU serial so our backend will have some
-    // idea of the number of unique devices using the system
-    headers.emplace_back("x-ats-primary: " + primary_ecu.first.ToString());
-  }
   headers.emplace_back("x-ats-tags: " + boost::algorithm::join(tags, ","));
 }
 
