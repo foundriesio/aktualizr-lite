@@ -404,7 +404,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         std::tie(rc, dr, cor_id) = do_update(client, target_to_install, reason);
         if (rc == data::ResultCode::Numeric::kOk) {
           current = target_to_install;
-          LiteClient::update_request_headers(client.http_client, current, client.config.pacman);
           // Start the loop over to call updateImagesMeta which will update this
           // device's target name on the server.
           continue;

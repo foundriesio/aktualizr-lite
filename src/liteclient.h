@@ -94,6 +94,8 @@ class LiteClient {
   DownloadResult downloadImage(const Uptane::Target& target, const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
+  void initRequestHeaders(std::vector<std::string>& headers) const;
+  void updateRequestHeaders();
 
   boost::filesystem::path callback_program;
   std::unique_ptr<KeyManager> key_manager_;
