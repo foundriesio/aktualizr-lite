@@ -297,11 +297,13 @@ bool LiteClient::importRootMeta(const boost::filesystem::path& src, Uptane::Vers
   try {
     offline::MetaFetcher offline_meta_fetcher{src.string(), max_ver};
     image_repo_.updateRoot(*storage, offline_meta_fetcher);
-  } catch (const offline::MetaFetcher::NotFoundException&) {
+  } catch (const offline::MetaFetcher::NotFoundException& exc) {
     // That's OK, it means the latest + 1 root version is not found
-  } catch (const Uptane::ExpiredMetadata&) {
+    LOG_TRACE << "Not found root role metadata; err: " << exc.what();
+  } catch (const Uptane::ExpiredMetadata& exc) {
     // That's OK, the pre-provisioned root versions can expire by the time a system image is flashed on a device
     // and a device starts importing them. The expiration is quite possible for the first two versions.
+    LOG_TRACE << "Root role metadata have expired; err: " << exc.what();
   } catch (const std::exception& exc) {
     // If it fails then there is no much we can do about it, just do TOFU
     storage->clearMetadata();
