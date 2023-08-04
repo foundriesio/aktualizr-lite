@@ -29,6 +29,10 @@ tidy:
 test:
 	cd ${BUILD_DIR} && GTEST_FILTER=${GTEST_FILTER} ctest -L ${TEST_LABEL} -j $(shell nproc) ${CTEST_ARGS}
 
+test-uptane-vectors:
+	cmake -B aktualizr/${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DWARNING_AS_ERROR=OFF
+	cd aktualizr/${BUILD_DIR} && make -j $(shell nproc) aktualizr_uptane_vector_tests test ARGS="-R test_uptane_vectors"
+
 install:
 	cmake --build ${BUILD_DIR} --target $@
 	cp -r aktualizr/third_party/jsoncpp/include/json /usr/include
