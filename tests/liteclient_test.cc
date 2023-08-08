@@ -263,7 +263,7 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateToLatestAfterManualUpdate) {
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
 
-  // emulate manuall update to the previous version
+  // emulate manual update to the previous version
   update(*client, new_target, getInitialTarget(), data::ResultCode::Numeric::kNeedCompletion,
          {DownloadResult::Status::Ok, ""}, "", false);
 
@@ -273,7 +273,7 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateToLatestAfterManualUpdate) {
   checkHeaders(*client, getInitialTarget());
 
   // make sure we can install the latest version that has been installed before
-  // the succesfully installed Target should be "not known"
+  // the successfully installed Target should be "not known"
   ASSERT_FALSE(client->isRollback(new_target));
 
   // emulate auto update to the latest

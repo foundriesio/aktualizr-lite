@@ -101,7 +101,7 @@ TufTarget Target::toTufTarget(const Uptane::Target& target) {
 }
 
 bool Target::isUnknown(const Uptane::Target& target) {
-  // "unknown" - a valid target that refers to an ostree hash that a device was or is successfuly booted on.
+  // "unknown" - a valid target that refers to an ostree hash that a device was or is successfully booted on.
   // It's "unknown" because there is no corresponding TUF Target in the DB/TUF Targets metadata.
   // See OstreeManager::getCurrent() for more details
   return target.IsValid() && target.filename() == "unknown";

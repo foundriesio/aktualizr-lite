@@ -53,7 +53,7 @@ TEST_P(AkliteTest, AppUpdate) {
     daemon_.setImagePullFailFlag(true);
     updateApps(*client, getInitialTarget(), target01, DownloadResult::Status::Ok, "",
                data::ResultCode::Numeric::kDownloadFailed, "");
-    // turn off failure, and try to update againg
+    // turn off failure, and try to update again
     daemon_.setImagePullFailFlag(false);
     ASSERT_FALSE(client->isRollback(target01));
   }
@@ -197,7 +197,7 @@ TEST_P(AkliteTest, OstreeAndAppUpdate) {
     // inject image pull failure  during App installation for Restorable Apps
     daemon_.setImagePullFailFlag(true);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed);
-    // turn off failure, and try to update againg
+    // turn off failure, and try to update again
     daemon_.setImagePullFailFlag(false);
     ASSERT_FALSE(client->isRollback(new_target));
   }
@@ -334,14 +334,14 @@ TEST_P(AkliteTest, InvalidAppComposeUpdate) {
 
   const auto app_engine_type{GetParam()};
 
-  // in the case of Restorable App we expect that download/fetch is successfull
+  // in the case of Restorable App we expect that download/fetch is successful
   DownloadResult::Status expected_download_res{DownloadResult::Status::Ok};
   if (app_engine_type == "ComposeAppEngine") {
     // App is verified (docker-compose config) at the "fetch" phase for ComposeAppEngine
     // this is a bug that became a feature bug, so let's adjust to it
     expected_download_res = DownloadResult::Status::DownloadFailed;
   }
-  // updateApps() emulates LiteClient's client which invokes the fecthed Target verification.
+  // updateApps() emulates LiteClient's client which invokes the fetched Target verification.
   // the verification is supposed to fail and the installation process is never invoked
   updateApps(*client, target01, target02, expected_download_res, "", data::ResultCode::Numeric::kVerificationFailed);
   ASSERT_FALSE(targetsMatch(client->getCurrent(), target02));

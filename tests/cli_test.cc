@@ -111,7 +111,7 @@ TEST_P(CliClient, UpdateIfBootFwUpdateRequiresReboot) {
   // make the client think that there is pending boot fw update that requires reboot to be confirmed
   boot_flag_mgr_->set("bootupgrade_available");
   ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::InstallNeedsRebootForBootFw);
-  // make sure that the istallation hasn't happened
+  // make sure that the installation hasn't happened
   ASSERT_FALSE(akclient->IsInstallationInProgress());
   reboot(akclient);
   // make sure the client can install a target after the boot fw update confirmation (reboot)
