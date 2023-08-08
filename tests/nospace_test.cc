@@ -132,6 +132,56 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
   UnsetFreeBlockNumb();
 }
 
+TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  // Delta size will be 10 + 1 = 11 blocks, 1  block for additional data like boot loader version file.
+  setGenerateStaticDelta(10, true);
+  auto new_target = createTarget();
+  {
+    // not enough free blocks
+    SetFreeBlockNumb(5, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
+  {
+    // not enough free blocks taking into account the default watermark 90%,
+    // (20 - 11 = 9) - 9% of blocks will be free after the update, we need 10%
+    SetFreeBlockNumb(20, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    const auto events{device_gateway_.getEvents()};
+    const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find("available 40960 out of 368640(90% of the volume capacity 409600)"))
+        << event_err_msg;
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
+  {
+    // (21 - 11 = 10) - 10% of blocks will be free, need 10% so, it's supposed to succeed.
+    // But, the commit function checks if it will be more than 15% of storage capacity free after commit.
+    // Obviously it's not since only 10% will be available.
+    SetFreeBlockNumb(21, 100);
+    sys_repo_.setMinFreeSpacePercent("15");
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    const auto events{device_gateway_.getEvents()};
+    const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("opcode close: min-free-space-percent '15%' would be exceeded"))
+        << event_err_msg;
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
+  {
+    sys_repo_.setMinFreeSpacePercent("1");
+    SetFreeBlockNumb(21, 100);
+    update(*client, getInitialTarget(), new_target);
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  }
+  UnsetFreeBlockNumb();
+}
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << argv[0] << " invalid arguments\n";

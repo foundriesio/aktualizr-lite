@@ -38,6 +38,27 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   const std::shared_ptr<OSTree::Sysroot>& sysroot() const { return sysroot_; }
 
  private:
+  struct DeltaStatsRef {
+    std::string sha256;
+    unsigned int size;
+  };
+  struct DeltaStat {
+    uint64_t size;
+    uint64_t uncompressedSize;
+  };
+  struct StorageStat {
+    uint64_t blockSize;
+    uint64_t freeBlockNumb;
+    uint64_t blockNumb;
+  };
+  struct UpdateStat {
+    uint64_t storageCapacity;
+    unsigned int highWatermark;
+    uint64_t maxAvailable;
+    uint64_t available;
+    uint64_t deltaSize;
+  };
+
   std::string getCurrentHash() const override {
     return sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent);
   }
@@ -45,6 +66,15 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
 
   void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys);
   data::InstallationResult verifyBootloaderUpdate(const Uptane::Target& target) const;
+  bool getDeltaStatIfAvailable(const TufTarget& target, const Remote& remote, DeltaStat& delta_stat) const;
+  bool canDeltaFitOnDisk(const DeltaStat& delta_stat, UpdateStat& update_stat) const;
+  static unsigned int getStorageHighWatermark() { return 90; /* TODO */ };
+
+  static bool getDeltaStatsRef(const Json::Value& json, DeltaStatsRef& ref);
+  static Json::Value downloadDeltaStats(const DeltaStatsRef& ref, const Remote& remote);
+  static bool findDeltaStatForUpdate(const Json::Value& delta_stats, const std::string& from, const std::string& to,
+                                     DeltaStat& found_delta_stat);
+  static void getStorageStat(const std::string& path, StorageStat& stat_out);
 
   const KeyManager& keys_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;

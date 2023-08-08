@@ -20,6 +20,10 @@ class SysOSTreeRepoMock {
     executeCmd("ostree", { "--repo=" + path_ + "/ostree/repo", "config", "set", "core.min-free-space-size", size }, "set config " + size);
   }
 
+  void setMinFreeSpacePercent(const std::string& size_in_percents) {
+    executeCmd("ostree", { "--repo=" + path_ + "/ostree/repo", "config", "set", "core.min-free-space-percent", size_in_percents }, "set config " + size_in_percents);
+  }
+
   std::string getDeploymentPath() const { return path_ + "/ostree/deploy/" + os_ + "/deploy"; }
 
  private:
