@@ -1,7 +1,14 @@
 #include "rootfstreemanager.h"
 
+#include <fcntl.h>
+#include <sys/statvfs.h>
+#include <cstdio>
+
+#include <boost/algorithm/hex.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include "crypto/crypto.h"
+#include "http/httpclient.h"
 #include "ostree/repo.h"
 #include "storage/invstorage.h"
 #include "target.h"
@@ -47,6 +54,12 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
     if (!remote.isRemoteSet) {
       setRemote(remote.name, remote.baseUrl, remote.keys);
     }
+
+    if (!canUpdateFitOnDisk(target, remote)) {
+      return {DownloadResult::Status::DownloadFailed_NoSpace,
+              "Insufficient storage available; path: " + sysroot_->path() + "; err: ", sysroot_->path()};
+    }
+
     pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
                                    prog_cb, remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
     if (pull_err.isSuccess()) {
@@ -249,4 +262,135 @@ data::InstallationResult RootfsTreeManager::verifyBootloaderUpdate(const Uptane:
   }
 
   return data::InstallationResult(data::ResultCode::Numeric::kOk, "");
+}
+
+bool RootfsTreeManager::canUpdateFitOnDisk(const TufTarget& target, const Remote& remote) const {
+  bool res{true};
+
+  try {
+    DeltaStatsRef delta_stats_ref;
+    if (!getDeltaStatsRef(target.Custom(), delta_stats_ref)) {
+      LOG_INFO << "No reference to static deltas found in Target; skipping update size checking";
+      return true;
+    }
+    Json::Value delta_stats_json{downloadDeltaStats(delta_stats_ref, remote)};
+    DeltaStat delta_stat{};
+    if (!findDeltaStatForUpdate(delta_stats_json, getCurrentHash(), target.Sha256Hash(), delta_stat)) {
+      LOG_ERROR << "No delta stat found between " << getCurrentHash() << " and " << target.Sha256Hash()
+                << "; skipping update size checking";
+      return true;
+    }
+    // TODO: watermark and add stat to the update even context
+    return canDeltaFitOnDisk(delta_stat);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to check if the update can fit on a disk: " << exc.what();
+  }
+  return res;
+}
+
+bool RootfsTreeManager::canDeltaFitOnDisk(const DeltaStat& delta_stat) const {
+  const uint64_t free_space{getFreeSpace(sysroot_->path())};
+  // TODO: use storage watermark
+  // TODO: check if `delta_stat.size` compressed size should be taken into account too
+  return delta_stat.uncompressedSize < free_space;
+}
+
+bool RootfsTreeManager::getDeltaStatsRef(const Json::Value& json, DeltaStatsRef& ref) {
+  if (!json.isMember("delta-stats")) {
+    return false;
+  }
+  const auto delta_stats_ref{json["delta-stats"]};
+  if (!delta_stats_ref.isMember("sha256") || !delta_stats_ref["sha256"].isString()) {
+    LOG_ERROR << "Incorrect metadata about static delta statistics are found in Target;"
+              << " err: missing `sha256` field or it's not a string";
+    return false;
+  }
+  if (!delta_stats_ref.isMember("size") || !delta_stats_ref["size"].isUInt()) {
+    LOG_ERROR << "Incorrect metadata about static delta statistics are found in Target;"
+              << " err: missing `size` field or it's not an integer";
+    return false;
+  }
+  ref = {delta_stats_ref["sha256"].asString(), delta_stats_ref["size"].asUInt()};
+  return true;
+}
+
+Json::Value RootfsTreeManager::downloadDeltaStats(const DeltaStatsRef& ref, const Remote& remote) {
+  static const uint64_t DeltaStatsMaxSize{1024 * 1024};
+  const std::string uri = remote.baseUrl + "/delta-stats/" + ref.sha256;
+
+  if (ref.size > DeltaStatsMaxSize) {
+    LOG_ERROR << "Requested delta stat file has higher size than maximum allowed; "
+                 " requested size: "
+              << ref.size << ", maximum allowed: " << DeltaStatsMaxSize;
+    return Json::nullValue;
+  }
+  std::vector<std::string> extra_headers;
+  for (const auto& header : remote.headers) {
+    extra_headers.emplace_back(header.first + ": " + header.second);
+  }
+  auto client{HttpClient(&extra_headers)};
+
+  LOG_INFO << "Fetching delta stats -> " << uri;
+  const auto resp = client.get(uri, ref.size);
+  if (!resp.isOk()) {
+    LOG_ERROR << "Failed to fetch static delta stats; status: " << resp.getStatusStr() << ", err: " << resp.body;
+    return Json::nullValue;
+  }
+  if (resp.body.size() != ref.size) {
+    LOG_ERROR << "Fetched invalid static delta stats, size mismatch; "
+              << " expected: " << ref.size << ", got: " << resp.body.size();
+    return Json::nullValue;
+  }
+  const auto received_data_hash{
+      boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(resp.body)))};
+  if (received_data_hash != ref.sha256) {
+    LOG_ERROR << "Fetched invalid static delta stats, hash mismatch; "
+              << " expected: " << ref.sha256 << ", got: " << received_data_hash;
+    return Json::nullValue;
+  }
+  return resp.getJson();
+}
+
+bool RootfsTreeManager::findDeltaStatForUpdate(const Json::Value& delta_stats, const std::string& from,
+                                               const std::string& to, DeltaStat& found_delta_stat) {
+  if (!delta_stats.isMember(to)) {
+    LOG_ERROR << "Invalid delta stats received; no `to` hash is found: " << to;
+    return false;
+  }
+  const auto& to_json{delta_stats[to]};
+  Json::Value found_delta;
+  for (Json::ValueConstIterator it = to_json.begin(); it != to_json.end(); ++it) {
+    if (it.key().asString() == from) {
+      found_delta = *it;
+      break;
+    }
+  }
+  if (!found_delta) {
+    return false;
+  }
+  if (!found_delta.isMember("size") || !found_delta["size"].isUInt64()) {
+    LOG_ERROR << "Invalid delta stat has been found; `size` field is missing or is not `uint64`, " << found_delta;
+    return false;
+  }
+  if (!found_delta.isMember("u_size") || !found_delta["u_size"].isUInt64()) {
+    LOG_ERROR << "Invalid delta stat has been found; `u_size` field is missing or is not `uint64`, " << found_delta;
+    return false;
+  }
+  found_delta_stat = {found_delta["size"].asUInt64(), found_delta["u_size"].asUInt64()};
+  return true;
+}
+
+uint64_t RootfsTreeManager::getFreeSpace(const std::string& path) {
+  int fd{-1};
+  if ((fd = open(path.c_str(), O_DIRECTORY | O_RDONLY)) == -1) {
+    throw std::runtime_error(std::string("Failed to obtain a sysroot directory file descriptor; err: ") +
+                             std::strerror(errno));
+  }
+  struct statvfs fs_stat {};
+  if (-1 == fstatvfs(fd, &fs_stat)) {
+    throw std::runtime_error(std::string("Failed to obtain statistic about the sysroot directory; err: ") +
+                             std::strerror(errno));
+  }
+
+  return fs_stat.f_bfree * fs_stat.f_bsize;
 }
