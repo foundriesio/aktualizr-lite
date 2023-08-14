@@ -2,6 +2,8 @@
 #include <gtest/gtest.h>
 #include <sys/statvfs.h>
 
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/process.hpp>
 #include <boost/process/env.hpp>
@@ -91,10 +93,8 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
 
   // We need to generate new Target content that occupies at least a few blocks
   // in order to get delta that has a size higher than one block.
-  fixtures::executeCmd("dd", {"if=/dev/urandom", "of=" + getSysRootFs().path + "/file.img", "bs=4K", "count=3"},
-                       "generate a file with random content");
+  setGenerateStaticDelta(3);
   auto new_target = createTarget();
-  getOsTreeRepo().generate_delta(getInitialTarget().sha256Hash(), new_target.sha256Hash());
   SetFreeBlockNumb(1);
   update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
          {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});

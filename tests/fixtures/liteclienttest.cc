@@ -1,8 +1,12 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
+#include <boost/algorithm/hex.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include "primary/reportqueue.h"
 #include "crypto/p11engine.h"
+#include "crypto/crypto.h"
 #include "http/httpclient.h"
 #include "bootloader/bootloaderlite.h"
 #include "target.h"
@@ -258,7 +262,15 @@ class ClientTest :virtual public ::testing::Test {
       boost::filesystem::remove(rootfs + bootloader::BootloaderLite::VersionFile, ec);
     }
 
+    if (static_delta_size_bn_ > 0) {
+      fixtures::executeCmd("dd", {"if=/dev/urandom", "of=" + getSysRootFs().path + "/file.img", "bs=4K", "count=" + std::to_string(static_delta_size_bn_)},
+                           "generate a file with random content");
+    }
     auto hash = getOsTreeRepo().commit(rootfs, "lmp");
+    Json::Value delta_stat;
+    if (static_delta_size_bn_ > 0) {
+      delta_stat = getOsTreeRepo().generate_delta(latest_target.sha256Hash(), hash, static_delta_stat_);
+    }
 
     Json::Value apps_json;
     if (apps) {
@@ -273,7 +285,7 @@ class ClientTest :virtual public ::testing::Test {
 
     // add new target to TUF repo
     const std::string name = hwid + "-" + os + "-" + version;
-    return repo.addTarget(name, hash, hwid, version, apps_json);
+    return repo.addTarget(name, hash, hwid, version, apps_json, delta_stat);
   }
 
   /**
@@ -524,6 +536,10 @@ class ClientTest :virtual public ::testing::Test {
   TufRepoMock& getTufRepo() { return tuf_repo_; }
   OSTreeRepoMock& getOsTreeRepo() { return ostree_repo_; }
   void setAppShortlist(const std::vector<std::string>& apps) { app_shortlist_ = boost::make_optional(apps); }
+  void setGenerateStaticDelta(unsigned int min_size_in_blocks, bool add_delta_stat = false) {
+    static_delta_size_bn_ = min_size_in_blocks;
+    static_delta_stat_ = add_delta_stat;
+  }
 
  protected:
   static const std::string branch;
@@ -542,6 +558,8 @@ class ClientTest :virtual public ::testing::Test {
   Uptane::Target initial_target_;
 
   boost::optional<std::vector<std::string>> app_shortlist_;
+  unsigned int static_delta_size_bn_{0};
+  bool static_delta_stat_{false};
 };
 
 std::string ClientTest::SysRootSrc;

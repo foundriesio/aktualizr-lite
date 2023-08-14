@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/algorithm/hex.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include "ostree/repo.h"
 #include "test_utils.h"
 #include "utilities/utils.h"
+#include "crypto/crypto.h"
 
 #include "fixtures/liteclient/executecmd.cc"
 #include "fixtures/liteclient/ostreerepomock.cc"
