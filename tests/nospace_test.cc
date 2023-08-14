@@ -14,6 +14,7 @@
 
 #include "fixtures/liteclienttest.cc"
 
+
 // Defined in fstatvfs-mock.cc
 extern void SetFreeBlockNumb(uint64_t, uint64_t);
 extern void UnsetFreeBlockNumb();
@@ -91,10 +92,8 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
 
   // We need to generate new Target content that occupies at least a few blocks
   // in order to get delta that has a size higher than one block.
-  fixtures::executeCmd("dd", {"if=/dev/urandom", "of=" + getSysRootFs().path + "/file.img", "bs=4K", "count=3"},
-                       "generate a file with random content");
+  setGenerateStaticDelta(3);
   auto new_target = createTarget();
-  getOsTreeRepo().generate_delta(getInitialTarget().sha256Hash(), new_target.sha256Hash());
   SetFreeBlockNumb(1, 10);
   update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
          {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
