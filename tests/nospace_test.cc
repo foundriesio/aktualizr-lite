@@ -97,7 +97,27 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
   auto new_target = createTarget();
   SetFreeBlockNumb(1);
   update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
-         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available to pull ostree commit"});
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  UnsetFreeBlockNumb();
+  // reboot device
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  // try again when there is enough free storage
+  update(*client, getInitialTarget(), new_target);
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+}
+
+TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStat) {
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  setGenerateStaticDelta(3, true);
+  auto new_target = createTarget();
+  SetFreeBlockNumb(1);
+  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available to pull ostree delta"});
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   UnsetFreeBlockNumb();
   // reboot device

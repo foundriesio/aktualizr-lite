@@ -57,7 +57,8 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
 
     if (!canUpdateFitOnDisk(target, remote)) {
       return {DownloadResult::Status::DownloadFailed_NoSpace,
-              "Insufficient storage available; path: " + sysroot_->path() + "; err: ", sysroot_->path()};
+              "Insufficient storage available to pull ostree delta; path: " + sysroot_->path() + "; err: ",
+              sysroot_->path()};
     }
 
     pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
@@ -77,7 +78,8 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
         (pull_err.description.find("Delta requires") != std::string::npos &&
          pull_err.description.find("free space, but only") != std::string::npos)) {
       res = {DownloadResult::Status::DownloadFailed_NoSpace,
-             "Insufficient storage available; path: " + config.sysroot.string() + "; err: " + pull_err.description,
+             "Insufficient storage available to pull ostree commit; path: " + config.sysroot.string() +
+                 "; err: " + pull_err.description,
              sysroot_->path()};
       break;
     }
