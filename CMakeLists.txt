@@ -42,7 +42,7 @@ if(BUILD_AKLITE)
   add_dependencies(aklite aktualizr-lite)
 
   add_custom_target(aklite-tests)
-  add_dependencies(aklite-tests aklite t_lite-helpers uptane-generator t_compose-apps t_ostree t_liteclient t_yaml2json t_composeappengine t_restorableappengine t_aklite t_aklite_rollback t_aklite_rollback_ext t_apiclient t_exec t_docker t_aklite_offline t_boot_flag_mgmt t_cli)
+  add_dependencies(aklite-tests aklite t_lite-helpers uptane-generator t_compose-apps t_ostree t_liteclient t_yaml2json t_composeappengine t_restorableappengine t_aklite t_aklite_rollback t_aklite_rollback_ext t_apiclient t_exec t_docker t_aklite_offline t_boot_flag_mgmt t_cli t_nospace)
 
   set(CMAKE_MODULE_PATH "${AKTUALIZR_DIR}/cmake-modules;${CMAKE_MODULE_PATH}")
 

@@ -89,7 +89,6 @@ target_compile_definitions(t_liteclient PRIVATE ${TEST_DEFS})
 target_include_directories(t_liteclient PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
 target_link_libraries(t_liteclient ${MAIN_TARGET_LIB} ${TEST_LIBS} uptane_generator_lib testutilities fstatvfs-mock)
 add_dependencies(t_liteclient make_ostree_sysroot)
-set_tests_properties(test_liteclient PROPERTIES ENVIRONMENT "LD_PRELOAD=${PROJECT_BINARY_DIR}/tests/libfstatvfs-mock.so")
 set_tests_properties(test_liteclient PROPERTIES LABELS "aklite:liteclient")
 
 
@@ -256,5 +255,23 @@ target_include_directories(t_cli PRIVATE ${TEST_INCS} ${AKLITE_DIR}/include ${AK
 target_link_libraries(t_cli ${MAIN_TARGET_LIB} ${TEST_LIBS} uptane_generator_lib testutilities)
 add_dependencies(t_cli make_ostree_sysroot)
 set_tests_properties(test_cli PROPERTIES LABELS "aklite:cli")
+
+add_aktualizr_test(NAME nospace
+  SOURCES nospace_test.cc
+  PROJECT_WORKING_DIRECTORY
+  ARGS
+  ${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
+  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+)
+
+target_compile_definitions(t_nospace PRIVATE ${TEST_DEFS})
+target_include_directories(t_nospace PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_nospace ${MAIN_TARGET_LIB} ${TEST_LIBS} uptane_generator_lib testutilities fstatvfs-mock)
+add_dependencies(t_nospace make_ostree_sysroot)
+set_tests_properties(test_nospace PROPERTIES ENVIRONMENT "LD_PRELOAD=${PROJECT_BINARY_DIR}/tests/libfstatvfs-mock.so")
+set_tests_properties(test_nospace PROPERTIES LABELS "aklite:nospace")
+
+
+aktualizr_source_file_checks(nospace_test.cc)
 
 add_library(fstatvfs-mock SHARED fixtures/fstatvfs-mock.cc)
