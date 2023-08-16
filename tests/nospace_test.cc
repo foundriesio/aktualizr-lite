@@ -14,7 +14,6 @@
 
 #include "fixtures/liteclienttest.cc"
 
-
 // Defined in fstatvfs-mock.cc
 extern void SetFreeBlockNumb(uint64_t, uint64_t);
 extern void UnsetFreeBlockNumb();
@@ -89,23 +88,48 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpace) {
 TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-
-  // We need to generate new Target content that occupies at least a few blocks
-  // in order to get delta that has a size higher than one block.
   setGenerateStaticDelta(3);
   auto new_target = createTarget();
-  SetFreeBlockNumb(1, 10);
-  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
-         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  {
+    // Not enough space/block, 3 is required, we got only 1.
+    // The expected libostree error:
+    //    "Error while pulling image: 0 Delta requires 13.8 kB free space, but only 4.1 kB available"
+    SetFreeBlockNumb(1, 10);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
+  {
+    // There is enough space to accommodate the 3-block delta since we have 3 free blocks.
+    // But, at the last step of the delta processing libostree calls dispatch_close() ->
+    // _ostree_repo_bare_content_commit(). And, the _ostree_repo_bare_content_commit() checks the
+    // `min-free-space-percent`/`min-free-space-size` watermark. In our case we have 3 out of 100 blocks free,
+    // which is enough to fit the delta, but less than the `min-free-space-percent` of overall storage
+    // becomes free after the update, so libostree rejects it.
+    // It  doesn't make sense to reject the update after its content is pulled and already written to a disk,
+    // but this is the way libostree works, so we have to adjust...(we bypass this issue by using the delta stats)
+    // Expected error message is:
+    //    "Error while pulling image: 0 opcode close: min-free-space-percent '3%' would be exceeded, at least 13 bytes
+    //    requested"
+    SetFreeBlockNumb(3, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
+  {
+    // Now, we have 15 blocks out of 100 free, so 15-3 = 12 - 12% of storage will be free after the update,
+    // so libostree should be happy.
+    // NOTE: 7 blocks (7%) should suffice, but for some reason libostree requires 15%.
+    // TODO: Check the following assumption.
+    //       Most likely there is a moment during download at which 2x of the update/delta size is required.
+    //       Specifically, in this case, 3% for downloaded delta and then 3% to commit it to the repo - hence > 6% is
+    //       needed.
+    SetFreeBlockNumb(15, 100);
+    update(*client, getInitialTarget(), new_target);
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  }
   UnsetFreeBlockNumb();
-  // reboot device
-  reboot(client);
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  // try again when there is enough free storage
-  update(*client, getInitialTarget(), new_target);
-  reboot(client);
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
 }
 
 int main(int argc, char** argv) {
