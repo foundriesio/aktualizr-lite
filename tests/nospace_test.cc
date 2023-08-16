@@ -15,7 +15,7 @@
 #include "fixtures/liteclienttest.cc"
 
 // Defined in fstatvfs-mock.cc
-extern void SetFreeBlockNumb(uint64_t);
+extern void SetFreeBlockNumb(uint64_t, uint64_t);
 extern void UnsetFreeBlockNumb();
 
 using ::testing::NiceMock;
@@ -95,7 +95,7 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
                        "generate a file with random content");
   auto new_target = createTarget();
   getOsTreeRepo().generate_delta(getInitialTarget().sha256Hash(), new_target.sha256Hash());
-  SetFreeBlockNumb(1);
+  SetFreeBlockNumb(1, 10);
   update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
          {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
