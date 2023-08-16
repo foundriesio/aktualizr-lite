@@ -222,6 +222,11 @@ TEST_F(ApiClientTest, InstallWithCorrelationId) {
   ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
 
   ASSERT_EQ("this-is-random", installer->GetCorrelationId());
+  // drain all events to DG by recreating the report queue instance
+  liteclient->report_queue =
+      std::make_unique<ReportQueue>(liteclient->config, liteclient->http_client, liteclient->storage, 0, 1);
+  // wait a bit to make sure all events arrive to DG
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
   auto events = getDeviceGateway().getEvents();
   ASSERT_EQ("this-is-random", events[0]["event"]["correlationId"].asString());
 }
