@@ -219,7 +219,7 @@ AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App
   } catch (const std::exception& exc) {
     LOG_WARNING << "failed to check whether containers have been created: " << exc.what();
     // if we fail (exception) to check whether containers have been created is doesn't mean
-    // that installation was not succesful, just assume that the App creation succeeded if
+    // that installation was not successful, just assume that the App creation succeeded if
     // `docker-compose up` returns EXIT_SUCCESS
   }
 
@@ -648,7 +648,7 @@ bool RestorableAppEngine::areAppImagesFetched(const App& app) const {
 
     // Unfortunately `skopeo` trims an index/list image manifest by removing from it each image manifests that
     // doesn't match the current architecture. Therefore, it's not possible or doesn't make sense to compare
-    // the image digest (image_uri.digest.hash()) with a hash of actuall content of index.json.
+    // the image digest (image_uri.digest.hash()) with a hash of actual content of index.json.
     // TODO: consider patching skopeo or adding cli param to make it store an intact image index manifest.
 
     const auto manifest_desc{Utils::parseJSONFile(index_manifest)};
@@ -851,10 +851,10 @@ uint64_t RestorableAppEngine::getAppUpdateSize(const Json::Value& app_layers, co
 
   // It can happen that one or more currently stored blobs/layers are not needed for the new App
   // and they will be purged after an update completion therefore we actually will need less than
-  // `total_update_size` additional storage to accomodate a new App. Moreover, a new App even might
+  // `total_update_size` additional storage to accommodate a new App. Moreover, a new App even might
   // occupy even less space than the current App.
   // But, during an update process there is a moment at which a sum of both the current's and new App's layers
-  // are stored on storage, thus we need to make sure that underlying storage can accomodate the sum of the Apps'
+  // are stored on storage, thus we need to make sure that underlying storage can accommodate the sum of the Apps'
   // layers set/list.
 
   uint64_t skopeo_total_update_size{0};
@@ -891,7 +891,7 @@ uint64_t RestorableAppEngine::getAppUpdateSize(const Json::Value& app_layers, co
 
 uint64_t RestorableAppEngine::getDockerStoreSizeForAppUpdate(const uint64_t& compressed_update_size,
                                                              uint32_t average_compression_ratio) {
-  // approximate an amount of storage required to accomodate the App update in the docker store
+  // approximate an amount of storage required to accommodate the App update in the docker store
   uint64_t docker_total_update_size{0};
   // update size in uncompressed format (docker data root), skopeo_total_update_size * average_compression_ratio
   if (__builtin_mul_overflow(compressed_update_size, average_compression_ratio, &docker_total_update_size)) {
@@ -913,10 +913,10 @@ std::tuple<uint64_t, uint64_t> RestorableAppEngine::getPreciseAppUpdateSize(cons
 
   // It can happen that one or more currently stored blobs/layers are not needed for the new App
   // and they will be purged after an update completion therefore we actually will need less than
-  // `total_update_size` additional storage to accomodate a new App. Moreover, a new App even might
+  // `total_update_size` additional storage to accommodate a new App. Moreover, a new App even might
   // occupy even less space than the current App.
   // But, during an update process there is a moment at which a sum of both the current's and new App's layers
-  // are stored on storage, thus we need to make sure that underlying storage can accomodate the sum of the Apps'
+  // are stored on storage, thus we need to make sure that underlying storage can accommodate the sum of the Apps'
   // layers set/list.
 
   uint64_t skopeo_total_update_size{0};

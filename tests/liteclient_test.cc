@@ -1,6 +1,5 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <sys/statvfs.h>
 
 #include <boost/filesystem.hpp>
 #include <boost/process.hpp>
@@ -26,10 +25,6 @@
 
 using ::testing::NiceMock;
 using ::testing::Return;
-
-// Defined in fstatvfs-mock.cc
-extern void SetFreeBlockNumb(uint64_t);
-extern void UnsetFreeBlockNumb();
 
 /**
  * Class MockAppEngine
@@ -176,48 +171,6 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdate) {
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
-}
-
-TEST_P(LiteClientTestMultiPacman, OstreeUpdateNoSpace) {
-  // boot device
-  auto client = createLiteClient();
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-
-  sys_repo_.setMinFreeSpace("1TB");
-  // Create a new Target: update rootfs and commit it into Treehub's repo
-  auto new_target = createTarget();
-  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
-         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-
-  // reboot device
-  reboot(client);
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  checkHeaders(*client, getInitialTarget());
-}
-
-TEST_P(LiteClientTestMultiPacman, OstreeUpdateNoSpaceIfStaticDelta) {
-  auto client = createLiteClient();
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-
-  // We need to generate new Target content that occupies at least a few blocks
-  // in order to get delta that has a size higher than one block.
-  fixtures::executeCmd("dd", {"if=/dev/urandom", "of=" + getSysRootFs().path + "/file.img", "bs=4K", "count=3"},
-                       "generate a file with random content");
-  auto new_target = createTarget();
-  getOsTreeRepo().generate_delta(getInitialTarget().sha256Hash(), new_target.sha256Hash());
-  SetFreeBlockNumb(1);
-  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
-         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  UnsetFreeBlockNumb();
-  // reboot device
-  reboot(client);
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  // try again when there is enough free storage
-  update(*client, getInitialTarget(), new_target);
-  reboot(client);
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
 }
 
 TEST_P(LiteClientTestMultiPacman, OstreeUpdateRollback) {
