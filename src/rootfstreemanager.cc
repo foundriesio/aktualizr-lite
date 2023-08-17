@@ -14,6 +14,13 @@
 #include "storage/invstorage.h"
 #include "target.h"
 
+RootfsTreeManager::Config::Config(const PackageConfig& pconfig) {
+  if (pconfig.extra.count(UpdateBlockParamName) == 1) {
+    std::string val{pconfig.extra.at(UpdateBlockParamName)};
+    UpdateBlock = val != "0" && val != "false";
+  }
+}
+
 RootfsTreeManager::RootfsTreeManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
@@ -23,13 +30,8 @@ RootfsTreeManager::RootfsTreeManager(const PackageConfig& pconfig, const Bootloa
       boot_fw_update_status_{new bootloader::BootloaderLite(bconfig, *storage, sysroot_)},
       http_client_{http},
       gateway_url_{pconfig.ostree_server},
-      keys_{keys} {
-  const std::string update_block_attr_name{"ostree_update_block"};
-  if (pconfig.extra.count(update_block_attr_name) == 1) {
-    std::string val{pconfig.extra.at(update_block_attr_name)};
-    update_block_ = val != "0" && val != "false";
-  }
-}
+      keys_{keys},
+      cfg_{pconfig} {}
 
 DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
   auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
@@ -218,7 +220,7 @@ void RootfsTreeManager::setRemote(const std::string& name, const std::string& ur
 }
 
 data::InstallationResult RootfsTreeManager::verifyBootloaderUpdate(const Uptane::Target& target) const {
-  if (update_block_ && boot_fw_update_status_->isUpdateInProgress()) {
+  if (cfg_.UpdateBlock && boot_fw_update_status_->isUpdateInProgress()) {
     LOG_WARNING << "Bootlader update is in progress."
                    " A device must be rebooted to confirm and finalize the boot fw update"
                    " before installation of a new Target with ostree/rootfs change";

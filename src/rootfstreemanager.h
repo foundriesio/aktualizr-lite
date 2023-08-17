@@ -10,6 +10,16 @@
 class RootfsTreeManager : public OstreeManager, public Downloader {
  public:
   static constexpr const char* const Name{"ostree"};
+  struct Config {
+   public:
+    explicit Config(const PackageConfig& pconfig);
+
+    static constexpr const char* const UpdateBlockParamName{"ostree_update_block"};
+
+    // A flag enabling/disabling ostree update blocking if there is ongoing boot firmware update
+    // that requires confirmation by means of reboot.
+    bool UpdateBlock{true};
+  };
   using RequestHeaders = std::unordered_map<std::string, std::string>;
   struct Remote {
     std::string name;
@@ -81,9 +91,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   std::unique_ptr<bootloader::BootFwUpdateStatus> boot_fw_update_status_;
   std::shared_ptr<HttpInterface> http_client_;
   const std::string gateway_url_;
-  // A flag enabling/disabling ostree update blocking if there is ongoing boot firmware update
-  // that requires confirmation by means of reboot.
-  bool update_block_{true};
+  const Config cfg_;
 };
 
 #endif  // AKTUALIZR_LITE_ROOTFS_TREE_MANAGER_H_
