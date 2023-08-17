@@ -67,6 +67,45 @@ class NoSpaceTest : public fixtures::ClientTest {
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
 };
 
+TEST_F(NoSpaceTest, SysrootStorageWatermarkParam) {
+  {
+    // check default value
+    const auto cfg{RootfsTreeManager::Config(PackageConfig{})};
+    ASSERT_EQ(RootfsTreeManager::Config::DefaultSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+  }
+  {
+    // check if set to the default value if the specified param value is ivalid
+    PackageConfig pacmancfg;
+    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] = "10foo";
+    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
+    ASSERT_EQ(RootfsTreeManager::Config::DefaultSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+  }
+  {
+    // check if set to the min allowed value if the specified param value is lower than the one
+    PackageConfig pacmancfg;
+    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] =
+        std::to_string(RootfsTreeManager::Config::MinSysrootStorageWatermark - 1);
+    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
+    ASSERT_EQ(RootfsTreeManager::Config::MinSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+  }
+  {
+    // check if set to the max allowed value if the specified param value is higher than the one
+    PackageConfig pacmancfg;
+    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] =
+        std::to_string(RootfsTreeManager::Config::MaxSysrootStorageWatermark + 1);
+    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
+    ASSERT_EQ(RootfsTreeManager::Config::MaxSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+  }
+  {
+    // check if a custom valid value can be set
+    PackageConfig pacmancfg;
+    const unsigned int my_watermark{93};
+    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] = std::to_string(my_watermark);
+    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
+    ASSERT_EQ(my_watermark, cfg.SysrootStorageWatermark);
+  }
+}
+
 TEST_F(NoSpaceTest, OstreeUpdateNoSpace) {
   // boot device
   auto client = createLiteClient();
