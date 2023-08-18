@@ -10,6 +10,25 @@
 class RootfsTreeManager : public OstreeManager, public Downloader {
  public:
   static constexpr const char* const Name{"ostree"};
+  struct Config {
+   public:
+    explicit Config(const PackageConfig& pconfig);
+
+    static constexpr const char* const UpdateBlockParamName{"ostree_update_block"};
+    static constexpr const char* const SysrootStorageWatermarkParamName{"sysroot_storage_watermark"};
+    static const unsigned int DefaultSysrootStorageWatermark;
+    static const unsigned int MinSysrootStorageWatermark;
+    static const unsigned int MaxSysrootStorageWatermark;
+
+    // A flag enabling/disabling ostree update blocking if there is ongoing boot firmware update
+    // that requires confirmation by means of reboot.
+    bool UpdateBlock{true};
+
+    // A high watermark for storage usage, expressed as a percentage,
+    // in other words, up to X% of the overall volume capacity can be used.
+    // The volume on which the sysroot is persisted is what is meant in this context.
+    unsigned int SysrootStorageWatermark{DefaultSysrootStorageWatermark};
+  };
   using RequestHeaders = std::unordered_map<std::string, std::string>;
   struct Remote {
     std::string name;
@@ -38,6 +57,27 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   const std::shared_ptr<OSTree::Sysroot>& sysroot() const { return sysroot_; }
 
  private:
+  struct DeltaStatsRef {
+    std::string sha256;
+    unsigned int size;
+  };
+  struct DeltaStat {
+    uint64_t size;
+    uint64_t uncompressedSize;
+  };
+  struct StorageStat {
+    uint64_t blockSize;
+    uint64_t freeBlockNumb;
+    uint64_t blockNumb;
+  };
+  struct UpdateStat {
+    uint64_t storageCapacity;
+    unsigned int highWatermark;
+    uint64_t maxAvailable;
+    uint64_t available;
+    uint64_t deltaSize;
+  };
+
   std::string getCurrentHash() const override {
     return sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kCurrent);
   }
@@ -45,15 +85,22 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
 
   void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys);
   data::InstallationResult verifyBootloaderUpdate(const Uptane::Target& target) const;
+  bool getDeltaStatIfAvailable(const TufTarget& target, const Remote& remote, DeltaStat& delta_stat) const;
+  bool canDeltaFitOnDisk(const DeltaStat& delta_stat, UpdateStat& update_stat) const;
+  unsigned int getStorageHighWatermark() const { return cfg_.SysrootStorageWatermark; };
+
+  static bool getDeltaStatsRef(const Json::Value& json, DeltaStatsRef& ref);
+  static Json::Value downloadDeltaStats(const DeltaStatsRef& ref, const Remote& remote);
+  static bool findDeltaStatForUpdate(const Json::Value& delta_stats, const std::string& from, const std::string& to,
+                                     DeltaStat& found_delta_stat);
+  static void getStorageStat(const std::string& path, StorageStat& stat_out);
 
   const KeyManager& keys_;
   std::shared_ptr<OSTree::Sysroot> sysroot_;
   std::unique_ptr<bootloader::BootFwUpdateStatus> boot_fw_update_status_;
   std::shared_ptr<HttpInterface> http_client_;
   const std::string gateway_url_;
-  // A flag enabling/disabling ostree update blocking if there is ongoing boot firmware update
-  // that requires confirmation by means of reboot.
-  bool update_block_{true};
+  const Config cfg_;
 };
 
 #endif  // AKTUALIZR_LITE_ROOTFS_TREE_MANAGER_H_

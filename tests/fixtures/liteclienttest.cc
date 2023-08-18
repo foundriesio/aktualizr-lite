@@ -243,15 +243,20 @@ class ClientTest :virtual public ::testing::Test {
       next_version = "1";
     }
     const std::string version{ver.empty()?next_version:ver};
-
-    // update rootfs and commit it into Treehub's repo
-    const std::string unique_content = Utils::randomUuid();
-    const std::string unique_file = Utils::randomUuid();
     std::string rootfs{rootfs_path};
     if (rootfs.empty()) {
       rootfs = getSysRootFs().path;
     }
-    Utils::writeFile(rootfs + "/" + unique_file, unique_content, true);
+
+    // update rootfs and commit it into Treehub's repo
+    if (static_delta_size_bn_ > 0) {
+      fixtures::executeCmd("dd", {"if=/dev/urandom", "of=" + rootfs + "/file.img", "bs=4K", "count=" + std::to_string(static_delta_size_bn_)},
+                           "generate a file with random content");
+    } else {
+      const std::string unique_content = Utils::randomUuid();
+      const std::string unique_file = Utils::randomUuid();
+      Utils::writeFile(rootfs + "/" + unique_file, unique_content, true);
+    }
     std::string boot_fw_ver{bootloader_ver};
     if (boot_fw_ver.empty()) {
       boot_fw_ver = "bootfirmware_version=" + next_version;
@@ -261,11 +266,6 @@ class ClientTest :virtual public ::testing::Test {
     } else  {
       boost::system::error_code ec;
       boost::filesystem::remove(rootfs + bootloader::BootloaderLite::VersionFile, ec);
-    }
-
-    if (static_delta_size_bn_ > 0) {
-      fixtures::executeCmd("dd", {"if=/dev/urandom", "of=" + getSysRootFs().path + "/file.img", "bs=4K", "count=" + std::to_string(static_delta_size_bn_)},
-                           "generate a file with random content");
     }
     auto hash = getOsTreeRepo().commit(rootfs, "lmp");
     Json::Value delta_stat;
@@ -537,7 +537,7 @@ class ClientTest :virtual public ::testing::Test {
   TufRepoMock& getTufRepo() { return tuf_repo_; }
   OSTreeRepoMock& getOsTreeRepo() { return ostree_repo_; }
   void setAppShortlist(const std::vector<std::string>& apps) { app_shortlist_ = boost::make_optional(apps); }
-  void setGenerateStaticDelta(unsigned int min_size_in_blocks, bool add_delta_stat = false) {
+  void setGenerateStaticDelta(uint32_t min_size_in_blocks, bool add_delta_stat = false) {
     static_delta_size_bn_ = min_size_in_blocks;
     static_delta_stat_ = add_delta_stat;
   }
@@ -559,7 +559,7 @@ class ClientTest :virtual public ::testing::Test {
   Uptane::Target initial_target_;
 
   boost::optional<std::vector<std::string>> app_shortlist_;
-  unsigned int static_delta_size_bn_{0};
+  uint32_t static_delta_size_bn_{0};
   bool static_delta_stat_{false};
 };
 

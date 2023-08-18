@@ -43,7 +43,7 @@ class CliClient : public AkliteTest {
   void tweakConf(Config& conf) override {
     conf.pacman.ostree_server = ostree_server_uri_;
     conf.uptane.repo_server = tuf_repo_server_;
-    conf.pacman.extra["ostree_update_block"] = "1";
+    conf.pacman.extra[RootfsTreeManager::Config::UpdateBlockParamName] = "1";
   }
 
  protected:

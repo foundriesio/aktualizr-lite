@@ -84,7 +84,7 @@ class BootFlagMgmtTestSuite : public BootFlagMgmtTest,
     std::tie(pacman_type, bootloader_mode) = GetParam();
     conf.pacman.type = pacman_type;
     conf.bootloader.rollback_mode = bootloader_mode;
-    conf.pacman.extra["ostree_update_block"] = "1";
+    conf.pacman.extra[RootfsTreeManager::Config::UpdateBlockParamName] = "1";
     bootloader_type_ = bootloader_mode;
   };
 };

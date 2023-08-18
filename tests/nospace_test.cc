@@ -67,6 +67,45 @@ class NoSpaceTest : public fixtures::ClientTest {
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
 };
 
+TEST_F(NoSpaceTest, SysrootStorageWatermarkParam) {
+  {
+    // check default value
+    const auto cfg{RootfsTreeManager::Config(PackageConfig{})};
+    ASSERT_EQ(RootfsTreeManager::Config::DefaultSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+  }
+  {
+    // check if set to the default value if the specified param value is ivalid
+    PackageConfig pacmancfg;
+    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] = "10foo";
+    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
+    ASSERT_EQ(RootfsTreeManager::Config::DefaultSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+  }
+  {
+    // check if set to the min allowed value if the specified param value is lower than the one
+    PackageConfig pacmancfg;
+    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] =
+        std::to_string(RootfsTreeManager::Config::MinSysrootStorageWatermark - 1);
+    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
+    ASSERT_EQ(RootfsTreeManager::Config::MinSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+  }
+  {
+    // check if set to the max allowed value if the specified param value is higher than the one
+    PackageConfig pacmancfg;
+    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] =
+        std::to_string(RootfsTreeManager::Config::MaxSysrootStorageWatermark + 1);
+    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
+    ASSERT_EQ(RootfsTreeManager::Config::MaxSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+  }
+  {
+    // check if a custom valid value can be set
+    PackageConfig pacmancfg;
+    const unsigned int my_watermark{93};
+    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] = std::to_string(my_watermark);
+    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
+    ASSERT_EQ(my_watermark, cfg.SysrootStorageWatermark);
+  }
+}
+
 TEST_F(NoSpaceTest, OstreeUpdateNoSpace) {
   // boot device
   auto client = createLiteClient();
@@ -125,6 +164,56 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
     //       Specifically, in this case, 3% for downloaded delta and then 3% to commit it to the repo - hence > 6% is
     //       needed.
     SetFreeBlockNumb(15, 100);
+    update(*client, getInitialTarget(), new_target);
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  }
+  UnsetFreeBlockNumb();
+}
+
+TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  // Delta size will be 10 + 1 = 11 blocks, 1  block for additional data like boot loader version file.
+  setGenerateStaticDelta(10, true);
+  auto new_target = createTarget();
+  {
+    // not enough free blocks
+    SetFreeBlockNumb(5, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
+  {
+    // not enough free blocks taking into account the default watermark 90%,
+    // (20 - 11 = 9) - 9% of blocks will be free after the update, we need 10%
+    SetFreeBlockNumb(20, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    const auto events{device_gateway_.getEvents()};
+    const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find("available 40960 out of 368640(90% of the volume capacity 409600)"))
+        << event_err_msg;
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
+  {
+    // (21 - 11 = 10) - 10% of blocks will be free, need 10% so, it's supposed to succeed.
+    // But, the commit function checks if it will be more than 15% of storage capacity free after commit.
+    // Obviously it's not since only 10% will be available.
+    SetFreeBlockNumb(21, 100);
+    sys_repo_.setMinFreeSpacePercent("15");
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    const auto events{device_gateway_.getEvents()};
+    const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("opcode close: min-free-space-percent '15%' would be exceeded"))
+        << event_err_msg;
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  }
+  {
+    sys_repo_.setMinFreeSpacePercent("1");
+    SetFreeBlockNumb(21, 100);
     update(*client, getInitialTarget(), new_target);
     reboot(client);
     ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
