@@ -80,6 +80,31 @@ TEST_F(OSTreeTest, ReadFileFromCommit) {
   }
 }
 
+TEST_F(OSTreeTest, StorageWatermark) {
+  ASSERT_TRUE(isRepoInited());
+  {
+    ASSERT_EQ(OSTree::Repo::MinFreeSpacePercentDefaultValue, repo_->getFreeSpacePercent());
+  }
+  {
+    const int watermark{20};
+    repo_->setFreeSpacePercent(watermark);
+    ASSERT_EQ(watermark, repo_->getFreeSpacePercent());
+  }
+}
+
+TEST_F(OSTreeTest, StorageWatermarkNegative) {
+  ASSERT_TRUE(isRepoInited());
+  {
+    EXPECT_THROW(repo_->setFreeSpacePercent(-1, true), std::runtime_error);
+  }
+  {
+    EXPECT_THROW(repo_->setFreeSpacePercent(101, true), std::runtime_error);
+  }
+  {
+    EXPECT_THROW(repo_->setFreeSpacePercent(100, true), std::runtime_error);
+  }
+}
+
 // TODO: Add Treehub mock and uncomment the following tests
 //TEST_F(OSTreeTest, Pull) {
 //  ASSERT_TRUE(isRepoInited());

@@ -10,6 +10,9 @@
 
 namespace OSTree {
 
+// The default value builtin in the libostree source code (see reload_core_config() function)
+const unsigned int Repo::MinFreeSpacePercentDefaultValue{3};
+
 Repo::Repo(std::string path, bool create) : path_{std::move(path)}, repo_{nullptr} { init(create); }
 
 Repo::~Repo() {
@@ -195,6 +198,42 @@ std::string Repo::readFile(const std::string& commit_hash, const std::string& fi
   }
 
   return file_content;
+}
+
+void Repo::setFreeSpacePercent(unsigned int min_free_space, bool hot_reload) {
+  g_autoptr(GError) error = nullptr;
+  GCancellable* cancellable = nullptr;
+
+  g_autoptr(GKeyFile) config = ostree_repo_copy_config(repo_);
+  g_key_file_set_string(config, "core", "min-free-space-percent", std::to_string(min_free_space).c_str());
+  if (0 == ostree_repo_write_config(repo_, config, &error)) {
+    throw std::runtime_error("Failed to set `min-free-space-percent`; value: " + std::to_string(min_free_space) +
+                             ", err: " + std::string(error->message));
+  }
+  if (hot_reload) {
+    if (0 == ostree_repo_reload_config(repo_, cancellable, &error)) {
+      throw std::runtime_error("Failed to reload ostree repo config; repo path: " + path_ +
+                               ", err: " + std::string(error->message));
+    }
+  }
+}
+
+unsigned int Repo::getFreeSpacePercent() const {
+  g_autoptr(GError) error = nullptr;
+  g_autofree char* low_watermark_str_val = nullptr;
+
+  try {
+    GKeyFile* readonly_config = ostree_repo_get_config(repo_);
+    if (0 == g_key_file_has_key(readonly_config, "core", "min-free-space-percent", nullptr)) {
+      return MinFreeSpacePercentDefaultValue;
+    }
+    low_watermark_str_val = g_key_file_get_string(readonly_config, "core", "min-free-space-percent", nullptr);
+    const auto low_watermark_val{std::stoi(low_watermark_str_val)};
+    return low_watermark_val;
+  } catch (const std::exception& exc) {
+    std::cerr << "Failed to get `min-free-space-percent` value: " << exc.what();
+    return MinFreeSpacePercentDefaultValue;
+  }
 }
 
 }  // namespace OSTree

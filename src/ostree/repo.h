@@ -19,6 +19,8 @@ class Repo {
   Repo& operator=(const Repo&) = delete;
   Repo& operator=(Repo&&) = delete;
 
+  static const unsigned int MinFreeSpacePercentDefaultValue;
+
   void addRemote(const std::string& name, const std::string& url, const std::string& ca, const std::string& cert,
                  const std::string& key);
 
@@ -26,6 +28,8 @@ class Repo {
   void checkout(const std::string& commit_hash, const std::string& src_dir, const std::string& dst_dir);
   std::unordered_map<std::string, std::string> getRefs() const;
   std::string readFile(const std::string& commit_hash, const std::string& file) const;
+  void setFreeSpacePercent(unsigned int min_free_space, bool hot_reload = false);
+  unsigned int getFreeSpacePercent() const;
 
  private:
   void init(bool create);
