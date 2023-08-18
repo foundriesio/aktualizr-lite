@@ -154,7 +154,7 @@ bool BootloaderLite::isRollbackProtectionEnabled() const {
 }
 
 std::string BootloaderLite::getTargetVersion(const std::string& target_hash) const {
-  const OSTree::Repo repo{sysroot_->path() + "/ostree/repo"};
+  const OSTree::Repo repo{sysroot_->repoPath()};
   const std::string version_line{repo.readFile(target_hash, VersionFile)};
   return extractVersionValue(version_line);
 }

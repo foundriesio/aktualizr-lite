@@ -240,7 +240,7 @@ void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const
 
 void RootfsTreeManager::setRemote(const std::string& name, const std::string& url,
                                   const boost::optional<const KeyManager*>& keys) {
-  OSTree::Repo repo{sysroot_->path() + "/ostree/repo"};
+  OSTree::Repo repo{sysroot_->repoPath()};
 
   if (!!keys) {
     repo.addRemote(name, url, (*keys)->getCaFile(), (*keys)->getCertFile(), (*keys)->getPkeyFile());
