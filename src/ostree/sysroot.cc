@@ -12,6 +12,10 @@ const unsigned int Sysroot::Config::MinStorageWatermark{50};
 const unsigned int Sysroot::Config::MaxStorageWatermark{95};
 
 Sysroot::Config::Config(const PackageConfig& pconfig) {
+  Path = pconfig.sysroot.string();
+  Type = pconfig.booted;
+  OsName = pconfig.os.empty() ? "lmp" : pconfig.os;
+
   if (pconfig.extra.count(StorageWatermarkParamName) == 1) {
     const std::string val_str{pconfig.extra.at(StorageWatermarkParamName)};
     try {
@@ -34,21 +38,18 @@ Sysroot::Config::Config(const PackageConfig& pconfig) {
   }
 }
 
-Sysroot::Sysroot(const PackageConfig& pconfig, std::string sysroot_path, BootedType booted, std::string os_name)
+Sysroot::Sysroot(const PackageConfig& pconfig)
     : cfg_{pconfig},
-      path_{std::move(sysroot_path)},
-      repo_path_{path_ + "/ostree/repo"},
-      booted_{booted},
-      os_name_{std::move(os_name)},
-      deployment_path_{path_ + "/ostree/deploy/" + os_name_ + "/deploy"} {
-  sysroot_ = OstreeManager::LoadSysroot(path_);
+      repo_path_{cfg_.Path + "/ostree/repo"},
+      deployment_path_{cfg_.Path + "/ostree/deploy/" + cfg_.OsName + "/deploy"} {
+  sysroot_ = OstreeManager::LoadSysroot(cfg_.Path);
 }
 
 bool Sysroot::reload() {
   // Just reload for the booted env. In non-booted env "pending" deployment becomes "current" just after installation
   // without a need to reboot. It in turns invalidates "getCurrent" value for tests at the stage after installation and
   // before reboot.
-  if (booted_ == BootedType::kBooted) {
+  if (cfg_.Type == BootedType::kBooted) {
     return static_cast<bool>(ostree_sysroot_load_if_changed(sysroot_.get(), nullptr, nullptr, nullptr));
   }
   return true;
@@ -59,28 +60,28 @@ std::string Sysroot::getDeploymentHash(Deployment deployment_type) const {
   g_autoptr(GPtrArray) deployments = nullptr;
   OstreeDeployment* deployment = nullptr;
 
-  switch (booted_) {
+  switch (cfg_.Type) {
     case BootedType::kBooted:
-      deployment = getDeploymentIfBooted(sysroot_.get(), os_name_.c_str(), deployment_type);
+      deployment = getDeploymentIfBooted(sysroot_.get(), cfg_.OsName.c_str(), deployment_type);
       break;
     case BootedType::kStaged:
       if (deployment_type == Deployment::kPending) {
-        OstreeDeployment* cur_deployment = getDeploymentIfStaged(sysroot_.get(), os_name_.c_str(), deployment_type);
+        OstreeDeployment* cur_deployment = getDeploymentIfStaged(sysroot_.get(), cfg_.OsName.c_str(), deployment_type);
         // Load the sysroot to make sure we get its latest state, so we can get real "pending" deployment caused by
         // successful installation
-        GObjectUniquePtr<OstreeSysroot> changed_sysroot = OstreeManager::LoadSysroot(path_);
+        GObjectUniquePtr<OstreeSysroot> changed_sysroot = OstreeManager::LoadSysroot(cfg_.Path);
         OstreeDeployment* pend_deployment =
-            getDeploymentIfStaged(changed_sysroot.get(), os_name_.c_str(), deployment_type);
+            getDeploymentIfStaged(changed_sysroot.get(), cfg_.OsName.c_str(), deployment_type);
         deployment =
             (strcmp(ostree_deployment_get_csum(pend_deployment), ostree_deployment_get_csum(cur_deployment)) == 0)
                 ? nullptr
                 : pend_deployment;
       } else {
-        deployment = getDeploymentIfStaged(sysroot_.get(), os_name_.c_str(), deployment_type);
+        deployment = getDeploymentIfStaged(sysroot_.get(), cfg_.OsName.c_str(), deployment_type);
       }
       break;
     default:
-      throw std::runtime_error("Invalid boot type: " + std::to_string(static_cast<int>(booted_)));
+      throw std::runtime_error("Invalid boot type: " + std::to_string(static_cast<int>(cfg_.Type)));
   }
 
   if (deployment != nullptr) {

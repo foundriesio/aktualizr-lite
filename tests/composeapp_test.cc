@@ -185,7 +185,7 @@ class TestSysroot: public OSTree::Sysroot {
 
  public:
     TestSysroot(Hasher hasher, const std::string& sysroot_path):
-      OSTree::Sysroot(PackageConfig{}, sysroot_path, BootedType::kStaged),
+      OSTree::Sysroot(PackageConfig{.sysroot = sysroot_path, .booted = BootedType::kStaged}),
       hasher_{std::move(hasher)} {}
 
     virtual std::string getCurDeploymentHash() const {
@@ -206,6 +206,7 @@ struct TestClient {
     config.pacman.type = ComposeAppManager::Name;
     config.bootloader.reboot_sentinel_dir = tempdir->Path();
     config.pacman.sysroot = test_sysroot.string();
+    config.pacman.booted = BootedType::kStaged;
     // this a name/title of a group of ostree-based rootfs deployments that share /var, aka "stateroot" or "osname"
     // aktualizr supports just one stateroot, for test purposes a tool ./aktualizr/tests/ostree-scripts/makephysical.sh
     // creates an ostree sysroot/rootfs with stateroot called "dummy-os" at build time and put it in build/aktualizr/ostree_repo/
@@ -232,7 +233,7 @@ struct TestClient {
       storage->savePrimaryInstalledVersion(*installedTarget, InstalledVersionUpdateMode::kCurrent);
     }
 
-    sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman, config.pacman.sysroot.string(), BootedType::kStaged, config.pacman.os) :
+    sysroot = (sysroot_hasher == nullptr) ? std::make_shared<OSTree::Sysroot>(config.pacman) :
                                             std::make_shared<TestSysroot>(sysroot_hasher, config.pacman.sysroot.string());
 
     fetcher = std_::make_unique<Uptane::Fetcher>(config, std::make_shared<HttpClient>());

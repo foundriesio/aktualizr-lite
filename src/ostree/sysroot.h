@@ -23,15 +23,18 @@ class Sysroot {
     // in other words, up to X% of the overall volume capacity can be used.
     // The volume on which the sysroot is persisted is what is meant in this context.
     unsigned int StorageWatermark{DefaultStorageWatermark};
+
+    std::string Path;
+    BootedType Type;
+    std::string OsName;
   };
 
   enum class Deployment { kCurrent = 0, kPending, kRollback };
   using Ptr = std::shared_ptr<Sysroot>;
 
-  explicit Sysroot(const PackageConfig& pconfig, std::string sysroot_path, BootedType booted = BootedType::kBooted,
-                   std::string os_name = "lmp");
+  explicit Sysroot(const PackageConfig& pconfig);
 
-  const std::string& path() const { return path_; }
+  const std::string& path() const { return cfg_.Path; }
   const std::string& repoPath() const { return repo_path_; }
   const std::string& deployment_path() const { return deployment_path_; }
 
@@ -46,10 +49,7 @@ class Sysroot {
                                                  Deployment deployment_type);
 
   const Config cfg_;
-  const std::string path_;
   const std::string repo_path_;
-  const BootedType booted_;
-  const std::string os_name_;
   const std::string deployment_path_;
 
   GObjectUniquePtr<OstreeSysroot> sysroot_;
