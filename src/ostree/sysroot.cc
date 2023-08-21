@@ -11,6 +11,9 @@ const unsigned int Sysroot::Config::DefaultStorageWatermark{90};
 const unsigned int Sysroot::Config::MinStorageWatermark{50};
 const unsigned int Sysroot::Config::MaxStorageWatermark{95};
 
+const unsigned int Sysroot::Config::MinFreeSpacePercent{3};
+const unsigned int Sysroot::Config::MaxFreeSpacePercent{50};
+
 Sysroot::Config::Config(const PackageConfig& pconfig) {
   Path = pconfig.sysroot.string();
   Type = pconfig.booted;
@@ -36,12 +39,48 @@ Sysroot::Config::Config(const PackageConfig& pconfig) {
                 << "; setting it the default value: " << DefaultStorageWatermark;
     }
   }
+
+  if (pconfig.extra.count(StorageFreeSpacePercentParamName) == 1) {
+    const std::string val_str{pconfig.extra.at(StorageFreeSpacePercentParamName)};
+    try {
+      const auto val{boost::lexical_cast<unsigned int>(val_str)};
+      if (val < MinFreeSpacePercent) {
+        LOG_ERROR << "Value of `" << StorageFreeSpacePercentParamName << "` parameter is too low: " << val_str
+                  << "; won't override the value set in the ostree config";
+      } else if (val > MaxFreeSpacePercent) {
+        LOG_ERROR << "Value of `" << StorageFreeSpacePercentParamName << "` parameter is too high: " << val_str
+                  << "; won't override the value set in the ostree config";
+      } else {
+        StorageFreeSpacePercent = val;
+      }
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Invalid value of `" << StorageFreeSpacePercentParamName << "` parameter: " << val_str
+                << "; won't override the value set in the ostree config";
+    }
+  }
 }
 
 Sysroot::Sysroot(const PackageConfig& pconfig)
     : cfg_{pconfig},
       repo_path_{cfg_.Path + "/ostree/repo"},
       deployment_path_{cfg_.Path + "/ostree/deploy/" + cfg_.OsName + "/deploy"} {
+  Repo repo{repo_path_};
+  const auto ostree_min_free_space{repo.getFreeSpacePercent()};
+  if (-1 == cfg_.StorageFreeSpacePercent) {
+    LOG_DEBUG
+        << "Minimum free space percentage is not overridden, applying the one that is configured in the ostree config: "
+        << ostree_min_free_space;
+  } else {
+    try {
+      repo.setFreeSpacePercent(cfg_.StorageFreeSpacePercent);
+      LOG_DEBUG << "Minimum free space percentage is overridden; "
+                << "from " << ostree_min_free_space << " to  " << cfg_.StorageFreeSpacePercent;
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to override `min-free-space-percent` value in the ostree config, applying the one that is "
+                   "configured in the ostree config: "
+                << ostree_min_free_space << "; err: " << exc.what();
+    }
+  }
   sysroot_ = OstreeManager::LoadSysroot(cfg_.Path);
 }
 

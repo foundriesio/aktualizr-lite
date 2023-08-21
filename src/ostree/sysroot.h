@@ -19,10 +19,21 @@ class Sysroot {
     static const unsigned int MinStorageWatermark;
     static const unsigned int MaxStorageWatermark;
 
+    static constexpr const char* const StorageFreeSpacePercentParamName{"min_free_space_percent"};
+    static const unsigned int MinFreeSpacePercent;
+    static const unsigned int MaxFreeSpacePercent;
+
     // A high watermark for storage usage, expressed as a percentage,
     // in other words, up to X% of the overall volume capacity can be used.
     // The volume on which the sysroot is persisted is what is meant in this context.
     unsigned int StorageWatermark{DefaultStorageWatermark};
+
+    // A low watermark for storage free space expressed as a percentage.
+    // In other words, at least X% of the overall volume capacity must be free, or
+    // up to (100 - X%) of the overall volume capacity can be used.
+    // This parameter is intended solely for the non-delta case.
+    // Effectively, it enforces setting of the ostree repo config param `core.min-free-space-percent`.
+    int StorageFreeSpacePercent{-1};
 
     std::string Path;
     BootedType Type;

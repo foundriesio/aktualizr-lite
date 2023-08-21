@@ -63,8 +63,16 @@ class NoSpaceTest : public fixtures::ClientTest {
 
   std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
 
+  void tweakConf(Config& cfg) override {
+    if (!min_free_space_.empty()) {
+      cfg.pacman.extra[OSTree::Sysroot::Config::StorageFreeSpacePercentParamName] = min_free_space_;
+    }
+  }
+  void setMinFreeSpace(const std::string& min_free_space) { min_free_space_ = min_free_space; }
+
  private:
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
+  std::string min_free_space_;
 };
 
 TEST_F(NoSpaceTest, SysrootStorageWatermarkParam) {
@@ -122,6 +130,32 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpace) {
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   checkHeaders(*client, getInitialTarget());
+}
+
+TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfWatermarkParamIsSet) {
+  // There 51% of blocks are free. The update takes a few blocks,
+  // so the pull should fail since the storage usage exceeds
+  // the set required minimum space  - 50%.
+  SetFreeBlockNumb(51, 100);
+  setMinFreeSpace("50");
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  auto new_target = createTarget();
+  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Now, let's decrease the required minimum space to 40%, since the update size is < 9 blocks,
+  // then the libostree should be happy.
+  // We need to "reboot" in order to recreate the client instance so the new watermark is applied.
+  setMinFreeSpace("40");
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  update(*client, getInitialTarget(), new_target);
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  UnsetFreeBlockNumb();
 }
 
 TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
