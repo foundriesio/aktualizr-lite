@@ -1,10 +1,42 @@
 #include "sysroot.h"
 #include "logging/logging.h"
 
+#include <boost/lexical_cast.hpp>
+
+#include "ostree/repo.h"
+
 namespace OSTree {
 
-Sysroot::Sysroot(std::string sysroot_path, BootedType booted, std::string os_name)
-    : path_{std::move(sysroot_path)},
+const unsigned int Sysroot::Config::DefaultStorageWatermark{90};
+const unsigned int Sysroot::Config::MinStorageWatermark{50};
+const unsigned int Sysroot::Config::MaxStorageWatermark{95};
+
+Sysroot::Config::Config(const PackageConfig& pconfig) {
+  if (pconfig.extra.count(StorageWatermarkParamName) == 1) {
+    const std::string val_str{pconfig.extra.at(StorageWatermarkParamName)};
+    try {
+      const auto val{boost::lexical_cast<unsigned int>(val_str)};
+      if (val < MinStorageWatermark) {
+        LOG_ERROR << "Value of `" << StorageWatermarkParamName << "` parameter is too low: " << val_str
+                  << "; setting it the minimum allowed: " << MinStorageWatermark;
+        StorageWatermark = MinStorageWatermark;
+      } else if (val > MaxStorageWatermark) {
+        LOG_ERROR << "Value of `" << StorageWatermarkParamName << "` parameter is too high: " << val_str
+                  << "; setting it the maximum allowed: " << MaxStorageWatermark;
+        StorageWatermark = MaxStorageWatermark;
+      } else {
+        StorageWatermark = val;
+      }
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Invalid value of `" << StorageWatermarkParamName << "` parameter: " << val_str
+                << "; setting it the default value: " << DefaultStorageWatermark;
+    }
+  }
+}
+
+Sysroot::Sysroot(const PackageConfig& pconfig, std::string sysroot_path, BootedType booted, std::string os_name)
+    : cfg_{pconfig},
+      path_{std::move(sysroot_path)},
       repo_path_{path_ + "/ostree/repo"},
       booted_{booted},
       os_name_{std::move(os_name)},

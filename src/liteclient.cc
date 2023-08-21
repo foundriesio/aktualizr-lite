@@ -74,8 +74,9 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   }
   primary_ecu = ecu_serials[0];
 
-  auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(config.pacman.sysroot.string(), config.pacman.booted,
-                                                          config.pacman.os.empty() ? "lmp" : config.pacman.os);
+  auto ostree_sysroot =
+      std::make_shared<OSTree::Sysroot>(config.pacman, config.pacman.sysroot.string(), config.pacman.booted,
+                                        config.pacman.os.empty() ? "lmp" : config.pacman.os);
 
   std::vector<std::string> headers;
   // Add all required request headers to the http client and set them to default values.
