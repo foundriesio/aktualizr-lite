@@ -15,19 +15,10 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
     explicit Config(const PackageConfig& pconfig);
 
     static constexpr const char* const UpdateBlockParamName{"ostree_update_block"};
-    static constexpr const char* const SysrootStorageWatermarkParamName{"sysroot_storage_watermark"};
-    static const unsigned int DefaultSysrootStorageWatermark;
-    static const unsigned int MinSysrootStorageWatermark;
-    static const unsigned int MaxSysrootStorageWatermark;
 
     // A flag enabling/disabling ostree update blocking if there is ongoing boot firmware update
     // that requires confirmation by means of reboot.
     bool UpdateBlock{true};
-
-    // A high watermark for storage usage, expressed as a percentage,
-    // in other words, up to X% of the overall volume capacity can be used.
-    // The volume on which the sysroot is persisted is what is meant in this context.
-    unsigned int SysrootStorageWatermark{DefaultSysrootStorageWatermark};
   };
   using RequestHeaders = std::unordered_map<std::string, std::string>;
   struct Remote {
@@ -87,7 +78,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   data::InstallationResult verifyBootloaderUpdate(const Uptane::Target& target) const;
   bool getDeltaStatIfAvailable(const TufTarget& target, const Remote& remote, DeltaStat& delta_stat) const;
   bool canDeltaFitOnDisk(const DeltaStat& delta_stat, UpdateStat& update_stat) const;
-  unsigned int getStorageHighWatermark() const { return cfg_.SysrootStorageWatermark; };
+  unsigned int getStorageHighWatermark() const { return sysroot_->storageWatermark(); };
 
   static bool getDeltaStatsRef(const Json::Value& json, DeltaStatsRef& ref);
   static Json::Value downloadDeltaStats(const DeltaStatsRef& ref, const Remote& remote);

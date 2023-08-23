@@ -63,46 +63,54 @@ class NoSpaceTest : public fixtures::ClientTest {
 
   std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
 
+  void tweakConf(Config& cfg) override {
+    if (!min_free_space_.empty()) {
+      cfg.pacman.extra[OSTree::Sysroot::Config::StorageFreeSpacePercentParamName] = min_free_space_;
+    }
+  }
+  void setMinFreeSpace(const std::string& min_free_space) { min_free_space_ = min_free_space; }
+
  private:
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
+  std::string min_free_space_;
 };
 
 TEST_F(NoSpaceTest, SysrootStorageWatermarkParam) {
   {
     // check default value
-    const auto cfg{RootfsTreeManager::Config(PackageConfig{})};
-    ASSERT_EQ(RootfsTreeManager::Config::DefaultSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+    const auto cfg{OSTree::Sysroot::Config(PackageConfig{})};
+    ASSERT_EQ(OSTree::Sysroot::Config::DefaultStorageWatermark, cfg.StorageWatermark);
   }
   {
     // check if set to the default value if the specified param value is ivalid
     PackageConfig pacmancfg;
-    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] = "10foo";
-    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
-    ASSERT_EQ(RootfsTreeManager::Config::DefaultSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+    pacmancfg.extra[OSTree::Sysroot::Config::StorageWatermarkParamName] = "10foo";
+    const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
+    ASSERT_EQ(OSTree::Sysroot::Config::DefaultStorageWatermark, cfg.StorageWatermark);
   }
   {
     // check if set to the min allowed value if the specified param value is lower than the one
     PackageConfig pacmancfg;
-    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] =
-        std::to_string(RootfsTreeManager::Config::MinSysrootStorageWatermark - 1);
-    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
-    ASSERT_EQ(RootfsTreeManager::Config::MinSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+    pacmancfg.extra[OSTree::Sysroot::Config::StorageWatermarkParamName] =
+        std::to_string(OSTree::Sysroot::Config::MinStorageWatermark - 1);
+    const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
+    ASSERT_EQ(OSTree::Sysroot::Config::MinStorageWatermark, cfg.StorageWatermark);
   }
   {
     // check if set to the max allowed value if the specified param value is higher than the one
     PackageConfig pacmancfg;
-    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] =
-        std::to_string(RootfsTreeManager::Config::MaxSysrootStorageWatermark + 1);
-    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
-    ASSERT_EQ(RootfsTreeManager::Config::MaxSysrootStorageWatermark, cfg.SysrootStorageWatermark);
+    pacmancfg.extra[OSTree::Sysroot::Config::StorageWatermarkParamName] =
+        std::to_string(OSTree::Sysroot::Config::MaxStorageWatermark + 1);
+    const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
+    ASSERT_EQ(OSTree::Sysroot::Config::MaxStorageWatermark, cfg.StorageWatermark);
   }
   {
     // check if a custom valid value can be set
     PackageConfig pacmancfg;
     const unsigned int my_watermark{93};
-    pacmancfg.extra[RootfsTreeManager::Config::SysrootStorageWatermarkParamName] = std::to_string(my_watermark);
-    const auto cfg{RootfsTreeManager::Config(pacmancfg)};
-    ASSERT_EQ(my_watermark, cfg.SysrootStorageWatermark);
+    pacmancfg.extra[OSTree::Sysroot::Config::StorageWatermarkParamName] = std::to_string(my_watermark);
+    const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
+    ASSERT_EQ(my_watermark, cfg.StorageWatermark);
   }
 }
 
@@ -122,6 +130,32 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpace) {
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   checkHeaders(*client, getInitialTarget());
+}
+
+TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfWatermarkParamIsSet) {
+  // There 51% of blocks are free. The update takes a few blocks,
+  // so the pull should fail since the storage usage exceeds
+  // the set required minimum space  - 50%.
+  SetFreeBlockNumb(51, 100);
+  setMinFreeSpace("50");
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  auto new_target = createTarget();
+  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  // Now, let's decrease the required minimum space to 40%, since the update size is < 9 blocks,
+  // then the libostree should be happy.
+  // We need to "reboot" in order to recreate the client instance so the new watermark is applied.
+  setMinFreeSpace("40");
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  update(*client, getInitialTarget(), new_target);
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  UnsetFreeBlockNumb();
 }
 
 TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {

@@ -14,34 +14,10 @@
 #include "storage/invstorage.h"
 #include "target.h"
 
-const unsigned int RootfsTreeManager::Config::DefaultSysrootStorageWatermark{90};
-const unsigned int RootfsTreeManager::Config::MinSysrootStorageWatermark{50};
-const unsigned int RootfsTreeManager::Config::MaxSysrootStorageWatermark{95};
-
 RootfsTreeManager::Config::Config(const PackageConfig& pconfig) {
   if (pconfig.extra.count(UpdateBlockParamName) == 1) {
     std::string val{pconfig.extra.at(UpdateBlockParamName)};
     UpdateBlock = val != "0" && val != "false";
-  }
-  if (pconfig.extra.count(SysrootStorageWatermarkParamName) == 1) {
-    const std::string val_str{pconfig.extra.at(SysrootStorageWatermarkParamName)};
-    try {
-      const auto val{boost::lexical_cast<unsigned int>(val_str)};
-      if (val < MinSysrootStorageWatermark) {
-        LOG_ERROR << "Value of `" << SysrootStorageWatermarkParamName << "` parameter is too low: " << val_str
-                  << "; setting it the minimum allowed: " << MinSysrootStorageWatermark;
-        SysrootStorageWatermark = MinSysrootStorageWatermark;
-      } else if (val > MaxSysrootStorageWatermark) {
-        LOG_ERROR << "Value of `" << SysrootStorageWatermarkParamName << "` parameter is too high: " << val_str
-                  << "; setting it the maximum allowed: " << MaxSysrootStorageWatermark;
-        SysrootStorageWatermark = MaxSysrootStorageWatermark;
-      } else {
-        SysrootStorageWatermark = val;
-      }
-    } catch (const std::exception& exc) {
-      LOG_ERROR << "Invalid value of `" << SysrootStorageWatermarkParamName << "` parameter: " << val_str
-                << "; setting it the default value: " << DefaultSysrootStorageWatermark;
-    }
   }
 }
 
