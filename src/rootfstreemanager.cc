@@ -84,17 +84,23 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
     DeltaStat delta_stat{};
     if (getDeltaStatIfAvailable(target, remote, delta_stat)) {
       LOG_INFO << "Found and pulled delta stats, checking if update can fit on a disk...";
-      UpdateStat update_stat{};
-      bool ok{canDeltaFitOnDisk(delta_stat, update_stat)};
-      const auto stat_msg{boost::format{"required %u, available %u out of %u(%u%% of the volume capacity %u)"} %
-                          update_stat.deltaSize % update_stat.available % update_stat.maxAvailable %
-                          update_stat.highWatermark % update_stat.storageCapacity};
+      try {
+        UpdateStat update_stat{};
+        bool ok{canDeltaFitOnDisk(delta_stat, update_stat)};
+        const auto stat_msg{boost::format{"required %u, available %u out of %u(%u%% of the volume capacity %u)"} %
+                            update_stat.deltaSize % update_stat.available % update_stat.maxAvailable %
+                            update_stat.highWatermark % update_stat.storageCapacity};
 
-      if (!ok) {
-        return {DownloadResult::Status::DownloadFailed_NoSpace,
-                "Insufficient storage available; err: " + stat_msg.str(), sysroot_->path()};
+        if (!ok) {
+          return {DownloadResult::Status::DownloadFailed_NoSpace,
+                  "Insufficient storage available; err: " + stat_msg.str(), sysroot_->path()};
+        }
+        LOG_INFO << "Fetching static delta; " + stat_msg.str();
+      } catch (const std::exception& exc) {
+        LOG_ERROR << "Failed to check if the static delta can fit on a disk, skipping the update size check...; err: "
+                  << exc.what();
+        LOG_INFO << "Fetching ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
       }
-      LOG_INFO << "Fetching static delta; " + stat_msg.str();
     } else {
       LOG_INFO << "No static delta or static delta stats are found, skipping the update size check...";
       LOG_INFO << "Fetching ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
@@ -234,7 +240,7 @@ void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const
 
 void RootfsTreeManager::setRemote(const std::string& name, const std::string& url,
                                   const boost::optional<const KeyManager*>& keys) {
-  OSTree::Repo repo{sysroot_->path() + "/ostree/repo"};
+  OSTree::Repo repo{sysroot_->repoPath()};
 
   if (!!keys) {
     repo.addRemote(name, url, (*keys)->getCaFile(), (*keys)->getCertFile(), (*keys)->getPkeyFile());
@@ -331,7 +337,7 @@ bool RootfsTreeManager::getDeltaStatIfAvailable(const TufTarget& target, const R
 
 bool RootfsTreeManager::canDeltaFitOnDisk(const DeltaStat& delta_stat, UpdateStat& update_stat) const {
   StorageStat storage{};
-  getStorageStat(sysroot_->path(), storage);
+  getStorageStat(sysroot_->repoPath(), storage);
   const auto highWatermark{getStorageHighWatermark()};
 
   const uint64_t max_blocks_available = std::floor(storage.blockNumb * (static_cast<double>(highWatermark) / 100));
@@ -438,13 +444,13 @@ bool RootfsTreeManager::findDeltaStatForUpdate(const Json::Value& delta_stats, c
 void RootfsTreeManager::getStorageStat(const std::string& path, StorageStat& stat_out) {
   int fd{-1};
   if ((fd = open(path.c_str(), O_DIRECTORY | O_RDONLY)) == -1) {
-    throw std::runtime_error(std::string("Failed to obtain a sysroot directory file descriptor; err: ") +
-                             std::strerror(errno));
+    throw std::runtime_error(std::string("Failed to obtain a sysroot directory file descriptor; path: ") + path +
+                             ", err: " + std::strerror(errno));
   }
   struct statvfs fs_stat {};
   if (-1 == fstatvfs(fd, &fs_stat)) {
-    throw std::runtime_error(std::string("Failed to obtain statistic about the sysroot directory; err: ") +
-                             std::strerror(errno));
+    throw std::runtime_error(std::string("Failed to obtain statistic about the sysroot directory; path: ") + path +
+                             ", err: " + std::strerror(errno));
   }
 
   stat_out.freeBlockNumb = (getuid() != 0 ? fs_stat.f_bavail : fs_stat.f_bfree);

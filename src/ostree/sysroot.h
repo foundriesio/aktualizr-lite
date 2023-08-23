@@ -16,6 +16,7 @@ class Sysroot {
   explicit Sysroot(std::string sysroot_path, BootedType booted = BootedType::kBooted, std::string os_name = "lmp");
 
   const std::string& path() const { return path_; }
+  const std::string& repoPath() const { return repo_path_; }
   const std::string& deployment_path() const { return deployment_path_; }
 
   virtual std::string getDeploymentHash(Deployment deployment_type) const;
@@ -28,6 +29,7 @@ class Sysroot {
                                                  Deployment deployment_type);
 
   const std::string path_;
+  const std::string repo_path_;
   const BootedType booted_;
   const std::string os_name_;
   const std::string deployment_path_;
