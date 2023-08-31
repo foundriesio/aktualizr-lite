@@ -78,7 +78,6 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   data::InstallationResult verifyBootloaderUpdate(const Uptane::Target& target) const;
   bool getDeltaStatIfAvailable(const TufTarget& target, const Remote& remote, DeltaStat& delta_stat) const;
   bool canDeltaFitOnDisk(const DeltaStat& delta_stat, UpdateStat& update_stat) const;
-  unsigned int getStorageHighWatermark() const { return sysroot_->storageWatermark(); };
 
   static bool getDeltaStatsRef(const Json::Value& json, DeltaStatsRef& ref);
   static Json::Value downloadDeltaStats(const DeltaStatsRef& ref, const Remote& remote);

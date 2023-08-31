@@ -65,7 +65,7 @@ class NoSpaceTest : public fixtures::ClientTest {
 
   void tweakConf(Config& cfg) override {
     if (!min_free_space_.empty()) {
-      cfg.pacman.extra[OSTree::Sysroot::Config::StorageFreeSpacePercentParamName] = min_free_space_;
+      cfg.pacman.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] = min_free_space_;
     }
   }
   void setMinFreeSpace(const std::string& min_free_space) { min_free_space_ = min_free_space; }
@@ -75,42 +75,45 @@ class NoSpaceTest : public fixtures::ClientTest {
   std::string min_free_space_;
 };
 
-TEST_F(NoSpaceTest, SysrootStorageWatermarkParam) {
+TEST_F(NoSpaceTest, ReservedStorageSpacePercentageDeltaParam) {
   {
     // check default value
     const auto cfg{OSTree::Sysroot::Config(PackageConfig{})};
-    ASSERT_EQ(OSTree::Sysroot::Config::DefaultStorageWatermark, cfg.StorageWatermark);
+    ASSERT_EQ(OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta,
+              cfg.ReservedStorageSpacePercentageDelta);
   }
   {
     // check if set to the default value if the specified param value is ivalid
     PackageConfig pacmancfg;
-    pacmancfg.extra[OSTree::Sysroot::Config::StorageWatermarkParamName] = "10foo";
+    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName] = "10foo";
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
-    ASSERT_EQ(OSTree::Sysroot::Config::DefaultStorageWatermark, cfg.StorageWatermark);
+    ASSERT_EQ(OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta,
+              cfg.ReservedStorageSpacePercentageDelta);
   }
   {
     // check if set to the min allowed value if the specified param value is lower than the one
     PackageConfig pacmancfg;
-    pacmancfg.extra[OSTree::Sysroot::Config::StorageWatermarkParamName] =
-        std::to_string(OSTree::Sysroot::Config::MinStorageWatermark - 1);
+    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName] =
+        std::to_string(OSTree::Sysroot::Config::MinReservedStorageSpacePercentageDelta - 1);
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
-    ASSERT_EQ(OSTree::Sysroot::Config::MinStorageWatermark, cfg.StorageWatermark);
+    ASSERT_EQ(OSTree::Sysroot::Config::MinReservedStorageSpacePercentageDelta, cfg.ReservedStorageSpacePercentageDelta);
   }
   {
     // check if set to the max allowed value if the specified param value is higher than the one
     PackageConfig pacmancfg;
-    pacmancfg.extra[OSTree::Sysroot::Config::StorageWatermarkParamName] =
-        std::to_string(OSTree::Sysroot::Config::MaxStorageWatermark + 1);
+    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName] =
+        std::to_string(OSTree::Sysroot::Config::MaxReservedStorageSpacePercentageDelta + 1);
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
-    ASSERT_EQ(OSTree::Sysroot::Config::MaxStorageWatermark, cfg.StorageWatermark);
+    ASSERT_EQ(OSTree::Sysroot::Config::MaxReservedStorageSpacePercentageDelta, cfg.ReservedStorageSpacePercentageDelta);
   }
   {
     // check if a custom valid value can be set
     PackageConfig pacmancfg;
-    const unsigned int my_watermark{93};
-    pacmancfg.extra[OSTree::Sysroot::Config::StorageWatermarkParamName] = std::to_string(my_watermark);
+    const unsigned int my_watermark{43};
+    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName] =
+        std::to_string(my_watermark);
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
-    ASSERT_EQ(my_watermark, cfg.StorageWatermark);
+    ASSERT_EQ(my_watermark, cfg.ReservedStorageSpacePercentageDelta);
   }
 }
 
@@ -219,15 +222,15 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
   {
-    // not enough free blocks taking into account the default watermark 90%,
-    // (20 - 11 = 9) - 9% of blocks will be free after the update, we need 10%
-    SetFreeBlockNumb(20, 100);
+    // not enough free blocks taking into account the default reserved 5%,
+    // (15 - 11 = 4) - 4% of blocks will be free after the update, we need 5%
+    SetFreeBlockNumb(15, 100);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
     const auto events{device_gateway_.getEvents()};
     const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
     ASSERT_TRUE(std::string::npos !=
-                event_err_msg.find("available 40960 out of 368640(90% of the volume capacity 409600)"))
+                event_err_msg.find("available 40960 out of 389120(95% of the volume capacity 409600)"))
         << event_err_msg;
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }

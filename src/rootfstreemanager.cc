@@ -314,7 +314,7 @@ bool RootfsTreeManager::getDeltaStatIfAvailable(const TufTarget& target, const R
 bool RootfsTreeManager::canDeltaFitOnDisk(const DeltaStat& delta_stat, UpdateStat& update_stat) const {
   StorageStat storage{};
   getStorageStat(sysroot_->repoPath(), storage);
-  const auto highWatermark{getStorageHighWatermark()};
+  const auto highWatermark{100 - sysroot_->reservedStorageSpacePercentageDelta()};
 
   const uint64_t max_blocks_available = std::floor(storage.blockNumb * (static_cast<double>(highWatermark) / 100));
   const uint64_t blocks_in_use = storage.blockNumb - storage.freeBlockNumb;
