@@ -11,10 +11,12 @@
 
 #include "composeappmanager.h"
 #include "liteclient.h"
+#include "storage/stat.h"
 
 #include "fixtures/liteclienttest.cc"
 
 // Defined in fstatvfs-mock.cc
+extern void SetBlockSize(unsigned long int);
 extern void SetFreeBlockNumb(uint64_t, uint64_t);
 extern void UnsetFreeBlockNumb();
 
@@ -115,6 +117,89 @@ TEST_F(NoSpaceTest, ReservedStorageSpacePercentageDeltaParam) {
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
     ASSERT_EQ(my_watermark, cfg.ReservedStorageSpacePercentageDelta);
   }
+}
+
+TEST(StorageStat, UsageInfo) {
+  {
+    storage::Volume::UsageInfo usage_info{storage::Volume::getUsageInfo("non-existing-path", 5)};
+    ASSERT_FALSE(usage_info.isOk());
+    ASSERT_FALSE(usage_info.err.empty()) << usage_info.err;
+    usage_info.withRequired(7);
+    ASSERT_EQ(7, usage_info.required.first);
+    ASSERT_EQ(0, usage_info.required.second);
+    ASSERT_EQ("required: 7B unknown%", usage_info.str());
+  }
+  {
+    unsigned int block_size{4096};
+    uint64_t block_numb{100};
+    unsigned int free_percentage{15};
+    unsigned int reserved_percentage{10};
+    const auto reserved_by{"ostree_min_free_space"};
+
+    storage::Volume::UsageInfo::Type free{std::ceil(block_numb * (free_percentage / 100.0)) * block_size,
+                                          free_percentage};
+    storage::Volume::UsageInfo::Type reserved{std::ceil(block_numb * (reserved_percentage / 100.0)) * block_size,
+                                              reserved_percentage};
+    storage::Volume::UsageInfo::Type used{std::ceil(block_numb * ((100 - free_percentage) / 100.0)) * block_size,
+                                          (100 - free_percentage)};
+
+    SetBlockSize(block_size);
+    SetFreeBlockNumb(std::ceil(block_numb * (free_percentage / 100.0)), block_numb);
+    storage::Volume::UsageInfo usage_info{storage::Volume::getUsageInfo("./", reserved_percentage, reserved_by)};
+    ASSERT_TRUE(usage_info.isOk());
+    ASSERT_EQ(free, usage_info.free) << usage_info.free.first;
+    ASSERT_EQ(reserved, usage_info.reserved) << usage_info.free.first;
+    ASSERT_EQ((free.first - reserved.first), usage_info.available.first) << usage_info.available.first;
+    ASSERT_EQ((free.second - reserved.second), usage_info.available.second) << usage_info.available.second;
+    ASSERT_EQ(reserved_by, usage_info.reserved_by) << usage_info.reserved_by;
+  }
+  {
+    // The same amount of free and reserved space
+    unsigned int block_size{4096};
+    uint64_t block_numb{999};
+    unsigned int free_percentage{15};
+    unsigned int reserved_percentage{15};
+
+    storage::Volume::UsageInfo::Type free{std::ceil(block_numb * (free_percentage / 100.0)) * block_size,
+                                          free_percentage};
+    storage::Volume::UsageInfo::Type reserved{std::ceil(block_numb * (reserved_percentage / 100.0)) * block_size,
+                                              reserved_percentage};
+    storage::Volume::UsageInfo::Type used{std::ceil(block_numb * ((100 - free_percentage) / 100.0)) * block_size,
+                                          (100 - free_percentage)};
+
+    SetBlockSize(block_size);
+    SetFreeBlockNumb(std::ceil(block_numb * (free_percentage / 100.0)), block_numb);
+    storage::Volume::UsageInfo usage_info{storage::Volume::getUsageInfo("./", reserved_percentage)};
+    ASSERT_TRUE(usage_info.isOk());
+    ASSERT_EQ(free, usage_info.free) << usage_info.free.first;
+    ASSERT_EQ(reserved, usage_info.reserved) << usage_info.reserved.first;
+    ASSERT_EQ((free.first - reserved.first), usage_info.available.first) << usage_info.available.first;
+    ASSERT_EQ((free.second - reserved.second), usage_info.available.second) << usage_info.available.second;
+    ASSERT_EQ(storage::Volume::UsageInfo::Type(0, 0), usage_info.available) << usage_info.available.first;
+  }
+  {
+    // The amount of free space is less than the required reserved
+    unsigned int block_size{1024};
+    uint64_t block_numb{999};
+    unsigned int free_percentage{13};
+    unsigned int reserved_percentage{15};
+
+    storage::Volume::UsageInfo::Type free{std::ceil(block_numb * (free_percentage / 100.0)) * block_size,
+                                          free_percentage};
+    storage::Volume::UsageInfo::Type reserved{std::ceil(block_numb * (reserved_percentage / 100.0)) * block_size,
+                                              reserved_percentage};
+    storage::Volume::UsageInfo::Type used{std::ceil(block_numb * ((100 - free_percentage) / 100.0)) * block_size,
+                                          (100 - free_percentage)};
+
+    SetBlockSize(block_size);
+    SetFreeBlockNumb(std::ceil(block_numb * (free_percentage / 100.0)), block_numb);
+    storage::Volume::UsageInfo usage_info{storage::Volume::getUsageInfo("./", reserved_percentage)};
+    ASSERT_TRUE(usage_info.isOk());
+    ASSERT_EQ(free, usage_info.free) << usage_info.free.first;
+    ASSERT_EQ(reserved, usage_info.reserved) << usage_info.reserved.first;
+    ASSERT_EQ(storage::Volume::UsageInfo::Type(0, 0), usage_info.available) << usage_info.available.first;
+  }
+  UnsetFreeBlockNumb();
 }
 
 TEST_F(NoSpaceTest, OstreeUpdateNoSpace) {

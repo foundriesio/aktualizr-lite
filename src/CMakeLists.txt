@@ -2,6 +2,7 @@ set(TARGET_EXE aktualizr-lite)
 set(TARGET_LIB ${MAIN_TARGET_LIB})
 
 set(SRC helpers.cc
+        storage/stat.cc
         composeappmanager.cc
         rootfstreemanager.cc
         docker/restorableappengine.cc
@@ -20,6 +21,7 @@ set(SRC helpers.cc
         api.cc)
 
 set(HEADERS helpers.h
+        storage/stat.h
         composeappmanager.h
         rootfstreemanager.h
         docker/restorableappengine.h
