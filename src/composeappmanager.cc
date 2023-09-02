@@ -248,7 +248,7 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
     return ostree_download_res;
   }
 
-  DownloadResult res{DownloadResult::Status::Ok, ""};
+  DownloadResult res{ostree_download_res};
   const Uptane::Target uptane_target{Target::fromTufTarget(target)};
 
   if (cfg_.force_update) {

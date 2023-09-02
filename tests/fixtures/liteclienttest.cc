@@ -545,6 +545,15 @@ class ClientTest :virtual public ::testing::Test {
     return ostree_repo_.getDeltaSize(to.custom_data()["delta-stats"]["sha256"].asString(), from.sha256Hash(), to.sha256Hash());
   }
 
+  std::string getEventContext(const std::string& ev_id) {
+    for (const auto& ev: device_gateway_.getEvents()) {
+      if (ev_id == ev["eventType"]["id"].asString()) {
+        return ev["event"]["details"].asString();
+      }
+    }
+    return "";
+  }
+
  protected:
   static const std::string branch;
   static const std::string hw_id;

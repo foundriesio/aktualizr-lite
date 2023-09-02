@@ -73,14 +73,25 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
                  << pre_pull_usage_info.withRequired(delta_stat.uncompressedSize);
       }
     } else {
+      if (pre_pull_usage_info.isOk()) {
+        LOG_INFO << "Pre-pull storage usage info; " << pre_pull_usage_info;
+      }
       LOG_INFO << "No static delta stats are found, skipping the update size check";
     }
 
     LOG_INFO << "Fetching ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
     pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
                                    prog_cb, remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
+
+    storage::Volume::UsageInfo post_pull_usage_info{getUsageInfo()};
+    if (post_pull_usage_info.isOk()) {
+      LOG_INFO << "Post pull storage usage info; " << post_pull_usage_info;
+    } else {
+      LOG_ERROR << "Failed to obtain storage usage statistic: " << post_pull_usage_info.err;
+    }
     if (pull_err.isSuccess()) {
-      res = {DownloadResult::Status::Ok, ""};
+      res = {DownloadResult::Status::Ok,
+             "before ostree pull; " + pre_pull_usage_info.str() + "\nafter ostree pull; " + post_pull_usage_info.str()};
       break;
     }
 

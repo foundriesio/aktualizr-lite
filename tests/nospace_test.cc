@@ -320,8 +320,7 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
                  << ", available: " << usage_info.available;
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
-    const auto events{device_gateway_.getEvents()};
-    const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
+    const std::string event_err_msg{getEventContext("EcuDownloadCompleted")};
     ASSERT_TRUE(std::string::npos != event_err_msg.find(expected_msg.str())) << event_err_msg;
     ASSERT_TRUE(std::string::npos !=
                 event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName))
@@ -341,8 +340,7 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
                  << ", available: " << usage_info.available;
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
-    const auto events{device_gateway_.getEvents()};
-    const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
+    const std::string event_err_msg{getEventContext("EcuDownloadCompleted")};
     ASSERT_TRUE(std::string::npos != event_err_msg.find(expected_msg.str())) << event_err_msg;
     ASSERT_TRUE(std::string::npos !=
                 event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName))
@@ -355,6 +353,9 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
     update(*client, getInitialTarget(), new_target);
     reboot(client);
     ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+    const std::string msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != msg.find("before ostree pull")) << msg;
+    ASSERT_TRUE(std::string::npos != msg.find("after ostree pull")) << msg;
   }
   UnsetFreeBlockNumb();
 }
