@@ -7,7 +7,6 @@
 #include "http/httpclient.h"
 #include "ostree/repo.h"
 #include "storage/invstorage.h"
-#include "storage/stat.h"
 #include "target.h"
 
 RootfsTreeManager::Config::Config(const PackageConfig& pconfig) {
@@ -53,9 +52,7 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
       setRemote(remote.name, remote.baseUrl, remote.keys);
     }
 
-    storage::Volume::UsageInfo pre_pull_usage_info{
-        storage::Volume::getUsageInfo(sysroot_->repoPath(), sysroot_->reservedStorageSpacePercentageDelta(),
-                                      OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName)};
+    storage::Volume::UsageInfo pre_pull_usage_info{getUsageInfo()};
     if (!pre_pull_usage_info.isOk()) {
       LOG_ERROR << "Failed to obtain storage usage statistic: " << pre_pull_usage_info.err;
     }
@@ -392,4 +389,16 @@ bool RootfsTreeManager::findDeltaStatForUpdate(const Json::Value& delta_stats, c
   }
   found_delta_stat = {found_delta["size"].asUInt64(), found_delta["u_size"].asUInt64()};
   return true;
+}
+
+storage::Volume::UsageInfo RootfsTreeManager::getUsageInfo() const {
+  unsigned int reserved_percentage{sysroot_->reservedStorageSpacePercentageDelta()};
+  std::string reserved_by{OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName};
+
+  const unsigned int reserved_by_ostree{sysroot_->reservedStorageSpacePercentageOstree()};
+  if (reserved_percentage < reserved_by_ostree) {
+    reserved_percentage = reserved_by_ostree;
+    reserved_by = OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName;
+  }
+  return storage::Volume::getUsageInfo(sysroot_->repoPath(), reserved_percentage, reserved_by);
 }

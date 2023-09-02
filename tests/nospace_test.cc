@@ -308,7 +308,7 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
   {
-    // required 11%, free 15%, reserved 5% (default) -> available 10% < 11%
+    // required 11%, free 15%, reserved 5% (default, by the delta knob) -> available 10% < 11%
     SetFreeBlockNumb(15, 100);
     const auto expected_available{((15 > OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta))
                                       ? (15 - OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta)
@@ -323,19 +323,29 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
     const auto events{device_gateway_.getEvents()};
     const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
     ASSERT_TRUE(std::string::npos != event_err_msg.find(expected_msg.str())) << event_err_msg;
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName))
+        << event_err_msg;
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
   {
-    // (21 - 11 = 10) - 10% of blocks will be free, need 10% so, it's supposed to succeed.
-    // But, the commit function checks if it will be more than 15% of storage capacity free after commit.
-    // Obviously it's not since only 10% will be available.
-    SetFreeBlockNumb(21, 100);
-    sys_repo_.setMinFreeSpacePercent("15");
+    // required 11%, free 16%, reserved 5% by the delta knob, reserved 6% by the ostree knob
+    // -> available 10% < 11%
+    SetFreeBlockNumb(16, 100);
+    sys_repo_.setMinFreeSpacePercent("6");
+    const auto expected_available{16 - 6};
+    storage::Volume::UsageInfo usage_info{.size = {100 * 4096, 100},
+                                          .available = {expected_available * 4096, expected_available}};
+    std::stringstream expected_msg;
+    expected_msg << "required: " << usage_info.withRequired(delta_size).required
+                 << ", available: " << usage_info.available;
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
     const auto events{device_gateway_.getEvents()};
     const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
-    ASSERT_TRUE(std::string::npos != event_err_msg.find("opcode close: min-free-space-percent '15%' would be exceeded"))
+    ASSERT_TRUE(std::string::npos != event_err_msg.find(expected_msg.str())) << event_err_msg;
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName))
         << event_err_msg;
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
