@@ -1,17 +1,13 @@
 #include "rootfstreemanager.h"
 
-#include <fcntl.h>
-#include <sys/statvfs.h>
-#include <cstdio>
-
 #include <boost/algorithm/hex.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/format.hpp>
 
 #include "crypto/crypto.h"
 #include "http/httpclient.h"
 #include "ostree/repo.h"
 #include "storage/invstorage.h"
+#include "storage/stat.h"
 #include "target.h"
 
 RootfsTreeManager::Config::Config(const PackageConfig& pconfig) {
@@ -57,31 +53,33 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
       setRemote(remote.name, remote.baseUrl, remote.keys);
     }
 
+    storage::Volume::UsageInfo pre_pull_usage_info{
+        storage::Volume::getUsageInfo(sysroot_->repoPath(), sysroot_->reservedStorageSpacePercentageDelta(),
+                                      OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName)};
+    if (!pre_pull_usage_info.isOk()) {
+      LOG_ERROR << "Failed to obtain storage usage statistic: " << pre_pull_usage_info.err;
+    }
     DeltaStat delta_stat{};
     if (getDeltaStatIfAvailable(target, remote, delta_stat)) {
-      LOG_INFO << "Found and pulled delta stats, checking if update can fit on a disk...";
-      try {
-        UpdateStat update_stat{};
-        bool ok{canDeltaFitOnDisk(delta_stat, update_stat)};
-        const auto stat_msg{boost::format{"required %u, available %u out of %u(%u%% of the volume capacity %u)"} %
-                            update_stat.deltaSize % update_stat.available % update_stat.maxAvailable %
-                            update_stat.highWatermark % update_stat.storageCapacity};
-
-        if (!ok) {
-          return {DownloadResult::Status::DownloadFailed_NoSpace,
-                  "Insufficient storage available; err: " + stat_msg.str(), sysroot_->path()};
+      if (pre_pull_usage_info.isOk()) {
+        LOG_INFO << "Checking if update can fit on a disk...";
+        if (pre_pull_usage_info.available.first < delta_stat.uncompressedSize) {
+          return {
+              DownloadResult::Status::DownloadFailed_NoSpace,
+              "Insufficient storage available; " + pre_pull_usage_info.withRequired(delta_stat.uncompressedSize).str(),
+              sysroot_->repoPath()};
         }
-        LOG_INFO << "Fetching static delta; " + stat_msg.str();
-      } catch (const std::exception& exc) {
-        LOG_ERROR << "Failed to check if the static delta can fit on a disk, skipping the update size check...; err: "
-                  << exc.what();
-        LOG_INFO << "Fetching ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
+        LOG_INFO << "Sufficient free storage available; "
+                 << pre_pull_usage_info.withRequired(delta_stat.uncompressedSize);
+      } else {
+        LOG_INFO << "No storage usage statistic is available, skipping the update size check; "
+                 << pre_pull_usage_info.withRequired(delta_stat.uncompressedSize);
       }
     } else {
-      LOG_INFO << "No static delta or static delta stats are found, skipping the update size check...";
-      LOG_INFO << "Fetching ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
+      LOG_INFO << "No static delta stats are found, skipping the update size check";
     }
 
+    LOG_INFO << "Fetching ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
     pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
                                    prog_cb, remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
     if (pull_err.isSuccess()) {
@@ -98,9 +96,8 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
         // not enough storage space in the case of a static delta pull (pulling the delta parts/files)
         (pull_err.description.find("Delta requires") != std::string::npos &&
          pull_err.description.find("free space, but only") != std::string::npos)) {
-      res = {DownloadResult::Status::DownloadFailed_NoSpace,
-             "Insufficient storage available; path: " + config.sysroot.string() + "; err: " + pull_err.description,
-             sysroot_->path()};
+      res = {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available; " + pull_err.description,
+             sysroot_->repoPath()};
       break;
     }
     error_desc += pull_err.description + "\n";
@@ -301,35 +298,15 @@ bool RootfsTreeManager::getDeltaStatIfAvailable(const TufTarget& target, const R
     }
     LOG_INFO << "File with static delta stats has been downloaded, parsing it...";
     if (!findDeltaStatForUpdate(delta_stats_json, getCurrentHash(), target.Sha256Hash(), delta_stat)) {
-      LOG_ERROR << "No delta stat found between " << getCurrentHash() << " and " << target.Sha256Hash();
+      LOG_ERROR << "No stat found for delta between " << getCurrentHash() << " and " << target.Sha256Hash();
       return false;
     }
+    LOG_INFO << "Found stat for delta between " << getCurrentHash() << " and " << target.Sha256Hash();
     return true;
   } catch (const std::exception& exc) {
     LOG_ERROR << "Error occurred while getting static delta stats: " << exc.what();
   }
   return false;
-}
-
-bool RootfsTreeManager::canDeltaFitOnDisk(const DeltaStat& delta_stat, UpdateStat& update_stat) const {
-  StorageStat storage{};
-  getStorageStat(sysroot_->repoPath(), storage);
-  const auto highWatermark{100 - sysroot_->reservedStorageSpacePercentageDelta()};
-
-  const uint64_t max_blocks_available = std::floor(storage.blockNumb * (static_cast<double>(highWatermark) / 100));
-  const uint64_t blocks_in_use = storage.blockNumb - storage.freeBlockNumb;
-  const uint64_t max_blocks_available_for_update =
-      (max_blocks_available > blocks_in_use) ? (max_blocks_available - blocks_in_use) : 0;
-  const uint64_t blocks_required_by_delta = (delta_stat.uncompressedSize / storage.blockSize) +
-                                            ((delta_stat.uncompressedSize % storage.blockSize != 0) ? 1 : 0);
-
-  update_stat.storageCapacity = storage.blockSize * storage.blockNumb;
-  update_stat.highWatermark = highWatermark;
-  update_stat.maxAvailable = max_blocks_available * storage.blockSize;
-  update_stat.available = max_blocks_available_for_update * storage.blockSize;
-  update_stat.deltaSize = delta_stat.uncompressedSize;
-
-  return blocks_required_by_delta <= max_blocks_available_for_update;
 }
 
 bool RootfsTreeManager::getDeltaStatsRef(const Json::Value& json, DeltaStatsRef& ref) {
@@ -415,21 +392,4 @@ bool RootfsTreeManager::findDeltaStatForUpdate(const Json::Value& delta_stats, c
   }
   found_delta_stat = {found_delta["size"].asUInt64(), found_delta["u_size"].asUInt64()};
   return true;
-}
-
-void RootfsTreeManager::getStorageStat(const std::string& path, StorageStat& stat_out) {
-  int fd{-1};
-  if ((fd = open(path.c_str(), O_DIRECTORY | O_RDONLY)) == -1) {
-    throw std::runtime_error(std::string("Failed to obtain a sysroot directory file descriptor; path: ") + path +
-                             ", err: " + std::strerror(errno));
-  }
-  struct statvfs fs_stat {};
-  if (-1 == fstatvfs(fd, &fs_stat)) {
-    throw std::runtime_error(std::string("Failed to obtain statistic about the sysroot directory; path: ") + path +
-                             ", err: " + std::strerror(errno));
-  }
-
-  stat_out.freeBlockNumb = (getuid() != 0 ? fs_stat.f_bavail : fs_stat.f_bfree);
-  stat_out.blockNumb = fs_stat.f_blocks;
-  stat_out.blockSize = fs_stat.f_bsize;  // f_frsize == f_bsize on the linux-based systems
 }

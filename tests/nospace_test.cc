@@ -307,15 +307,13 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
   {
-    // not enough free blocks taking into account the default reserved 5%,
-    // (15 - 11 = 4) - 4% of blocks will be free after the update, we need 5%
+    // required 11%, free 15%, reserved 5% (default) -> available 10% < 11%
     SetFreeBlockNumb(15, 100);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
     const auto events{device_gateway_.getEvents()};
     const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
-    ASSERT_TRUE(std::string::npos !=
-                event_err_msg.find("available 40960 out of 389120(95% of the volume capacity 409600)"))
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("required: 42397B 11%, available: 40960B 10%"))
         << event_err_msg;
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
