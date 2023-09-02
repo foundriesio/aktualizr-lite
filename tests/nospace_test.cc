@@ -299,6 +299,7 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
   // Delta size will be 10 + 1 = 11 blocks, 1  block for additional data like boot loader version file.
   setGenerateStaticDelta(10, true);
   auto new_target = createTarget();
+  const auto delta_size{getDeltaSize(getInitialTarget(), new_target)};
   {
     // not enough free blocks
     SetFreeBlockNumb(5, 100);
@@ -309,12 +310,19 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
   {
     // required 11%, free 15%, reserved 5% (default) -> available 10% < 11%
     SetFreeBlockNumb(15, 100);
+    const auto expected_available{((15 > OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta))
+                                      ? (15 - OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta)
+                                      : 0};
+    storage::Volume::UsageInfo usage_info{.size = {100 * 4096, 100},
+                                          .available = {expected_available * 4096, expected_available}};
+    std::stringstream expected_msg;
+    expected_msg << "required: " << usage_info.withRequired(delta_size).required
+                 << ", available: " << usage_info.available;
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
     const auto events{device_gateway_.getEvents()};
     const std::string event_err_msg{events[events.size() - 1]["event"]["details"].asString()};
-    ASSERT_TRUE(std::string::npos != event_err_msg.find("required: 42397B 11%, available: 40960B 10%"))
-        << event_err_msg;
+    ASSERT_TRUE(std::string::npos != event_err_msg.find(expected_msg.str())) << event_err_msg;
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
   {

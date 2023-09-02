@@ -61,6 +61,21 @@ class OSTreeRepoMock {
     return delta_stat_ref;
   }
 
+  uint64_t getDeltaSize(const std::string& delta_file_name, const std::string& from, const std::string& to) const {
+    const auto delta_file_path{path_ + "/delta-stats/" + delta_file_name};
+    if (!boost::filesystem::exists(delta_file_path)) {
+     return 0;
+    }
+    Json::Value delta_json = Utils::parseJSONFile(delta_file_path);
+    if (!delta_json.isMember(to)) {
+      return 0;
+    }
+    if (!delta_json[to].isMember(from)) {
+      return 0;
+    }
+    return boost::lexical_cast<uint64_t>(delta_json[to][from]["u_size"]);
+  }
+
   const std::string& getPath() const { return path_; }
 
  private:

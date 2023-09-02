@@ -541,6 +541,9 @@ class ClientTest :virtual public ::testing::Test {
     static_delta_size_bn_ = min_size_in_blocks;
     static_delta_stat_ = add_delta_stat;
   }
+  uint64_t getDeltaSize(const Uptane::Target& from, const Uptane::Target& to) const {
+    return ostree_repo_.getDeltaSize(to.custom_data()["delta-stats"]["sha256"].asString(), from.sha256Hash(), to.sha256Hash());
+  }
 
  protected:
   static const std::string branch;
