@@ -92,6 +92,7 @@ ostream& operator<<(ostream& os, const storage::Volume::UsageInfo& t) {
     if (t.required.first > 0) {
       os << "required: " << t.required.first << "B unknown%";
     }
+    os << "; fstatvfs err: " << t.err;
     return os;
   }
 

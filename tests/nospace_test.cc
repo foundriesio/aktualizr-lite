@@ -127,7 +127,7 @@ TEST(StorageStat, UsageInfo) {
     usage_info.withRequired(7);
     ASSERT_EQ(7, usage_info.required.first);
     ASSERT_EQ(0, usage_info.required.second);
-    ASSERT_EQ("required: 7B unknown%", usage_info.str());
+    ASSERT_TRUE(std::string::npos != usage_info.str().find("required: 7B unknown%")) << usage_info;
   }
   {
     unsigned int block_size{4096};
@@ -213,6 +213,11 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpace) {
   update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
          {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+  ASSERT_TRUE(std::string::npos != event_err_msg.find("min-free-space-size 1048576MB would be exceeded"))
+      << event_err_msg;
+  ASSERT_TRUE(std::string::npos != event_err_msg.find("before ostree pull; available:")) << event_err_msg;
+  ASSERT_TRUE(std::string::npos != event_err_msg.find("after ostree pull; available:")) << event_err_msg;
 
   // reboot device
   reboot(client);
@@ -230,62 +235,109 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfWatermarkParamIsSet) {
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
 
   auto new_target = createTarget();
-  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
-         {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
 
-  // Now, let's decrease the required minimum space to 40%, since the update size is < 9 blocks,
-  // then the libostree should be happy.
-  // We need to "reboot" in order to recreate the client instance so the new watermark is applied.
-  setMinFreeSpace("40");
-  reboot(client);
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
-  update(*client, getInitialTarget(), new_target);
-  reboot(client);
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  {
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("min-free-space-percent '50%' would be exceeded"))
+        << event_err_msg;
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("available: 4096B 1%")) << event_err_msg;
+  }
+  {
+    // Now, let's decrease the required minimum space to 40%, since the update size is < 9 blocks,
+    // then the libostree should be happy.
+    // We need to "reboot" in order to recreate the client instance so the new watermark is applied.
+    setMinFreeSpace("40");
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+    update(*client, getInitialTarget(), new_target);
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  }
   UnsetFreeBlockNumb();
 }
 
 TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  // Delta size is 3 + 1 = 4 blocks
   setGenerateStaticDelta(3);
   auto new_target = createTarget();
   {
-    // Not enough space/block, 3 is required, we got only 1.
+    // The delta-based update if there is no stat/info about the delta, so the pre-pull verification
+    // of the update size is not possible. Thus, the error originates in libostree; libostree does NOT
+    // apply any threshold/reserved when checking if there is enough storage to store a delta file,
+    // it just checks for the overall storage capacity.
+    //
+    // required 4%, free 2%, available 0%, no pre-pull check -> libostree generates the error "Delta requires..."
     // The expected libostree error:
     //    "Error while pulling image: 0 Delta requires 13.8 kB free space, but only 4.1 kB available"
-    SetFreeBlockNumb(1, 10);
+    SetFreeBlockNumb(2, 100);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("Delta requires")) << event_err_msg;
+    // libostree converts 2*4096=8192B by dividing it to 1000 not 1024.
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("free space, but only 8.2 kB available")) << event_err_msg;
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("available: 0B 0%")) << event_err_msg;
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName))
+        << event_err_msg;
   }
   {
-    // There is enough space to accommodate the 3-block delta since we have 3 free blocks.
-    // But, at the last step of the delta processing libostree calls dispatch_close() ->
-    // _ostree_repo_bare_content_commit(). And, the _ostree_repo_bare_content_commit() checks the
-    // `min-free-space-percent`/`min-free-space-size` watermark. In our case we have 3 out of 100 blocks free,
-    // which is enough to fit the delta, but less than the `min-free-space-percent` of overall storage
-    // becomes free after the update, so libostree rejects it.
-    // It  doesn't make sense to reject the update after its content is pulled and already written to a disk,
-    // but this is the way libostree works, so we have to adjust...(we bypass this issue by using the delta stats)
-    // Expected error message is:
+    // The delta-based update if there is no stat/info about the delta, so the pre-pull verification
+    // of the update size is not possible. Thus, the error originates in libostree; libostree does NOT
+    // apply any threshold/reserved when checking if there is enough storage to store a delta file,
+    // it just checks for the overall storage capacity.
+    // In this case, there is enough free storage to accommodate the delta file.
+    // But, during committing the ostree objects extracted from the delta file, libostree checks
+    // if there is enough free storage is available taking into account the
+    // `min-free-space-percent`/`min-free-space-size` threshold -> reserved storage. By default, the libostree sets it
+    // to 3%.
+    //
+    // required 4%, free 5%, reserved 3%, available 2%, no pre-pull check -> libostree generates the error "would be
+    // exceeded, at least..." Expected error message is:
     //    "Error while pulling image: 0 opcode close: min-free-space-percent '3%' would be exceeded, at least 13 bytes
     //    requested"
-    SetFreeBlockNumb(3, 100);
+    SetFreeBlockNumb(5, 100);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("min-free-space-percent '3%' would be exceeded, at least"))
+        << event_err_msg;
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("available: 8192B 2%")) << event_err_msg;
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName));
   }
   {
-    // Now, we have 15 blocks out of 100 free, so 15-3 = 12 - 12% of storage will be free after the update,
-    // so libostree should be happy.
-    // NOTE: 7 blocks (7%) should suffice, but for some reason libostree requires 15%.
-    // TODO: Check the following assumption.
-    //       Most likely there is a moment during download at which 2x of the update/delta size is required.
-    //       Specifically, in this case, 3% for downloaded delta and then 3% to commit it to the repo - hence > 6% is
-    //       needed.
-    SetFreeBlockNumb(15, 100);
+    // required 4%, free 7%, reserved 3%, available 7% - 3% = 4% -> should be ok,
+    // but there is a moment during the delta-based pull when libostree has the delta file
+    // on a file system + extracted files while it commits the extracted files to the repo.
+    // So, it takes into account the delta file size + extracted objects during ostree objects committing,
+    // therefore we need 4% + <some additional space> ~ 5% (required)+ 3% (reserved) ~ 8% (at least 8 free blocks
+    // is required, but just 7 is available)
+    //
+    storage::Volume::UsageInfo usage_info{.size = {100 * 4096, 100}, .available = {(7 - 3) * 4096, 7 - 3}};
+    std::stringstream expected_available;
+    expected_available << usage_info.available;
+    SetFreeBlockNumb(7, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("min-free-space-percent '3%' would be exceeded, at least"))
+        << event_err_msg;
+    ASSERT_TRUE(std::string::npos != event_err_msg.find(expected_available.str())) << event_err_msg;
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName));
+  }
+  {
+    // required 4%, free 15%, reserved 3%, available 15% - 3% = 12% -> ok
+    SetFreeBlockNumb(14, 100);
     update(*client, getInitialTarget(), new_target);
     reboot(client);
     ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
