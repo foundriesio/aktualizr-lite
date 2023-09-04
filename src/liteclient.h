@@ -1,6 +1,7 @@
 #ifndef AKTUALIZR_LITE_CLIENT_H_
 #define AKTUALIZR_LITE_CLIENT_H_
 
+#include "downloader.h"
 #include "gtest/gtest_prod.h"
 #include "libaktualizr/config.h"
 #include "libaktualizr/packagemanagerinterface.h"
@@ -41,7 +42,7 @@ class LiteClient {
   void checkForUpdatesEndWithFailure(const std::string& err);
   bool finalizeInstall(data::InstallationResult* ir = nullptr);
   Uptane::Target getRollbackTarget();
-  DownloadResult download(const Uptane::Target& target, const std::string& reason);
+  DownloadResultWithStat download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
   std::pair<bool, std::string> isRebootRequired() const {
@@ -91,7 +92,7 @@ class LiteClient {
   void writeCurrentTarget(const Uptane::Target& t) const;
 
   data::InstallationResult installPackage(const Uptane::Target& target);
-  DownloadResult downloadImage(const Uptane::Target& target, const api::FlowControlToken* token = nullptr);
+  DownloadResultWithStat downloadImage(const Uptane::Target& target, const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
   void initRequestHeaders(std::vector<std::string>& headers) const;
