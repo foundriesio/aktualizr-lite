@@ -78,6 +78,19 @@ class OSTreeRepoMock {
 
   const std::string& getPath() const { return path_; }
 
+  void removeCommitObject(const std::string& hash) {
+    const auto commit_object_path{path_ + "/objects/" + hash.substr(0, 2) + "/" + hash.substr(2) + ".commit"};
+    boost::filesystem::remove(commit_object_path);
+  }
+  void removeDeltas() {
+    const auto deltas_path{path_ + "/deltas/"};
+    boost::filesystem::remove_all(deltas_path);
+  }
+  void removeDeltaStats() {
+    const auto deltas_path{path_ + "/delta-stats/"};
+    boost::filesystem::remove_all(deltas_path);
+  }
+
  private:
   const std::string path_;
 };

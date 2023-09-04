@@ -114,8 +114,9 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
              sysroot_->repoPath()};
       break;
     }
-    error_desc += pull_err.description + "\n";
-    res = {DownloadResult::Status::DownloadFailed, error_desc};
+    error_desc += pull_err.description + "\nbefore ostree pull; " + pre_pull_usage_info.str() +
+                  "\nafter ostree pull; " + post_pull_usage_info.str();
+    res = {DownloadResult::Status::DownloadFailed, error_desc, sysroot_->repoPath()};
   }
 
   return res;

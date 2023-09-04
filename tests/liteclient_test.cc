@@ -23,6 +23,9 @@
 
 #include "fixtures/liteclienttest.cc"
 
+extern void SetFreeBlockNumb(uint64_t, uint64_t);
+extern void UnsetFreeBlockNumb();
+
 using ::testing::NiceMock;
 using ::testing::Return;
 
@@ -321,6 +324,51 @@ TEST_F(LiteClientTest, OstreeAndAppUpdate) {
     ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
     checkHeaders(*client, new_target);
   }
+}
+
+TEST_F(LiteClientTest, OstreeAndAppUpdateIfOstreeDownloadFailure) {
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  std::vector<AppEngine::App> apps{createApp("app-01")};
+  auto new_target = createTarget(&apps);
+
+  SetFreeBlockNumb(10 + 3 /* default reserved */, 100);
+
+  getOsTreeRepo().removeCommitObject(new_target.sha256Hash());
+  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed, ""});
+  const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+  ASSERT_TRUE(std::string::npos != event_err_msg.find("Server returned HTTP 404")) << event_err_msg;
+  ASSERT_TRUE(std::string::npos != event_err_msg.find("before ostree pull; available: 40960B 10%")) << event_err_msg;
+  ASSERT_TRUE(std::string::npos != event_err_msg.find("after ostree pull; available: 40960B 10%")) << event_err_msg;
+  UnsetFreeBlockNumb();
+}
+
+TEST_F(LiteClientTest, OstreeAndAppUpdateIfOstreeDownloadFailureAndStaticDeltaStats) {
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  std::vector<AppEngine::App> apps{createApp("app-01")};
+  // Delta size will be 2 + 1 = 3 blocks, 1  block for additional data like boot loader version file.
+  setGenerateStaticDelta(2, true);
+  auto new_target = createTarget(&apps);
+  const auto delta_size{getDeltaSize(getInitialTarget(), new_target)};
+  const auto expected_available{15 - 5};
+  storage::Volume::UsageInfo usage_info{.size = {100 * 4096, 100},
+                                        .available = {expected_available * 4096, expected_available}};
+  std::stringstream expected_msg;
+  expected_msg << "before ostree pull; required: " << usage_info.withRequired(delta_size).required
+               << ", available: " << usage_info.available;
+  SetFreeBlockNumb(10 + 5 /* default reserved for delta case */, 100);
+
+  getOsTreeRepo().removeDeltas();
+  getOsTreeRepo().removeCommitObject(new_target.sha256Hash());
+  update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed, ""});
+  const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+  ASSERT_TRUE(std::string::npos != event_err_msg.find("Server returned HTTP 404")) << event_err_msg;
+  ASSERT_TRUE(std::string::npos != event_err_msg.find(expected_msg.str())) << event_err_msg;
+  ASSERT_TRUE(std::string::npos != event_err_msg.find("after ostree pull; available: 40960B 10%")) << event_err_msg;
+  UnsetFreeBlockNumb();
 }
 
 TEST_F(LiteClientTest, AppUpdateDownloadFailure) {
