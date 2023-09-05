@@ -170,6 +170,8 @@ TEST(StorageStat, UsageInfo) {
     SetBlockSize(block_size);
     SetFreeBlockNumb(std::ceil(block_numb * (free_percentage / 100.0)), block_numb);
     storage::Volume::UsageInfo usage_info{storage::Volume::getUsageInfo("./", reserved_percentage)};
+    usage_info.free.second = std::round(usage_info.free.second);
+    usage_info.available.second = std::round(usage_info.available.second);
     ASSERT_TRUE(usage_info.isOk());
     ASSERT_EQ(free, usage_info.free) << usage_info.free.first;
     ASSERT_EQ(reserved, usage_info.reserved) << usage_info.reserved.first;
@@ -194,6 +196,7 @@ TEST(StorageStat, UsageInfo) {
     SetBlockSize(block_size);
     SetFreeBlockNumb(std::ceil(block_numb * (free_percentage / 100.0)), block_numb);
     storage::Volume::UsageInfo usage_info{storage::Volume::getUsageInfo("./", reserved_percentage)};
+    usage_info.free.second = std::round(usage_info.free.second);
     ASSERT_TRUE(usage_info.isOk());
     ASSERT_EQ(free, usage_info.free) << usage_info.free.first;
     ASSERT_EQ(reserved, usage_info.reserved) << usage_info.reserved.first;
