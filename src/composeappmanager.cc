@@ -288,16 +288,22 @@ DownloadResultWithStat ComposeAppManager::Download(const TufTarget& target) {
       if (fetch_res.noSpace()) {
         res = {DownloadResult::Status::DownloadFailed_NoSpace, stat_msg.str(), fetch_res.stat.path, fetch_res.stat};
       } else {
-        storage::Volume::UsageInfo post_app_pull_usage{storage::Volume::getUsageInfo(
-            cfg_.images_data_root.string(), (100 - cfg_.storage_watermark), "pacman:storage_watermark")};
-        if (!post_app_pull_usage.isOk()) {
-          LOG_ERROR << "Failed to obtain storage usage statistic: " << post_app_pull_usage.err;
-        }
-        stat_msg << "\nafter apps pull: " << post_app_pull_usage;
-        res = {DownloadResult::Status::DownloadFailed, stat_msg.str()};
+        res = {DownloadResult::Status::DownloadFailed, ""};
       }
       break;
     }
+  }
+
+  storage::Volume::UsageInfo post_app_pull_usage;
+  if (!all_apps_to_fetch.empty() && !res.noSpace()) {
+    post_app_pull_usage = storage::Volume::getUsageInfo(cfg_.images_data_root.string(), (100 - cfg_.storage_watermark),
+                                                        "pacman:storage_watermark");
+    if (!post_app_pull_usage.isOk()) {
+      LOG_ERROR << "Failed to obtain storage usage statistic: " << post_app_pull_usage.err;
+    }
+    stat_msg << "\nafter apps pull: " << post_app_pull_usage;
+    res.description = stat_msg.str();
+    LOG_INFO << "Post pull storage usage info; " << post_app_pull_usage;
   }
 
   are_apps_checked_ = false;

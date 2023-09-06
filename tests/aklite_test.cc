@@ -214,6 +214,14 @@ TEST_P(AkliteTest, OstreeAndAppUpdate) {
   checkHeaders(*client, new_target);
   ASSERT_TRUE(app_engine->isRunning(app01));
   checkEvents(*client, new_target, UpdateType::kOstree);
+  if (app_engine_type == "RestorableAppEngine") {
+    const auto err_msg{getEventContext("EcuDownloadCompleted")};
+    // make sure storage usage stat is added to the download event context
+    ASSERT_TRUE(std::string::npos != err_msg.find("before ostree pull")) << err_msg;
+    ASSERT_TRUE(std::string::npos != err_msg.find("after ostree pull")) << err_msg;
+    ASSERT_TRUE(std::string::npos != err_msg.find("before apps pull")) << err_msg;
+    ASSERT_TRUE(std::string::npos != err_msg.find("after apps pull")) << err_msg;
+  }
 }
 
 TEST_P(AkliteTest, OstreeAndAppUpdateIfAppDownloadFails) {
