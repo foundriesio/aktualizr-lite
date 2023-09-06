@@ -267,6 +267,16 @@ DownloadResultWithStat ComposeAppManager::Download(const TufTarget& target) {
   all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
   all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
 
+  std::stringstream stat_msg;
+  storage::Volume::UsageInfo pre_app_pull_usage;
+  if (!all_apps_to_fetch.empty()) {
+    pre_app_pull_usage = storage::Volume::getUsageInfo(cfg_.images_data_root.string(), (100 - cfg_.storage_watermark),
+                                                       "pacman:storage_watermark");
+    if (!pre_app_pull_usage.isOk()) {
+      LOG_ERROR << "Failed to obtain storage usage statistic: " << pre_app_pull_usage.err;
+    }
+    stat_msg << res.description << "\nbefore apps pull: " << pre_app_pull_usage;
+  }
   for (const auto& pair : all_apps_to_fetch) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
     const auto fetch_res{app_engine_->fetch({pair.first, pair.second})};
@@ -274,11 +284,17 @@ DownloadResultWithStat ComposeAppManager::Download(const TufTarget& target) {
       const std::string err_desc{boost::str(boost::format("failed to fetch App; app: %s; uri: %s; %s") % pair.first %
                                             pair.second % fetch_res.err)};
       LOG_ERROR << err_desc;
+      stat_msg << "\n" << err_desc;
       if (fetch_res.noSpace()) {
-        res = {DownloadResult::Status::DownloadFailed_NoSpace, res.description + "\n" + err_desc, fetch_res.stat.path,
-               fetch_res.stat};
+        res = {DownloadResult::Status::DownloadFailed_NoSpace, stat_msg.str(), fetch_res.stat.path, fetch_res.stat};
       } else {
-        res = {DownloadResult::Status::DownloadFailed, err_desc};
+        storage::Volume::UsageInfo post_app_pull_usage{storage::Volume::getUsageInfo(
+            cfg_.images_data_root.string(), (100 - cfg_.storage_watermark), "pacman:storage_watermark")};
+        if (!post_app_pull_usage.isOk()) {
+          LOG_ERROR << "Failed to obtain storage usage statistic: " << post_app_pull_usage.err;
+        }
+        stat_msg << "\nafter apps pull: " << post_app_pull_usage;
+        res = {DownloadResult::Status::DownloadFailed, stat_msg.str()};
       }
       break;
     }

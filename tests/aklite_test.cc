@@ -216,6 +216,36 @@ TEST_P(AkliteTest, OstreeAndAppUpdate) {
   checkEvents(*client, new_target, UpdateType::kOstree);
 }
 
+TEST_P(AkliteTest, OstreeAndAppUpdateIfAppDownloadFails) {
+  // App's containers are re-created before reboot
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  std::vector<AppEngine::App> apps{app01};
+  auto new_target = createTarget(&apps);
+
+  auto target01 = createAppTarget({app01});
+  auto invalid_custom_target{target01.custom_data()};
+  invalid_custom_target["docker_compose_apps"]["app-01"]["uri"] =
+      "hub.foundries.io/factory/app-01@sha256:badhash5501792d4eeb043b728c9a0c8417fbe9f62146625610377e11bcf572d";
+  target01.updateCustom(invalid_custom_target);
+
+  const auto app_engine_type{GetParam()};
+  update(*client, getInitialTarget(), target01, data::ResultCode::Numeric::kDownloadFailed,
+         {DownloadResult::Status::DownloadFailed, "Failed to download App manifest"});
+  if (app_engine_type == "RestorableAppEngine") {
+    const auto err_msg{getEventContext("EcuDownloadCompleted")};
+    // make sure storage usage stat is added to the event context
+    ASSERT_TRUE(std::string::npos != err_msg.find("before ostree pull")) << err_msg;
+    ASSERT_TRUE(std::string::npos != err_msg.find("after ostree pull")) << err_msg;
+    ASSERT_TRUE(std::string::npos != err_msg.find("before apps pull")) << err_msg;
+    ASSERT_TRUE(std::string::npos != err_msg.find("after apps pull")) << err_msg;
+  }
+}
+
 TEST_P(AkliteTest, OstreeAndAppUpdateIfCreateAfterBoot) {
   // App's containers are re-created after reboot
   setCreateContainersBeforeReboot(false);

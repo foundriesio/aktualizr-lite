@@ -40,6 +40,9 @@ class AkliteTest : public fixtures::ClientTest,
   }
 
   void setCreateContainersBeforeReboot(bool value) { create_containers_before_reboot_ = value; }
+  void tweakConf(Config& conf) override {
+    conf.pacman.extra["images_data_root"] = daemon_.dataRoot();
+  };
 
  private:
   bool create_containers_before_reboot_{true};
