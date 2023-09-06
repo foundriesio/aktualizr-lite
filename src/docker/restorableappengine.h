@@ -7,6 +7,7 @@
 
 #include "docker/docker.h"
 #include "docker/dockerclient.h"
+#include "storage/stat.h"
 
 namespace Docker {
 
@@ -74,8 +75,7 @@ namespace Docker {
 class RestorableAppEngine : public AppEngine {
  public:
   static const std::string ComposeFile;
-  using StorageSpaceFunc =
-      std::function<std::tuple<boost::uintmax_t, boost::uintmax_t>(const boost::filesystem::path&)>;
+  using StorageSpaceFunc = std::function<storage::Volume::UsageInfo(const boost::filesystem::path&)>;
   using ClientImageSrcFunc = std::function<std::string(const Docker::Uri&, const std::string&)>;
 
   static const int LowWatermarkLimit{20};

@@ -22,10 +22,10 @@ namespace Docker {
 
 class InsufficientSpaceError : public std::runtime_error {
  public:
-  InsufficientSpaceError(const std::string& store, const std::string& path, const uint64_t& required,
-                         const uint64_t& available)
-      : std::runtime_error("Insufficient storage available; store: " + store + ", path: " + path +
-                           ", required: " + std::to_string(required) + ", available: " + std::to_string(available)) {}
+  InsufficientSpaceError(const std::string& store, const storage::Volume::UsageInfo& usage_info)
+      : std::runtime_error("Insufficient storage available; store: " + store + "; " + usage_info.str()),
+        stat{usage_info} {}
+  storage::Volume::UsageInfo stat;
 };
 
 const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
@@ -42,16 +42,12 @@ RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::GetDefStorageSpaceFun
   }
 
   return [watermark](const boost::filesystem::path& path) {
-    boost::system::error_code ec;
-    const boost::filesystem::space_info store_info{boost::filesystem::space(path, ec)};
-    if (ec.failed()) {
-      throw std::runtime_error("Failed to get an available storage size: " + ec.message());
+    storage::Volume::UsageInfo usage_info{storage::Volume::getUsageInfo(
+        path.string(), (100 > watermark) ? static_cast<unsigned int>(100 - watermark) : 0, "pacman:storage_watermark")};
+    if (!usage_info.isOk()) {
+      LOG_ERROR << "Failed to obtain storage usage statistic: " << usage_info.err;
     }
-
-    boost::uintmax_t allowed_for_usage{static_cast<boost::uintmax_t>((float(watermark) / 100) * store_info.available)};
-    return std::tuple<boost::uintmax_t, boost::uintmax_t>(
-        store_info.available /* overall available */,
-        allowed_for_usage /* available for usage taking into account a highe level watermark*/);
+    return usage_info;
   };
 }
 
@@ -126,7 +122,7 @@ AppEngine::Result RestorableAppEngine::fetch(const App& app) {
     pullAppImages(uri, app_compose_file, images_dir);
     res = true;
   } catch (const InsufficientSpaceError& exc) {
-    res = {Result::ID::InsufficientSpace, exc.what()};
+    res = {Result::ID::InsufficientSpace, exc.what(), exc.stat};
   } catch (const std::exception& exc) {
     res = {false, exc.what()};
   }
@@ -418,18 +414,12 @@ void RestorableAppEngine::pullApp(const Uri& uri, const boost::filesystem::path&
   Docker::Uri archive_uri{uri.createUri(HashedDigest(manifest.archiveDigest()))};
   const auto archive_full_path{app_dir / (HashedDigest(manifest.archiveDigest()).hash() + Manifest::ArchiveExt)};
 
-  boost::system::error_code ec;
-  boost::filesystem::space_info fs_storage_info{boost::filesystem::space(app_dir, ec)};
-  if (ec.failed()) {
-    LOG_WARNING << "Failed to get an available storage size: " << ec.message();
-  } else {
+  storage::Volume::UsageInfo usage_info{storage_space_func_(store_root_)};
+  if (usage_info.isOk()) {
     // assume that an extracted files total size is up to 3x larger than the archive size
-    // 80% is a storage space watermark, we don't want to fill a storage volume above it
     auto need_storage = manifest.archiveSize() * 3;
-    auto available = static_cast<boost::uintmax_t>(fs_storage_info.available * 0.8);
-    if (need_storage > available) {
-      throw std::runtime_error("There is no sufficient storage space available to download App archive, available: " +
-                               std::to_string(available) + " need: " + std::to_string(need_storage));
+    if (need_storage > usage_info.available.first) {
+      throw InsufficientSpaceError("skopeo apps", usage_info.withRequired(need_storage));
     }
   }
 
@@ -963,15 +953,11 @@ void RestorableAppEngine::checkAvailableStorageInStores(const std::string& app_n
                                                         const uint64_t& docker_required_storage) const {
   auto checkRoomInStore = [&](const std::string& store_name, const uint64_t& required_storage,
                               const boost::filesystem::path& store_path) {
-    boost::uintmax_t capacity;
-    boost::uintmax_t available;
-
-    std::tie(capacity, available) = storage_space_func_(store_path);
-    LOG_INFO << app_name << " -> " << store_name << " store total update size: " << required_storage
-             << " bytes; available: " << available << " (out of " << capacity << ") "
-             << ", path: " << store_path.string();
-    if (required_storage > available) {
-      throw InsufficientSpaceError(store_name, store_path.string(), required_storage, available);
+    storage::Volume::UsageInfo usage_info{storage_space_func_(store_path)};
+    LOG_INFO << app_name << " -> " << store_name
+             << " store total update size: " << usage_info.withRequired(required_storage);
+    if (required_storage > usage_info.available.first) {
+      throw InsufficientSpaceError(store_name, usage_info.withRequired(required_storage));
     }
   };
 

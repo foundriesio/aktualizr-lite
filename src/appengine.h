@@ -8,6 +8,8 @@
 
 #include "json/json.h"
 
+#include "storage/stat.h"
+
 class AppEngine {
  public:
   class Client {
@@ -51,6 +53,8 @@ class AppEngine {
     // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
     Result(bool var, std::string errMsg = "") : status{var ? ID::OK : ID::Failed}, err{std::move(errMsg)} {}
     Result(Result::ID id, std::string errMsg) : status{id}, err{std::move(errMsg)} {}
+    Result(Result::ID id, std::string errMsg, storage::Volume::UsageInfo stat_in)
+        : status{id}, err{std::move(errMsg)}, stat{std::move(stat_in)} {}
     // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
     operator bool() const { return status == ID::OK; }
     bool noSpace() const { return status == ID::InsufficientSpace; }
@@ -58,6 +62,7 @@ class AppEngine {
 
     ID status;
     std::string err;
+    storage::Volume::UsageInfo stat{.err = "undefined"};
   };
 
   using Apps = std::vector<App>;

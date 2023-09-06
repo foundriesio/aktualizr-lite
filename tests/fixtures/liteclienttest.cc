@@ -335,7 +335,11 @@ class ClientTest :virtual public ::testing::Test {
     ASSERT_EQ(download_result.status, expected_download_result.status);
     ASSERT_TRUE(download_result.description.find(expected_download_result.description) != std::string::npos) << "Actuall error message: " << download_result.description;
     if (expected_download_result.noSpace()) {
-      ASSERT_EQ(download_result.destination_path, sys_repo_.getRepo().getPath());
+      if (download_result.stat.reserved_by == "pacman:storage_watermark") {
+        EXPECT_THAT(download_result.destination_path, ::testing::AnyOf(::testing::EndsWith("apps-store"), ::testing::EndsWith("daemon")));
+      } else {
+        ASSERT_EQ(download_result.destination_path, sys_repo_.getRepo().getPath());
+      }
     }
     if (download_result) {
       ASSERT_EQ(client.install(to), expected_install_code);

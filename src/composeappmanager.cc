@@ -271,12 +271,15 @@ DownloadResultWithStat ComposeAppManager::Download(const TufTarget& target) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
     const auto fetch_res{app_engine_->fetch({pair.first, pair.second})};
     if (!fetch_res) {
-      const std::string err_desc{boost::str(boost::format("failed to fetch App; app: %s; uri: %s; err: %s") %
-                                            pair.first % pair.second % fetch_res.err)};
+      const std::string err_desc{boost::str(boost::format("failed to fetch App; app: %s; uri: %s; %s") % pair.first %
+                                            pair.second % fetch_res.err)};
       LOG_ERROR << err_desc;
-      res = {
-          fetch_res.noSpace() ? DownloadResult::Status::DownloadFailed_NoSpace : DownloadResult::Status::DownloadFailed,
-          err_desc};
+      if (fetch_res.noSpace()) {
+        res = {DownloadResult::Status::DownloadFailed_NoSpace, res.description + "\n" + err_desc, fetch_res.stat.path,
+               fetch_res.stat};
+      } else {
+        res = {DownloadResult::Status::DownloadFailed, err_desc};
+      }
       break;
     }
   }
