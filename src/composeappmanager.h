@@ -71,12 +71,14 @@ class ComposeAppManager : public RootfsTreeManager {
   void removeDisabledComposeApps(const Uptane::Target& target) const;
   void forEachRemovedApp(const Uptane::Target& target,
                          const std::function<void(AppEngine::Ptr&, const std::string&)>& action) const;
+  std::string getAppsFsUsageInfo() const;
 
   Config cfg_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;
   mutable AppsContainer cur_apps_to_fetch_;
   bool are_apps_checked_{false};
   AppEngine::Ptr app_engine_;
+  bool is_restorable_engine_{false};
 };
 
 #endif  // AKTUALIZR_LITE_COMPOSE_APP_MANAGER_H_
