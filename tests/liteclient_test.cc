@@ -352,13 +352,13 @@ TEST_F(LiteClientTest, OstreeAndAppUpdateIfOstreeDownloadFailureAndStaticDeltaSt
   setGenerateStaticDelta(2, true);
   auto new_target = createTarget(&apps);
   const auto delta_size{getDeltaSize(getInitialTarget(), new_target)};
-  const auto expected_available{15 - 5};
+  const auto expected_available{10};
   storage::Volume::UsageInfo usage_info{.size = {100 * 4096, 100},
                                         .available = {expected_available * 4096, expected_available}};
   std::stringstream expected_msg;
   expected_msg << "before ostree pull; required: " << usage_info.withRequired(delta_size).required
                << ", available: " << usage_info.available;
-  SetFreeBlockNumb(10 + 5 /* default reserved for delta case */, 100);
+  SetFreeBlockNumb(10 + OSTree::Repo::MinFreeSpacePercentDefaultValue, 100);
 
   getOsTreeRepo().removeDeltas();
   getOsTreeRepo().removeCommitObject(new_target.sha256Hash());
