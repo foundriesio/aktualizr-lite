@@ -13,7 +13,7 @@
 #include "liteclient.h"
 #include "storage/stat.h"
 
-#include "fixtures/liteclienttest.cc"
+#include "fixtures/aklitetest.cc"
 
 // Defined in fstatvfs-mock.cc
 extern void SetBlockSize(unsigned long int);
@@ -414,6 +414,68 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
   }
   UnsetFreeBlockNumb();
 }
+
+class AkliteNoSpaceTest : public AkliteTest {
+ protected:
+  Docker::RestorableAppEngine::StorageSpaceFunc getTestStorageSpaceFunc() override {
+    // Use the restorable app engine default storage usage function since
+    // `fstatvfs` is mocked in the `AkliteNoSpaceTest` based tests.
+    return Docker::RestorableAppEngine::GetDefStorageSpaceFunc();
+  }
+};
+
+TEST_P(AkliteNoSpaceTest, OstreeAndAppUpdateNotEnoughSpaceForApps) {
+  // App's containers are re-created before reboot
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  std::vector<AppEngine::App> apps{app01};
+  auto new_target = createTarget(&apps);
+
+  {
+    // Not enough free space to pull an App bundle/archive since there is only 20% of free space
+    // and 20% is reserved, so 0% is available for the update
+    SetFreeBlockNumb(20, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("store: skopeo apps")) << event_err_msg;
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find("free: 81920B 20%, reserved: 81920B 20%(by `pacman:storage_watermark`)"))
+        << event_err_msg;
+  }
+  {
+    // Enough free space to pull an App bundle/archive since there is 21 - 20% of free space.
+    // But, it's not enough available free space to pull the App image because
+    // the App image requires more than 1 block.
+    SetFreeBlockNumb(21, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("store: skopeo")) << event_err_msg;
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find("free: 86016B 21%, reserved: 81920B 20%(by `pacman:storage_watermark`)"))
+        << event_err_msg;
+  }
+  {
+    // Enough free space to pull an App bundle/archive and the App image layers/blobs.
+    // But, it's not enough available free space to accommodate the App in the docker store (extracted image layers).
+    SetFreeBlockNumb(36, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("store: docker")) << event_err_msg;
+    ASSERT_TRUE(std::string::npos !=
+                event_err_msg.find("free: 147456B 36%, reserved: 81920B 20%(by `pacman:storage_watermark`)"))
+        << event_err_msg;
+  }
+  UnsetFreeBlockNumb();
+}
+
+INSTANTIATE_TEST_SUITE_P(MultiEngine, AkliteNoSpaceTest, ::testing::Values("RestorableAppEngine"));
 
 int main(int argc, char** argv) {
   if (argc != 3) {

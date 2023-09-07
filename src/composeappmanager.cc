@@ -140,6 +140,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
           std::make_shared<Docker::DockerClient>(), skopeo_cmd, docker_host, compose_cmd,
           Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
+      is_restorable_engine_ = true;
     } else {
 #ifdef BUILD_AKLITE_WITH_NERDCTL
       if (cfg_.compose_bin.filename().compare("nerdctl") == 0) {
@@ -267,18 +268,34 @@ DownloadResultWithStat ComposeAppManager::Download(const TufTarget& target) {
   all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
   all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
 
+  std::stringstream stat_msg;
+  if (!all_apps_to_fetch.empty()) {
+    const auto pre_pull_fs_usage{getAppsFsUsageInfo()};
+    stat_msg << res.description << "\nbefore apps pull: " << pre_pull_fs_usage;
+    LOG_INFO << "Pre Apps pull storage usage info; " << pre_pull_fs_usage;
+  }
   for (const auto& pair : all_apps_to_fetch) {
     LOG_INFO << "Fetching " << pair.first << " -> " << pair.second;
     const auto fetch_res{app_engine_->fetch({pair.first, pair.second})};
     if (!fetch_res) {
-      const std::string err_desc{boost::str(boost::format("failed to fetch App; app: %s; uri: %s; err: %s") %
-                                            pair.first % pair.second % fetch_res.err)};
+      const std::string err_desc{boost::str(boost::format("failed to fetch App; app: %s; uri: %s; %s") % pair.first %
+                                            pair.second % fetch_res.err)};
       LOG_ERROR << err_desc;
-      res = {
-          fetch_res.noSpace() ? DownloadResult::Status::DownloadFailed_NoSpace : DownloadResult::Status::DownloadFailed,
-          err_desc};
+      stat_msg << "\n" << err_desc;
+      if (fetch_res.noSpace()) {
+        res = {DownloadResult::Status::DownloadFailed_NoSpace, stat_msg.str(), fetch_res.stat.path, fetch_res.stat};
+      } else {
+        res = {DownloadResult::Status::DownloadFailed, ""};
+      }
       break;
     }
+  }
+
+  if (!all_apps_to_fetch.empty() && !res.noSpace()) {
+    const auto post_pull_fs_usage{getAppsFsUsageInfo()};
+    stat_msg << "\nafter apps pull: " << post_pull_fs_usage;
+    res.description = stat_msg.str();
+    LOG_INFO << "Post Apps pull storage usage info; " << post_pull_fs_usage;
   }
 
   are_apps_checked_ = false;
@@ -656,4 +673,24 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane:
   }
 
   return apps;
+}
+
+std::string ComposeAppManager::getAppsFsUsageInfo() const {
+  std::stringstream ss;
+  auto usage_info{storage::Volume::getUsageInfo(cfg_.images_data_root.string(), (100 - cfg_.storage_watermark),
+                                                "pacman:storage_watermark")};
+  if (!usage_info.isOk()) {
+    LOG_ERROR << "Failed to obtain storage usage statistic: " << usage_info.err;
+  }
+  ss << usage_info;
+  if (is_restorable_engine_ &&
+      !Docker::RestorableAppEngine::areDockerAndSkopeoOnTheSameVolume(cfg_.apps_root, cfg_.images_data_root)) {
+    auto usage_info{storage::Volume::getUsageInfo(cfg_.apps_root.string(), (100 - cfg_.storage_watermark),
+                                                  "pacman:storage_watermark")};
+    if (!usage_info.isOk()) {
+      LOG_ERROR << "Failed to obtain storage usage statistic: " << usage_info.err;
+    }
+    ss << "\n" << usage_info;
+  }
+  return ss.str();
 }

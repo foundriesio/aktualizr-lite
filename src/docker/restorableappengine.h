@@ -7,6 +7,7 @@
 
 #include "docker/docker.h"
 #include "docker/dockerclient.h"
+#include "storage/stat.h"
 
 namespace Docker {
 
@@ -74,8 +75,7 @@ namespace Docker {
 class RestorableAppEngine : public AppEngine {
  public:
   static const std::string ComposeFile;
-  using StorageSpaceFunc =
-      std::function<std::tuple<boost::uintmax_t, boost::uintmax_t>(const boost::filesystem::path&)>;
+  using StorageSpaceFunc = std::function<storage::Volume::UsageInfo(const boost::filesystem::path&)>;
   using ClientImageSrcFunc = std::function<std::string(const Docker::Uri&, const std::string&)>;
 
   static const int LowWatermarkLimit{20};
@@ -107,6 +107,8 @@ class RestorableAppEngine : public AppEngine {
   void prune(const Apps& app_shortlist) override;
 
   static void removeTmpFiles(const boost::filesystem::path& apps_root);
+  static bool areDockerAndSkopeoOnTheSameVolume(const boost::filesystem::path& skopeo_path,
+                                                const boost::filesystem::path& docker_path);
 
  private:
   // pull App&Images
@@ -162,8 +164,6 @@ class RestorableAppEngine : public AppEngine {
   void checkAvailableStorageInStores(const std::string& app_name, const uint64_t& skopeo_required_storage,
                                      const uint64_t& docker_required_storage) const;
 
-  static bool areDockerAndSkopeoOnTheSameVolume(const boost::filesystem::path& skopeo_path,
-                                                const boost::filesystem::path& docker_path);
   static std::tuple<uint64_t, bool> getPathVolumeID(const boost::filesystem::path& path);
   static std::string extractComposeFile(const boost::filesystem::path& archive_path);
 

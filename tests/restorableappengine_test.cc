@@ -17,19 +17,14 @@
 
 class RestorableAppEngineTest : public fixtures::AppEngineTest {
  protected:
-  RestorableAppEngineTest()
-      : AppEngineTest(),
-        skopeo_store_root_{test_dir_ / "apps-store"},
-        available_storage_space_{std::numeric_limits<boost::uintmax_t>::max()} {}
+  RestorableAppEngineTest() : AppEngineTest(), skopeo_store_root_{test_dir_ / "apps-store"} {}
+
   void SetUp() override {
     fixtures::AppEngineTest::SetUp();
 
     app_engine = std::make_shared<Docker::RestorableAppEngine>(
         skopeo_store_root_, apps_root_dir, daemon_.dataRoot(), registry_client_, docker_client_,
-        registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd, [this](const boost::filesystem::path& path) {
-          return std::tuple<boost::uintmax_t, boost::uintmax_t>{this->available_storage_space_,
-                                                                (this->watermark_ * this->available_storage_space_)};
-        });
+        registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd, getTestStorageSpaceFunc());
   }
 
   void removeAppManifest(const AppEngine::App& app) {
@@ -55,19 +50,10 @@ class RestorableAppEngineTest : public fixtures::AppEngineTest {
         app_dir / (Docker::HashedDigest(manifest.archiveDigest()).hash() + Docker::Manifest::ArchiveExt)};
     Utils::writeFile(archive_full_path, std::string("foo bar"));
   }
-
-  void setAvailableStorageSpace(const boost::uintmax_t& space_size) {
-    available_storage_space_ = space_size / watermark_;
-  }
-  void setAvailableStorageSpaceWithoutWatermark(const boost::uintmax_t& space_size) {
-    available_storage_space_ = space_size;
-  }
   const boost::filesystem::path& storeRoot() const { return skopeo_store_root_; }
 
  protected:
   const boost::filesystem::path skopeo_store_root_;
-  boost::uintmax_t available_storage_space_;
-  float watermark_{0.8};
 };
 
 class RestorableAppEngineTestParameterized : public RestorableAppEngineTest,
@@ -80,10 +66,7 @@ class RestorableAppEngineTestParameterized : public RestorableAppEngineTest,
     app_engine = std::make_shared<Docker::RestorableAppEngine>(
         skopeo_store_root_, apps_root_dir, docker_data_root_path.empty() ? daemon_.dataRoot() : docker_data_root_path,
         registry_client_, docker_client_, registry.getSkopeoClient(), daemon_.getUrl(), compose_cmd,
-        [this](const boost::filesystem::path& path) {
-          return std::tuple<boost::uintmax_t, boost::uintmax_t>{this->available_storage_space_,
-                                                                (this->watermark_ * this->available_storage_space_)};
-        });
+        getTestStorageSpaceFunc());
   }
 };
 
