@@ -28,7 +28,7 @@ RootfsTreeManager::RootfsTreeManager(const PackageConfig& pconfig, const Bootloa
       keys_{keys},
       cfg_{pconfig} {}
 
-DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
+DownloadResultWithStat RootfsTreeManager::Download(const TufTarget& target) {
   auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
     // report_progress_cb(events_channel.get(), t, description, progress);
     // TODO: consider make use of it for download progress reporting
@@ -44,7 +44,7 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
     getAdditionalRemotes(remotes, target.Name());
   }
 
-  DownloadResult res{DownloadResult::Status::Ok, ""};
+  DownloadResultWithStat res{DownloadResult::Status::Ok, ""};
   data::InstallationResult pull_err{data::ResultCode::Numeric::kUnknown, ""};
   std::string error_desc;
   for (const auto& remote : remotes) {
@@ -67,7 +67,7 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
           return {
               DownloadResult::Status::DownloadFailed_NoSpace,
               "Insufficient storage available; " + pre_pull_usage_info.withRequired(delta_stat.uncompressedSize).str(),
-              sysroot_->repoPath()};
+              sysroot_->repoPath(), pre_pull_usage_info};
         }
         LOG_INFO << "Sufficient free storage available; "
                  << pre_pull_usage_info.withRequired(delta_stat.uncompressedSize);
@@ -108,10 +108,16 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
         // not enough storage space in the case of a static delta pull (pulling the delta parts/files)
         (pull_err.description.find("Delta requires") != std::string::npos &&
          pull_err.description.find("free space, but only") != std::string::npos)) {
-      res = {DownloadResult::Status::DownloadFailed_NoSpace,
-             "Insufficient storage available; " + pull_err.description + "\nbefore ostree pull; " +
-                 pre_pull_usage_info.str() + "\nafter ostree pull; " + post_pull_usage_info.str(),
-             sysroot_->repoPath()};
+      res = {
+          DownloadResult::Status::DownloadFailed_NoSpace,
+          "Insufficient storage available; " + pull_err.description + "\nbefore ostree pull; " +
+              pre_pull_usage_info.str() + "\nafter ostree pull; " + post_pull_usage_info.str(),
+          sysroot_->repoPath(),
+          delta_stat_avail
+              ? post_pull_usage_info.withRequired(delta_stat.uncompressedSize)
+              : post_pull_usage_info.withRequired(
+                    post_pull_usage_info.available.first +
+                    (4096 * 10))} /* we don't know how much more storage is needed, so just require 10 more blocks */;
       break;
     }
     error_desc += pull_err.description + "\nbefore ostree pull; " + pre_pull_usage_info.str() +

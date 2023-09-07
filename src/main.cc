@@ -178,9 +178,9 @@ static std::pair<bool, std::unique_ptr<Uptane::Target>> find_target(LiteClient& 
   return {false, std_::make_unique<Uptane::Target>(Uptane::Target::Unknown())};
 }
 
-static std::tuple<data::ResultCode::Numeric, DownloadResult, std::string> do_update(LiteClient& client,
-                                                                                    Uptane::Target target,
-                                                                                    const std::string& reason) {
+static std::tuple<data::ResultCode::Numeric, DownloadResultWithStat, std::string> do_update(LiteClient& client,
+                                                                                            Uptane::Target target,
+                                                                                            const std::string& reason) {
   client.logTarget("Updating Active Target: ", client.getCurrent());
   client.logTarget("To New Target: ", target);
 
@@ -198,7 +198,7 @@ static std::tuple<data::ResultCode::Numeric, DownloadResult, std::string> do_upd
     return {res.result_code.num_code, download_res, target.correlation_id()};
   }
 
-  return {client.install(target), {DownloadResult::Status::Ok}, target.correlation_id()};
+  return {client.install(target), download_res, target.correlation_id()};
 }
 
 static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
@@ -245,7 +245,7 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
   if (find_target_res.first) {
     std::string reason = "Manual update to " + version;
     data::ResultCode::Numeric rc;
-    DownloadResult dr;
+    DownloadResultWithStat dr;
     std::string cor_id;
     std::tie(rc, dr, cor_id) = do_update(client, *find_target_res.second, reason);
 
@@ -256,12 +256,6 @@ static int update_main(LiteClient& client, const bpo::variables_map& variables_m
              << "; tags: " << boost::algorithm::join(client.tags, ",");
     return EXIT_SUCCESS;
   }
-}
-
-static std::tuple<boost::uintmax_t, bool> get_available_space(const std::string& path) {
-  boost::system::error_code ec;
-  const boost::filesystem::space_info store_info{boost::filesystem::space(path, ec)};
-  return {ec.failed() ? 0 : store_info.available, !ec.failed()};
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
@@ -290,10 +284,9 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
   struct NoSpaceDownloadState {
     Hash ostree_commit_hash;
-    boost::uintmax_t free_space;
-    std::string dst_path;
     std::string cor_id;
-  } state_when_download_failed{Hash{"", ""}, 0, "", ""};
+    storage::Volume::UsageInfo stat;
+  } state_when_download_failed{Hash{"", ""}, "", {.err = "undefined"}};
 
   while (true) {
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
@@ -376,15 +369,20 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
         // New Target is available, try to update a device with it.
         // But prior to performing the update, check if aklite haven't tried to fetch the target ostree before,
         // and it failed due to lack of space, and the space has not increased since that time.
-        if (state_when_download_failed.free_space != 0 &&
+        if (state_when_download_failed.stat.required.first > 0 && state_when_download_failed.stat.isOk() &&
             target_to_install.MatchHash(state_when_download_failed.ostree_commit_hash)) {
-          const auto available_space_res{get_available_space(state_when_download_failed.dst_path)};
-          const auto required_space{state_when_download_failed.free_space + 1024 /* at least 1K should be freed */};
-          if (std::get<1>(available_space_res) && std::get<0>(available_space_res) < required_space) {
-            const auto err_msg{boost::str(
-                boost::format("No space to download Target's ostree; hash: %s, required: %d, available: %d") %
-                target_to_install.sha256Hash() % required_space % std::get<0>(available_space_res))};
+          storage::Volume::UsageInfo current_usage_info{storage::Volume::getUsageInfo(
+              state_when_download_failed.stat.path, state_when_download_failed.stat.reserved.second,
+              state_when_download_failed.stat.reserved_by)};
+          if (!current_usage_info.isOk()) {
+            LOG_ERROR << "Failed to obtain storage usage statistic: " << current_usage_info.err;
+          }
 
+          if (current_usage_info.isOk() &&
+              current_usage_info.available.first < state_when_download_failed.stat.required.first) {
+            const std::string err_msg{
+                "Insufficient storage available to download Target's ostree; hash: " + target_to_install.sha256Hash() +
+                ", " + current_usage_info.withRequired(state_when_download_failed.stat.required.first).str()};
             LOG_ERROR << err_msg;
             target_to_install.setCorrelationId(state_when_download_failed.cor_id);
             client.notifyDownloadFinished(target_to_install, false, err_msg);
@@ -394,12 +392,12 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
           }
         }
 
-        state_when_download_failed = {Hash{"", ""}, 0, "", ""};
+        state_when_download_failed = {Hash{"", ""}, "", {.err = "undefined"}};
         std::string reason = std::string(rollback ? "Rolling back" : "Updating") + " from " + current.filename() +
                              " to " + target_to_install.filename();
 
         data::ResultCode::Numeric rc;
-        DownloadResult dr;
+        DownloadResultWithStat dr;
         std::string cor_id;
         std::tie(rc, dr, cor_id) = do_update(client, target_to_install, reason);
         if (rc == data::ResultCode::Numeric::kOk) {
@@ -418,12 +416,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
           // changes in the latest failing Target.
           client.setAppsNotChecked();
           continue;
-        } else if (rc == data::ResultCode::Numeric::kDownloadFailed && !dr.destination_path.empty()) {
-          const auto available_space_res{get_available_space(dr.destination_path)};
-          if (std::get<1>(available_space_res)) {
-            state_when_download_failed = {Hash{Hash::Type::kSha256, target_to_install.sha256Hash()},
-                                          std::get<0>(available_space_res), dr.destination_path, cor_id};
-          }
+        } else if (rc == data::ResultCode::Numeric::kDownloadFailed && dr.noSpace()) {
+          state_when_download_failed = {Hash{Hash::Type::kSha256, target_to_install.sha256Hash()}, cor_id, dr.stat};
         }
 
       } else {

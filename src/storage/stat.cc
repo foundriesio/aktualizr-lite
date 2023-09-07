@@ -42,9 +42,8 @@ Volume::UsageInfo Volume::getUsageInfo(const std::string& path, unsigned int res
     return UsageInfo{.err = err};
   }
 
-  UsageInfo::Type free{
-      stat.blockSize * stat.freeBlockNumber,
-      static_cast<unsigned int>(std::floor((static_cast<double>(stat.freeBlockNumber) / stat.blockNumb) * 100))};
+  UsageInfo::Type free{stat.blockSize * stat.freeBlockNumber,
+                       (static_cast<double>(stat.freeBlockNumber) / stat.blockNumb) * 100};
   UsageInfo::Type reserved{
       stat.blockSize * static_cast<uint64_t>(std::ceil(stat.blockNumb * (reserved_percentage / 100.0))),
       reserved_percentage};
@@ -64,7 +63,7 @@ Volume::UsageInfo Volume::getUsageInfo(const std::string& path, unsigned int res
 
 Volume::UsageInfo& Volume::UsageInfo::withRequired(const uint64_t& val) {
   if (isOk() && size.first > 0) {
-    required = {val, std::ceil((static_cast<double>(val) / size.first) * 100)};
+    required = {val, (static_cast<double>(val) / size.first) * 100};
   } else {
     required = {val, 0};
   }

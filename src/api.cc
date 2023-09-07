@@ -239,7 +239,7 @@ class LiteInstall : public InstallContext {
 
     auto download_res{client_->download(*target_, reason)};
     if (!download_res) {
-      return download_res;
+      return DownloadResult{download_res.status, download_res.description, download_res.destination_path};
     }
 
     if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {

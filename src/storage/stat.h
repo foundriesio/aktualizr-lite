@@ -9,7 +9,7 @@ namespace storage {
 struct Volume {
   struct UsageInfo {
     // <bytes, percentage of overall volume capacity>
-    using Type = std::pair<uint64_t, unsigned int>;
+    using Type = std::pair<uint64_t, float>;
 
     std::string path;
     Type size;
