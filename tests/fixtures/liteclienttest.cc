@@ -335,7 +335,7 @@ class ClientTest :virtual public ::testing::Test {
     ASSERT_EQ(download_result.status, expected_download_result.status);
     ASSERT_TRUE(download_result.description.find(expected_download_result.description) != std::string::npos) << "Actuall error message: " << download_result.description;
     if (expected_download_result.noSpace()) {
-      ASSERT_EQ(download_result.destination_path, sys_repo_.getPath());
+      ASSERT_EQ(download_result.destination_path, sys_repo_.getRepo().getPath());
     }
     if (download_result) {
       ASSERT_EQ(client.install(to), expected_install_code);
@@ -540,6 +540,18 @@ class ClientTest :virtual public ::testing::Test {
   void setGenerateStaticDelta(uint32_t min_size_in_blocks, bool add_delta_stat = false) {
     static_delta_size_bn_ = min_size_in_blocks;
     static_delta_stat_ = add_delta_stat;
+  }
+  uint64_t getDeltaSize(const Uptane::Target& from, const Uptane::Target& to) const {
+    return ostree_repo_.getDeltaSize(to.custom_data()["delta-stats"]["sha256"].asString(), from.sha256Hash(), to.sha256Hash());
+  }
+
+  std::string getEventContext(const std::string& ev_id) {
+    for (const auto& ev: device_gateway_.getEvents()) {
+      if (ev_id == ev["eventType"]["id"].asString()) {
+        return ev["event"]["details"].asString();
+      }
+    }
+    return "";
   }
 
  protected:

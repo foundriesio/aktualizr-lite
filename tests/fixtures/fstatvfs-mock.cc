@@ -9,7 +9,13 @@ static __fsblkcnt_t blocks_numb;
 static __fsblkcnt64_t free_blocks_numb;
 static __fsblkcnt64_t blocks_numb;
 #endif
+static unsigned long int block_size{0};
 static bool override_blocks_numb{false};
+
+void SetBlockSize(unsigned long int block_size_in)
+ {
+  block_size = block_size_in;
+}
 
 void SetFreeBlockNumb(uint64_t free_blocks_numb_in, uint64_t blocks_numb_in) {
   free_blocks_numb = free_blocks_numb_in;
@@ -19,6 +25,7 @@ void SetFreeBlockNumb(uint64_t free_blocks_numb_in, uint64_t blocks_numb_in) {
 
 void UnsetFreeBlockNumb() {
   override_blocks_numb = false;
+  block_size = 0;
 }
 
 int fstatvfs (int fd, struct statvfs* buf) {
@@ -31,6 +38,9 @@ int fstatvfs (int fd, struct statvfs* buf) {
     if (blocks_numb > 0) {
       // override the total number of blocks if set, otherwise the underlying system storage block number is used
       buf->f_blocks = blocks_numb;
+    }
+    if (block_size > 0) {
+      buf->f_frsize = buf->f_bsize = block_size;
     }
   }
   return res;
