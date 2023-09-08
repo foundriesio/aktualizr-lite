@@ -107,6 +107,19 @@ AppEngine::Result ComposeAppEngine::run(const App& app) {
     return {false, "App dir doesn't exist, cannot install App that hasn't been fetched"};
   }
 
+  if (!isFetched(app)) {
+    // This situation can occur only if the switch from restorable to compose apps
+    // happened or App was pulled manually by running `docker-compose` command.
+    // So, the app directory with the compose content is present while the `.meta` directory
+    // and the `.meta/.version` files are missing.
+    // Therefore, we assume that App has been already pulled and set its state correspondingly.
+    LOG_WARNING << "App state is unknown, assuming it's pulled and trying to run it...";
+    // make sure the app meta dir exists
+    boost::filesystem::create_directories(appRoot(app) / MetaDir);
+    // assume that the app state is "pulled"
+    AppState(app, appRoot(app), true).setState(AppState::State::kPulled);
+  }
+
   AppState state(app, appRoot(app));
 
   // do App start if not started yet
