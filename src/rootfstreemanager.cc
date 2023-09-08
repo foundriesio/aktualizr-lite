@@ -55,7 +55,7 @@ DownloadResultWithStat RootfsTreeManager::Download(const TufTarget& target) {
     DeltaStat delta_stat{};
     bool delta_stat_avail{getDeltaStatIfAvailable(target, remote, delta_stat)};
 
-    storage::Volume::UsageInfo pre_pull_usage_info{getUsageInfo(!delta_stat_avail)};
+    storage::Volume::UsageInfo pre_pull_usage_info{getUsageInfo()};
     if (!pre_pull_usage_info.isOk()) {
       LOG_ERROR << "Failed to obtain storage usage statistic: " << pre_pull_usage_info.err;
     }
@@ -86,7 +86,7 @@ DownloadResultWithStat RootfsTreeManager::Download(const TufTarget& target) {
     pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
                                    prog_cb, remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
 
-    storage::Volume::UsageInfo post_pull_usage_info{getUsageInfo(!delta_stat_avail)};
+    storage::Volume::UsageInfo post_pull_usage_info{getUsageInfo()};
     if (post_pull_usage_info.isOk()) {
       LOG_INFO << "Post pull storage usage info; " << post_pull_usage_info;
     } else {
@@ -415,14 +415,7 @@ bool RootfsTreeManager::findDeltaStatForUpdate(const Json::Value& delta_stats, c
   return true;
 }
 
-storage::Volume::UsageInfo RootfsTreeManager::getUsageInfo(bool just_reserved_by_ostree) const {
-  unsigned int reserved_percentage{sysroot_->reservedStorageSpacePercentageDelta()};
-  std::string reserved_by{OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName};
-
-  const unsigned int reserved_by_ostree{sysroot_->reservedStorageSpacePercentageOstree()};
-  if (just_reserved_by_ostree || reserved_percentage < reserved_by_ostree) {
-    reserved_percentage = reserved_by_ostree;
-    reserved_by = OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName;
-  }
-  return storage::Volume::getUsageInfo(sysroot_->repoPath(), reserved_percentage, reserved_by);
+storage::Volume::UsageInfo RootfsTreeManager::getUsageInfo() const {
+  return storage::Volume::getUsageInfo(sysroot_->repoPath(), sysroot_->reservedStorageSpacePercentageOstree(),
+                                       OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName);
 }

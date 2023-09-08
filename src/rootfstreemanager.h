@@ -71,7 +71,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
   void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys);
   data::InstallationResult verifyBootloaderUpdate(const Uptane::Target& target) const;
   bool getDeltaStatIfAvailable(const TufTarget& target, const Remote& remote, DeltaStat& delta_stat) const;
-  storage::Volume::UsageInfo getUsageInfo(bool just_reserved_by_ostree) const;
+  storage::Volume::UsageInfo getUsageInfo() const;
 
   static bool getDeltaStatsRef(const Json::Value& json, DeltaStatsRef& ref);
   static Json::Value downloadDeltaStats(const DeltaStatsRef& ref, const Remote& remote);

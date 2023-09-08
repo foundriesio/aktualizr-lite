@@ -11,6 +11,7 @@
 
 #include "composeappmanager.h"
 #include "liteclient.h"
+#include "ostree/repo.h"
 #include "storage/stat.h"
 
 #include "fixtures/aklitetest.cc"
@@ -77,45 +78,103 @@ class NoSpaceTest : public fixtures::ClientTest {
   std::string min_free_space_;
 };
 
-TEST_F(NoSpaceTest, ReservedStorageSpacePercentageDeltaParam) {
+TEST_F(NoSpaceTest, ReservedStorageSpacePercentageOstreeParam) {
   {
-    // check default value
+    // check the default value - `-1`, `min-free-space-percent` is not overridden
     const auto cfg{OSTree::Sysroot::Config(PackageConfig{})};
-    ASSERT_EQ(OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta,
-              cfg.ReservedStorageSpacePercentageDelta);
+    ASSERT_EQ(-1, cfg.ReservedStorageSpacePercentageOstree);
   }
   {
-    // check if set to the default value if the specified param value is ivalid
+    // check the default if the specified param value is invalid
     PackageConfig pacmancfg;
-    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName] = "10foo";
+    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] = "10foo";
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
-    ASSERT_EQ(OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta,
-              cfg.ReservedStorageSpacePercentageDelta);
+    ASSERT_EQ(-1, cfg.ReservedStorageSpacePercentageOstree);
   }
   {
     // check if set to the min allowed value if the specified param value is lower than the one
     PackageConfig pacmancfg;
-    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName] =
-        std::to_string(OSTree::Sysroot::Config::MinReservedStorageSpacePercentageDelta - 1);
+    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] =
+        std::to_string(OSTree::Sysroot::Config::MinReservedStorageSpacePercentageOstree - 1);
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
-    ASSERT_EQ(OSTree::Sysroot::Config::MinReservedStorageSpacePercentageDelta, cfg.ReservedStorageSpacePercentageDelta);
+    ASSERT_EQ(-1, cfg.ReservedStorageSpacePercentageOstree);
   }
   {
     // check if set to the max allowed value if the specified param value is higher than the one
     PackageConfig pacmancfg;
-    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName] =
-        std::to_string(OSTree::Sysroot::Config::MaxReservedStorageSpacePercentageDelta + 1);
+    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] =
+        std::to_string(OSTree::Sysroot::Config::MaxReservedStorageSpacePercentageOstree + 1);
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
-    ASSERT_EQ(OSTree::Sysroot::Config::MaxReservedStorageSpacePercentageDelta, cfg.ReservedStorageSpacePercentageDelta);
+    ASSERT_EQ(-1, cfg.ReservedStorageSpacePercentageOstree);
   }
   {
     // check if a custom valid value can be set
     PackageConfig pacmancfg;
     const unsigned int my_watermark{43};
-    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName] =
+    pacmancfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] =
         std::to_string(my_watermark);
     const auto cfg{OSTree::Sysroot::Config(pacmancfg)};
-    ASSERT_EQ(my_watermark, cfg.ReservedStorageSpacePercentageDelta);
+    ASSERT_EQ(my_watermark, cfg.ReservedStorageSpacePercentageOstree);
+  }
+}
+
+TEST_F(NoSpaceTest, SysrootReservedStorageSpace) {
+  PackageConfig cfg{.os = os, .sysroot = sys_repo_.getPath(), .booted = BootedType::kStaged};
+  {
+    // no overriding, the default libostree value should be returned.
+    auto sysroot{OSTree::Sysroot(cfg)};
+    ASSERT_EQ(OSTree::Repo::MinFreeSpacePercentDefaultValue, sysroot.reservedStorageSpacePercentageOstree());
+  }
+  {
+    // no overriding, the `min-free-space-percent` value set in the repo should be returned
+    const auto expected_val{5};
+    sys_repo_.setMinFreeSpacePercent(std::to_string(expected_val));
+    auto sysroot{OSTree::Sysroot(cfg)};
+    ASSERT_EQ(expected_val, sysroot.reservedStorageSpacePercentageOstree());
+  }
+  {
+    // overriding the default `min-free-space-percent` value,
+    // the new/set value should be returned
+    const auto expected_val{"10"};
+    cfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] = expected_val;
+    auto sysroot{OSTree::Sysroot(cfg)};
+    ASSERT_EQ(std::atoi(expected_val), sysroot.reservedStorageSpacePercentageOstree());
+  }
+  {
+    // overriding the `min-free-space-percent` value set in the repo,
+    // the new/set value should be returned
+    const auto expected_val{"10"};
+    sys_repo_.setMinFreeSpacePercent("5");
+    cfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] = expected_val;
+    auto sysroot{OSTree::Sysroot(cfg)};
+    ASSERT_EQ(std::atoi(expected_val), sysroot.reservedStorageSpacePercentageOstree());
+  }
+  {
+    // trying to override the `min-free-space-percent` value set in the repo,
+    // but the new value is invalid, the value set in libostree should be returned
+    const auto expected_val{"6"};
+    sys_repo_.setMinFreeSpacePercent(expected_val);
+    cfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] = "120";
+    auto sysroot{OSTree::Sysroot(cfg)};
+    ASSERT_EQ(std::atoi(expected_val), sysroot.reservedStorageSpacePercentageOstree());
+  }
+  {
+    // trying to override the `min-free-space-percent` value set in the repo,
+    // but the new value is invalid, the value set in libostree should be returned
+    const auto expected_val{"6"};
+    sys_repo_.setMinFreeSpacePercent(expected_val);
+    cfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] = "1";
+    auto sysroot{OSTree::Sysroot(cfg)};
+    ASSERT_EQ(std::atoi(expected_val), sysroot.reservedStorageSpacePercentageOstree());
+  }
+  {
+    // trying to override the `min-free-space-percent` value set in the repo,
+    // but the new value is invalid, the value set in libostree should be returned
+    const auto expected_val{"6"};
+    sys_repo_.setMinFreeSpacePercent(expected_val);
+    cfg.extra[OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName] = 30;
+    auto sysroot{OSTree::Sysroot(cfg)};
+    ASSERT_EQ(std::atoi(expected_val), sysroot.reservedStorageSpacePercentageOstree());
   }
 }
 
@@ -363,11 +422,10 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
   {
-    // required 11%, free 15%, reserved 5% (default, by the delta knob) -> available 10% < 11%
+    // required 11%, free 15%, reserved 5% -> available 10% < 11%
+    sys_repo_.setMinFreeSpacePercent("5");
     SetFreeBlockNumb(15, 100);
-    const auto expected_available{((15 > OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta))
-                                      ? (15 - OSTree::Sysroot::Config::DefaultReservedStorageSpacePercentageDelta)
-                                      : 0};
+    const auto expected_available{15 - 5};
     storage::Volume::UsageInfo usage_info{.size = {100 * 4096, 100},
                                           .available = {expected_available * 4096, expected_available}};
     std::stringstream expected_msg;
@@ -377,14 +435,11 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDeltaStats) {
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
     const std::string event_err_msg{getEventContext("EcuDownloadCompleted")};
     ASSERT_TRUE(std::string::npos != event_err_msg.find(expected_msg.str())) << event_err_msg;
-    ASSERT_TRUE(std::string::npos !=
-                event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageDeltaParamName))
-        << event_err_msg;
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("5")) << event_err_msg;
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
   }
   {
-    // required 11%, free 16%, reserved 5% by the delta knob, reserved 6% by the ostree knob
-    // -> available 10% < 11%
+    // required 11%, free 16%, reserved 6% by the ostree knob -> available 10% < 11%
     SetFreeBlockNumb(16, 100);
     sys_repo_.setMinFreeSpacePercent("6");
     const auto expected_available{16 - 6};

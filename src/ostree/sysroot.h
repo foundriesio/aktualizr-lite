@@ -14,24 +14,10 @@ class Sysroot {
    public:
     explicit Config(const PackageConfig& pconfig);
 
-    static constexpr const char* const ReservedStorageSpacePercentageDeltaParamName{
-        "sysroot_delta_reserved_space_percentage"};
-    static const unsigned int DefaultReservedStorageSpacePercentageDelta;
-    static const unsigned int MinReservedStorageSpacePercentageDelta;
-    static const unsigned int MaxReservedStorageSpacePercentageDelta;
-
     static constexpr const char* const ReservedStorageSpacePercentageOstreeParamName{
         "sysroot_ostree_reserved_space_percentage"};
     static const unsigned int MinReservedStorageSpacePercentageOstree;
     static const unsigned int MaxReservedStorageSpacePercentageOstree;
-
-    // This variable represents the reserved amount of storage, expressed as a percentage
-    // of the overall capacity of the volume where the sysroot/ostree repo is located.
-    // The reserved percentage is only considered when performing a delta-based ostree pull.
-    // The downloader verifies that the reserved storage will remain untouched prior to initiating a delta-based ostree
-    // pull. If the available free space, in addition to the reserved space, is insufficient to fit delta files, then
-    // the downloader will reject the download and exit with an error.
-    unsigned int ReservedStorageSpacePercentageDelta{DefaultReservedStorageSpacePercentageDelta};
 
     // This variable represents the reserved amount of storage, expressed as a percentage
     // of the overall capacity of the volume where the sysroot/ostree repo is located.
@@ -59,7 +45,6 @@ class Sysroot {
 
   virtual std::string getDeploymentHash(Deployment deployment_type) const;
   bool reload();
-  unsigned int reservedStorageSpacePercentageDelta() const { return cfg_.ReservedStorageSpacePercentageDelta; }
   unsigned int reservedStorageSpacePercentageOstree() const;
 
  private:
