@@ -56,10 +56,6 @@ DownloadResultWithStat RootfsTreeManager::Download(const TufTarget& target) {
     bool delta_stat_avail{getDeltaStatIfAvailable(target, remote, delta_stat)};
 
     storage::Volume::UsageInfo pre_pull_usage_info{getUsageInfo()};
-    if (!pre_pull_usage_info.isOk()) {
-      LOG_ERROR << "Failed to obtain storage usage statistic: " << pre_pull_usage_info.err;
-    }
-
     if (delta_stat_avail) {
       if (pre_pull_usage_info.isOk()) {
         LOG_INFO << "Checking if update can fit on a disk...";
@@ -78,6 +74,12 @@ DownloadResultWithStat RootfsTreeManager::Download(const TufTarget& target) {
     } else {
       if (pre_pull_usage_info.isOk()) {
         LOG_INFO << "Pre-pull storage usage info; " << pre_pull_usage_info;
+        if (pre_pull_usage_info.available.first == 0) {
+          return {DownloadResult::Status::DownloadFailed_NoSpace,
+                  // we don't know how much more storage is needed, so just require 10 more blocks
+                  "No available storage left; " + pre_pull_usage_info.withRequired(4096 * 10).str(),
+                  sysroot_->repoPath(), pre_pull_usage_info};
+        }
       }
       LOG_INFO << "No static delta stats are found, skipping the update size check";
     }
@@ -89,8 +91,6 @@ DownloadResultWithStat RootfsTreeManager::Download(const TufTarget& target) {
     storage::Volume::UsageInfo post_pull_usage_info{getUsageInfo()};
     if (post_pull_usage_info.isOk()) {
       LOG_INFO << "Post pull storage usage info; " << post_pull_usage_info;
-    } else {
-      LOG_ERROR << "Failed to obtain storage usage statistic: " << post_pull_usage_info.err;
     }
     if (pull_err.isSuccess()) {
       res = {DownloadResult::Status::Ok,
@@ -416,6 +416,11 @@ bool RootfsTreeManager::findDeltaStatForUpdate(const Json::Value& delta_stats, c
 }
 
 storage::Volume::UsageInfo RootfsTreeManager::getUsageInfo() const {
-  return storage::Volume::getUsageInfo(sysroot_->repoPath(), sysroot_->reservedStorageSpacePercentageOstree(),
-                                       OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName);
+  auto usage_info{
+      storage::Volume::getUsageInfo(sysroot_->repoPath(), sysroot_->reservedStorageSpacePercentageOstree(),
+                                    OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName)};
+  if (!usage_info.isOk()) {
+    LOG_ERROR << "Failed to obtain storage usage statistic: " << usage_info.err;
+  }
+  return usage_info;
 }
