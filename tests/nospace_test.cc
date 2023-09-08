@@ -287,6 +287,43 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpace) {
   checkHeaders(*client, getInitialTarget());
 }
 
+TEST_F(NoSpaceTest, OstreeUpdateNoSpaceBeforeUpdate) {
+  setMinFreeSpace("50");
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  auto new_target = createTarget();
+
+  {
+    // 50% reserved, 49% free -> 0% available
+    SetFreeBlockNumb(49, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "No available storage left"});
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("available: 0B 0%")) << event_err_msg;
+  }
+  {
+    // 50% reserved, 50% free -> 0% available
+    SetFreeBlockNumb(50, 100);
+    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+           {DownloadResult::Status::DownloadFailed_NoSpace, "No available storage left"});
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("available: 0B 0%")) << event_err_msg;
+  }
+  {
+    // 50% reserved, 60% free -> 10% available
+    SetFreeBlockNumb(60, 100);
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+    update(*client, getInitialTarget(), new_target);
+    reboot(client);
+    ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+    const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
+    ASSERT_TRUE(std::string::npos != event_err_msg.find("available: 40960B 10%")) << event_err_msg;
+  }
+}
+
 TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfWatermarkParamIsSet) {
   // There 51% of blocks are free. The update takes a few blocks,
   // so the pull should fail since the storage usage exceeds
@@ -338,12 +375,9 @@ TEST_F(NoSpaceTest, OstreeUpdateNoSpaceIfStaticDelta) {
     //    "Error while pulling image: 0 Delta requires 13.8 kB free space, but only 4.1 kB available"
     SetFreeBlockNumb(2, 100);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
-           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+           {DownloadResult::Status::DownloadFailed_NoSpace, "No available storage left"});
     ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
     const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
-    ASSERT_TRUE(std::string::npos != event_err_msg.find("Delta requires")) << event_err_msg;
-    // libostree converts 2*4096=8192B by dividing it to 1000 not 1024.
-    ASSERT_TRUE(std::string::npos != event_err_msg.find("free space, but only 8.2 kB available")) << event_err_msg;
     ASSERT_TRUE(std::string::npos != event_err_msg.find("available: 0B 0%")) << event_err_msg;
     ASSERT_TRUE(std::string::npos !=
                 event_err_msg.find(OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName))
@@ -518,13 +552,13 @@ TEST_P(AkliteNoSpaceTest, OstreeAndAppUpdateNotEnoughSpaceForApps) {
   {
     // Enough free space to pull an App bundle/archive and the App image layers/blobs.
     // But, it's not enough available free space to accommodate the App in the docker store (extracted image layers).
-    SetFreeBlockNumb(36, 100);
+    SetFreeBlockNumb(37, 100);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
     const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
     ASSERT_TRUE(std::string::npos != event_err_msg.find("store: docker")) << event_err_msg;
     ASSERT_TRUE(std::string::npos !=
-                event_err_msg.find("free: 147456B 36%, reserved: 81920B 20%(by `pacman:storage_watermark`)"))
+                event_err_msg.find("free: 151552B 37%, reserved: 81920B 20%(by `pacman:storage_watermark`)"))
         << event_err_msg;
   }
   UnsetFreeBlockNumb();
