@@ -43,11 +43,28 @@ struct Uri {
 };
 
 struct Descriptor {
-  std::string digest;
-  int64_t size;
+  HashedDigest digest;
+  int64_t size{0};
+  std::string mediaType;
+
+  explicit Descriptor() : digest{"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"} {}
+  explicit Descriptor(const Json::Value& value)
+      :  // default value is sha256 hash for an empty string
+        digest{"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"} {
+    static const std::array<std::string, 3> required_fields = {"mediaType", "digest", "size"};
+    for (const auto& f : required_fields) {
+      if (!value.isMember(f)) {
+        throw std::runtime_error("Got invalid descriptor, missing required field; field: " + f +
+                                 ", descriptor: " + Utils::jsonToCanonicalStr(value));
+      }
+    }
+    digest = HashedDigest{value["digest"].asString()};
+    size = value["size"].asInt64();
+    mediaType = value["mediaType"].asString();
+  }
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
-  operator bool() const { return !(digest.empty() && size == 0); }
+  operator bool() const { return !(digest().empty() && size == 0); }
 };
 
 struct Manifest : Json::Value {
@@ -117,20 +134,18 @@ struct Manifest : Json::Value {
       LOG_DEBUG << "No layers metadata are found in the App manifest";
       return Descriptor{};
     }
-    if (!(desc_json.isMember("digest") && desc_json.isMember("size"))) {
-      throw std::runtime_error(
-          "Got invalid App manifest; no `size` or `digest` is found"
-          " in App layers metadata: " +
-          Utils::jsonToCanonicalStr(*this));
-    }
-    auto digest{desc_json["digest"].asString()};
-    if (digest.empty()) {
-      throw std::runtime_error("Got invalid App manifest; failed to parse App layers metadata: " +
-                               Utils::jsonToCanonicalStr(*this));
-    }
-    auto size{desc_json["size"].asInt64()};
-    return Descriptor{digest, size};
+    return Descriptor{desc_json};
   }
+};
+
+struct ImageManifest : Json::Value {
+  static constexpr const char* const Format{"application/vnd.docker.distribution.manifest.v2+json"};
+  static constexpr const char* const Version{"2"};
+
+  explicit ImageManifest(const std::string& json_file) : ImageManifest(Utils::parseJSONFile(json_file)) {}
+  explicit ImageManifest(const Json::Value& value);
+  Descriptor config() const { return Descriptor{(*this)["config"]}; }
+  std::vector<Descriptor> layers() const;
 };
 
 class RegistryClient {

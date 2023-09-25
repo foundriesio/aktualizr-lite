@@ -446,8 +446,8 @@ void RestorableAppEngine::checkAppUpdateSize(const Uri& uri, const boost::filesy
   const auto layers_meta_desc{manifest.layersMetaDescr()};
   if (layers_meta_desc) {
     try {
-      const Docker::Uri layers_meta_uri{uri.createUri(HashedDigest(layers_meta_desc.digest))};
-      const auto layers_meta_path{app_dir / layers_meta_desc.digest};
+      const Docker::Uri layers_meta_uri{uri.createUri(layers_meta_desc.digest)};
+      const auto layers_meta_path{app_dir / layers_meta_desc.digest.hash()};
       registry_client_->downloadBlob(layers_meta_uri, layers_meta_path, layers_meta_desc.size);
       const auto layers_meta{Utils::parseJSONFile(layers_meta_path)};
       if (!layers_meta.isMember(arch)) {

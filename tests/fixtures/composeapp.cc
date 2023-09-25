@@ -190,6 +190,7 @@ class ComposeApp {
         manifest["layers"][1]["size"] = layers_meta_.size();
       }
       manifest["layers"][1]["annotations"]["layers-meta"] = "v1";
+      manifest["layers"][1]["mediaType"] = "application/octet-stream";
     }
     // emulate compose-publish work, i.e. calculate hash on a manifest json as it is,
     // no need to normalize it to a canonical representation
