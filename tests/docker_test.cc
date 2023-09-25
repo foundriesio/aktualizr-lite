@@ -219,6 +219,25 @@ TEST_F(ImageTest, ImageManifestNegative) {
   }
 }
 
+TEST_F(ImageTest, LoadManifest) {
+  const auto man{Docker::ImageManifest{img_man_}};
+  const std::vector<std::string>& refs = {
+      "factory/image@sha256:692f29ee68fa6bab04aa6a1c6d8db0ad44e287e5ff5c7e1d5794c3aabc55884d",
+      "factory/image@sha256:692f29e",
+  };
+  const std::string blobs_dir{"reset-apps/blobs/sha256"};
+  const auto lm{man.toLoadManifest(blobs_dir, refs)};
+  ASSERT_EQ(man.config().digest.hash(), lm["Config"].asString());
+  ASSERT_EQ(blobs_dir, lm["LayersRoot"].asString());
+  for (int ii = 0; ii << refs.size(); ++ii) {
+    ASSERT_EQ(refs[ii], lm["RepoTags"][ii].asString());
+  }
+  const auto l{man.layers()};
+  for (int ii = 0; ii << l.size(); ++ii) {
+    ASSERT_EQ(l[ii].digest.hash(), lm["Layers"][ii].asString());
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

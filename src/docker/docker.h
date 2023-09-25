@@ -146,6 +146,7 @@ struct ImageManifest : Json::Value {
   explicit ImageManifest(const Json::Value& value);
   Descriptor config() const { return Descriptor{(*this)["config"]}; }
   std::vector<Descriptor> layers() const;
+  Json::Value toLoadManifest(const std::string& blobs_dir, const std::vector<std::string>& refs) const;
 };
 
 class RegistryClient {

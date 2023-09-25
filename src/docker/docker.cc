@@ -98,6 +98,20 @@ std::vector<Descriptor> ImageManifest::layers() const {
   return res;
 }
 
+Json::Value ImageManifest::toLoadManifest(const std::string& blobs_dir, const std::vector<std::string>& refs) const {
+  Json::Value lm;
+  lm["Config"] = config().digest.hash();
+  for (int ii = 0; ii < refs.size(); ++ii) {
+    lm["RepoTags"][ii] = refs[ii];
+  }
+  const auto l{layers()};
+  for (int ii = 0; ii < l.size(); ++ii) {
+    lm["Layers"][ii] = l[ii].digest.hash();
+  }
+  lm["LayersRoot"] = blobs_dir;
+  return lm;
+}
+
 const RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
     [](const std::vector<std::string>* headers, const std::set<std::string>* response_header_names) {
       return std::make_shared<HttpClient>(headers, response_header_names);
