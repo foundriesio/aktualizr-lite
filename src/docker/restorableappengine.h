@@ -145,6 +145,10 @@ class RestorableAppEngine : public AppEngine {
   static void installImage(const std::string& client, const boost::filesystem::path& image_dir,
                            const boost::filesystem::path& shared_blob_dir, const std::string& docker_host,
                            const std::string& tag, const std::string& format = "v2s2");
+  static void loadImageToDockerStore(Docker::DockerClient::Ptr& docker_client_,
+                                     const boost::filesystem::path& shared_blob_dir,
+                                     const boost::filesystem::path& image_dir, const std::string& uri,
+                                     const std::string& tag);
 
   static void verifyComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir);
   static void pullComposeAppImages(const std::string& compose_cmd, const boost::filesystem::path& app_dir,

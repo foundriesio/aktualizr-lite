@@ -177,17 +177,25 @@ AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App
     res = true;
   } catch (const std::exception& exc) {
     res = {false, exc.what()};
+    LOG_WARNING << "Failed to install App images: " << exc.what();
   }
 
   if (!offline_) {
     try {
+      if (!res) {
+        LOG_INFO << "Falling back to pulling App images directly from Registry...";
+        // If App images installation/load fails, then let's try to pull images from Registry
+        // as the last resort.
+      } else {
+        LOG_INFO << "Verifying if App images are installed...";
+        // Even if App images are installed/loaded without failure, it would be great to check
+        // if the docker is happy about it. If not it may update image reference/manifest by
+        // fetching image manifest from Registry. This fetch may fail and we need to distinguish
+        // between the pull/fetch failures and container start/running errors.
+        // The former one shouldn't lead to the Target marking as failing,
+        // only container run/start errors should cause it.
+      }
       const auto app_install_root{install_root_ / app.name};
-      // Make the docker store aware about the app images by invoking `docker compose pull` command.
-      // The command fetches just image manifests since `installAppAndImages` injects all image data
-      // to the docker store. The goal is to update the docker store map (`repositories.json`) between
-      // image URIs and internal image represntation's hash.
-      // If the pull fails then `ImagePullFailure` error is returned so the client can distnguish it from
-      // the other image install/run errors and keep trying to install/run App containers.
       pullComposeAppImages(compose_cmd_, app_install_root);
     } catch (const std::exception& exc) {
       return {Result::ID::ImagePullFailure, exc.what()};
@@ -554,7 +562,9 @@ void RestorableAppEngine::installAppImages(const boost::filesystem::path& app_di
     const Uri uri{Uri::parseUri(image_uri, false)};
     const std::string tag{uri.registryHostname + '/' + uri.repo + ':' + uri.digest.shortHash()};
     const auto image_dir{app_dir / "images" / uri.registryHostname / uri.repo / uri.digest.hash()};
-    installImage(client_, image_dir, blobs_root_, docker_host_, tag);
+    // TODO: Consider making type of installation configurable.
+    // installImage(client_, image_dir, blobs_root_, docker_host_, tag);
+    loadImageToDockerStore(docker_client_, blobs_root_, image_dir, image_uri, tag);
   }
 }
 
@@ -802,6 +812,19 @@ void RestorableAppEngine::installImage(const std::string& client, const boost::f
   exec(boost::format{"%s copy -f %s --dest-daemon-host %s --src-shared-blob-dir %s oci:%s docker-daemon:%s"} % client %
            format % docker_host % shared_blob_dir.string() % image_dir.string() % tag,
        "failed to install image", boost::this_process::environment());
+}
+
+void RestorableAppEngine::loadImageToDockerStore(Docker::DockerClient::Ptr& docker_client,
+                                                 const boost::filesystem::path& shared_blob_dir,
+                                                 const boost::filesystem::path& image_dir, const std::string& uri,
+                                                 const std::string& tag) {
+  const auto index_manifest{image_dir / "index.json"};
+  const auto index_manifest_desc{Utils::parseJSONFile(index_manifest)};
+  const auto manifest_descr{Descriptor(index_manifest_desc["manifests"][0])};
+  const auto manifest_file{shared_blob_dir / "sha256" / manifest_descr.digest.hash()};
+  const auto manifest{ImageManifest(manifest_file.string())};
+  const auto load_manifest{manifest.toLoadManifest((shared_blob_dir / "sha256").string(), {uri, tag})};
+  docker_client->loadImage(uri, load_manifest);
 }
 
 void RestorableAppEngine::verifyComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
