@@ -180,21 +180,10 @@ AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App
     LOG_WARNING << "Failed to install App images: " << exc.what();
   }
 
-  if (!offline_) {
+  if (!offline_ && !res) {
     try {
-      if (!res) {
-        LOG_INFO << "Falling back to pulling App images directly from Registry...";
-        // If App images installation/load fails, then let's try to pull images from Registry
-        // as the last resort.
-      } else {
-        LOG_INFO << "Verifying if App images are installed...";
-        // Even if App images are installed/loaded without failure, it would be great to check
-        // if the docker is happy about it. If not it may update image reference/manifest by
-        // fetching image manifest from Registry. This fetch may fail and we need to distinguish
-        // between the pull/fetch failures and container start/running errors.
-        // The former one shouldn't lead to the Target marking as failing,
-        // only container run/start errors should cause it.
-      }
+      LOG_INFO << "Falling back to pulling App images directly from Registry...";
+      // If App images installation/load fails, then try to pull images from Registry as the last resort.
       const auto app_install_root{install_root_ / app.name};
       pullComposeAppImages(compose_cmd_, app_install_root);
     } catch (const std::exception& exc) {

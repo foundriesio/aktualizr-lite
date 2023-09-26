@@ -1,5 +1,7 @@
 #include "fixtures/basehttpclient.cc"
 
+#include "libaktualizr/http/httpclient.h"
+
 namespace fixtures {
 
 class DockerDaemon {
@@ -48,6 +50,10 @@ class DockerDaemon {
     }
   }
 
+  bool isImagePullFailSet() const {
+    return boost::filesystem::exists(dir_ / ImagePullFailFlag);
+  }
+
 
  private:
   class HttpClient: public BaseHttpClient {
@@ -66,21 +72,17 @@ class DockerDaemon {
     }
 
     HttpResponse post(const std::string& url, const std::string& content_type, const std::string& data) override {
-      const std::string failure_injection_str{"x-failure-injection"};
       if (std::string::npos != url.rfind("/images/load") && content_type == "application/x-tar") {
-        const auto failure_injection_pos{data.find(failure_injection_str)};
-        if (std::string::npos != failure_injection_pos) {
-            const auto failure_type_pos{data.find(":", failure_injection_pos)};
-            // failure_type_pos + 3 because <key> : "<value>", so we need to skip `: "`
-            if ("500" == data.substr(failure_type_pos + 3, 3)) {
-               return HttpResponse("", 500, CURLE_OK, "");
-            } if ("load-failure" == data.substr(failure_type_pos + 3, 12)) {
-              return HttpResponse("{\"error\": \"Some image load failure\"}", 200, CURLE_OK, "");
-            } else {
-              return HttpResponse("{\"error\": \"Unknown image load failure\"}", 200, CURLE_OK, "");
-            }
+        if (daemon_.isImagePullFailSet()) {
+          return HttpResponse("", 500, CURLE_OK, "");
         }
-        return HttpResponse("{\"stream\": \"Image loaded; refs:\"}", 200, CURLE_OK, "");
+        // We need to make to the `docker-compose_fake` think that the image is installed/pulled/loaded.
+        // To do so, we have to set `docker-daemon-dir/images.json::[image URI]` to true.
+        // The image URI is not available at the http post request neither in headers nor in query params,
+        // it's embedded in the TAR archive, in `RepoTags` field of the TARred `manifest.json`.
+        // Let the daemon mock written in Python do the TAR extraction and updating of the `images.json`.
+        ::HttpClient c{daemon_.unix_sock_.PathString()};
+        return c.post(url, content_type, data);
       }
       return BaseHttpClient::post(url, content_type, data);
     }
