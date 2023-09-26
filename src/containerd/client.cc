@@ -71,6 +71,12 @@ void Client::pruneContainers() {
   LOG_ERROR << "Container pruning is not supported in nerdctl";
 }
 
+void Client::loadImage(const std::string& image_uri, const Json::Value& load_manifest) {
+  (void)image_uri;
+  (void)load_manifest;
+  LOG_ERROR << "Image loading is not implemented";
+}
+
 Json::Value Client::getRunningApps(const std::function<void(const std::string&, Json::Value&)>& /* ext_func */) {
   Json::Value apps;
   Json::Value containers;

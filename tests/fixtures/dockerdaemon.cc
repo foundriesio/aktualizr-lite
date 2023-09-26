@@ -64,6 +64,27 @@ class DockerDaemon {
 
       return HttpResponse(daemon_.getRunningContainers(), 200, CURLE_OK, "");
     }
+
+    HttpResponse post(const std::string& url, const std::string& content_type, const std::string& data) override {
+      const std::string failure_injection_str{"x-failure-injection"};
+      if (std::string::npos != url.rfind("/images/load") && content_type == "application/x-tar") {
+        const auto failure_injection_pos{data.find(failure_injection_str)};
+        if (std::string::npos != failure_injection_pos) {
+            const auto failure_type_pos{data.find(":", failure_injection_pos)};
+            // failure_type_pos + 3 because <key> : "<value>", so we need to skip `: "`
+            if ("500" == data.substr(failure_type_pos + 3, 3)) {
+               return HttpResponse("", 500, CURLE_OK, "");
+            } if ("load-failure" == data.substr(failure_type_pos + 3, 12)) {
+              return HttpResponse("{\"error\": \"Some image load failure\"}", 200, CURLE_OK, "");
+            } else {
+              return HttpResponse("{\"error\": \"Unknown image load failure\"}", 200, CURLE_OK, "");
+            }
+        }
+        return HttpResponse("{\"stream\": \"Image loaded; refs:\"}", 200, CURLE_OK, "");
+      }
+      return BaseHttpClient::post(url, content_type, data);
+    }
+
    private:
     DockerDaemon& daemon_;
   };
