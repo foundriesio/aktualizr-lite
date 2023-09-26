@@ -163,6 +163,8 @@ AppEngine::Result RestorableAppEngine::installContainerless(const App& app) {
   try {
     installAppAndImages(app);
     res = true;
+  } catch (const LoadImageException& exc) {
+    res = {Result::ID::ImagePullFailure, exc.what()};
   } catch (const std::exception& exc) {
     res = {false, exc.what()};
   }
@@ -170,25 +172,9 @@ AppEngine::Result RestorableAppEngine::installContainerless(const App& app) {
 }
 
 AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App& app, bool run) {
-  Result res{false};
-
-  try {
-    const auto app_install_root{installAppAndImages(app)};
-    res = true;
-  } catch (const std::exception& exc) {
-    res = {false, exc.what()};
-    LOG_WARNING << "Failed to install App images: " << exc.what();
-  }
-
-  if (!offline_ && !res) {
-    try {
-      LOG_INFO << "Falling back to pulling App images directly from Registry...";
-      // If App images installation/load fails, then try to pull images from Registry as the last resort.
-      const auto app_install_root{install_root_ / app.name};
-      pullComposeAppImages(compose_cmd_, app_install_root);
-    } catch (const std::exception& exc) {
-      return {Result::ID::ImagePullFailure, exc.what()};
-    }
+  Result res{installContainerless(app)};
+  if (!res) {
+    return res;
   }
 
   try {
@@ -197,11 +183,7 @@ AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App
     startComposeApp(compose_cmd_, app_install_root, flags);
     res = true;
   } catch (const std::exception& exc) {
-    res = {false, exc.what()};
-  }
-
-  if (!res) {
-    return res;
+    return {false, exc.what()};
   }
 
   try {
@@ -522,7 +504,7 @@ void RestorableAppEngine::pullAppImages(const Uri& app_uri, const boost::filesys
   }
 }
 
-boost::filesystem::path RestorableAppEngine::installAppAndImages(const App& app) {
+void RestorableAppEngine::installAppAndImages(const App& app) {
   const Uri uri{Uri::parseUri(app.uri)};
   const auto app_dir{apps_root_ / uri.app / uri.digest.hash()};
   auto app_install_dir{install_root_ / app.name};
@@ -532,7 +514,6 @@ boost::filesystem::path RestorableAppEngine::installAppAndImages(const App& app)
   verifyComposeApp(compose_cmd_, app_install_dir);
   LOG_DEBUG << app.name << ": installing App images: " << app_dir << " --> docker-daemon://";
   installAppImages(app_dir);
-  return app_install_dir;
 }
 
 void RestorableAppEngine::installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir) {
@@ -553,7 +534,11 @@ void RestorableAppEngine::installAppImages(const boost::filesystem::path& app_di
     const auto image_dir{app_dir / "images" / uri.registryHostname / uri.repo / uri.digest.hash()};
     // TODO: Consider making type of installation configurable.
     // installImage(client_, image_dir, blobs_root_, docker_host_, tag);
-    loadImageToDockerStore(docker_client_, blobs_root_, image_dir, image_uri, tag);
+    try {
+      loadImageToDockerStore(docker_client_, blobs_root_, image_dir, image_uri, tag);
+    } catch (const std::exception& exc) {
+      throw LoadImageException("Failed to load image to docker store; image: " + image_uri + ", err: " + exc.what());
+    }
   }
 }
 

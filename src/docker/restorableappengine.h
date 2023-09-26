@@ -111,6 +111,10 @@ class RestorableAppEngine : public AppEngine {
                                                 const boost::filesystem::path& docker_path);
 
  private:
+  class LoadImageException : public std::runtime_error {
+   public:
+    explicit LoadImageException(const std::string& err) : std::runtime_error(err) {}
+  };
   // pull App&Images
   void pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
   void checkAppUpdateSize(const Uri& uri, const boost::filesystem::path& app_dir) const;
@@ -120,7 +124,7 @@ class RestorableAppEngine : public AppEngine {
   // install App&Images
   Result installAndCreateOrRunContainers(const App& app, bool run = false);
   Result installContainerless(const App& app);
-  boost::filesystem::path installAppAndImages(const App& app);
+  void installAppAndImages(const App& app);
   static void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);
   void installAppImages(const boost::filesystem::path& app_dir);
 
