@@ -3,6 +3,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include <boost/format.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/process.hpp>
 
 #include "http/httpclient.h"
@@ -24,7 +25,24 @@ const DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = [
   }
 
   const auto socket{docker_host.substr(docker_host_prefix.size())};
-  return std::make_shared<HttpClient>(socket);
+  auto c{std::make_shared<HttpClient>(socket)};
+  // Set a timeout for the overall request processing:
+  // "the maximum time in milliseconds that you allow the entire transfer operation to take".
+  int64_t timeout_ms{1000 * 60}; /* by default 1m timeout */
+  if (1 == env.count("COMPOSE_HTTP_TIMEOUT")) {
+    std::string timeout_str;
+    try {
+      timeout_str = env.get("COMPOSE_HTTP_TIMEOUT");
+      const auto timeout_s{boost::lexical_cast<int64_t>(timeout_str)};
+      timeout_ms = timeout_s * 1000;
+      LOG_DEBUG << "Docker client: setting the timeout defined by `COMPOSE_HTTP_TIMEOUT` env variable: " << timeout_str;
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Invalid timeout value set by `COMPOSE_HTTP_TIMEOUT`; value: " << timeout_str
+                << ", err: " << exc.what() << "; applying the default value: 60s";
+    }
+  }
+  c->timeout(timeout_ms);
+  return c;
 };
 
 DockerClient::DockerClient(std::shared_ptr<HttpInterface> http_client)
