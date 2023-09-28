@@ -111,6 +111,10 @@ class RestorableAppEngine : public AppEngine {
                                                 const boost::filesystem::path& docker_path);
 
  private:
+  class LoadImageException : public std::runtime_error {
+   public:
+    explicit LoadImageException(const std::string& err) : std::runtime_error(err) {}
+  };
   // pull App&Images
   void pullApp(const Uri& uri, const boost::filesystem::path& app_dir);
   void checkAppUpdateSize(const Uri& uri, const boost::filesystem::path& app_dir) const;
@@ -120,7 +124,7 @@ class RestorableAppEngine : public AppEngine {
   // install App&Images
   Result installAndCreateOrRunContainers(const App& app, bool run = false);
   Result installContainerless(const App& app);
-  boost::filesystem::path installAppAndImages(const App& app);
+  void installAppAndImages(const App& app);
   static void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);
   void installAppImages(const boost::filesystem::path& app_dir);
 
@@ -145,6 +149,10 @@ class RestorableAppEngine : public AppEngine {
   static void installImage(const std::string& client, const boost::filesystem::path& image_dir,
                            const boost::filesystem::path& shared_blob_dir, const std::string& docker_host,
                            const std::string& tag, const std::string& format = "v2s2");
+  static void loadImageToDockerStore(Docker::DockerClient::Ptr& docker_client_,
+                                     const boost::filesystem::path& shared_blob_dir,
+                                     const boost::filesystem::path& image_dir, const std::string& uri,
+                                     const std::string& tag);
 
   static void verifyComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir);
   static void pullComposeAppImages(const std::string& compose_cmd, const boost::filesystem::path& app_dir,

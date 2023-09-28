@@ -18,6 +18,7 @@ class Client : public AppEngine::Client {
   Json::Value getRunningApps(const std::function<void(const std::string&, Json::Value&)>& ext_func) override;
   void pruneImages() override;
   void pruneContainers() override;
+  void loadImage(const std::string& image_uri, const Json::Value& load_manifest) override;
 
  private:
   const std::string nerdctl_;

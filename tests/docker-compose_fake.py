@@ -51,6 +51,7 @@ def up(out_dir, app_name, compose, flags):
         images = {}
 
     logger.info("Run services...")
+    logger.info("Run services...")
     with open(os.path.join(out_dir, "containers.json"), "r") as f:
         containers = json.load(f)
 

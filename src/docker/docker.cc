@@ -71,6 +71,47 @@ HashedDigest::HashedDigest(const std::string& hash_digest) : digest_{boost::algo
   short_hash_ = hash_.substr(0, 7);
 }
 
+ImageManifest::ImageManifest(const Json::Value& value) : Json::Value(value) {
+  static const std::array<std::string, 4> required_fields = {"mediaType", "schemaVersion", "config", "layers"};
+  for (const auto& f : required_fields) {
+    if (!(*this).isMember(f)) {
+      throw std::runtime_error("Got invalid image manifest, missing required field; field: " + f +
+                               ", manifest: " + Utils::jsonToCanonicalStr(value));
+    }
+  }
+  const auto format{(*this)["mediaType"].asString()};
+  if (format != Format) {
+    throw std::runtime_error(std::string("Unsupported image manifest format; supported: ") + Format + "got: " + format);
+  }
+  const auto version{(*this)["schemaVersion"].asString()};
+  if (version != Version) {
+    throw std::runtime_error(std::string("Unsupported image manifest schema version; supported: ") + Version +
+                             "got: " + version);
+  }
+}
+
+std::vector<Descriptor> ImageManifest::layers() const {
+  std::vector<Descriptor> res;
+  for (Json::ValueConstIterator ii = (*this)["layers"].begin(); ii != (*this)["layers"].end(); ++ii) {
+    res.emplace_back(Descriptor{*ii});
+  }
+  return res;
+}
+
+Json::Value ImageManifest::toLoadManifest(const std::string& blobs_dir, const std::vector<std::string>& refs) const {
+  Json::Value lm;
+  lm["Config"] = config().digest.hash();
+  for (int ii = 0; ii < refs.size(); ++ii) {
+    lm["RepoTags"][ii] = refs[ii];
+  }
+  const auto l{layers()};
+  for (int ii = 0; ii < l.size(); ++ii) {
+    lm["Layers"][ii] = l[ii].digest.hash();
+  }
+  lm["LayersRoot"] = blobs_dir;
+  return lm;
+}
+
 const RegistryClient::HttpClientFactory RegistryClient::DefaultHttpClientFactory =
     [](const std::vector<std::string>* headers, const std::set<std::string>* response_header_names) {
       return std::make_shared<HttpClient>(headers, response_header_names);

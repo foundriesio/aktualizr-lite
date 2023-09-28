@@ -212,9 +212,9 @@ add_aktualizr_test(NAME docker
   PROJECT_WORKING_DIRECTORY
 )
 aktualizr_source_file_checks(docker_test.cc)
-target_include_directories(t_docker PRIVATE ${TEST_INCS})
+target_include_directories(t_docker PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src)
 set_tests_properties(test_docker PROPERTIES LABELS "aklite:docker")
-target_link_libraries(t_docker ${MAIN_TARGET_LIB})
+target_link_libraries(t_docker ${MAIN_TARGET_LIB} testutilities)
 
 add_aktualizr_test(NAME aklite_offline
   SOURCES aklite_offline_test.cc

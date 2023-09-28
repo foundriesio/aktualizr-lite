@@ -27,6 +27,8 @@ class DockerClient : public AppEngine::Client {
   Json::Value getRunningApps(const std::function<void(const std::string&, Json::Value&)>& ext_func) override;
   void pruneImages() override;
   void pruneContainers() override;
+  void loadImage(const std::string& image_uri, const Json::Value& load_manifest) override;
+  static std::string tarString(const std::string& data, const std::string& file_name_in_tar);
 
  private:
   Json::Value getEngineInfo();

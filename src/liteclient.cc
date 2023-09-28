@@ -660,7 +660,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
     writeCurrentTarget(target);
     updateRequestHeaders();
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kDownloadFailed) {
-    LOG_INFO << "Apps installation failed while the install process was trying to fetch App images data,"
+    LOG_INFO << "Apps installation failed while the install process was trying to load App images to docker store,"
                 " will try the install again at the next update cycle.";
   } else {
     LOG_ERROR << "Unable to install update: " << iresult.description;

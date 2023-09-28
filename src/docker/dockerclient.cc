@@ -1,6 +1,11 @@
 #include "dockerclient.h"
+
+#include <archive.h>
+#include <archive_entry.h>
 #include <boost/format.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/process.hpp>
+
 #include "http/httpclient.h"
 #include "logging/logging.h"
 #include "utilities/utils.h"
@@ -20,7 +25,24 @@ const DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = [
   }
 
   const auto socket{docker_host.substr(docker_host_prefix.size())};
-  return std::make_shared<HttpClient>(socket);
+  auto c{std::make_shared<HttpClient>(socket)};
+  // Set a timeout for the overall request processing:
+  // "the maximum time in milliseconds that you allow the entire transfer operation to take".
+  int64_t timeout_ms{1000 * 60}; /* by default 1m timeout */
+  if (1 == env.count("COMPOSE_HTTP_TIMEOUT")) {
+    std::string timeout_str;
+    try {
+      timeout_str = env.get("COMPOSE_HTTP_TIMEOUT");
+      const auto timeout_s{boost::lexical_cast<int64_t>(timeout_str)};
+      timeout_ms = timeout_s * 1000;
+      LOG_DEBUG << "Docker client: setting the timeout defined by `COMPOSE_HTTP_TIMEOUT` env variable: " << timeout_str;
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Invalid timeout value set by `COMPOSE_HTTP_TIMEOUT`; value: " << timeout_str
+                << ", err: " << exc.what() << "; applying the default value: 60s";
+    }
+  }
+  c->timeout(timeout_ms);
+  return c;
 };
 
 DockerClient::DockerClient(std::shared_ptr<HttpInterface> http_client)
@@ -148,6 +170,36 @@ void DockerClient::pruneContainers() {
   }
 }
 
+void DockerClient::loadImage(const std::string& image_uri, const Json::Value& load_manifest) {
+  // The `/images/load` handler expects an array of load manifests in `manifest.json`
+  Json::Value lm{Json::arrayValue};
+  lm[0] = load_manifest;
+  const auto load_manifest_str{Utils::jsonToStr(lm)};
+  const auto tarred_manifest{tarString(load_manifest_str, "manifest.json")};
+  // curl --unix-socket <sock>  "http://localhost/images/load?quiet=0" --data-binary @tarred_load_manifest -H
+  // "Content-Type: application/x-tar"
+  LOG_INFO << "Loading image into docker store " << image_uri;
+  // TODO: implement support of the "not quiet" request. In this case, the response is streamed as a "chunked" stream,
+  // each "chunk" containing image load progress, so the code can output the progress to the logs.
+  // The httpclient doesn't support a HTTP response streaming and it will require some effort to implement it.
+  // The code that handle the request is located in https://github.com/moby/moby/blob/master/image/tarexport/load.go.
+  const std::string cmd{"http://localhost/images/load?quiet=1"};
+  auto resp = http_client_->post(cmd, "application/x-tar", tarred_manifest);
+  if (!resp.isOk()) {
+    throw std::runtime_error("Failed to load image: " + resp.getStatusStr());
+  }
+  const auto json_resp{resp.getJson()};
+  if (json_resp.isMember("stream")) {
+    // It prints "Image loaded; refs: <ref1>, <ref2>, ... <refN>"
+    LOG_INFO << resp.getJson()["stream"].asString();
+  } else {
+    // The load handler sends 200 to a caller before all layers are loaded and image refs are set.
+    // A presence of the `stream` field in the response assumes that the load was successful, otherwise
+    // the exception is thrown with the response payload which contains the load failure reason.
+    throw std::runtime_error("Failed to load image: " + Utils::jsonToStr(json_resp));
+  }
+}
+
 Json::Value DockerClient::getEngineInfo() {
   Json::Value info;
   const std::string cmd{"http://localhost/version"};
@@ -161,6 +213,36 @@ Json::Value DockerClient::getEngineInfo() {
     throw std::runtime_error("Request to the dockerd's /version endpoint has failed: " + cmd);
   }
   return info;
+}
+
+std::string DockerClient::tarString(const std::string& data, const std::string& file_name_in_tar) {
+  struct archive* a;
+  struct archive_entry* entry;
+  size_t archive_size;
+  std::vector<uint8_t> tar_data(2 * data.size() + 500 + 512 + 512);
+
+  a = archive_write_new();
+  archive_write_set_format_ustar(a);
+  int archive_open_status = archive_write_open_memory(a, tar_data.data(), tar_data.size(), &archive_size);
+  if (archive_open_status != ARCHIVE_OK) {
+    throw std::runtime_error("Failed to create an in-memory TAR archive: " + std::to_string(archive_open_status));
+  }
+
+  entry = archive_entry_new();
+  archive_entry_set_pathname(entry, file_name_in_tar.c_str());
+  archive_entry_set_size(entry, data.size());
+  archive_entry_set_filetype(entry, AE_IFREG);
+  archive_entry_set_perm(entry, 0644);
+  archive_write_header(a, entry);
+
+  archive_write_data(a, data.c_str(), data.size());
+  archive_write_finish_entry(a);
+  archive_entry_free(entry);
+
+  archive_write_close(a);
+  archive_write_free(a);
+
+  return {tar_data.begin(), tar_data.begin() + archive_size};
 }
 
 }  // namespace Docker

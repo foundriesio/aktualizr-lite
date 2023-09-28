@@ -1,5 +1,7 @@
 #include "fixtures/basehttpclient.cc"
 
+#include "libaktualizr/http/httpclient.h"
+
 namespace fixtures {
 
 class DockerDaemon {
@@ -48,6 +50,10 @@ class DockerDaemon {
     }
   }
 
+  bool isImagePullFailSet() const {
+    return boost::filesystem::exists(dir_ / ImagePullFailFlag);
+  }
+
 
  private:
   class HttpClient: public BaseHttpClient {
@@ -64,6 +70,23 @@ class DockerDaemon {
 
       return HttpResponse(daemon_.getRunningContainers(), 200, CURLE_OK, "");
     }
+
+    HttpResponse post(const std::string& url, const std::string& content_type, const std::string& data) override {
+      if (std::string::npos != url.rfind("/images/load") && content_type == "application/x-tar") {
+        if (daemon_.isImagePullFailSet()) {
+          return HttpResponse("", 500, CURLE_OK, "");
+        }
+        // We need to make to the `docker-compose_fake` think that the image is installed/pulled/loaded.
+        // To do so, we have to set `docker-daemon-dir/images.json::[image URI]` to true.
+        // The image URI is not available at the http post request neither in headers nor in query params,
+        // it's embedded in the TAR archive, in `RepoTags` field of the TARred `manifest.json`.
+        // Let the daemon mock written in Python do the TAR extraction and updating of the `images.json`.
+        ::HttpClient c{daemon_.unix_sock_.PathString()};
+        return c.post(url, content_type, data);
+      }
+      return BaseHttpClient::post(url, content_type, data);
+    }
+
    private:
     DockerDaemon& daemon_;
   };

@@ -26,6 +26,7 @@ class AppEngine {
     virtual Json::Value getRunningApps(const std::function<void(const std::string&, Json::Value&)>& ext_func) = 0;
     virtual void pruneImages() = 0;
     virtual void pruneContainers() = 0;
+    virtual void loadImage(const std::string&, const Json::Value&) = 0;
 
     virtual ~Client() = default;
     Client(const Client&&) = delete;

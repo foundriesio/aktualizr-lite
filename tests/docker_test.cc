@@ -1,8 +1,14 @@
 #include <gtest/gtest.h>
 
+#include <boost/format.hpp>
+#include <boost/process.hpp>
 #include "boost/format.hpp"
 
 #include "docker/docker.h"
+#include "docker/dockerclient.h"
+#include "test_utils.h"
+
+#include "fixtures/dockerdaemon.cc"
 
 TEST(Docker, ParseUri) {
   const std::string host{"host"};
@@ -167,6 +173,107 @@ TEST(Docker, BearerAuthNegative) {
                                            "\",service=\"registry\",scope=\"repository:msul-dev01/simpleapp:pull\""),
         std::invalid_argument);
   }
+}
+
+class ImageTest : virtual public ::testing::Test {
+ protected:
+  void SetUp() override {
+    img_man_["mediaType"] = Docker::ImageManifest::Format;
+    img_man_["schemaVersion"] = Docker::ImageManifest::Version;
+    img_man_["config"]["mediaType"] = "application/vnd.docker.container.image.v1+json";
+    img_man_["config"]["size"] = 6541;
+    img_man_["config"]["digest"] = "sha256:99ae753c80968a7d7846dfbd06f0f0f7a425575955a275c7db01d0e9e34cab70";
+
+    img_layers_[0]["mediaType"] = "application/vnd.docker.image.rootfs.diff.tar.gzip";
+    img_layers_[0]["size"] = 1342;
+    img_layers_[0]["digest"] = "sha256:48ecbb6b270eb481cb6df2a5b0332de294ec729e1968e92d725f1329637ce01b";
+    img_layers_[1]["mediaType"] = "application/vnd.docker.image.rootfs.diff.tar.gzip";
+    img_layers_[1]["size"] = 308482;
+    img_layers_[1]["digest"] = "sha256:692f29ee68fa6bab04aa6a1c6d8db0ad44e287e5ff5c7e1d5794c3aabc55884d";
+    img_man_["layers"] = img_layers_;
+  }
+
+  Json::Value getLoadManifest() const {
+    const auto man{Docker::ImageManifest{img_man_}};
+    const std::vector<std::string>& refs = {
+        "factory/image@sha256:692f29ee68fa6bab04aa6a1c6d8db0ad44e287e5ff5c7e1d5794c3aabc55884d",
+        "factory/image@sha256:692f29e",
+    };
+    const std::string blobs_dir{"reset-apps/blobs/sha256"};
+    return {man.toLoadManifest(blobs_dir, refs)};
+  }
+
+  Json::Value img_man_;
+  Json::Value img_layers_;
+};
+
+TEST_F(ImageTest, ImageManifest) {
+  ASSERT_NO_THROW(const auto man{Docker::ImageManifest{img_man_}};
+                  EXPECT_EQ(Docker::Descriptor{img_man_["config"]}, man.config()); const auto man_layers{man.layers()};
+                  int indx{0}; for (const auto& l
+                                    : man.layers()) { EXPECT_EQ(Docker::Descriptor{img_layers_[indx++]}, l); };);
+}
+
+TEST_F(ImageTest, ImageManifestNegative) {
+  {
+    // missing field
+    Json::Value image_manifest;
+    image_manifest["schemaVersion"] = Docker::ImageManifest::Version;
+    ASSERT_THROW(Docker::ImageManifest{image_manifest}, std::runtime_error);
+  }
+  {
+    // invalid config digest
+    Json::Value image_manifest{img_man_};
+    image_manifest["config"]["digest"] = "0968a7d7846dfbd06f0f0f7a425575955a275c7db01d0e9e34cab70";
+    ASSERT_THROW(Docker::ImageManifest{image_manifest}.config(), std::invalid_argument);
+  }
+  {
+    // invalid layer size
+    Json::Value image_manifest{img_man_};
+    image_manifest["layers"][0]["size"] = "foobar";
+    ASSERT_THROW(Docker::ImageManifest{image_manifest}.layers(), Json::LogicError);
+  }
+}
+
+TEST_F(ImageTest, LoadManifest) {
+  const auto man{Docker::ImageManifest{img_man_}};
+  const std::vector<std::string>& refs = {
+      "factory/image@sha256:692f29ee68fa6bab04aa6a1c6d8db0ad44e287e5ff5c7e1d5794c3aabc55884d",
+      "factory/image@sha256:692f29e",
+  };
+  const std::string blobs_dir{"reset-apps/blobs/sha256"};
+  const auto lm{man.toLoadManifest(blobs_dir, refs)};
+  ASSERT_EQ(man.config().digest.hash(), lm["Config"].asString());
+  ASSERT_EQ(blobs_dir, lm["LayersRoot"].asString());
+  for (int ii = 0; ii << refs.size(); ++ii) {
+    ASSERT_EQ(refs[ii], lm["RepoTags"][ii].asString());
+  }
+  const auto l{man.layers()};
+  for (int ii = 0; ii << l.size(); ++ii) {
+    ASSERT_EQ(l[ii].digest.hash(), lm["Layers"][ii].asString());
+  }
+}
+
+TEST_F(ImageTest, TarLoadManifest) {
+  const auto lm{getLoadManifest()};
+  const auto lm_str{Utils::jsonToStr(lm)};
+  const auto lm_tar{Docker::DockerClient::tarString(lm_str, "manifest.json")};
+  TemporaryFile tar_file{"-load-manifest.tar"};
+  Utils::writeFile(tar_file.Path(), lm_tar);
+  std::string out_untar;
+  ASSERT_EQ(EXIT_SUCCESS, Utils::shell("tar -tvf " + tar_file.PathString(), &out_untar, true)) << out_untar;
+}
+
+TEST_F(ImageTest, LoadImage) {
+  TemporaryDirectory dir;
+  fixtures::DockerDaemon daemon{dir / "daemon"};
+  auto client{std::make_shared<Docker::DockerClient>(daemon.getClient())};
+  auto lm{getLoadManifest()};
+  ASSERT_NO_THROW(client->loadImage("factory/app@sha256:123", lm));
+  lm["x-failure-injection"] = "500";
+  ASSERT_THROW(client->loadImage("factory/app@sha256:123", lm), std::runtime_error);
+  lm["x-failure-injection"] = "load-failure";
+  ASSERT_THROW(client->loadImage("factory/app@sha256:123", lm), std::runtime_error);
 }
 
 int main(int argc, char** argv) {
