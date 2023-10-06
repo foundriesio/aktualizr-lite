@@ -236,4 +236,17 @@ unsigned int Repo::getFreeSpacePercent() const {
   }
 }
 
+bool Repo::hasCommit(const std::string& commit_hash) const {
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GFile) root = nullptr;
+  GCancellable* cancellable = nullptr;
+  gboolean found{0};
+
+  if (0 == ostree_repo_has_object(repo_, OSTREE_OBJECT_TYPE_COMMIT, commit_hash.c_str(), &found, cancellable, &error)) {
+    throw std::runtime_error("Failed to check if commit is present; commit hash: " + commit_hash +
+                             ", err: " + std::string(error->message));
+  }
+  return static_cast<bool>(found);
+}
+
 }  // namespace OSTree

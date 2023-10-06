@@ -30,6 +30,7 @@ class Repo {
   std::string readFile(const std::string& commit_hash, const std::string& file) const;
   void setFreeSpacePercent(unsigned int min_free_space, bool hot_reload = false);
   unsigned int getFreeSpacePercent() const;
+  bool hasCommit(const std::string& commit_hash) const;
 
  private:
   void init(bool create);
