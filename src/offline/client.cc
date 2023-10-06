@@ -196,7 +196,7 @@ static Uptane::Target getSpecificTarget(LiteClient& client, const std::string& t
   }
 }
 
-static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::vector<std::string>& found_apps) {
+static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set<std::string>& found_apps) {
   if (!boost::filesystem::exists(apps_dir)) {
     return;
   }
@@ -206,7 +206,7 @@ static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::vec
       const auto uri_file{app_ver_dir_entry.path() / "uri"};
       const auto app_uri{Utils::readFile(uri_file.string())};
       LOG_INFO << "Found app; uri: " << app_uri;
-      found_apps.push_back(app_uri);
+      found_apps.insert(app_uri);
     }
   }
 }
@@ -239,7 +239,7 @@ static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
   }
 
   // parse the update content
-  std::vector<std::string> found_apps;
+  std::set<std::string> found_apps;
   parseUpdateContent(src.AppsDir / "apps", found_apps);
 
   const OSTree::Repo repo{src.OstreeRepoDir.string()};
@@ -251,31 +251,18 @@ static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
       LOG_DEBUG << "No ostree commit found for Target: " << t.filename();
       continue;
     }
-
-    std::list<std::string> found_but_not_target_apps{found_apps.begin(), found_apps.end()};
-    auto shortlisted_target_apps{Target::appsJson(t)};
-
+    // Find Target Apps content of which is present in the specified source directory
+    Json::Value apps_to_install;
     for (const auto& app : Target::Apps(t)) {
-      if (found_apps.end() == std::find(found_apps.begin(), found_apps.end(), app.uri)) {
-        // It may happen because App was shortlisted during running the CI run that fetched Apps, so we `continue` with
-        // the App matching We just need to make sure that all found/update Apps macthes subset of Target Apps
-        LOG_DEBUG << "No App found for Target; Target: " << t.filename() << "; app: " << app.uri;
-        shortlisted_target_apps.removeMember(app.name);
-        continue;
+      if (found_apps.count(app.uri) > 0) {
+        apps_to_install[app.name]["uri"] = app.uri;
       }
-      found_but_not_target_apps.remove(app.uri);
-      // We cannot exit this loop earlier even if `found_but_not_target_apps` becomes empty,
-      // which indicates that all found Apps are listed in Target, because
-      // we need to shortlist ALL Target apps that are no found on the provided filesystem.
     }
 
-    if (found_but_not_target_apps.empty()) {
-      found_target = t;
-      auto found_target_custom = found_target.custom_data();
-      found_target_custom[Target::ComposeAppField] = shortlisted_target_apps;
-      found_target.updateCustom(found_target_custom);
-      break;
-    }
+    Json::Value updated_custom{t.custom_data()};
+    updated_custom[Target::ComposeAppField] = apps_to_install;
+    found_target = Target::updateCustom(t, updated_custom);
+    break;
   }
 
   return found_target;

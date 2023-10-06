@@ -100,6 +100,17 @@ TufTarget Target::toTufTarget(const Uptane::Target& target) {
   return TufTarget{target.filename(), target.sha256Hash(), ver, target.custom_data()};
 }
 
+Uptane::Target Target::updateCustom(const Uptane::Target& target, const Json::Value& custom) {
+  // Uptane::Target::updateCustom() method not only update custom,
+  // but also adds hw-ids and ECUs even if the one already present in the source Target.
+  // This method updates Target custom without changing any other field.
+  Json::Value target_json;
+  target_json["hashes"]["sha256"] = target.sha256Hash();
+  target_json["length"] = target.length();
+  target_json["custom"] = custom;
+  return Uptane::Target{target.filename(), target_json};
+}
+
 bool Target::isUnknown(const Uptane::Target& target) {
   // "unknown" - a valid target that refers to an ostree hash that a device was or is successfully booted on.
   // It's "unknown" because there is no corresponding TUF Target in the DB/TUF Targets metadata.
