@@ -185,6 +185,12 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   return std::make_unique<LiteClient>(cfg, app_engine, nullptr, std::make_shared<MetaFetcher>(src.TufDir));
 }
 
+static bool compareTargets(const Uptane::Target& t1, const Uptane::Target& t2) {
+  return !(Target::Version(t1.custom_version()) < Target::Version(t2.custom_version()));
+}
+
+using SortedTargets = std::set<Uptane::Target, decltype(&compareTargets)>;
+
 static Uptane::Target getSpecificTarget(LiteClient& client, const std::string& target_name) {
   const auto found_target_it =
       std::find_if(client.allTargets().begin(), client.allTargets().end(),
@@ -194,6 +200,30 @@ static Uptane::Target getSpecificTarget(LiteClient& client, const std::string& t
   } else {
     return Uptane::Target::Unknown();
   }
+}
+
+// Filter the specified list of Targets by hardware ID and sort them in descending version order
+static SortedTargets filterAndSortTargets(const std::vector<Uptane::Target>& targets,
+                                          const std::string& required_hwid) {
+  SortedTargets res(compareTargets);
+
+  for (const auto& target : targets) {
+    if (target.hardwareIds().size() != 1) {
+      LOG_ERROR << "Invalid hardware ID number found in Target; target: " << target.filename()
+                << "; found: " << target.hardwareIds().size() << "; expected: " << 1;
+      continue;
+    }
+    const auto hwid{target.hardwareIds()[0]};
+    if (required_hwid != hwid.ToString()) {
+      LOG_DEBUG << "Found Target's hardware ID doesn't match a device's hardware ID, skipping it; "
+                << "target: " << target.filename() << " target hw ID: " << hwid << "; device hw ID: " << required_hwid;
+      continue;
+    }
+    LOG_TRACE << "Found Target: " << target.filename();
+    res.insert(target);
+  }
+
+  return res;
 }
 
 static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set<std::string>& found_apps) {
@@ -211,41 +241,17 @@ static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set
   }
 }
 
-static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
-  if (!src.TargetName.empty()) {
-    return getSpecificTarget(client, src.TargetName);
-  }
-
-  // sort Targets by a version number in a descendent order
-  auto target_sort = [](const Uptane::Target& t1, const Uptane::Target& t2) {
-    return strverscmp(t1.custom_version().c_str(), t2.custom_version().c_str()) > 0;
-  };
-  std::set<Uptane::Target, decltype(target_sort)> available_targets(target_sort);
-
-  for (const auto& target : client.allTargets()) {
-    if (target.hardwareIds().size() != 1) {
-      LOG_ERROR << "Invalid hardware ID number found in Target; target: " << target.filename()
-                << "; found: " << target.hardwareIds().size() << "; expected: " << 1;
-      continue;
-    }
-    const auto hwid{target.hardwareIds()[0]};
-    if (client.primary_ecu.second != hwid) {
-      LOG_DEBUG << "Found Target's hardware ID doesn't match a device's hardware ID, skipping it; target hw ID: "
-                << hwid << "; device hw ID: " << client.primary_ecu.second;
-      continue;
-    }
-    LOG_DEBUG << "Found Target: " << target.filename();
-    available_targets.insert(target);
-  }
-
-  // parse the update content
+static std::vector<Uptane::Target> getAvailableTargets(const SortedTargets& allowed_targets, const UpdateSrc& src,
+                                                       bool just_latest = true) {
+  std::vector<Uptane::Target> found_targets;
   std::set<std::string> found_apps;
+
   parseUpdateContent(src.AppsDir / "apps", found_apps);
 
   const OSTree::Repo repo{src.OstreeRepoDir.string()};
-  // find Target that matches the given update content, search starting from the most recent Target
   Uptane::Target found_target(Uptane::Target::Unknown());
-  for (const auto& t : available_targets) {
+
+  for (const auto& t : allowed_targets) {
     LOG_INFO << "Checking if update content matches the given target: " << t.filename();
     if (!repo.hasCommit(t.sha256Hash())) {
       LOG_DEBUG << "No ostree commit found for Target: " << t.filename();
@@ -258,14 +264,22 @@ static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
         apps_to_install[app.name]["uri"] = app.uri;
       }
     }
-
     Json::Value updated_custom{t.custom_data()};
     updated_custom[Target::ComposeAppField] = apps_to_install;
-    found_target = Target::updateCustom(t, updated_custom);
-    break;
+    found_targets.emplace_back(Target::updateCustom(t, updated_custom));
+    if (just_latest) {
+      break;
+    }
   }
+  return found_targets;
+}
 
-  return found_target;
+static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
+  if (!src.TargetName.empty()) {
+    return getSpecificTarget(client, src.TargetName);
+  }
+  return getAvailableTargets(filterAndSortTargets(client.allTargets(), client.primary_ecu.second.ToString()), src)
+      .front();
 }
 
 static void registerApps(const Uptane::Target& target, const boost::filesystem::path& apps_store_root,

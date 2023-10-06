@@ -309,6 +309,17 @@ TEST_F(AkliteOffline, OfflineClient) {
   ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }
 
+TEST_F(AkliteOffline, OfflineClientMultipleTargets) {
+  const auto target{addTarget({createApp("app-01")})};
+  const auto target_01{addTarget({createApp("app-01"), createApp("app-02")})};
+  const auto target_02{addTarget({createApp("app-02"), createApp("app-03")})};
+
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target_02.MatchTarget(getCurrent()));
+}
+
 TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
   const auto app03{createApp("zz00-app-03")};
   const auto target{addTarget({createApp("app-01"), createApp("app-02"), app03})};
