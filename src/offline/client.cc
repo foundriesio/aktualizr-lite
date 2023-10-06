@@ -196,30 +196,17 @@ static Uptane::Target getSpecificTarget(LiteClient& client, const std::string& t
   }
 }
 
-static void parseUpdateContent(const Uptane::HardwareIdentifier& hw_id,
-                               const boost::filesystem::path& src_ostree_repo_dir,
-                               const boost::filesystem::path& apps_dir, std::vector<std::string>& found_ostree_commits,
-                               std::vector<std::string>& found_apps) {
-  {  // parse ostree repo
-    OSTree::Repo ostree_repo{src_ostree_repo_dir.string()};
-    LOG_INFO << "Parsing a source ostree repo: " << src_ostree_repo_dir.string();
-    std::unordered_map<std::string, std::string> refs_map{ostree_repo.getRefs()};
-    for (const auto& ref : refs_map) {
-      found_ostree_commits.push_back(ref.second);
-    }
+static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::vector<std::string>& found_apps) {
+  if (!boost::filesystem::exists(apps_dir)) {
+    return;
   }
-  {
-    if (!boost::filesystem::exists(apps_dir)) {
-      return;
-    }
-    for (auto const& app_dir_entry : boost::filesystem::directory_iterator{apps_dir}) {
-      const auto app_name{app_dir_entry.path().filename().string()};
-      for (auto const& app_ver_dir_entry : boost::filesystem::directory_iterator{app_dir_entry.path()}) {
-        const auto uri_file{app_ver_dir_entry.path() / "uri"};
-        const auto app_uri{Utils::readFile(uri_file.string())};
-        LOG_INFO << "Found app; uri: " << app_uri;
-        found_apps.push_back(app_uri);
-      }
+  for (auto const& app_dir_entry : boost::filesystem::directory_iterator{apps_dir}) {
+    const auto app_name{app_dir_entry.path().filename().string()};
+    for (auto const& app_ver_dir_entry : boost::filesystem::directory_iterator{app_dir_entry.path()}) {
+      const auto uri_file{app_ver_dir_entry.path() / "uri"};
+      const auto app_uri{Utils::readFile(uri_file.string())};
+      LOG_INFO << "Found app; uri: " << app_uri;
+      found_apps.push_back(app_uri);
     }
   }
 }
@@ -252,17 +239,15 @@ static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
   }
 
   // parse the update content
-  std::vector<std::string> found_ostree_commits;
   std::vector<std::string> found_apps;
-  parseUpdateContent(client.primary_ecu.second, src.OstreeRepoDir, src.AppsDir / "apps", found_ostree_commits,
-                     found_apps);
+  parseUpdateContent(src.AppsDir / "apps", found_apps);
 
+  const OSTree::Repo repo{src.OstreeRepoDir.string()};
   // find Target that matches the given update content, search starting from the most recent Target
   Uptane::Target found_target(Uptane::Target::Unknown());
   for (const auto& t : available_targets) {
     LOG_INFO << "Checking if update content matches the given target: " << t.filename();
-    if (found_ostree_commits.end() ==
-        std::find(found_ostree_commits.begin(), found_ostree_commits.end(), t.sha256Hash())) {
+    if (!repo.hasCommit(t.sha256Hash())) {
       LOG_DEBUG << "No ostree commit found for Target: " << t.filename();
       continue;
     }
