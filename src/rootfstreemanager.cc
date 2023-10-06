@@ -306,6 +306,10 @@ data::InstallationResult RootfsTreeManager::verifyBootloaderUpdate(const Uptane:
 
 bool RootfsTreeManager::getDeltaStatIfAvailable(const TufTarget& target, const Remote& remote,
                                                 DeltaStat& delta_stat) const {
+  if (0 == remote.baseUrl.find_first_of("file://")) {
+    // Delta stat file download is not supported in the offline update case.
+    return false;
+  }
   try {
     DeltaStatsRef delta_stats_ref;
     if (!getDeltaStatsRef(target.Custom(), delta_stats_ref)) {

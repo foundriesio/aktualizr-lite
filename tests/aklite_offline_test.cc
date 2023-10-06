@@ -24,6 +24,10 @@
 #include "fixtures/liteclient/sysrootfs.cc"
 #include "fixtures/liteclient/tufrepomock.cc"
 
+// Defined in fstatvfs-mock.cc
+extern void SetFreeBlockNumb(uint64_t, uint64_t);
+extern void UnsetFreeBlockNumb();
+
 class AppStore {
  public:
   AppStore(const boost::filesystem::path& root_dir, const std::string& hostname = "hub.foundries.io")
@@ -123,7 +127,10 @@ class AkliteOffline : public ::testing::Test {
   void SetUp() {
     auto env{boost::this_process::environment()};
     env.set("DOCKER_HOST", daemon_.getUrl());
+    SetFreeBlockNumb(90, 100);
   }
+
+  void TearDown() { UnsetFreeBlockNumb(); }
 
   offline::PostInstallAction install() { return offline::client::install(cfg_, src(), daemon_.getClient()); }
 
