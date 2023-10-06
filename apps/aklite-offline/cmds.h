@@ -82,6 +82,30 @@ class RunCmd : public Cmd {
   po::options_description _options;
 };
 
+class CurrentCmd : public Cmd {
+ public:
+  CurrentCmd() : Cmd("current", _options) {
+    _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
+                                                    "set log level 0-5 (trace, debug, info, warning, error, fatal)");
+  }
+
+  int operator()(const po::variables_map& vm) const override {
+    try {
+      Config cfg_in{vm};
+      return current(cfg_in);
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to get current status information: " << exc.what();
+      return EXIT_FAILURE;
+    }
+  }
+
+ private:
+  int current(const Config& cfg_in) const;
+
+ private:
+  po::options_description _options;
+};
+
 }  // namespace aklite_offline
 }  // namespace apps
 

@@ -1,4 +1,6 @@
 #include "cmds.h"
+#include "composeappmanager.h"
+#include "target.h"
 
 #include "offline/client.h"
 
@@ -110,6 +112,25 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
   } catch (const std::exception& exc) {
     std::cerr << "Failed to run the offline update; err: " << exc.what();
   }
+  return ret_code;
+}
+
+int CurrentCmd::current(const Config& cfg_in) const {
+  int ret_code{EXIT_FAILURE};
+
+  auto target = offline::client::getCurrent(cfg_in, nullptr);
+
+  ComposeAppManager::Config pc{cfg_in.pacman};
+
+  std::cout << "Target: " << target.filename() << std::endl;
+  std::cout << "Ostree hash: " << target.sha256Hash() << std::endl;
+  std::cout << "Apps:" << std::endl;
+  for (const auto& app : Target::Apps(target)) {
+    if (!pc.apps || (*pc.apps).end() != std::find((*pc.apps).begin(), (*pc.apps).end(), app.name)) {
+      std::cout << "    " << app.name + " -> " + app.uri << std::endl;
+    }
+  }
+
   return ret_code;
 }
 
