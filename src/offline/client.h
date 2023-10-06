@@ -77,6 +77,7 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
 PostRunAction run(const Config& cfg_in, std::shared_ptr<HttpInterface> docker_client_http_client = nullptr);
 const Uptane::Target getCurrent(const Config& cfg_in,
                                 std::shared_ptr<HttpInterface> docker_client_http_client = nullptr);
+std::vector<Uptane::Target> check(const Config& cfg_in, const UpdateSrc& src);
 
 }  // namespace client
 }  // namespace offline

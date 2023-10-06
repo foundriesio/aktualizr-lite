@@ -529,5 +529,12 @@ const Uptane::Target getCurrent(const Config& cfg_in, std::shared_ptr<HttpInterf
   return client->getCurrent();
 }
 
+std::vector<Uptane::Target> check(const Config& cfg_in, const UpdateSrc& src) {
+  const auto targets_json{Utils::parseJSONFile(src.TufDir / "targets.json")};
+  const Uptane::Targets targets{targets_json};
+  return getAvailableTargets(filterAndSortTargets(targets.targets, cfg_in.provision.primary_ecu_hardware_id), src,
+                             false);
+}
+
 }  // namespace client
 }  // namespace offline
