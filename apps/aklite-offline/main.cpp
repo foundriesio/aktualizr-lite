@@ -10,6 +10,7 @@
 namespace po = boost::program_options;
 
 static std::vector<apps::aklite_offline::Cmd::Ptr> cmds{
+    std::make_shared<apps::aklite_offline::CheckCmd>(),
     std::make_shared<apps::aklite_offline::InstallCmd>(),
     std::make_shared<apps::aklite_offline::RunCmd>(),
     std::make_shared<apps::aklite_offline::CurrentCmd>(),

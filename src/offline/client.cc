@@ -235,7 +235,7 @@ static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set
     for (auto const& app_ver_dir_entry : boost::filesystem::directory_iterator{app_dir_entry.path()}) {
       const auto uri_file{app_ver_dir_entry.path() / "uri"};
       const auto app_uri{Utils::readFile(uri_file.string())};
-      LOG_INFO << "Found app; uri: " << app_uri;
+      LOG_DEBUG << "Found app; uri: " << app_uri;
       found_apps.insert(app_uri);
     }
   }
@@ -252,7 +252,9 @@ static std::vector<Uptane::Target> getAvailableTargets(const SortedTargets& allo
   Uptane::Target found_target(Uptane::Target::Unknown());
 
   for (const auto& t : allowed_targets) {
-    LOG_INFO << "Checking if update content matches the given target: " << t.filename();
+    if (just_latest) {
+      LOG_INFO << "Checking if update content matches the given target: " << t.filename();
+    }
     if (!repo.hasCommit(t.sha256Hash())) {
       LOG_DEBUG << "No ostree commit found for Target: " << t.filename();
       continue;
