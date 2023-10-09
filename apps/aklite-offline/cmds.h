@@ -63,13 +63,15 @@ class InstallCmd : public Cmd {
     _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
                                                     "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
         "config,c", po::value<std::vector<boost::filesystem::path>>()->composing(), "Configuration file or directory")(
-        "src-dir,s", po::value<boost::filesystem::path>()->required(), "Directory that contains an update");
+        "src-dir,s", po::value<boost::filesystem::path>()->required(), "Directory that contains an update")(
+        "force,f", po::bool_switch(&force_downgrade), "Force downgrade");
   }
 
   int operator()(const po::variables_map& vm) const override {
     try {
       Config cfg_in{vm};
-      return installUpdate(cfg_in, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()));
+      return installUpdate(cfg_in, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()),
+                           force_downgrade);
     } catch (const std::exception& exc) {
       LOG_ERROR << "Failed to list Apps: " << exc.what();
       return EXIT_FAILURE;
@@ -77,10 +79,11 @@ class InstallCmd : public Cmd {
   }
 
  private:
-  int installUpdate(const Config& cfg_in, const boost::filesystem::path& src_dir) const;
+  int installUpdate(const Config& cfg_in, const boost::filesystem::path& src_dir, bool force_downgrade) const;
 
  private:
   po::options_description _options;
+  bool force_downgrade{false};
 };
 
 class RunCmd : public Cmd {

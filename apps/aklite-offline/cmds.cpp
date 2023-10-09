@@ -29,11 +29,12 @@ int CheckCmd::checkSrcDir(const Config& cfg_in, const boost::filesystem::path& s
   return ret_code;
 }
 
-int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::path& src_dir) const {
+int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::path& src_dir,
+                              bool force_downgrade) const {
   int ret_code{EXIT_FAILURE};
   try {
-    const auto install_res =
-        offline::client::install(cfg_in, {src_dir / "tuf", src_dir / "ostree_repo", src_dir / "apps"});
+    const auto install_res = offline::client::install(
+        cfg_in, {src_dir / "tuf", src_dir / "ostree_repo", src_dir / "apps"}, nullptr, force_downgrade);
 
     switch (install_res) {
       case offline::PostInstallAction::NeedRebootForBootFw: {
@@ -64,12 +65,17 @@ int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::pat
         ret_code = EXIT_SUCCESS;
         break;
       }
+      case offline::PostInstallAction::DowngradeAttempt: {
+        std::cout << "Refused to downgrade\n";
+        ret_code = 102;
+        break;
+      }
       default:
         LOG_ERROR << "Got invalid post install action code";
     };
 
   } catch (const std::exception& exc) {
-    std::cerr << "Failed to install the offline update; src-dir: " << src_dir << "; err: " << exc.what();
+    std::cerr << "Failed to install the offline update; src-dir: " << src_dir << "; err: " << exc.what() << std::endl;
   }
   return ret_code;
 }

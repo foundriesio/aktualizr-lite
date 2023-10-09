@@ -19,6 +19,7 @@ class Target {
     explicit Version(std::string version) : raw_ver(std::move(version)) {}
 
     bool operator<(const Version& other) const { return strverscmp(raw_ver.c_str(), other.raw_ver.c_str()) < 0; }
+    bool operator>(const Version& other) const { return strverscmp(raw_ver.c_str(), other.raw_ver.c_str()) > 0; }
   };
 
   static bool hasTag(const Uptane::Target& target, const std::vector<std::string>& tags);
