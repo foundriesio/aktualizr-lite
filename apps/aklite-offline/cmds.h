@@ -112,7 +112,8 @@ class CurrentCmd : public Cmd {
  public:
   CurrentCmd() : Cmd("current", _options) {
     _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
-                                                    "set log level 0-5 (trace, debug, info, warning, error, fatal)");
+                                                    "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
+        "config,c", po::value<std::vector<boost::filesystem::path>>()->composing(), "Configuration file or directory");
   }
 
   int operator()(const po::variables_map& vm) const override {
