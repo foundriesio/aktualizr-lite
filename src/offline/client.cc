@@ -358,7 +358,7 @@ static void shortlistTargetAppsByContent(const boost::filesystem::path& apps_roo
 }
 
 PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
-                          std::shared_ptr<HttpInterface> docker_client_http_client) {
+                          std::shared_ptr<HttpInterface> docker_client_http_client, bool force_downgrade) {
   auto client{createOfflineClient(cfg_in, src, docker_client_http_client)};
 
   const auto import{client->isRootMetaImportNeeded()};
@@ -390,6 +390,18 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
   }
 
   LOG_INFO << "Found TUF Target that matches the given update content: " << target.filename();
+  const auto current{client->getCurrent()};
+  if (Target::Version(current.custom_version()) > Target::Version(target.custom_version())) {
+    LOG_WARNING << "Found TUF Target is lower version than the current on; "
+                << "current: " << current.custom_version() << ", found Target: " << target.custom_version();
+
+    if (!force_downgrade) {
+      LOG_ERROR << "Downgrade is not allowed by default, re-run the command with `--force` option to force downgrade";
+      return PostInstallAction::DowngradeAttempt;
+    }
+    LOG_WARNING << "Downgrading from " << current.custom_version() << " to  " << target.custom_version() << "...";
+  }
+
   const auto download_res = client->download(target, "offline update to " + target.filename());
   if (!download_res) {
     throw std::runtime_error("Failed to download Target; err: " + download_res.description);
