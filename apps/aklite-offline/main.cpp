@@ -70,6 +70,9 @@ int main(int argc, char** argv) {
 
   logger_init(isatty(1) == 1);
   logger_set_threshold(static_cast<boost::log::trivial::severity_level>(vm["log-level"].as<int>()));
+  // libaktualizr assumes that the log level is set using a "loglevel" cmd line option, so we need
+  // to set that option as well, otherwise libaktualizr overrides the log level with the default value
+  vm.insert(std::pair<std::string, boost::program_options::variable_value>("loglevel", vm["log-level"]));
 
   return cmd(vm);
 }
