@@ -31,6 +31,32 @@ class Cmd {
   const po::options_description& _options;
 };
 
+class CheckCmd : public Cmd {
+ public:
+  CheckCmd() : Cmd("check", _options) {
+    _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
+                                                    "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
+        "config,c", po::value<std::vector<boost::filesystem::path>>()->composing(), "Configuration file or directory")(
+        "src-dir,s", po::value<boost::filesystem::path>()->required(), "Directory that contains an update");
+  }
+
+  int operator()(const po::variables_map& vm) const override {
+    try {
+      Config cfg_in{vm};
+      return checkSrcDir(cfg_in, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()));
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Failed to check the update source directory: " << exc.what();
+      return EXIT_FAILURE;
+    }
+  }
+
+ private:
+  int checkSrcDir(const Config& cfg_in, const boost::filesystem::path& src_dir) const;
+
+ private:
+  po::options_description _options;
+};
+
 class InstallCmd : public Cmd {
  public:
   InstallCmd() : Cmd("install", _options) {

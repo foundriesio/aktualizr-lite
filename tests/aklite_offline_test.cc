@@ -132,6 +132,7 @@ class AkliteOffline : public ::testing::Test {
 
   void TearDown() { UnsetFreeBlockNumb(); }
 
+  std::vector<Uptane::Target> check() { return offline::client::check(cfg_, src()); }
   offline::PostInstallAction install() { return offline::client::install(cfg_, src(), daemon_.getClient()); }
 
   offline::PostRunAction run() { return offline::client::run(cfg_, daemon_.getClient()); }
@@ -303,10 +304,28 @@ const std::string AkliteOffline::branch{hw_id + "-" + os};
 TEST_F(AkliteOffline, OfflineClient) {
   const auto target{addTarget({createApp("app-01")})};
 
+  ASSERT_EQ(1, check().size());
+  ASSERT_TRUE(target.MatchTarget(check().front()));
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
   ASSERT_TRUE(target.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, OfflineClientMultipleTargets) {
+  const std::vector<Uptane::Target> targets{addTarget({createApp("app-01")}),
+                                            addTarget({createApp("app-01"), createApp("app-02")}),
+                                            addTarget({createApp("app-02"), createApp("app-03")})};
+
+  const auto found_targets{check()};
+  ASSERT_EQ(targets.size(), found_targets.size());
+  for (int ii = 0; ii < targets.size(); ++ii) {
+    ASSERT_TRUE(targets[ii].MatchTarget(found_targets[found_targets.size() - ii - 1]));
+  }
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(targets[targets.size() - 1].MatchTarget(getCurrent()));
 }
 
 TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
@@ -316,6 +335,8 @@ TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
   // if one of the targets apps is missing in the provided update content.
   boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
 
+  ASSERT_EQ(1, check().size());
+  ASSERT_TRUE(target.MatchTarget(check().front()));
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
@@ -327,6 +348,8 @@ TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
   // Remove all Target Apps from App store to make sure that only ostree can be updated
   boost::filesystem::remove_all(app_store_.appsDir());
 
+  ASSERT_EQ(1, check().size());
+  ASSERT_TRUE(target.MatchTarget(check().front()));
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
@@ -335,6 +358,8 @@ TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
 
 TEST_F(AkliteOffline, OfflineClientAppsOnly) {
   const auto target{addTarget({createApp("app-01")}, true)};
+  ASSERT_EQ(1, check().size());
+  ASSERT_TRUE(target.MatchTarget(check().front()));
   ASSERT_EQ(install(), offline::PostInstallAction::NeedDockerRestart);
   reloadDockerEngine();
   ASSERT_EQ(run(), offline::PostRunAction::Ok);

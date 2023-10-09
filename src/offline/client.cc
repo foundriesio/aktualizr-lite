@@ -185,6 +185,12 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   return std::make_unique<LiteClient>(cfg, app_engine, nullptr, std::make_shared<MetaFetcher>(src.TufDir));
 }
 
+static bool compareTargets(const Uptane::Target& t1, const Uptane::Target& t2) {
+  return !(Target::Version(t1.custom_version()) < Target::Version(t2.custom_version()));
+}
+
+using SortedTargets = std::set<Uptane::Target, decltype(&compareTargets)>;
+
 static Uptane::Target getSpecificTarget(LiteClient& client, const std::string& target_name) {
   const auto found_target_it =
       std::find_if(client.allTargets().begin(), client.allTargets().end(),
@@ -196,104 +202,86 @@ static Uptane::Target getSpecificTarget(LiteClient& client, const std::string& t
   }
 }
 
-static void parseUpdateContent(const Uptane::HardwareIdentifier& hw_id,
-                               const boost::filesystem::path& src_ostree_repo_dir,
-                               const boost::filesystem::path& apps_dir, std::vector<std::string>& found_ostree_commits,
-                               std::vector<std::string>& found_apps) {
-  {  // parse ostree repo
-    OSTree::Repo ostree_repo{src_ostree_repo_dir.string()};
-    LOG_INFO << "Parsing a source ostree repo: " << src_ostree_repo_dir.string();
-    std::unordered_map<std::string, std::string> refs_map{ostree_repo.getRefs()};
-    for (const auto& ref : refs_map) {
-      found_ostree_commits.push_back(ref.second);
-    }
-  }
-  {
-    if (!boost::filesystem::exists(apps_dir)) {
-      return;
-    }
-    for (auto const& app_dir_entry : boost::filesystem::directory_iterator{apps_dir}) {
-      const auto app_name{app_dir_entry.path().filename().string()};
-      for (auto const& app_ver_dir_entry : boost::filesystem::directory_iterator{app_dir_entry.path()}) {
-        const auto uri_file{app_ver_dir_entry.path() / "uri"};
-        const auto app_uri{Utils::readFile(uri_file.string())};
-        LOG_INFO << "Found app; uri: " << app_uri;
-        found_apps.push_back(app_uri);
-      }
-    }
-  }
-}
+// Filter the specified list of Targets by hardware ID and sort them in descending version order
+static SortedTargets filterAndSortTargets(const std::vector<Uptane::Target>& targets,
+                                          const std::string& required_hwid) {
+  SortedTargets res(compareTargets);
 
-static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
-  if (!src.TargetName.empty()) {
-    return getSpecificTarget(client, src.TargetName);
-  }
-
-  // sort Targets by a version number in a descendent order
-  auto target_sort = [](const Uptane::Target& t1, const Uptane::Target& t2) {
-    return strverscmp(t1.custom_version().c_str(), t2.custom_version().c_str()) > 0;
-  };
-  std::set<Uptane::Target, decltype(target_sort)> available_targets(target_sort);
-
-  for (const auto& target : client.allTargets()) {
+  for (const auto& target : targets) {
     if (target.hardwareIds().size() != 1) {
       LOG_ERROR << "Invalid hardware ID number found in Target; target: " << target.filename()
                 << "; found: " << target.hardwareIds().size() << "; expected: " << 1;
       continue;
     }
     const auto hwid{target.hardwareIds()[0]};
-    if (client.primary_ecu.second != hwid) {
-      LOG_DEBUG << "Found Target's hardware ID doesn't match a device's hardware ID, skipping it; target hw ID: "
-                << hwid << "; device hw ID: " << client.primary_ecu.second;
+    if (required_hwid != hwid.ToString()) {
+      LOG_DEBUG << "Found Target's hardware ID doesn't match a device's hardware ID, skipping it; "
+                << "target: " << target.filename() << " target hw ID: " << hwid << "; device hw ID: " << required_hwid;
       continue;
     }
-    LOG_DEBUG << "Found Target: " << target.filename();
-    available_targets.insert(target);
+    LOG_TRACE << "Found Target: " << target.filename();
+    res.insert(target);
   }
 
-  // parse the update content
-  std::vector<std::string> found_ostree_commits;
-  std::vector<std::string> found_apps;
-  parseUpdateContent(client.primary_ecu.second, src.OstreeRepoDir, src.AppsDir / "apps", found_ostree_commits,
-                     found_apps);
+  return res;
+}
 
-  // find Target that matches the given update content, search starting from the most recent Target
+static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set<std::string>& found_apps) {
+  if (!boost::filesystem::exists(apps_dir)) {
+    return;
+  }
+  for (auto const& app_dir_entry : boost::filesystem::directory_iterator{apps_dir}) {
+    const auto app_name{app_dir_entry.path().filename().string()};
+    for (auto const& app_ver_dir_entry : boost::filesystem::directory_iterator{app_dir_entry.path()}) {
+      const auto uri_file{app_ver_dir_entry.path() / "uri"};
+      const auto app_uri{Utils::readFile(uri_file.string())};
+      LOG_DEBUG << "Found app; uri: " << app_uri;
+      found_apps.insert(app_uri);
+    }
+  }
+}
+
+static std::vector<Uptane::Target> getAvailableTargets(const SortedTargets& allowed_targets, const UpdateSrc& src,
+                                                       bool just_latest = true) {
+  std::vector<Uptane::Target> found_targets;
+  std::set<std::string> found_apps;
+
+  parseUpdateContent(src.AppsDir / "apps", found_apps);
+
+  const OSTree::Repo repo{src.OstreeRepoDir.string()};
   Uptane::Target found_target(Uptane::Target::Unknown());
-  for (const auto& t : available_targets) {
-    LOG_INFO << "Checking if update content matches the given target: " << t.filename();
-    if (found_ostree_commits.end() ==
-        std::find(found_ostree_commits.begin(), found_ostree_commits.end(), t.sha256Hash())) {
+
+  for (const auto& t : allowed_targets) {
+    if (just_latest) {
+      LOG_INFO << "Checking if update content matches the given target: " << t.filename();
+    }
+    if (!repo.hasCommit(t.sha256Hash())) {
       LOG_DEBUG << "No ostree commit found for Target: " << t.filename();
       continue;
     }
-
-    std::list<std::string> found_but_not_target_apps{found_apps.begin(), found_apps.end()};
-    auto shortlisted_target_apps{Target::appsJson(t)};
-
+    // Find Target Apps content of which is present in the specified source directory
+    Json::Value apps_to_install;
     for (const auto& app : Target::Apps(t)) {
-      if (found_apps.end() == std::find(found_apps.begin(), found_apps.end(), app.uri)) {
-        // It may happen because App was shortlisted during running the CI run that fetched Apps, so we `continue` with
-        // the App matching We just need to make sure that all found/update Apps macthes subset of Target Apps
-        LOG_DEBUG << "No App found for Target; Target: " << t.filename() << "; app: " << app.uri;
-        shortlisted_target_apps.removeMember(app.name);
-        continue;
+      if (found_apps.count(app.uri) > 0) {
+        apps_to_install[app.name]["uri"] = app.uri;
       }
-      found_but_not_target_apps.remove(app.uri);
-      // We cannot exit this loop earlier even if `found_but_not_target_apps` becomes empty,
-      // which indicates that all found Apps are listed in Target, because
-      // we need to shortlist ALL Target apps that are no found on the provided filesystem.
     }
-
-    if (found_but_not_target_apps.empty()) {
-      found_target = t;
-      auto found_target_custom = found_target.custom_data();
-      found_target_custom[Target::ComposeAppField] = shortlisted_target_apps;
-      found_target.updateCustom(found_target_custom);
+    Json::Value updated_custom{t.custom_data()};
+    updated_custom[Target::ComposeAppField] = apps_to_install;
+    found_targets.emplace_back(Target::updateCustom(t, updated_custom));
+    if (just_latest) {
       break;
     }
   }
+  return found_targets;
+}
 
-  return found_target;
+static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
+  if (!src.TargetName.empty()) {
+    return getSpecificTarget(client, src.TargetName);
+  }
+  return getAvailableTargets(filterAndSortTargets(client.allTargets(), client.primary_ecu.second.ToString()), src)
+      .front();
 }
 
 static void registerApps(const Uptane::Target& target, const boost::filesystem::path& apps_store_root,
@@ -541,6 +529,13 @@ const Uptane::Target getCurrent(const Config& cfg_in, std::shared_ptr<HttpInterf
                                   },
                                   docker_client_http_client)};
   return client->getCurrent();
+}
+
+std::vector<Uptane::Target> check(const Config& cfg_in, const UpdateSrc& src) {
+  const auto targets_json{Utils::parseJSONFile(src.TufDir / "targets.json")};
+  const Uptane::Targets targets{targets_json};
+  return getAvailableTargets(filterAndSortTargets(targets.targets, cfg_in.provision.primary_ecu_hardware_id), src,
+                             false);
 }
 
 }  // namespace client

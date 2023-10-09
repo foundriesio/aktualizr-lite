@@ -105,6 +105,26 @@ TEST_F(OSTreeTest, StorageWatermarkNegative) {
   }
 }
 
+TEST_F(OSTreeTest, CheckCommit) {
+  const std::string content_dir{"contentdir"};
+
+  ASSERT_TRUE(isRepoInited());
+
+  Utils::writeFile(test_dir_ / content_dir / "version.txt", std::string("some data"), true);
+  const auto commit_hash{repo_mock_.commit((test_dir_ / content_dir).string(), "lmp")};
+  Utils::writeFile(test_dir_ / content_dir / "version1.txt", std::string("some data 01"), true);
+  const auto commit_hash_01{repo_mock_.commit((test_dir_ / content_dir).string(), "lmp")};
+  const std::vector<std::string> commits{commit_hash, commit_hash_01};
+
+  for (const auto& c: commits) {
+    ASSERT_TRUE(repo_->hasCommit(c));
+  }
+
+  ASSERT_FALSE(repo_->hasCommit("some invalid hash"));
+  // valid sha256 hash, but there is no such commit in the repo
+  ASSERT_FALSE(repo_->hasCommit("c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"));
+}
+
 // TODO: Add Treehub mock and uncomment the following tests
 //TEST_F(OSTreeTest, Pull) {
 //  ASSERT_TRUE(isRepoInited());
