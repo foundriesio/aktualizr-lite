@@ -21,6 +21,7 @@ option(ALLOW_MANUAL_ROLLBACK "Set to ON to build with support of manual rollback
 option(BUILD_AKLITE_OFFLINE "Set to ON to build cli command for an offline update" OFF)
 option(BUILD_AKLITE_WITH_NERDCTL "Set to ON to build with support of nerdctl/containerd" OFF)
 option(BUILD_AKLITE_APPS "Set to ON to build cli command for Apps management" ON)
+option(BUILD_TUFCTL "Set to ON to build sample tuf control application" OFF)
 
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
@@ -61,7 +62,9 @@ if(BUILD_AKLITE)
   if(BUILD_AKLITE_OFFLINE)
     add_subdirectory(apps/aklite-offline)
   endif(BUILD_AKLITE_OFFLINE)
-
+  if(BUILD_TUFCTL)
+    add_subdirectory(apps/tufctl)
+  endif(BUILD_TUFCTL)
 endif(BUILD_AKLITE)
 
 # Use `-LH` options (cmake <args> -LH) to output all variables
@@ -72,3 +75,4 @@ message(STATUS "ALLOW_MANUAL_ROLLBACK: ${ALLOW_MANUAL_ROLLBACK}")
 message(STATUS "BUILD_AKLITE_OFFLINE: ${BUILD_AKLITE_OFFLINE}")
 message(STATUS "BUILD_AKLITE_WITH_NERDCTL: ${BUILD_AKLITE_WITH_NERDCTL}")
 message(STATUS "BUILD_AKLITE_APPS: ${BUILD_AKLITE_APPS}")
+message(STATUS "BUILD_TUFCTL: ${BUILD_TUFCTL}")
