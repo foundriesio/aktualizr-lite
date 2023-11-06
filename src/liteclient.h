@@ -18,6 +18,7 @@ class ReportEvent;
 class ReportQueue;
 class DownloadResult;
 class Downloader;
+class Installer;
 
 class LiteClient {
  public:
@@ -43,7 +44,7 @@ class LiteClient {
   bool finalizeInstall(data::InstallationResult* ir = nullptr);
   Uptane::Target getRollbackTarget();
   DownloadResultWithStat download(const Uptane::Target& target, const std::string& reason);
-  data::ResultCode::Numeric install(const Uptane::Target& target);
+  data::ResultCode::Numeric install(const Uptane::Target& target, InstallMode install_mode = InstallMode::All);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
   std::pair<bool, std::string> isRebootRequired() const {
     return {is_reboot_required_, config.bootloader.reboot_command};
@@ -91,7 +92,7 @@ class LiteClient {
   void notifyInstallStarted(const Uptane::Target& t);
   void writeCurrentTarget(const Uptane::Target& t) const;
 
-  data::InstallationResult installPackage(const Uptane::Target& target);
+  data::InstallationResult installPackage(const Uptane::Target& target, InstallMode install_mode = InstallMode::All);
   DownloadResultWithStat downloadImage(const Uptane::Target& target, const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
@@ -113,6 +114,7 @@ class LiteClient {
   std::vector<Uptane::Target> no_targets_;
 
   std::shared_ptr<Downloader> downloader_;
+  std::shared_ptr<Installer> installer_;
   Json::Value apps_state_;
   const int report_queue_run_pause_s_{10};
   const int report_queue_event_limit_{6};

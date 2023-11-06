@@ -4,11 +4,12 @@
 #include "bootloader/bootloaderlite.h"
 #include "downloader.h"
 #include "http/httpinterface.h"
+#include "installer.h"
 #include "ostree/sysroot.h"
 #include "package_manager/ostreemanager.h"
 #include "storage/stat.h"
 
-class RootfsTreeManager : public OstreeManager, public Downloader {
+class RootfsTreeManager : public OstreeManager, public Downloader, public Installer {
  public:
   static constexpr const char* const Name{"ostree"};
   struct Config {
@@ -35,17 +36,18 @@ class RootfsTreeManager : public OstreeManager, public Downloader {
                     std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys);
 
   DownloadResultWithStat Download(const TufTarget& target) override;
+  data::InstallationResult Install(const TufTarget& target, InstallMode mode) override;
 
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
   const bootloader::BootFwUpdateStatus& bootFwUpdateStatus() const { return *boot_fw_update_status_; }
   void setInitialTargetIfNeeded(const std::string& hw_id);
+  data::InstallationResult install(const Uptane::Target& target) const override;
 
  protected:
   virtual void completeInitialTarget(Uptane::Target& init_target){};
   void installNotify(const Uptane::Target& target) override;
-  data::InstallationResult install(const Uptane::Target& target) const override;
   const std::shared_ptr<OSTree::Sysroot>& sysroot() const { return sysroot_; }
 
  private:

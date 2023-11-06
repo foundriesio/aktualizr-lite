@@ -231,6 +231,68 @@ TEST_F(ApiClientTest, InstallWithCorrelationId) {
   ASSERT_EQ("this-is-random", events[0]["event"]["correlationId"].asString());
 }
 
+TEST_F(ApiClientTest, InstallModeOstreeOnlyIfOstreeAndApps) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  std::vector<AppEngine::App> apps{{"app-01", "app-01-URI"}};
+  auto new_target = createTarget(&apps);
+  {
+    AkliteClient client(liteclient);
+
+    EXPECT_CALL(*getAppEngine(), fetch).Times(1);
+    // make sure App install is not called
+    EXPECT_CALL(*getAppEngine(), install).Times(0);
+
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+    auto latest = result.GetLatest();
+    auto installer = client.Installer(latest, "", "", InstallMode::OstreeOnly);
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+    reboot(liteclient);
+  }
+  {
+    AkliteClient client(liteclient);
+
+    auto ciresult = client.CompleteInstallation();
+    ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
+  }
+}
+
+TEST_F(ApiClientTest, InstallModeOstreeOnlyIfJustApps) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  std::vector<AppEngine::App> apps{{"app-01", "app-01-URI"}};
+  auto new_target = createAppTarget(apps);
+  AkliteClient client(liteclient);
+
+  EXPECT_CALL(*getAppEngine(), fetch).Times(1);
+  // make sure App install is not called
+  EXPECT_CALL(*getAppEngine(), install).Times(0);
+
+  auto result = client.CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+  auto latest = result.GetLatest();
+  auto installer = client.Installer(latest, "", "", InstallMode::OstreeOnly);
+  ASSERT_NE(nullptr, installer);
+  auto dresult = installer->Download();
+  ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+  auto iresult = installer->Install();
+  ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+
+  auto ciresult = client.CompleteInstallation();
+  ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
+}
+
 TEST_F(ApiClientTest, Secondaries) {
   AkliteClient client(createLiteClient(InitialVersion::kOff));
   std::vector<SecondaryEcu> ecus;

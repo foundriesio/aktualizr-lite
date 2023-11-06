@@ -205,13 +205,14 @@ std::string AkliteClient::GetDeviceID() const { return client_->getDeviceID(); }
 
 class LiteInstall : public InstallContext {
  public:
-  LiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason)
-      : client_(std::move(client)), target_(std::move(t)), reason_(reason) {}
+  LiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason,
+              InstallMode install_mode)
+      : client_(std::move(client)), target_(std::move(t)), reason_(reason), mode_{install_mode} {}
 
   InstallResult Install() override {
     client_->logTarget("Installing: ", *target_);
 
-    auto rc = client_->install(*target_);
+    auto rc = client_->install(*target_, mode_);
     auto status = InstallResult::Status::Failed;
     if (rc == data::ResultCode::Numeric::kNeedCompletion) {
       if (client_->isPendingTarget(*target_)) {
@@ -287,6 +288,7 @@ class LiteInstall : public InstallContext {
   std::shared_ptr<LiteClient> client_;
   std::unique_ptr<Uptane::Target> target_;
   std::string reason_;
+  InstallMode mode_;
 };
 
 bool AkliteClient::IsInstallationInProgress() const { return client_->getPendingTarget().IsValid(); }
@@ -301,14 +303,14 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
     auto correlation_id = target->custom_version() + "-" + boost::uuids::to_string(tmp);
     target->setCorrelationId(correlation_id);
     std::string reason = "Sync active target apps";
-    installer = std::make_unique<LiteInstall>(client_, std::move(target), reason);
+    installer = std::make_unique<LiteInstall>(client_, std::move(target), reason, InstallMode::All);
   }
   client_->setAppsNotChecked();
   return installer;
 }
 
 std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason,
-                                                        std::string correlation_id) const {
+                                                        std::string correlation_id, InstallMode install_mode) const {
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
@@ -341,7 +343,7 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
     throw std::runtime_error("Correlation ID's must be less than 64 bytes");
   }
   target->setCorrelationId(correlation_id);
-  return std::make_unique<LiteInstall>(client_, std::move(target), reason);
+  return std::make_unique<LiteInstall>(client_, std::move(target), reason, install_mode);
 }
 
 InstallResult AkliteClient::CompleteInstallation() {

@@ -37,6 +37,7 @@ set(HEADERS helpers.h
         yaml2json.h
         target.h
         downloader.h
+        installer.h
         exec.h
         cli/cli.h
         ../include/aktualizr-lite/api.h)

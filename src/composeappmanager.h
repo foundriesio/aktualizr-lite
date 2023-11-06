@@ -44,6 +44,7 @@ class ComposeAppManager : public RootfsTreeManager {
 
   std::string name() const override { return Name; }
   DownloadResultWithStat Download(const TufTarget& target) override;
+  data::InstallationResult Install(const TufTarget& target, InstallMode mode) override;
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,
                    const FetcherProgressCb& progress_cb, const api::FlowControlToken* token) override;
 
