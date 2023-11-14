@@ -222,42 +222,6 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
   return client.install(target);
 }
 
-static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
-  FileLock lock;
-  client.importRootMetaIfNeededAndPresent();
-  client.finalizeInstall();
-  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
-
-  std::string version("latest");
-
-  if (variables_map.count("update-name") > 0) {
-    version = variables_map["update-name"].as<std::string>();
-  }
-
-  // This is only available if -DALLOW_MANUAL_ROLLBACK is set in the CLI args below.
-  if (variables_map.count("clear-installed-versions") > 0) {
-    LOG_WARNING << "Clearing installed version history!!!";
-    client.storage->clearInstalledVersions();
-  }
-
-  LOG_INFO << "Finding " << version << " to update to...";
-  auto find_target_res = find_target(client, hwid, client.tags, version);
-  if (find_target_res.first) {
-    std::string reason = "Manual update to " + version;
-    data::ResultCode::Numeric rc;
-    DownloadResultWithStat dr;
-    std::string cor_id;
-    std::tie(rc, dr, cor_id) = do_update(client, *find_target_res.second, reason);
-
-    return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
-                                                                                                      : EXIT_FAILURE;
-  } else {
-    LOG_INFO << "No Target found to update to; hw ID: " << hwid.ToString()
-             << "; tags: " << boost::algorithm::join(client.tags, ",");
-    return EXIT_SUCCESS;
-  }
-}
-
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
   FileLock lock;
   if (client.config.uptane.repo_server.empty()) {
