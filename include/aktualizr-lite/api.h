@@ -106,6 +106,7 @@ class InstallResult {
     Ok = 0,
     OkBootFwNeedsCompletion,
     NeedsCompletion,
+    AppsNeedCompletion,
     BootFwNeedsCompletion,
     Failed,
     DownloadFailed,
@@ -116,7 +117,8 @@ class InstallResult {
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const {
-    return status == Status::Ok || status == Status::OkBootFwNeedsCompletion || status == Status::NeedsCompletion;
+    return status == Status::Ok || status == Status::OkBootFwNeedsCompletion || status == Status::NeedsCompletion ||
+           status == Status::AppsNeedCompletion;
   }
 };
 

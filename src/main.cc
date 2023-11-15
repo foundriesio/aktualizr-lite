@@ -435,11 +435,15 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
       target_name = version_str;
     }
   }
+  std::string install_mode;
+  if (params.count("install-mode") > 0) {
+    install_mode = params.at("install-mode").as<std::string>();
+  }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClient akclient{client_ptr, false, true};
 
-  return static_cast<int>(cli::Install(akclient, version, target_name));
+  return static_cast<int>(cli::Install(akclient, version, target_name, install_mode));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
@@ -498,6 +502,7 @@ bpo::variables_map parse_options(int argc, char** argv) {
       ("ostree-server", bpo::value<std::string>(), "URL of the Ostree repository")
       ("primary-ecu-hardware-id", bpo::value<std::string>(), "hardware ID of primary ecu")
       ("update-name", bpo::value<std::string>(), "optional name of the update when running \"update\". default=latest")
+      ("install-mode", bpo::value<std::string>(), "Optional install mode. Supported modes: [delay-app-install]. By default both ostree and apps are installed before reboot")
 #ifdef ALLOW_MANUAL_ROLLBACK
       ("clear-installed-versions", "DANGER - clear the history of installed updates before applying the given update. This is handy when doing test/debug and you need to rollback to an old version manually.")
 #endif

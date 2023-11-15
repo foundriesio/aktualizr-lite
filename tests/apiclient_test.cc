@@ -287,10 +287,14 @@ TEST_F(ApiClientTest, InstallModeOstreeOnlyIfJustApps) {
   ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
 
   auto iresult = installer->Install();
-  ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+  ASSERT_EQ(InstallResult::Status::AppsNeedCompletion, iresult.status);
 
-  auto ciresult = client.CompleteInstallation();
-  ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
+  {
+    liteclient = createLiteClient();
+    AkliteClient client(liteclient);
+    auto ciresult = client.CompleteInstallation();
+    ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
+  }
 }
 
 TEST_F(ApiClientTest, Secondaries) {

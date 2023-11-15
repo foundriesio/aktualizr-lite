@@ -206,7 +206,7 @@ std::string AkliteClient::GetDeviceID() const { return client_->getDeviceID(); }
 class LiteInstall : public InstallContext {
  public:
   LiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason,
-              InstallMode install_mode)
+              InstallMode install_mode = InstallMode::All)
       : client_(std::move(client)), target_(std::move(t)), reason_(reason), mode_{install_mode} {}
 
   InstallResult Install() override {
@@ -216,7 +216,11 @@ class LiteInstall : public InstallContext {
     auto status = InstallResult::Status::Failed;
     if (rc == data::ResultCode::Numeric::kNeedCompletion) {
       if (client_->isPendingTarget(*target_)) {
-        status = InstallResult::Status::NeedsCompletion;
+        if (client_->getCurrent().sha256Hash() == target_->sha256Hash()) {
+          status = InstallResult::Status::AppsNeedCompletion;
+        } else {
+          status = InstallResult::Status::NeedsCompletion;
+        }
       } else {
         // If the install returns `kNeedCompletion` and the target being installed is not pending,
         // then it means that the previous boot fw update requires reboot prior to running the new target update
