@@ -106,6 +106,7 @@ class InstallResult {
     Ok = 0,
     OkBootFwNeedsCompletion,
     NeedsCompletion,
+    AppsNeedCompletion,
     BootFwNeedsCompletion,
     Failed,
     DownloadFailed,
@@ -116,7 +117,8 @@ class InstallResult {
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const {
-    return status == Status::Ok || status == Status::OkBootFwNeedsCompletion || status == Status::NeedsCompletion;
+    return status == Status::Ok || status == Status::OkBootFwNeedsCompletion || status == Status::NeedsCompletion ||
+           status == Status::AppsNeedCompletion;
   }
 };
 
@@ -142,6 +144,23 @@ class DownloadResult {
 
 std::ostream &operator<<(std::ostream &os, const InstallResult &res);
 std::ostream &operator<<(std::ostream &os, const DownloadResult &res);
+
+/**
+ * The installation mode to be applied. Specified during InstallContext context initialization.
+ */
+enum class InstallMode {
+  /**
+   * A default install mode. Both Target's components ostree and Apps are fetched and installed
+   * within InstallContext::Install() call.
+   */
+  All = 0,
+  /**
+   * Fetch both ostree and Apps, but only install ostree if it has been updated.
+   * The fetched Apps are installed and started during the finalization phase,
+   * which is executed by the AkliteClient::CompleteInstallation() call.
+   */
+  OstreeOnly
+};
 
 class InstallContext {
  public:
@@ -306,7 +325,7 @@ class AkliteClient {
    * Create an InstallContext object to help drive an update.
    */
   std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
-                                            std::string correlation_id = "") const;
+                                            std::string correlation_id = "", InstallMode = InstallMode::All) const;
 
   /**
    * @brief Complete a pending installation

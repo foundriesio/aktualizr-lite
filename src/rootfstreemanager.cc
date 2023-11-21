@@ -168,6 +168,10 @@ void RootfsTreeManager::installNotify(const Uptane::Target& target) {
   OstreeManager::installNotify(target);
 }
 
+data::InstallationResult RootfsTreeManager::Install(const TufTarget& target, InstallMode /*mode*/) {
+  return RootfsTreeManager::install(Target::fromTufTarget(target));
+}
+
 data::InstallationResult RootfsTreeManager::install(const Uptane::Target& target) const {
   data::InstallationResult res;
   Uptane::Target current = OstreeManager::getCurrent();

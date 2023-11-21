@@ -115,6 +115,10 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   if (!downloader_) {
     throw std::runtime_error("Invalid package manager: cannot cast to Downloader type");
   }
+  installer_ = std::dynamic_pointer_cast<Installer>(package_manager_);
+  if (!downloader_) {
+    throw std::runtime_error("Invalid package manager: cannot cast to Installer type");
+  }
   sysroot_ = ostree_sysroot;
 }
 
@@ -474,10 +478,10 @@ void LiteClient::writeCurrentTarget(const Uptane::Target& t) const {
   Utils::writeFile(config.storage.path / "current-target", ss.str());
 }
 
-data::InstallationResult LiteClient::installPackage(const Uptane::Target& target) {
+data::InstallationResult LiteClient::installPackage(const Uptane::Target& target, InstallMode install_mode) {
   LOG_INFO << "Installing package using " << package_manager_->name() << " package manager";
   try {
-    return package_manager_->install(target);
+    return installer_->Install(Target::toTufTarget(target), install_mode);
   } catch (std::exception& ex) {
     return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed, ex.what());
   }
@@ -639,9 +643,9 @@ DownloadResultWithStat LiteClient::download(const Uptane::Target& target, const 
   return download_result;
 }
 
-data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
+data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target, InstallMode install_mode) {
   notifyInstallStarted(target);
-  auto iresult = installPackage(target);
+  auto iresult = installPackage(target, install_mode);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
     is_reboot_required_ = (config.pacman.booted == BootedType::kBooted);
@@ -655,10 +659,18 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target) {
       storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
     }
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
-    LOG_INFO << "Update complete. No reboot needed";
-    storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
-    writeCurrentTarget(target);
-    updateRequestHeaders();
+    if (install_mode == InstallMode::OstreeOnly) {
+      // This is the case when the new Target updates just Apps and the ostree only mode is set.
+      // It means that the Apps update is downloaded but not installed.
+      LOG_INFO << "Apps have been downloaded. Run finalize to install and run them";
+      storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
+      iresult = {data::ResultCode::Numeric::kNeedCompletion, "finalization must be called to install and start Apps"};
+    } else {
+      LOG_INFO << "Update complete. No reboot needed";
+      storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kCurrent);
+      writeCurrentTarget(target);
+      updateRequestHeaders();
+    }
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kDownloadFailed) {
     LOG_INFO << "Apps installation failed while the install process was trying to load App images to docker store,"
                 " will try the install again at the next update cycle.";

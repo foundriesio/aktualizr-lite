@@ -27,11 +27,21 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::Ok, StatusCode::Ok},
     {InstallResult::Status::OkBootFwNeedsCompletion, StatusCode::OkNeedsRebootForBootFw},
     {InstallResult::Status::NeedsCompletion, StatusCode::InstallNeedsReboot},
+    {InstallResult::Status::AppsNeedCompletion, StatusCode::InstallAppsNeedFinalization},
     {InstallResult::Status::BootFwNeedsCompletion, StatusCode::InstallNeedsRebootForBootFw},
     {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
 };
 
-StatusCode Install(AkliteClient &client, int version, const std::string &target_name) {
+StatusCode Install(AkliteClient &client, int version, const std::string &target_name, const std::string &install_mode) {
+  const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
+  InstallMode mode{InstallMode::All};
+  if (!install_mode.empty()) {
+    if (str2Mode.count(install_mode) == 0) {
+      LOG_WARNING << "Unsupported installation mode: " << install_mode << "; falling back to the default install mode";
+    } else {
+      mode = str2Mode.at(install_mode);
+    }
+  }
   // Check if the device is in a correct state to start a new update
   if (client.IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
@@ -75,7 +85,7 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     LOG_INFO << "To New Target: " << target.Name();
   }
 
-  const auto installer = client.Installer(target);
+  const auto installer = client.Installer(target, "", "", mode);
   if (installer == nullptr) {
     LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
     return StatusCode::UnknownError;

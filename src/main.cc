@@ -222,42 +222,6 @@ static data::ResultCode::Numeric do_app_sync(LiteClient& client) {
   return client.install(target);
 }
 
-static int update_main(LiteClient& client, const bpo::variables_map& variables_map) {
-  FileLock lock;
-  client.importRootMetaIfNeededAndPresent();
-  client.finalizeInstall();
-  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
-
-  std::string version("latest");
-
-  if (variables_map.count("update-name") > 0) {
-    version = variables_map["update-name"].as<std::string>();
-  }
-
-  // This is only available if -DALLOW_MANUAL_ROLLBACK is set in the CLI args below.
-  if (variables_map.count("clear-installed-versions") > 0) {
-    LOG_WARNING << "Clearing installed version history!!!";
-    client.storage->clearInstalledVersions();
-  }
-
-  LOG_INFO << "Finding " << version << " to update to...";
-  auto find_target_res = find_target(client, hwid, client.tags, version);
-  if (find_target_res.first) {
-    std::string reason = "Manual update to " + version;
-    data::ResultCode::Numeric rc;
-    DownloadResultWithStat dr;
-    std::string cor_id;
-    std::tie(rc, dr, cor_id) = do_update(client, *find_target_res.second, reason);
-
-    return (rc == data::ResultCode::Numeric::kNeedCompletion || rc == data::ResultCode::Numeric::kOk) ? EXIT_SUCCESS
-                                                                                                      : EXIT_FAILURE;
-  } else {
-    LOG_INFO << "No Target found to update to; hw ID: " << hwid.ToString()
-             << "; tags: " << boost::algorithm::join(client.tags, ",");
-    return EXIT_SUCCESS;
-  }
-}
-
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
   FileLock lock;
   if (client.config.uptane.repo_server.empty()) {
@@ -471,11 +435,15 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
       target_name = version_str;
     }
   }
+  std::string install_mode;
+  if (params.count("install-mode") > 0) {
+    install_mode = params.at("install-mode").as<std::string>();
+  }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClient akclient{client_ptr, false, true};
 
-  return static_cast<int>(cli::Install(akclient, version, target_name));
+  return static_cast<int>(cli::Install(akclient, version, target_name, install_mode));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
@@ -534,6 +502,7 @@ bpo::variables_map parse_options(int argc, char** argv) {
       ("ostree-server", bpo::value<std::string>(), "URL of the Ostree repository")
       ("primary-ecu-hardware-id", bpo::value<std::string>(), "hardware ID of primary ecu")
       ("update-name", bpo::value<std::string>(), "optional name of the update when running \"update\". default=latest")
+      ("install-mode", bpo::value<std::string>(), "Optional install mode. Supported modes: [delay-app-install]. By default both ostree and apps are installed before reboot")
 #ifdef ALLOW_MANUAL_ROLLBACK
       ("clear-installed-versions", "DANGER - clear the history of installed updates before applying the given update. This is handy when doing test/debug and you need to rollback to an old version manually.")
 #endif

@@ -22,12 +22,14 @@ enum class StatusCode {
   InstallAppPullFailure = 80,
   InstallNeedsRebootForBootFw = 90,
   InstallNeedsReboot = 100,
+  InstallAppsNeedFinalization = 105,
   InstallRollbackOk = 110,
   InstallRollbackNeedsReboot = 120,
   InstallRollbackFailed = 130,
 };
 
-StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "");
+StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "",
+                   const std::string &install_mode = "");
 StatusCode CompleteInstall(AkliteClient &client);
 
 }  // namespace cli

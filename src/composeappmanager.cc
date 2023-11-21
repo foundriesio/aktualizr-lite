@@ -331,6 +331,13 @@ TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const
   return ostree_target_status;
 }
 
+data::InstallationResult ComposeAppManager::Install(const TufTarget& target, InstallMode mode) {
+  if (mode == InstallMode::OstreeOnly) {
+    return RootfsTreeManager::Install(target, mode);
+  }
+  return install(Target::fromTufTarget(target));
+}
+
 data::InstallationResult ComposeAppManager::install(const Uptane::Target& target) const {
   // Stopping disabled apps before creating or starting new apps
   // because they may interfere with each other (e.g., using the same port).
@@ -432,7 +439,11 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
     // Stop disabled Apps before creating or starting new Apps since they may interfere with each other (e.g. the same
     // port is used).
     stopDisabledComposeApps(target);
-    LOG_INFO << "Starting Apps after successful boot on a new version of OSTree-based sysroot...";
+    if (ir.description != "Already booted on the required version") {
+      LOG_INFO << "Starting Apps after successful boot on a new version of OSTree-based sysroot...";
+    } else {
+      LOG_INFO << "Installing and starting Apps...";
+    }
     // "finalize" (run) Apps that were pulled and created before reboot
     for (const auto& app_pair : getApps(target)) {
       const AppEngine::Result run_res = app_engine_->run({app_pair.first, app_pair.second});
