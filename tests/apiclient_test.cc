@@ -125,6 +125,33 @@ TEST_F(ApiClientTest, CheckIn) {
   ASSERT_EQ(new_target.sha256Hash(), result.Targets()[1].Sha256Hash());
 }
 
+TEST_F(ApiClientTest, CheckInLocal) {
+  AkliteClient client(createLiteClient(InitialVersion::kOn));
+
+  // Accessing repo metadata files directly from the local filesystem
+  auto repo_dir = getTufRepo().getRepoPath();
+  auto result = client.CheckInLocal(repo_dir);
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(1, result.Targets().size());
+
+  // No communication is done with the device gateway inside CheckInLocal
+  auto events = getDeviceGateway().getEvents();
+  ASSERT_EQ(0, events.size());
+  ASSERT_EQ("", getDeviceGateway().readSotaToml());
+
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(1, result.Targets().size());
+
+  auto new_target = createTarget();
+  result = client.CheckInLocal(repo_dir);
+  ASSERT_EQ(0, getDeviceGateway().getEvents().size());
+  ASSERT_EQ("", getDeviceGateway().readSotaToml());
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(2, result.Targets().size());
+  ASSERT_EQ(new_target.filename(), result.Targets()[1].Name());
+  ASSERT_EQ(new_target.sha256Hash(), result.Targets()[1].Sha256Hash());
+}
+
 TEST_F(ApiClientTest, CheckInWithoutTargetImport) {
   AkliteClient client(createLiteClient(InitialVersion::kOff));
 

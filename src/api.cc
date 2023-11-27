@@ -13,6 +13,12 @@
 #include "primary/reportqueue.h"
 #include "target.h"
 
+#include "aktualizr-lite/tuf/tuf.h"
+#include "composeappmanager.h"
+#include "tuf/akhttpsreposource.h"
+#include "tuf/akrepo.h"
+#include "tuf/localreposource.h"
+
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                         "/etc/sota/conf.d/"};
 
@@ -93,6 +99,8 @@ void AkliteClient::Init(Config& config, bool finalize, bool apply_lock) {
       client_->finalizeInstall();
     }
   }
+
+  tuf_repo_ = std::make_unique<aklite::tuf::AkRepo>(client_->config);
 }
 
 AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only, bool finalize) {
@@ -119,6 +127,69 @@ AkliteClient::~AkliteClient() {
 
 static bool compareTargets(const TufTarget& a, const TufTarget& b) { return a.Version() < b.Version(); }
 
+// Returns a sorted list of targets matching tags and hwid (or one of secondary_hwids)
+static std::vector<TufTarget> filterTargets(const std::vector<Uptane::Target>& allTargets,
+                                            const Uptane::HardwareIdentifier& hwidToFind,
+                                            const std::vector<std::string>& tags,
+                                            const std::vector<std::string>& secondary_hwids) {
+  std::vector<TufTarget> targets;
+  for (const auto& t : allTargets) {
+    int ver = 0;
+    try {
+      ver = std::stoi(t.custom_version(), nullptr, 0);
+    } catch (const std::invalid_argument& exc) {
+      LOG_ERROR << "Invalid version number format: " << t.custom_version();
+      ver = -1;
+    }
+    if (!target_has_tags(t, tags)) {
+      continue;
+    }
+    for (const auto& it : t.hardwareIds()) {
+      if (it == hwidToFind) {
+        targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
+        break;
+      }
+      for (const auto& hwid : secondary_hwids) {
+        if (it == Uptane::HardwareIdentifier(hwid)) {
+          targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
+          break;
+        }
+      }
+    }
+  }
+  std::sort(targets.begin(), targets.end(), compareTargets);
+  return targets;
+}
+
+CheckInResult AkliteClient::UpdateMetaAndGetTargets(std::shared_ptr<aklite::tuf::RepoSource> repo_src) const {
+  auto status = CheckInResult::Status::Ok;
+
+  LOG_INFO << "Refreshing Targets metadata";
+  try {
+    tuf_repo_->updateMeta(std::move(repo_src));
+  } catch (const std::exception& e) {
+    LOG_WARNING << "Unable to update latest metadata, using local copy: " << e.what();
+    try {
+      tuf_repo_->checkMeta();
+    } catch (const std::exception& e) {
+      LOG_ERROR << "Unable to use local copy of TUF data";
+      return CheckInResult(CheckInResult::Status::Failed, "", {});
+    }
+    status = CheckInResult::Status::OkCached;
+  }
+
+  auto allTargetsTuf = tuf_repo_->GetTargets();
+  std::vector<Uptane::Target> allTargets;
+  allTargets.reserve(allTargetsTuf.size());
+  for (auto const& ut : allTargetsTuf) {
+    allTargets.emplace_back(Target::fromTufTarget(ut));
+  }
+
+  Uptane::HardwareIdentifier hwidToFind(client_->config.provision.primary_ecu_hardware_id);
+  auto matchingTargets = filterTargets(allTargets, hwidToFind, client_->tags, secondary_hwids_);
+  return CheckInResult(status, client_->config.provision.primary_ecu_hardware_id, matchingTargets);
+}
+
 CheckInResult AkliteClient::CheckIn() const {
   if (!configUploaded_) {
     client_->reportAktualizrConfiguration();
@@ -128,48 +199,20 @@ CheckInResult AkliteClient::CheckIn() const {
   client_->reportHwInfo();
   client_->reportAppsState();
 
-  auto status = CheckInResult::Status::Ok;
-  Uptane::HardwareIdentifier hwidToFind(client_->config.provision.primary_ecu_hardware_id);
+  boost::property_tree::ptree pt;
+  pt.put<std::string>("tag", client_->tags.empty() ? "" : client_->tags.at(0));
+  auto current = client_->getCurrent();
+  pt.put<std::string>("dockerapps", Target::appsStr(current, ComposeAppManager::Config(client_->config.pacman).apps));
+  pt.put<std::string>("target", current.filename());
+  pt.put<std::string>("ostreehash", current.sha256Hash());
 
-  LOG_INFO << "Refreshing Targets metadata";
-  const auto rc = client_->updateImageMeta();
-  if (!std::get<0>(rc)) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
-    if (!client_->checkImageMetaOffline()) {
-      LOG_ERROR << "Unable to use local copy of TUF data";
-      return CheckInResult(CheckInResult::Status::Failed, "", {});
-    }
-    status = CheckInResult::Status::OkCached;
-  }
+  auto repo_src = std::make_shared<aklite::tuf::AkHttpsRepoSource>("temp-remote-repo-source", pt, client_->config);
+  return UpdateMetaAndGetTargets(repo_src);
+}
 
-  std::vector<TufTarget> targets;
-  for (const auto& t : client_->allTargets()) {
-    int ver = 0;
-    try {
-      ver = std::stoi(t.custom_version(), nullptr, 0);
-    } catch (const std::invalid_argument& exc) {
-      LOG_ERROR << "Invalid version number format: " << t.custom_version();
-      ver = -1;
-    }
-    if (!target_has_tags(t, client_->tags)) {
-      continue;
-    }
-    for (const auto& it : t.hardwareIds()) {
-      if (it == hwidToFind) {
-        targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
-        break;
-      }
-      for (const auto& hwid : secondary_hwids_) {
-        if (it == Uptane::HardwareIdentifier(hwid)) {
-          targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
-          break;
-        }
-      }
-    }
-  }
-
-  std::sort(targets.begin(), targets.end(), compareTargets);
-  return CheckInResult(status, client_->config.provision.primary_ecu_hardware_id, targets);
+CheckInResult AkliteClient::CheckInLocal(const std::string& path) const {
+  auto repo_src = std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", path);
+  return UpdateMetaAndGetTargets(repo_src);
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
@@ -320,10 +363,10 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   }
   std::unique_ptr<Uptane::Target> target;
   // Make sure the metadata is loaded from storage and valid.
-  client_->checkImageMetaOffline();
-  for (const auto& tt : client_->allTargets()) {
-    if (tt.filename() == t.Name()) {
-      target = std::make_unique<Uptane::Target>(tt);
+  tuf_repo_->checkMeta();
+  for (const auto& tt : tuf_repo_->GetTargets()) {
+    if (tt.Name() == t.Name()) {
+      target = std::make_unique<Uptane::Target>(Target::fromTufTarget(tt));
       break;
     }
   }

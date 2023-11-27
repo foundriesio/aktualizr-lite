@@ -62,4 +62,6 @@ void AkRepo::FetcherWrapper::fetchLatestRole(std::string* result, int64_t maxsiz
   fetchRole(result, maxsize, repo, role, Uptane::Version());
 }
 
+void AkRepo::checkMeta() { image_repo_.checkMetaOffline(*storage_); }
+
 }  // namespace aklite::tuf

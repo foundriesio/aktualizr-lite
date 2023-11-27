@@ -16,7 +16,7 @@ class AkHttpsRepoSource : public RepoSource {
   std::string fetchTargets() override;
 
  private:
-  void init(const std::string& name_in, boost::property_tree::ptree& pt);
+  void init(const std::string& name_in, boost::property_tree::ptree& pt, Config& config);
   static void fillConfig(Config& config, boost::property_tree::ptree& pt);
   std::string fetchRole(const Uptane::Role& role, int64_t maxsize, Uptane::Version version);
 
