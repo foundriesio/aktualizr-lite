@@ -9,7 +9,16 @@
 
 namespace aklite::tuf {
 
-AkHttpsRepoSource::AkHttpsRepoSource(const std::string& name_in, boost::property_tree::ptree& pt) { init(name_in, pt); }
+AkHttpsRepoSource::AkHttpsRepoSource(const std::string& name_in, boost::property_tree::ptree& pt) {
+  boost::program_options::variables_map m;
+  Config config(m);
+  fillConfig(config, pt);
+  init(name_in, pt, config);
+}
+
+AkHttpsRepoSource::AkHttpsRepoSource(const std::string& name_in, boost::property_tree::ptree& pt, Config& config) {
+  init(name_in, pt, config);
+}
 
 static std::string readFileIfExists(const utils::BasedPath& based_path) {
   if (based_path.empty()) {
@@ -23,7 +32,7 @@ static std::string readFileIfExists(const utils::BasedPath& based_path) {
   }
 }
 
-void AkHttpsRepoSource::init(const std::string& name_in, boost::property_tree::ptree& pt) {
+void AkHttpsRepoSource::init(const std::string& name_in, boost::property_tree::ptree& pt, Config& config) {
   name_ = name_in;
 
   std::vector<std::string> headers;
@@ -32,10 +41,6 @@ void AkHttpsRepoSource::init(const std::string& name_in, boost::property_tree::p
     headers.emplace_back("x-ats-" + std::string(key) + ": " + Utils::stripQuotes(pt.get<std::string>(key, "")));
   }
   auto http_client = std::make_shared<HttpClientWithShare>(&headers);
-
-  boost::program_options::variables_map m;
-  Config config(m);
-  fillConfig(config, pt);
 
   P11EngineGuard p11(config.p11.module, config.p11.pass, config.p11.label);
   http_client->setCerts(config.tls.ca_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_cacert_path)

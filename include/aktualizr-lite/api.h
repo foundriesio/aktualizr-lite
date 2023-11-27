@@ -241,6 +241,18 @@ class AkliteClient {
   CheckInResult CheckIn() const;
 
   /**
+   * Performs a simplified "check-in" accessing locally available TUF metadata files.
+   * No communication is done with the device gateway. It consists of:
+   *  1) attempt to read a new new root.json - normally not found.
+   *  2) read timestamp and snapshot metadata.
+   *  3) read a new targets.json if needed
+   *
+   * This is an EXPERIMENTAL implementation. If there is Target data to be updated
+   * later on, it will still be fetched from the remote servers (ostree, app registry).
+   */
+  CheckInResult CheckInLocal(const std::string &path) const;
+
+  /**
    * Return the active aktualizr-lite configuration.
    */
   boost::property_tree::ptree GetConfig() const;
@@ -313,9 +325,11 @@ class AkliteClient {
 
  private:
   void Init(Config &config, bool finalize = true, bool apply_lock = true);
+  CheckInResult UpdateMetaAndGetTargets(std::shared_ptr<aklite::tuf::RepoSource> repo_src) const;
 
   bool read_only_{false};
   std::shared_ptr<LiteClient> client_;
+  std::shared_ptr<aklite::tuf::TufRepo> tuf_repo_;
   std::vector<std::string> secondary_hwids_;
   mutable bool configUploaded_{false};
 };
