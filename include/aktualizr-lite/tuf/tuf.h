@@ -108,6 +108,7 @@ class Repo {
 
   virtual std::vector<TufTarget> GetTargets() = 0;
   virtual void updateMeta(std::shared_ptr<RepoSource> repo_src) = 0;
+  virtual void checkMeta() = 0;
 
  protected:
   Repo() = default;
