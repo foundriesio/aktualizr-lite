@@ -324,6 +324,18 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
       }
 
       // add blobs of the shortlisted apps to the blob shortlist
+      const auto appManifestPath{blobs_root_ / "sha256" / uri.digest.hash()};
+      if (boost::filesystem::exists(appManifestPath)) {
+        // The composeapp utility stores all nodes of an image merkle tree, specifically
+        // app manifest, app bundle, and app layers meta blob
+        // Skopeo, and aklite does not store them. Therefore is the app amnifest is found in the store,
+        // then we need to make sure that the related blobs are not removed.
+        blob_shortlist.emplace(uri.digest.hash());
+        const Manifest manifest{Utils::parseJSONFile(appManifestPath)};
+        blob_shortlist.emplace(HashedDigest(manifest.archiveDigest()).hash());
+        blob_shortlist.emplace(manifest.layersMetaDescr().digest.hash());
+      }
+
       ComposeInfo compose{(entry.path() / ComposeFile).string()};
       for (const auto& service : compose.getServices()) {
         const auto image = compose.getImage(service);
@@ -331,6 +343,9 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
         const auto image_root{app_dir / app_version_dir / "images" / image_uri.registryHostname / image_uri.repo /
                               image_uri.digest.hash()};
 
+        // Make sure the image root element (index or manifest) is not removed.
+        // We need it for backward compatibility with the composeapp utility.
+        blob_shortlist.emplace(image_uri.digest.hash());
         const auto index_manifest{image_root / "index.json"};
         if (!boost::filesystem::exists(index_manifest)) {
           LOG_WARNING << "Failed to find an index manifest of App image: " << image << ", removing its directory";
@@ -554,7 +569,7 @@ bool RestorableAppEngine::isAppFetched(const App& app) const {
     }
 
     const auto manifest_file{app_dir / Manifest::Filename};
-    if (!boost::filesystem::exists(manifest_file)) {
+    if (!(boost::filesystem::exists(manifest_file) || boost::filesystem::is_symlink(manifest_file))) {
       LOG_DEBUG << app.name << ": missing App manifest: " << manifest_file;
       break;
     }
