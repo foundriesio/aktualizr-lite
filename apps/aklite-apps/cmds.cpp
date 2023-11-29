@@ -9,6 +9,9 @@
 #include "docker/docker.h"
 #include "docker/restorableappengine.h"
 #include "http/httpclient.h"
+#ifdef USE_COMPOSEAPP_ENGINE
+#include "ctr/appengine.h"
+#endif  // USE_COMPOSEAPP_ENGINE
 
 namespace fs = std::filesystem;
 
@@ -124,6 +127,23 @@ int RunCmd::runApps(const std::vector<std::string>& shortlist, const std::string
   auto http_client = std::make_shared<HttpClient>();
   auto docker_client{std::make_shared<Docker::DockerClient>()};
   auto registry_client{std::make_shared<Docker::RegistryClient>(http_client, "")};
+#ifdef USE_COMPOSEAPP_ENGINE
+  ctr::AppEngine app_engine{
+      store_root,
+      compose_root,
+      docker_root,
+      registry_client,
+      docker_client,
+      client,
+      docker_host,
+      compose_client,
+      client,
+      80 /* this value is non-op in the case of install/run */,
+      Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
+      [](const Docker::Uri& /* app_uri */, const std::string& image_uri) { return "docker://" + image_uri; },
+      false,
+      true};
+#else
   Docker::RestorableAppEngine app_engine{
       store_root,
       compose_root,
@@ -137,6 +157,7 @@ int RunCmd::runApps(const std::vector<std::string>& shortlist, const std::string
       [](const Docker::Uri& /* app_uri */, const std::string& image_uri) { return "docker://" + image_uri; },
       false,
       true};
+#endif  // USE_COMPOSEAPP_ENGINE
 
   for (const auto& app : apps) {
     LOG_INFO << "Starting App: " << app.name;

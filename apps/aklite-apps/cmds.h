@@ -65,7 +65,12 @@ class RunCmd : public Cmd {
         "store-root", po::value<std::string>()->default_value("/var/sota/reset-apps"), "Image store root folder")(
         "compose-root", po::value<std::string>()->default_value("/var/sota/compose-apps"), "Compose Apps root folder")(
         "docker-root", po::value<std::string>()->default_value("/var/lib/docker"), "Docker data root folder")(
+#ifdef USE_COMPOSEAPP_ENGINE
+        "client", po::value<std::string>()->default_value("/usr/bin/composectl"),
+        "A client to load app images to docker")(
+#else
         "client", po::value<std::string>()->default_value("/usr/sbin/skopeo"), "A client to copy images")(
+#endif
         "compose-client", po::value<std::string>()->default_value("/usr/bin/docker compose "),
         "A client to manage compose apps");
   }

@@ -55,10 +55,9 @@ if (BUILD_AKLITE_WITH_NERDCTL)
   add_definitions(-DBUILD_AKLITE_WITH_NERDCTL)
 endif(BUILD_AKLITE_WITH_NERDCTL)
 
-if (USE_COMPOSEAPP_ENGINE)
+if(USE_COMPOSEAPP_ENGINE)
   set(SRC ${SRC} ctr/appengine.cc)
   set(HEADERS ${HEADERS} ctr/appengine.h)
-  add_definitions(-DUSE_COMPOSEAPP_ENGINE)
 endif(USE_COMPOSEAPP_ENGINE)
 
 add_executable(${TARGET_EXE} main.cc)
