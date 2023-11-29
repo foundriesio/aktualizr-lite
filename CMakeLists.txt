@@ -23,6 +23,7 @@ option(BUILD_AKLITE_WITH_NERDCTL "Set to ON to build with support of nerdctl/con
 option(BUILD_AKLITE_APPS "Set to ON to build cli command for Apps management" ON)
 option(BUILD_TUFCTL "Set to ON to build sample tuf control application" OFF)
 option(BUILD_P11 "Support for key storage in a HSM via PKCS#11" ON)
+option(USE_COMPOSEAPP_ENGINE "Set to ON to build the app engine based on the composeapp utility" OFF)
 
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
@@ -52,6 +53,10 @@ if(BUILD_AKLITE)
   find_package(PkgConfig REQUIRED)
   pkg_search_module(GLIB REQUIRED glib-2.0)
 
+  if(USE_COMPOSEAPP_ENGINE)
+    add_definitions(-DUSE_COMPOSEAPP_ENGINE)
+  endif(USE_COMPOSEAPP_ENGINE)
+
   add_subdirectory(src)
 
   include(CTest)
@@ -78,3 +83,4 @@ message(STATUS "BUILD_AKLITE_WITH_NERDCTL: ${BUILD_AKLITE_WITH_NERDCTL}")
 message(STATUS "BUILD_AKLITE_APPS: ${BUILD_AKLITE_APPS}")
 message(STATUS "BUILD_TUFCTL: ${BUILD_TUFCTL}")
 message(STATUS "BUILD_P11: ${BUILD_P11}")
+message(STATUS "USE_COMPOSEAPP_ENGINE: ${USE_COMPOSEAPP_ENGINE}")
