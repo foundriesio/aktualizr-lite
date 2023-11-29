@@ -149,7 +149,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       app_engine_ = std::make_shared<ctr::AppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
           std::make_shared<Docker::DockerClient>(), skopeo_cmd, docker_host, compose_cmd, composectl_cmd,
-          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
+          cfg_.storage_watermark, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
 #else
       app_engine_ = std::make_shared<Docker::RestorableAppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,

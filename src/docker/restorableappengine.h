@@ -110,6 +110,13 @@ class RestorableAppEngine : public AppEngine {
   static bool areDockerAndSkopeoOnTheSameVolume(const boost::filesystem::path& skopeo_path,
                                                 const boost::filesystem::path& docker_path);
 
+ protected:
+  const boost::filesystem::path& storeRoot() const { return store_root_; }
+  const boost::filesystem::path& installRoot() const { return install_root_; }
+  const std::string& dockerHost() const { return docker_host_; }
+
+  virtual void installAppAndImages(const App& app);
+
  private:
   class LoadImageException : public std::runtime_error {
    public:
@@ -124,7 +131,6 @@ class RestorableAppEngine : public AppEngine {
   // install App&Images
   Result installAndCreateOrRunContainers(const App& app, bool run = false);
   Result installContainerless(const App& app);
-  void installAppAndImages(const App& app);
   static void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);
   void installAppImages(const boost::filesystem::path& app_dir);
 

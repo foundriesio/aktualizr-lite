@@ -12,18 +12,21 @@ class AppEngine : public Docker::RestorableAppEngine {
       boost::filesystem::path store_root, boost::filesystem::path install_root, boost::filesystem::path docker_root,
       Docker::RegistryClient::Ptr registry_client, Docker::DockerClient::Ptr docker_client,
       std::string client = "/sbin/skopeo", std::string docker_host = "unix:///var/run/docker.sock",
-      std::string compose_cmd = "/usr/bin/docker-compose", std::string composectl_cmd = "/usr/bin/composectl",
+      std::string compose_cmd = "/usr/bin/docker-compose", std::string composectl_cmd = "/usr/bin/composectl", int storage_watermark = 80,
       StorageSpaceFunc storage_space_func = RestorableAppEngine::GetDefStorageSpaceFunc(),
       ClientImageSrcFunc client_image_src_func = [](const Docker::Uri& /* app_uri */,
                                                     const std::string& image_uri) { return "docker://" + image_uri; },
       bool create_containers_if_install = true, bool offline = false):
-        Docker::RestorableAppEngine(store_root, install_root, docker_root, registry_client, docker_client, client, docker_host, compose_cmd, storage_space_func, client_image_src_func), composectl_cmd_{composectl_cmd} {}
+        Docker::RestorableAppEngine(store_root, install_root, docker_root, registry_client, docker_client, client, docker_host, compose_cmd, storage_space_func, client_image_src_func), composectl_cmd_{composectl_cmd}, storage_watermark_{storage_watermark} {}
 
 
   Result fetch(const App& app) override;
+  private:
+   void installAppAndImages(const App& app) override;
 
  private:
   const std::string composectl_cmd_;
+  const int storage_watermark_;
 };
 
 }  // namespace ctr
