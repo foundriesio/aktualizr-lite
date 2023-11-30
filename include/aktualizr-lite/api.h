@@ -12,65 +12,12 @@
 
 #include "json/json.h"
 
+#include "tuf/tuf.h"
+
 class Config;
 class LiteClient;
 
-/**
- * A high-level representation of a TUF Target in terms applicable to a
- * FoundriesFactory.
- */
-class TufTarget {
- public:
-  explicit TufTarget() : name_{"unknown"} {}
-  TufTarget(std::string name, std::string sha256, int version, Json::Value custom)
-      : name_(std::move(name)), sha256_(std::move(sha256)), version_(version), custom_(std::move(custom)) {}
-
-  /**
-   * Return the TUF Target name. This is the key in the targets.json key/value
-   * singed.metadata dictionary.
-   */
-  const std::string &Name() const { return name_; }
-  /**
-   * Return the sha256 OStree hash of the Target.
-   */
-  const std::string &Sha256Hash() const { return sha256_; }
-  /**
-   * Return the FoundriesFactory CI build number or in TUF, custom.version.
-   */
-  int Version() const { return version_; }
-
-  /**
-   * Return TUF custom data for a Target.
-   */
-  const Json::Value &Custom() const { return custom_; }
-
-  /**
-   * Is this a known target in the Tuf manifest? There are two common causes
-   * to this situation:
-   *  1) A device has been re-registered (sql.db got wiped out) and the
-   *     /var/sota/installed_versions file is missing. The device might
-   *     running the correct target but the system isn't sure.
-   *  2) A device might be running a Target from a different tag it's not
-   *     configured for. This means the Target isn't present in the targets.json
-   *     this device is getting from the device-gateway.
-   */
-  bool IsUnknown() const { return name_ == "unknown"; }
-
-  /**
-   * @brief Compares the given target with the other target
-   * @param other - the other target to compare with
-   * @return true if the targets match, otherwise false
-   */
-  bool operator==(const TufTarget &other) const {
-    return other.name_ == name_ && other.sha256_ == sha256_ && other.version_ == version_;
-  }
-
- private:
-  std::string name_;
-  std::string sha256_;
-  int version_{-1};
-  Json::Value custom_;
-};
+using aklite::tuf::TufTarget;
 
 /**
  * The response from an AkliteClient call to CheckIn()
@@ -294,6 +241,18 @@ class AkliteClient {
   CheckInResult CheckIn() const;
 
   /**
+   * Performs a simplified "check-in" accessing locally available TUF metadata files.
+   * No communication is done with the device gateway. It consists of:
+   *  1) attempt to read a new new root.json - normally not found.
+   *  2) read timestamp and snapshot metadata.
+   *  3) read a new targets.json if needed
+   *
+   * This is an EXPERIMENTAL implementation. If there is Target data to be updated
+   * later on, it will still be fetched from the remote servers (ostree, app registry).
+   */
+  CheckInResult CheckInLocal(const std::string &path) const;
+
+  /**
    * Return the active aktualizr-lite configuration.
    */
   boost::property_tree::ptree GetConfig() const;
@@ -366,9 +325,11 @@ class AkliteClient {
 
  private:
   void Init(Config &config, bool finalize = true, bool apply_lock = true);
+  CheckInResult UpdateMetaAndGetTargets(std::shared_ptr<aklite::tuf::RepoSource> repo_src) const;
 
   bool read_only_{false};
   std::shared_ptr<LiteClient> client_;
+  std::shared_ptr<aklite::tuf::Repo> tuf_repo_;
   std::vector<std::string> secondary_hwids_;
   mutable bool configUploaded_{false};
 };
