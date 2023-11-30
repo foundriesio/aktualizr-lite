@@ -95,6 +95,7 @@ void AkHttpsRepoSource::fillConfig(Config& config, boost::property_tree::ptree& 
 
 std::string AkHttpsRepoSource::fetchRole(const Uptane::Role& role, int64_t maxsize, Uptane::Version version) {
   std::string reply;
+  LOG_INFO << "fetchRole AkHttpsRepoSource " << role;
   meta_fetcher_->fetchRole(&reply, maxsize, Uptane::RepositoryType::Image(), role, version);
   return reply;
 }

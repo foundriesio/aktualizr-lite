@@ -1,6 +1,7 @@
 #include <boost/filesystem.hpp>
 
 #include "utilities/utils.h"
+#include "logging/logging.h"
 
 #include "localreposource.h"
 
@@ -12,6 +13,7 @@ LocalRepoSource::LocalRepoSource(const std::string &name_in, const std::string &
 }
 
 std::string LocalRepoSource::fetchFile(const boost::filesystem::path &meta_file_path) {
+  LOG_INFO << "fetchFile LocalRepoSource " << meta_file_path;
   if (!boost::filesystem::exists(meta_file_path)) {
     throw NotFoundException(meta_file_path.string());
   }
