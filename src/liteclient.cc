@@ -83,7 +83,7 @@ LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, cons
   // We have to set all headers at this point because the http client API doesn't allow adding new
   // headers after its initialization, headers can be only modified.
   initRequestHeaders(headers);
-  http_client = std::make_shared<HttpClientWithShare>(&headers);
+  http_client = std::make_shared<HttpClient>(&headers);
 
   key_manager_ = std_::make_unique<KeyManager>(storage, config.keymanagerConfig(), p11);
   key_manager_->loadKeys();
