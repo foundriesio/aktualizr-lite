@@ -254,7 +254,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
   while (true) {
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
-    LOG_INFO << "Checking for a new Target...";
+    LOG_INFO << "V1 Checking for a new Target...";
 
     client.reportAppsState();
     if (!client.checkForUpdatesBegin()) {
