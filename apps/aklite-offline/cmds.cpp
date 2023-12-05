@@ -37,6 +37,11 @@ int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::pat
         cfg_in, {src_dir / "tuf", src_dir / "ostree_repo", src_dir / "apps"}, nullptr, force_downgrade);
 
     switch (install_res) {
+      case offline::PostInstallAction::Ok: {
+        std::cout << "Please run `aklite-offline run` command to start the updated Apps\n";
+        ret_code = 10;
+        break;
+      }
       case offline::PostInstallAction::NeedRebootForBootFw: {
         ret_code = 90;
         std::cout
@@ -52,12 +57,6 @@ int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::pat
         std::cout
             << "Please reboot a device and execute `aklite-offline run` command "
                "to apply installation and start the updated Apps (unless no Apps to update or dockerless system)\n";
-        break;
-      }
-      case offline::PostInstallAction::NeedDockerRestart: {
-        std::cout << "Please restart `docker` service `systemctl restart docker` and execute `aklite-offline run` "
-                     "command to start the updated Apps\n";
-        ret_code = 101;
         break;
       }
       case offline::PostInstallAction::AlreadyInstalled: {

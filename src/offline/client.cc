@@ -320,7 +320,11 @@ static void registerApps(const Uptane::Target& target, const boost::filesystem::
       const Docker::HashedDigest config_digest(image_manifest["config"]["digest"].asString());
       const auto image_repo{image_uri.registryHostname + "/" + image_uri.repo};
 
-      LOG_INFO << "Registering image: " << image_uri_str << " -> " << config_digest();
+      // The image "registration" is not needed since LmP v92 because of the docker patch that
+      // register image just afet it is been laoded to the docker store.
+      // However, we want to keep image registration anyway since a user may do downgrade,
+      // so the `run` command can be execute in the LmP < v92 which does not include the docker patch.
+      LOG_DEBUG << "Registering image: " << image_uri_str << " -> " << config_digest();
       repositories["Repositories"][image_repo][image_uri_str] = config_digest();
     }
   }
@@ -421,10 +425,9 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
   } else if (client->config.pacman.type != ComposeAppManager::Name || client->appsInSync(target)) {
     post_install_action = PostInstallAction::AlreadyInstalled;
   } else {
-    // don't `install` since it will create/run containers and we don't want to do it
-    // before we register images and restart dockerd
+    // just download apps in the case of "app only" update
     client->storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
-    post_install_action = PostInstallAction::NeedDockerRestart;
+    post_install_action = PostInstallAction::Ok;
   }
 
   if (client->config.pacman.type == ComposeAppManager::Name &&
