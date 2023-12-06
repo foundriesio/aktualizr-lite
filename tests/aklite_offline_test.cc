@@ -202,8 +202,7 @@ class AkliteOffline : public ::testing::Test {
     for (const auto& app : apps_not_to_preload) {
       boost::filesystem::remove_all(app_store_.appsDir() / app);
     }
-    ASSERT_EQ(install(), offline::PostInstallAction::NeedDockerRestart);
-    reloadDockerEngine();
+    ASSERT_EQ(install(), offline::PostInstallAction::Ok);
     ASSERT_EQ(run(), offline::PostRunAction::Ok);
 
     if (add_installed_versions) {
@@ -360,8 +359,7 @@ TEST_F(AkliteOffline, OfflineClientAppsOnly) {
   const auto target{addTarget({createApp("app-01")}, true)};
   ASSERT_EQ(1, check().size());
   ASSERT_TRUE(target.MatchTarget(check().front()));
-  ASSERT_EQ(install(), offline::PostInstallAction::NeedDockerRestart);
-  reloadDockerEngine();
+  ASSERT_EQ(install(), offline::PostInstallAction::Ok);
   ASSERT_EQ(run(), offline::PostRunAction::Ok);
   ASSERT_TRUE(target.MatchTarget(getCurrent()));
 }

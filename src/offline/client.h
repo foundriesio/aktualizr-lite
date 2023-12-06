@@ -22,9 +22,9 @@ struct UpdateSrc {
 
 enum class PostInstallAction {
   Undefined = -1,
+  Ok,
   NeedReboot,
   NeedRebootForBootFw,
-  NeedDockerRestart,
   AlreadyInstalled,
   DowngradeAttempt
 };
