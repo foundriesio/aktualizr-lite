@@ -53,38 +53,6 @@ class ListCmd : public Cmd {
   po::options_description _options;
 };
 
-class RegisterCmd : public Cmd {
- public:
-  RegisterCmd() : Cmd("register", _options) {
-    _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
-                                                    "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
-        "apps", po::value<std::string>()->default_value(""),
-        "Comma separated list of Apps to register, by default all Apps are registered")(
-        "store-root", po::value<std::string>()->default_value("/var/sota/reset-apps"), "Image store root folder")(
-        "docker-root", po::value<std::string>()->default_value("/var/lib/docker"), "Docker data root folder");
-  }
-
-  int operator()(const po::variables_map& vm) const override {
-    try {
-      std::vector<std::string> apps;
-      if (!vm["apps"].as<std::string>().empty()) {
-        boost::split(apps, vm["apps"].as<std::string>(), boost::is_any_of(", "), boost::token_compress_on);
-      }
-
-      return hackDockerStore(apps, vm["store-root"].as<std::string>(), vm["docker-root"].as<std::string>());
-    } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to register preloaded Apps's images: " << exc.what();
-      return EXIT_FAILURE;
-    }
-  }
-
- private:
-  static int hackDockerStore(const std::vector<std::string>& shortlist, const std::string& store_root,
-                             const std::string& docker_root);
-
-  po::options_description _options;
-};
-
 class RunCmd : public Cmd {
  public:
   RunCmd() : Cmd("run", _options) {

@@ -12,7 +12,6 @@ namespace po = boost::program_options;
 static std::vector<apps::aklite_apps::Cmd::Ptr> cmds{
     std::make_shared<apps::aklite_apps::ListCmd>(),
     std::make_shared<apps::aklite_apps::RunCmd>(),
-    std::make_shared<apps::aklite_apps::RegisterCmd>(),
 };
 
 static void print_usage() {

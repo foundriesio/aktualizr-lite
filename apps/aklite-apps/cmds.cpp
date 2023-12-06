@@ -106,54 +106,6 @@ int ListCmd::listApps(const std::string& store_root, bool wide) {
   return EXIT_SUCCESS;
 }
 
-int RegisterCmd::hackDockerStore(const std::vector<std::string>& shortlist, const std::string& store_root,
-                                 const std::string& docker_root) {
-  LOG_INFO << "Registering the preloaded Apps at the docker store repository;"
-           << "\n\tshortlist: " << boost::algorithm::join(shortlist, ",") << "\n\tstore-root: " << store_root
-           << "\n\tdocker-root: " << docker_root;
-
-  const auto apps{getStoreApps(store_root, shortlist)};
-  if (apps.size() == 0) {
-    LOG_INFO << "No Apps found in the store; path:  " << store_root;
-    exit(EXIT_SUCCESS);
-  }
-
-  const fs::path repositories_file{docker_root + "/image/overlay2/repositories.json"};
-  Json::Value repositories;
-  if (fs::exists(repositories_file)) {
-    repositories = Utils::parseJSONFile(repositories_file.string());
-  } else {
-    repositories = Utils::parseJSON("{\"Repositories\":{}}");
-  }
-
-  for (const auto& app : apps) {
-    const fs::path app_compose_file{app.path / Docker::RestorableAppEngine::ComposeFile};
-    const Docker::ComposeInfo app_compose{app_compose_file.string()};
-    for (const Json::Value& service : app_compose.getServices()) {
-      const auto image_uri_str{app_compose.getImage(service)};
-      const auto image_uri{Docker::Uri::parseUri(image_uri_str, false)};
-
-      const auto image_index_path{app.path / "images" / image_uri.registryHostname / image_uri.repo /
-                                  image_uri.digest.hash() / "index.json"};
-      const auto image_index{Utils::parseJSONFile(image_index_path.string())};
-
-      // parse an image index to find a path to an image manifest
-      const Docker::HashedDigest manifest_digest(image_index["manifests"][0]["digest"].asString());
-      const auto image_manifest_path{store_root + "/blobs/sha256/" + manifest_digest.hash()};
-      const auto image_manifest{Utils::parseJSONFile(image_manifest_path)};
-      // parse an image manifest to get a digest of an image config
-      const Docker::HashedDigest config_digest(image_manifest["config"]["digest"].asString());
-      const auto image_repo{image_uri.registryHostname + "/" + image_uri.repo};
-
-      LOG_INFO << "Registering image: " << image_uri_str << " -> " << config_digest();
-      repositories["Repositories"][image_repo][image_uri_str] = config_digest();
-    }
-  }
-
-  Utils::writeFile(repositories_file.string(), repositories);
-  return EXIT_SUCCESS;
-}
-
 int RunCmd::runApps(const std::vector<std::string>& shortlist, const std::string& docker_host,
                     const std::string& store_root, const std::string& compose_root, const std::string& docker_root,
                     const std::string& client, const std::string& compose_client) {
