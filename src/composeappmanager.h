@@ -61,6 +61,7 @@ class ComposeAppManager : public RootfsTreeManager {
   void handleRemovedApps(const Uptane::Target& target) const;
   Json::Value getAppsState() const;
   static bool compareAppsStates(const Json::Value& left, const Json::Value& right);
+  static AppsContainer getRequiredApps(const Config& cfg, const Uptane::Target& target);
 
  private:
   void completeInitialTarget(Uptane::Target& init_target) override;

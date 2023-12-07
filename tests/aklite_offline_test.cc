@@ -192,8 +192,10 @@ class AkliteOffline : public ::testing::Test {
     Uptane::Target preloaded_target{initial_target_};
     Json::Value apps_json;
 
+    std::set<std::string> apps_to_shortlist;
     for (const auto& app : apps) {
       apps_json[app.name]["uri"] = app.uri;
+      apps_to_shortlist.emplace(app.name);
     }
     tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-1", initial_target_.sha256Hash(),
                         cfg_.provision.primary_ecu_hardware_id, "0", apps_json);
@@ -201,7 +203,9 @@ class AkliteOffline : public ::testing::Test {
     // content-based shortlisting
     for (const auto& app : apps_not_to_preload) {
       boost::filesystem::remove_all(app_store_.appsDir() / app);
+      apps_to_shortlist.erase(app);
     }
+    setAppsShortlist(boost::algorithm::join(apps_to_shortlist, ","));
     ASSERT_EQ(install(), offline::PostInstallAction::Ok);
     ASSERT_EQ(run(), offline::PostRunAction::Ok);
 
@@ -277,6 +281,8 @@ class AkliteOffline : public ::testing::Test {
         "" /* target is not specified explicitly and has to be determined based on update content and TUF targets */};
   }
 
+  void setAppsShortlist(const std::string& shortlist) { cfg_.pacman.extra["compose_apps"] = shortlist; }
+
  protected:
   static const std::string hw_id;
   static const std::string os;
@@ -331,8 +337,10 @@ TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
   const auto app03{createApp("zz00-app-03")};
   const auto target{addTarget({createApp("app-01"), createApp("app-02"), app03})};
   // remove zz00-app-03 (app03) from the file system to make sure that offline update succeeds
-  // if one of the targets apps is missing in the provided update content.
+  // if one of the targets apps is missing in the provided update content and the corresponding app shortlist
+  // is set in the client config.
   boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
+  setAppsShortlist("app-01, app-02");
 
   ASSERT_EQ(1, check().size());
   ASSERT_TRUE(target.MatchTarget(check().front()));
@@ -346,6 +354,7 @@ TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
   const auto target{addTarget({createApp("app-01")})};
   // Remove all Target Apps from App store to make sure that only ostree can be updated
   boost::filesystem::remove_all(app_store_.appsDir());
+  cfg_.pacman.extra["enforce_pacman_type"] = RootfsTreeManager::Name;
 
   ASSERT_EQ(1, check().size());
   ASSERT_TRUE(target.MatchTarget(check().front()));
@@ -458,6 +467,7 @@ TEST_F(AkliteOffline, RollbackIfAppStartFailsWithAppShortlisting) {
   const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03", "compose-start-failure")})};
   // remove app-02 from the install source dir
   boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  setAppsShortlist("app-01,app-03");
   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
   reboot();
   ASSERT_EQ(run(), offline::PostRunAction::RollbackNeedReboot);

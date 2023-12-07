@@ -655,21 +655,20 @@ bool ComposeAppManager::compareAppsStates(const Json::Value& left, const Json::V
   return true;
 }
 
-ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target,
-                                                                   bool check_store) const {
+ComposeAppManager::AppsContainer ComposeAppManager::getRequiredApps(const Config& cfg, const Uptane::Target& target) {
   AppsContainer apps;
   std::set<std::string> cfg_apps_union;
   const auto& target_apps = Target::Apps(target);
 
-  if (!!cfg_.apps) {
-    cfg_apps_union.insert((*cfg_.apps).begin(), (*cfg_.apps).end());
+  if (!!cfg.apps) {
+    cfg_apps_union.insert((*cfg.apps).begin(), (*cfg.apps).end());
   } else {
     std::for_each(target_apps.begin(), target_apps.end(),
                   [&cfg_apps_union](const Target::Apps::AppDesc& val) { cfg_apps_union.insert(val.name); });
   }
 
-  if (!!cfg_.reset_apps) {
-    cfg_apps_union.insert((*cfg_.reset_apps).begin(), (*cfg_.reset_apps).end());
+  if (!!cfg.reset_apps) {
+    cfg_apps_union.insert((*cfg.reset_apps).begin(), (*cfg.reset_apps).end());
   }
 
   for (const auto& app_name : cfg_apps_union) {
@@ -678,12 +677,27 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane:
     }
 
     const auto app{target_apps[app_name]};
-    if (!check_store || !app_engine_->isFetched({app.name, app.uri})) {
-      apps[app.name] = app.uri;
-    }
+    apps[app.name] = app.uri;
   }
 
   return apps;
+}
+
+ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target,
+                                                                   bool check_store) const {
+  auto enabled_apps{getRequiredApps(cfg_, target)};
+  if (!check_store) {
+    return enabled_apps;
+  }
+
+  AppsContainer apps_to_be_fetched;
+  for (const auto& app : enabled_apps) {
+    if (!app_engine_->isFetched({app.first, app.second})) {
+      apps_to_be_fetched.insert(app);
+    }
+  }
+
+  return apps_to_be_fetched;
 }
 
 std::string ComposeAppManager::getAppsFsUsageInfo() const {
