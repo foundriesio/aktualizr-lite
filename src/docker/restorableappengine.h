@@ -114,6 +114,7 @@ class RestorableAppEngine : public AppEngine {
   const boost::filesystem::path& storeRoot() const { return store_root_; }
   const boost::filesystem::path& installRoot() const { return install_root_; }
   const std::string& dockerHost() const { return docker_host_; }
+  const StorageSpaceFunc& storageSpaceFunc() const { return storage_space_func_; }
 
   virtual void installAppAndImages(const App& app);
 
