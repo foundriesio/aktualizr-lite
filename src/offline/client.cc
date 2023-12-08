@@ -133,8 +133,13 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   // make LiteClient to pull from a local ostree repo
   cfg.pacman.ostree_server = "file://" + src.OstreeRepoDir.string();
 
-  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps.
-  cfg.pacman.type = ComposeAppManager::Name;
+  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
+  // unless a package manager type is enforced in the config.
+  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
+    cfg.pacman.type = cfg.pacman.extra["enforce_pacman_type"];
+  } else {
+    cfg.pacman.type = ComposeAppManager::Name;
+  }
   // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
   if (docker_client_http_client == nullptr &&
       (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
@@ -241,7 +246,8 @@ static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set
   }
 }
 
-static std::vector<Uptane::Target> getAvailableTargets(const SortedTargets& allowed_targets, const UpdateSrc& src,
+static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pconfig,
+                                                       const SortedTargets& allowed_targets, const UpdateSrc& src,
                                                        bool just_latest = true) {
   std::vector<Uptane::Target> found_targets;
   std::set<std::string> found_apps;
@@ -259,12 +265,32 @@ static std::vector<Uptane::Target> getAvailableTargets(const SortedTargets& allo
       LOG_DEBUG << "No ostree commit found for Target: " << t.filename();
       continue;
     }
-    // Find Target Apps content of which is present in the specified source directory
-    Json::Value apps_to_install;
-    for (const auto& app : Target::Apps(t)) {
-      if (found_apps.count(app.uri) > 0) {
-        apps_to_install[app.name]["uri"] = app.uri;
+    if (pconfig.type != ComposeAppManager::Name) {
+      found_targets.emplace_back(t);
+      if (!just_latest) {
+        continue;
       }
+      break;
+    }
+    const ComposeAppManager::AppsContainer required_apps{
+        ComposeAppManager::getRequiredApps(ComposeAppManager::Config(pconfig), t)};
+    std::set<std::string> missing_apps;
+    Json::Value apps_to_install;
+    for (const auto& app : required_apps) {
+      if (found_apps.count(app.second) == 0) {
+        missing_apps.insert(app.second);
+      } else {
+        apps_to_install[app.first]["uri"] = app.second;
+      }
+    }
+    if (!missing_apps.empty()) {
+      if (just_latest) {
+        LOG_INFO << "The following apps of the target are missing: ";
+        for (const auto& app : missing_apps) {
+          LOG_INFO << "\t" << app;
+        }
+      }
+      break;
     }
     Json::Value updated_custom{t.custom_data()};
     updated_custom[Target::ComposeAppField] = apps_to_install;
@@ -280,8 +306,12 @@ static Uptane::Target getTarget(LiteClient& client, const UpdateSrc& src) {
   if (!src.TargetName.empty()) {
     return getSpecificTarget(client, src.TargetName);
   }
-  return getAvailableTargets(filterAndSortTargets(client.allTargets(), client.primary_ecu.second.ToString()), src)
-      .front();
+  const auto available_targets{getAvailableTargets(
+      client.config.pacman, filterAndSortTargets(client.allTargets(), client.primary_ecu.second.ToString()), src)};
+  if (available_targets.empty()) {
+    return Uptane::Target::Unknown();
+  }
+  return available_targets.front();
 }
 
 static void registerApps(const Uptane::Target& target, const boost::filesystem::path& apps_store_root,
@@ -549,8 +579,20 @@ const Uptane::Target getCurrent(const Config& cfg_in, std::shared_ptr<HttpInterf
 std::vector<Uptane::Target> check(const Config& cfg_in, const UpdateSrc& src) {
   const auto targets_json{Utils::parseJSONFile(src.TufDir / "targets.json")};
   const Uptane::Targets targets{targets_json};
-  return getAvailableTargets(filterAndSortTargets(targets.targets, cfg_in.provision.primary_ecu_hardware_id), src,
-                             false);
+  Config cfg{cfg_in};
+  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
+  // unless a package manager type is enforced in the config.
+  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
+    cfg.pacman.type = cfg.pacman.extra["enforce_pacman_type"];
+  } else {
+    cfg.pacman.type = ComposeAppManager::Name;
+  }
+  // Unless there is no `docker` or `dockerd`
+  if ((!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
+    cfg.pacman.type = RootfsTreeManager::Name;
+  }
+  return getAvailableTargets(cfg.pacman, filterAndSortTargets(targets.targets, cfg.provision.primary_ecu_hardware_id),
+                             src, false);
 }
 
 }  // namespace client
