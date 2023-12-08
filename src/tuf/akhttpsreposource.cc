@@ -7,6 +7,12 @@
 #include "akhttpsreposource.h"
 #include "crypto/p11engine.h"
 
+#ifdef BUILD_P11
+static constexpr bool built_with_p11 = true;
+#else
+static constexpr bool built_with_p11 = false;
+#endif
+
 namespace aklite::tuf {
 
 AkHttpsRepoSource::AkHttpsRepoSource(const std::string& name_in, boost::property_tree::ptree& pt) {
@@ -42,16 +48,22 @@ void AkHttpsRepoSource::init(const std::string& name_in, boost::property_tree::p
   }
   auto http_client = std::make_shared<HttpClientWithShare>(&headers);
 
+#ifdef BUILD_P11
   P11EngineGuard p11(config.p11.module, config.p11.pass, config.p11.label);
-  http_client->setCerts(config.tls.ca_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_cacert_path)
-                                                                    : p11->getItemFullId(config.p11.tls_cacert_id),
-                        config.tls.ca_source,
-                        config.tls.cert_source == CryptoSource::kFile
-                            ? readFileIfExists(config.import.tls_clientcert_path)
-                            : p11->getItemFullId(config.p11.tls_clientcert_id),
-                        config.tls.cert_source,
-                        config.tls.pkey_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_pkey_path)
-                                                                      : p11->getItemFullId(config.p11.tls_pkey_id),
+  std::string tls_ca = config.tls.ca_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_cacert_path)
+                                                                   : p11->getItemFullId(config.p11.tls_cacert_id);
+  std::string tls_cert = config.tls.cert_source == CryptoSource::kFile
+                             ? readFileIfExists(config.import.tls_clientcert_path)
+                             : p11->getItemFullId(config.p11.tls_clientcert_id);
+  std::string tls_pkey = config.tls.cert_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_pkey_path)
+                                                                       : p11->getItemFullId(config.p11.tls_pkey_id);
+#else
+  std::string tls_ca = readFileIfExists(config.import.tls_cacert_path);
+  std::string tls_cert = readFileIfExists(config.import.tls_clientcert_path);
+  std::string tls_pkey = readFileIfExists(config.import.tls_pkey_path);
+#endif
+
+  http_client->setCerts(tls_ca, config.tls.ca_source, tls_cert, config.tls.cert_source, tls_pkey,
                         config.tls.pkey_source);
 
   meta_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
@@ -59,6 +71,10 @@ void AkHttpsRepoSource::init(const std::string& name_in, boost::property_tree::p
 
 void AkHttpsRepoSource::fillConfig(Config& config, boost::property_tree::ptree& pt) {
   bool enable_hsm = pt.count("p11_module") > 0;
+  if (!built_with_p11 && enable_hsm) {
+    throw std::runtime_error("Aktualizr was built without PKCS#11 support, can't use \"p11_module\"");
+  }
+
   if (enable_hsm) {
     config.p11.module = Utils::stripQuotes(pt.get<std::string>("p11_module"));
     config.p11.pass = Utils::stripQuotes(pt.get<std::string>("p11_pass"));

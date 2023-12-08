@@ -22,6 +22,7 @@ option(BUILD_AKLITE_OFFLINE "Set to ON to build cli command for an offline updat
 option(BUILD_AKLITE_WITH_NERDCTL "Set to ON to build with support of nerdctl/containerd" OFF)
 option(BUILD_AKLITE_APPS "Set to ON to build cli command for Apps management" ON)
 option(BUILD_TUFCTL "Set to ON to build sample tuf control application" OFF)
+option(BUILD_P11 "Support for key storage in a HSM via PKCS#11" ON)
 
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
@@ -76,3 +77,4 @@ message(STATUS "BUILD_AKLITE_OFFLINE: ${BUILD_AKLITE_OFFLINE}")
 message(STATUS "BUILD_AKLITE_WITH_NERDCTL: ${BUILD_AKLITE_WITH_NERDCTL}")
 message(STATUS "BUILD_AKLITE_APPS: ${BUILD_AKLITE_APPS}")
 message(STATUS "BUILD_TUFCTL: ${BUILD_TUFCTL}")
+message(STATUS "BUILD_P11: ${BUILD_P11}")
