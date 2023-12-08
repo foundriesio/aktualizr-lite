@@ -63,6 +63,10 @@ if(ALLOW_MANUAL_ROLLBACK)
   add_definitions(-DALLOW_MANUAL_ROLLBACK)
 endif(ALLOW_MANUAL_ROLLBACK)
 
+if(BUILD_P11)
+  add_definitions(-DBUILD_P11)
+endif(BUILD_P11)
+
 target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 
 set(INCS
