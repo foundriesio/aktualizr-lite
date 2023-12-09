@@ -315,7 +315,23 @@ const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
 
 TEST_F(AkliteOffline, OfflineClient) {
+  const auto prev_target{addTarget({createApp("app-01")})};
   const auto target{addTarget({createApp("app-01")})};
+
+  ASSERT_EQ(2, check().size());
+  ASSERT_TRUE(target.MatchTarget(check().front()));
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, OfflineClientInstallNotLatest) {
+  const auto target{addTarget({createApp("app-01")})};
+  const auto app01_updated{createApp("app-01")};
+  const auto latest_target{addTarget({app01_updated})};
+  const auto app01_updated_uri{Docker::Uri::parseUri(app01_updated.uri)};
+  boost::filesystem::remove_all(app_store_.appsDir() / app01_updated.name / app01_updated_uri.digest.hash());
 
   ASSERT_EQ(1, check().size());
   ASSERT_TRUE(target.MatchTarget(check().front()));

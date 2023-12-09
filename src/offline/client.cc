@@ -298,7 +298,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
           LOG_INFO << "\t" << app;
         }
       }
-      break;
+      continue;
     }
     Json::Value updated_custom{t.custom_data()};
     updated_custom[Target::ComposeAppField] = apps_to_install;
