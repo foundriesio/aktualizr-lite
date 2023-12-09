@@ -257,24 +257,36 @@ static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set
 static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pconfig,
                                                        const SortedTargets& allowed_targets, const UpdateSrc& src,
                                                        bool just_latest = true) {
+  if (allowed_targets.empty()) {
+    LOG_ERROR << "No targets are available for a given device; check a hardware ID and/or a tag";
+    return std::vector<Uptane::Target>{};
+  }
   std::vector<Uptane::Target> found_targets;
   std::set<std::string> found_apps;
 
   parseUpdateContent(src.AppsDir / "apps", found_apps);
+  LOG_INFO << "Apps found in the source directory " << src.AppsDir;
+  for (const auto& app : found_apps) {
+    LOG_INFO << "\t" << app;
+  }
 
   const OSTree::Repo repo{src.OstreeRepoDir.string()};
   Uptane::Target found_target(Uptane::Target::Unknown());
 
+  const std::string search_msg{just_latest ? "a target" : "all targets"};
+  LOG_INFO << "Searching for " << search_msg << " starting from " << allowed_targets.begin()->filename()
+           << " that match content provided in the source directory\n"
+           << "\tpacman type: \t" << pconfig.type << "\n\t apps dir: \t" << src.AppsDir << "\n\t ostree dir: \t"
+           << src.OstreeRepoDir;
   for (const auto& t : allowed_targets) {
-    if (just_latest) {
-      LOG_INFO << "Checking if update content matches the given target: " << t.filename();
-    }
+    LOG_INFO << "Checking " << t.filename();
     if (!repo.hasCommit(t.sha256Hash())) {
-      LOG_DEBUG << "No ostree commit found for Target: " << t.filename();
+      LOG_INFO << "\tmissing ostree commit: " << t.sha256Hash();
       continue;
     }
     if (pconfig.type != ComposeAppManager::Name) {
       found_targets.emplace_back(t);
+      LOG_INFO << "\tall target content have been found";
       if (!just_latest) {
         continue;
       }
@@ -292,17 +304,16 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       }
     }
     if (!missing_apps.empty()) {
-      if (just_latest) {
-        LOG_INFO << "The following apps of the target are missing: ";
-        for (const auto& app : missing_apps) {
-          LOG_INFO << "\t" << app;
-        }
+      LOG_INFO << "\tmissing apps:";
+      for (const auto& app : missing_apps) {
+        LOG_INFO << "\t\t" << app;
       }
       continue;
     }
     Json::Value updated_custom{t.custom_data()};
     updated_custom[Target::ComposeAppField] = apps_to_install;
     found_targets.emplace_back(Target::updateCustom(t, updated_custom));
+    LOG_INFO << "\tall target content have been found";
     if (just_latest) {
       break;
     }
