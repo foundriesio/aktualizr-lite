@@ -124,6 +124,24 @@ class OfflineRegistry : public BaseHttpClient {
   const boost::filesystem::path blobs_dir_{root_dir_ / "blobs" / "sha256"};
 };
 
+static void setPacmanType(Config& cfg, bool no_custom_docker_client) {
+  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
+  // unless a package manager type is enforced in the config.
+  std::string type{ComposeAppManager::Name};
+  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
+  if (no_custom_docker_client &&
+      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
+    type = RootfsTreeManager::Name;
+  }
+  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
+    type = cfg.pacman.extra.at("enforce_pacman_type");
+    if (type != RootfsTreeManager::Name && type != ComposeAppManager::Name) {
+      throw std::invalid_argument("unsupported package manager type: " + type);
+    }
+  }
+  cfg.pacman.type = type;
+}
+
 static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, const UpdateSrc& src,
                                                        std::shared_ptr<HttpInterface> docker_client_http_client) {
   Config cfg{cfg_in};  // make copy of the input config to avoid its modification by LiteClient
@@ -132,18 +150,8 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   cfg.tls.server = "";
   // make LiteClient to pull from a local ostree repo
   cfg.pacman.ostree_server = "file://" + src.OstreeRepoDir.string();
-
-  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
-  // unless a package manager type is enforced in the config.
-  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
-    cfg.pacman.type = cfg.pacman.extra["enforce_pacman_type"];
-  } else {
-    cfg.pacman.type = ComposeAppManager::Name;
-  }
-  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
-  if (docker_client_http_client == nullptr &&
-      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
-    cfg.pacman.type = RootfsTreeManager::Name;
+  setPacmanType(cfg, docker_client_http_client == nullptr);
+  if (cfg.pacman.type == RootfsTreeManager::Name) {
     return std::make_unique<LiteClient>(cfg, nullptr, nullptr, std::make_shared<MetaFetcher>(src.TufDir));
   }
 
@@ -580,17 +588,7 @@ std::vector<Uptane::Target> check(const Config& cfg_in, const UpdateSrc& src) {
   const auto targets_json{Utils::parseJSONFile(src.TufDir / "targets.json")};
   const Uptane::Targets targets{targets_json};
   Config cfg{cfg_in};
-  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
-  // unless a package manager type is enforced in the config.
-  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
-    cfg.pacman.type = cfg.pacman.extra["enforce_pacman_type"];
-  } else {
-    cfg.pacman.type = ComposeAppManager::Name;
-  }
-  // Unless there is no `docker` or `dockerd`
-  if ((!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
-    cfg.pacman.type = RootfsTreeManager::Name;
-  }
+  setPacmanType(cfg, true);
   return getAvailableTargets(cfg.pacman, filterAndSortTargets(targets.targets, cfg.provision.primary_ecu_hardware_id),
                              src, false);
 }

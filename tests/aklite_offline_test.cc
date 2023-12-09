@@ -101,7 +101,15 @@ class AkliteOffline : public ::testing::Test {
     cfg_.pacman.sysroot = sys_repo_.getPath();
     cfg_.pacman.os = os;
     cfg_.pacman.booted = BootedType::kStaged;
-    cfg_.pacman.type = "ostree+compose_apps";
+    // In most cases an offline device is not registered and does not have configuration set.
+    // If the package manager type is not set in a device config then it is initialized to `ostree` by default.
+    // The default value (`ostree`) is not  appropriate for the offline update so it sets the package manager to
+    // `ComposeAppManager::Name` by default unless no docker binaries are found on the system.
+    // Since the CI/test container doesn't have the docker binaries in its filesystem then we need to enforce
+    // the compose app package managaer usage because majority of the tests assume/require it.
+    // Also, enforcing of the package manager type can be useful of a system with docker but a user still would
+    // like to do only ostree update instead of ostree + apps update.
+    cfg_.pacman.extra["enforce_pacman_type"] = ComposeAppManager::Name;
 
     // configure bootloader/booting related functionality
     cfg_.bootloader.reboot_command = "/bin/true";
