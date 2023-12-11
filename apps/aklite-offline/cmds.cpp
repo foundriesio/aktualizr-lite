@@ -13,7 +13,11 @@ int CheckCmd::checkSrcDir(const Config& cfg_in, const boost::filesystem::path& s
     const auto found_targets =
         offline::client::check(cfg_in, {src_dir / "tuf", src_dir / "ostree_repo", src_dir / "apps"});
 
-    std::cout << "\nFound Targets: " << std::endl;
+    if (found_targets.empty()) {
+      std::cout << "\nNo Targets found" << std::endl;
+    } else {
+      std::cout << "\nFound Targets: " << std::endl;
+    }
     for (const auto& t : found_targets) {
       std::cout << "\tName: " << t.filename() << std::endl;
       std::cout << "\tOSTree hash: " << t.sha256Hash() << std::endl;

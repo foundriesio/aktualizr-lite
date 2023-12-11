@@ -124,6 +124,24 @@ class OfflineRegistry : public BaseHttpClient {
   const boost::filesystem::path blobs_dir_{root_dir_ / "blobs" / "sha256"};
 };
 
+static void setPacmanType(Config& cfg, bool no_custom_docker_client) {
+  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
+  // unless a package manager type is enforced in the config.
+  std::string type{ComposeAppManager::Name};
+  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
+  if (no_custom_docker_client &&
+      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
+    type = RootfsTreeManager::Name;
+  }
+  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
+    type = cfg.pacman.extra.at("enforce_pacman_type");
+    if (type != RootfsTreeManager::Name && type != ComposeAppManager::Name) {
+      throw std::invalid_argument("unsupported package manager type: " + type);
+    }
+  }
+  cfg.pacman.type = type;
+}
+
 static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, const UpdateSrc& src,
                                                        std::shared_ptr<HttpInterface> docker_client_http_client) {
   Config cfg{cfg_in};  // make copy of the input config to avoid its modification by LiteClient
@@ -132,18 +150,8 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   cfg.tls.server = "";
   // make LiteClient to pull from a local ostree repo
   cfg.pacman.ostree_server = "file://" + src.OstreeRepoDir.string();
-
-  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
-  // unless a package manager type is enforced in the config.
-  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
-    cfg.pacman.type = cfg.pacman.extra["enforce_pacman_type"];
-  } else {
-    cfg.pacman.type = ComposeAppManager::Name;
-  }
-  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
-  if (docker_client_http_client == nullptr &&
-      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
-    cfg.pacman.type = RootfsTreeManager::Name;
+  setPacmanType(cfg, docker_client_http_client == nullptr);
+  if (cfg.pacman.type == RootfsTreeManager::Name) {
     return std::make_unique<LiteClient>(cfg, nullptr, nullptr, std::make_shared<MetaFetcher>(src.TufDir));
   }
 
@@ -249,24 +257,36 @@ static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set
 static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pconfig,
                                                        const SortedTargets& allowed_targets, const UpdateSrc& src,
                                                        bool just_latest = true) {
+  if (allowed_targets.empty()) {
+    LOG_ERROR << "No targets are available for a given device; check a hardware ID and/or a tag";
+    return std::vector<Uptane::Target>{};
+  }
   std::vector<Uptane::Target> found_targets;
   std::set<std::string> found_apps;
 
   parseUpdateContent(src.AppsDir / "apps", found_apps);
+  LOG_INFO << "Apps found in the source directory " << src.AppsDir;
+  for (const auto& app : found_apps) {
+    LOG_INFO << "\t" << app;
+  }
 
   const OSTree::Repo repo{src.OstreeRepoDir.string()};
   Uptane::Target found_target(Uptane::Target::Unknown());
 
+  const std::string search_msg{just_latest ? "a target" : "all targets"};
+  LOG_INFO << "Searching for " << search_msg << " starting from " << allowed_targets.begin()->filename()
+           << " that match content provided in the source directory\n"
+           << "\tpacman type: \t" << pconfig.type << "\n\t apps dir: \t" << src.AppsDir << "\n\t ostree dir: \t"
+           << src.OstreeRepoDir;
   for (const auto& t : allowed_targets) {
-    if (just_latest) {
-      LOG_INFO << "Checking if update content matches the given target: " << t.filename();
-    }
+    LOG_INFO << "Checking " << t.filename();
     if (!repo.hasCommit(t.sha256Hash())) {
-      LOG_DEBUG << "No ostree commit found for Target: " << t.filename();
+      LOG_INFO << "\tmissing ostree commit: " << t.sha256Hash();
       continue;
     }
     if (pconfig.type != ComposeAppManager::Name) {
       found_targets.emplace_back(t);
+      LOG_INFO << "\tall target content have been found";
       if (!just_latest) {
         continue;
       }
@@ -284,17 +304,16 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       }
     }
     if (!missing_apps.empty()) {
-      if (just_latest) {
-        LOG_INFO << "The following apps of the target are missing: ";
-        for (const auto& app : missing_apps) {
-          LOG_INFO << "\t" << app;
-        }
+      LOG_INFO << "\tmissing apps:";
+      for (const auto& app : missing_apps) {
+        LOG_INFO << "\t\t" << app;
       }
-      break;
+      continue;
     }
     Json::Value updated_custom{t.custom_data()};
     updated_custom[Target::ComposeAppField] = apps_to_install;
     found_targets.emplace_back(Target::updateCustom(t, updated_custom));
+    LOG_INFO << "\tall target content have been found";
     if (just_latest) {
       break;
     }
@@ -580,17 +599,7 @@ std::vector<Uptane::Target> check(const Config& cfg_in, const UpdateSrc& src) {
   const auto targets_json{Utils::parseJSONFile(src.TufDir / "targets.json")};
   const Uptane::Targets targets{targets_json};
   Config cfg{cfg_in};
-  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
-  // unless a package manager type is enforced in the config.
-  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
-    cfg.pacman.type = cfg.pacman.extra["enforce_pacman_type"];
-  } else {
-    cfg.pacman.type = ComposeAppManager::Name;
-  }
-  // Unless there is no `docker` or `dockerd`
-  if ((!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
-    cfg.pacman.type = RootfsTreeManager::Name;
-  }
+  setPacmanType(cfg, true);
   return getAvailableTargets(cfg.pacman, filterAndSortTargets(targets.targets, cfg.provision.primary_ecu_hardware_id),
                              src, false);
 }

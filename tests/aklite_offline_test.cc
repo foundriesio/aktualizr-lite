@@ -101,7 +101,15 @@ class AkliteOffline : public ::testing::Test {
     cfg_.pacman.sysroot = sys_repo_.getPath();
     cfg_.pacman.os = os;
     cfg_.pacman.booted = BootedType::kStaged;
-    cfg_.pacman.type = "ostree+compose_apps";
+    // In most cases an offline device is not registered and does not have configuration set.
+    // If the package manager type is not set in a device config then it is initialized to `ostree` by default.
+    // The default value (`ostree`) is not  appropriate for the offline update so it sets the package manager to
+    // `ComposeAppManager::Name` by default unless no docker binaries are found on the system.
+    // Since the CI/test container doesn't have the docker binaries in its filesystem then we need to enforce
+    // the compose app package managaer usage because majority of the tests assume/require it.
+    // Also, enforcing of the package manager type can be useful of a system with docker but a user still would
+    // like to do only ostree update instead of ostree + apps update.
+    cfg_.pacman.extra["enforce_pacman_type"] = ComposeAppManager::Name;
 
     // configure bootloader/booting related functionality
     cfg_.bootloader.reboot_command = "/bin/true";
@@ -307,7 +315,23 @@ const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
 
 TEST_F(AkliteOffline, OfflineClient) {
+  const auto prev_target{addTarget({createApp("app-01")})};
   const auto target{addTarget({createApp("app-01")})};
+
+  ASSERT_EQ(2, check().size());
+  ASSERT_TRUE(target.MatchTarget(check().front()));
+  ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
+  reboot();
+  ASSERT_EQ(run(), offline::PostRunAction::Ok);
+  ASSERT_TRUE(target.MatchTarget(getCurrent()));
+}
+
+TEST_F(AkliteOffline, OfflineClientInstallNotLatest) {
+  const auto target{addTarget({createApp("app-01")})};
+  const auto app01_updated{createApp("app-01")};
+  const auto latest_target{addTarget({app01_updated})};
+  const auto app01_updated_uri{Docker::Uri::parseUri(app01_updated.uri)};
+  boost::filesystem::remove_all(app_store_.appsDir() / app01_updated.name / app01_updated_uri.digest.hash());
 
   ASSERT_EQ(1, check().size());
   ASSERT_TRUE(target.MatchTarget(check().front()));
