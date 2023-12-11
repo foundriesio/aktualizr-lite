@@ -7,6 +7,7 @@
 #include "aktualizr-lite/api.h"
 #include "appengine.h"
 #include "composeappmanager.h"
+#include "ctr/appengine.h"
 #include "docker/composeinfo.h"
 #include "docker/docker.h"
 #include "docker/restorableappengine.h"
@@ -179,6 +180,23 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
     docker_host = env.get("DOCKER_HOST");
   }
 
+#ifdef USE_COMPOSEAPP_ENGINE
+  AppEngine::Ptr app_engine{std::make_shared<ctr::AppEngine>(
+      pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client,
+      docker_client_http_client ? std::make_shared<Docker::DockerClient>(docker_client_http_client)
+                                : std::make_shared<Docker::DockerClient>(),
+      pacman_cfg.skopeo_bin.string(), docker_host, compose_cmd, pacman_cfg.composectl_bin.string(),
+      pacman_cfg.storage_watermark, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
+      [offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
+        Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
+        return "--src-shared-blob-dir " + offline_registry->blobsDir().string() +
+               " oci:" + offline_registry->appsDir().string() + "/" + app_uri.app + "/" + app_uri.digest.hash() +
+               "/images/" + uri.registryHostname + "/" + uri.repo + "/" + uri.digest.hash();
+      },
+      false, /* don't create containers on install because it makes dockerd check if pinned images
+    present in its store what we should avoid until images are registered (hacked) in dockerd store */
+      src.AppsDir.string())};
+#else
   AppEngine::Ptr app_engine{std::make_shared<Docker::RestorableAppEngine>(
       pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client,
       docker_client_http_client ? std::make_shared<Docker::DockerClient>(docker_client_http_client)
@@ -194,7 +212,7 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
     present in its store what we should avoid until images are registered (hacked) in dockerd store */
       true   /* indicate that this is an offline client */
       )};
-
+#endif  // USE_COMPOSEAPP_ENGINE
   return std::make_unique<LiteClient>(cfg, app_engine, nullptr, std::make_shared<MetaFetcher>(src.TufDir));
 }
 

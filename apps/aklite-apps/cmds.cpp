@@ -142,7 +142,7 @@ int RunCmd::runApps(const std::vector<std::string>& shortlist, const std::string
       Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
       [](const Docker::Uri& /* app_uri */, const std::string& image_uri) { return "docker://" + image_uri; },
       false,
-      true};
+      store_root};
 #else
   Docker::RestorableAppEngine app_engine{
       store_root,

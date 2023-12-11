@@ -15,7 +15,11 @@ namespace ctr {
   AppEngine::Result AppEngine::fetch(const App& app) {
   Result res{false};
     try {
-      exec(boost::format{"%s --store %s pull -p %s --storage-usage-watermark %d"} % composectl_cmd_ % storeRoot() % app.uri % storage_watermark_, "failed to pull compose app");
+      if (local_source_path_.empty()) {
+        exec(boost::format{"%s --store %s pull -p %s --storage-usage-watermark %d"} % composectl_cmd_ % storeRoot() % app.uri % storage_watermark_, "failed to pull compose app");
+      } else {
+        exec(boost::format{"%s --store %s pull -p %s -l %s --storage-usage-watermark %d"} % composectl_cmd_ % storeRoot() % app.uri % local_source_path_ % storage_watermark_, "failed to pull compose app");
+      }
       res = true;
     } catch (const ExecError& exc) {
       if (exc.ExitCode == static_cast<int>(ExitCode::ExitCodeInsufficientSpace)) {
@@ -31,7 +35,7 @@ namespace ctr {
     return res;
   }
   void AppEngine::installAppAndImages(const App& app) {
-    exec(boost::format{"%s --store %s install --compose-dir %s --docker-host %s %s"} % composectl_cmd_ % storeRoot() % installRoot() % dockerHost() % app.uri, "failed to installl compose app");
+    exec(boost::format{"%s --store %s --compose %s --host %s install %s"} % composectl_cmd_ % storeRoot() % installRoot() % dockerHost() % app.uri, "failed to installl compose app");
   }
 
 } // namespace ctr
