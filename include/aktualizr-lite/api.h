@@ -226,7 +226,7 @@ class AkliteClient {
    * an InstallContext is returned that may be called to synchronize the
    * apps.
    */
-  std::unique_ptr<InstallContext> CheckAppsInSync() const;
+  std::unique_ptr<InstallContext> CheckAppsInSync(std::string src_path = "") const;
 
   /**
    * Performs a "check-in" with the device-gateway. A check-in consists of:
@@ -247,8 +247,11 @@ class AkliteClient {
    *  2) read timestamp and snapshot metadata.
    *  3) read a new targets.json if needed
    *
-   * This is an EXPERIMENTAL implementation. If there is Target data to be updated
-   * later on, it will still be fetched from the remote servers (ostree, app registry).
+   * If there is Target data to be updated, it may be later on either fetched from
+   * the remote servers (ostree, app registry) or copied from a local directory,
+   * depending on which Installer is instantiated (LiteInstall or LocalLiteInstall).
+   *
+   * This is an EXPERIMENTAL implementation.
    */
   CheckInResult CheckInLocal(const std::string &path) const;
 
@@ -284,7 +287,8 @@ class AkliteClient {
    * Create an InstallContext object to help drive an update.
    */
   std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
-                                            std::string correlation_id = "", InstallMode = InstallMode::All) const;
+                                            std::string correlation_id = "", InstallMode = InstallMode::All,
+                                            std::string src_path = "") const;
 
   /**
    * @brief Complete a pending installation
