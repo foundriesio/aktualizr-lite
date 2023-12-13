@@ -136,9 +136,12 @@ class ComposeApp {
     arch_hash_ = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(arch_)));
 
     Json::Value manifest;
+    manifest["mediaType"] = "application/vnd.oci.image.manifest.v1+json";
+    manifest["schemaVersion"] = 2;
     manifest["annotations"]["compose-app"] = "v1";
     manifest["layers"][0]["digest"] = "sha256:" + arch_hash_;
     manifest["layers"][0]["size"] = arch_.size();
+    manifest["layers"][0]["mediaType"] = "application/octet-stream";
 
     // layers manifest
     Json::Value layers_json{layers};

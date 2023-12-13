@@ -38,7 +38,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         logger.info(">>> POST  %s" % self.path)
 
-        if self.path.startswith('/images/load'):
+        if self.path.startswith('/images/load') or self.path.startswith('/v1.43/images/load'):
             self.post_image()
             return
 
@@ -63,7 +63,7 @@ class Handler(SimpleHTTPRequestHandler):
         with tarfile.open(fileobj=io.BytesIO(self.rfile.read(data_len)), mode="r|") as tar_stream:
             for member in tar_stream:
                 if member.name == "manifest.json":
-                    tar_stream.extract(member, self.server.root_dir)
+                    tar_stream.extract(member, self.server.root_dir, set_attrs=False)
         try:
             with open(os.path.join(self.server.root_dir, "manifest.json")) as mf:
                 lm = json.load(mf)

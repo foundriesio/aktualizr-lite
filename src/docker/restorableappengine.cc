@@ -834,7 +834,10 @@ void RestorableAppEngine::startComposeApp(const std::string& compose_cmd, const 
 }
 
 void RestorableAppEngine::stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
-  exec(boost::format{"%s down"} % compose_cmd, "failed to bring Compose App down", boost::process::start_dir = app_dir);
+  if (boost::filesystem::exists(app_dir)) {
+    exec(boost::format{"%s down"} % compose_cmd, "failed to bring Compose App down",
+         boost::process::start_dir = app_dir);
+  }
 }
 
 std::string RestorableAppEngine::getContentHash(const boost::filesystem::path& path) {

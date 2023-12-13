@@ -1,3 +1,10 @@
+FROM golang:1.20.12-bookworm AS composeapp
+# Build composeapp
+WORKDIR /build
+RUN git clone https://github.com/foundriesio/composeapp.git && \
+    cd composeapp && make && cp ./bin/composectl /usr/bin/
+
+
 FROM ubuntu:jammy
 LABEL Description="Aktualizr testing dockerfile for Ubuntu Focal with static checks"
 
@@ -98,6 +105,8 @@ RUN mkdir ostree && cd ostree && git init && git remote add origin https://githu
     --with-curl --without-soup --prefix=/usr && \
     make -j8  install
 
+# Install composeapp
+COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
 # Install skopeo
 RUN echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     wget -nv https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key -O- | apt-key add -
