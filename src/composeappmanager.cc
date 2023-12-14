@@ -136,7 +136,6 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     }
     LOG_DEBUG << "Compose utility: `" << compose_cmd << "`";
 
-    const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
     std::string docker_host{"unix:///var/run/docker.sock"};
 
     if (!!cfg_.reset_apps) {
@@ -148,9 +147,10 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       const auto composectl_cmd{boost::filesystem::canonical(cfg_.composectl_bin).string()};
       app_engine_ = std::make_shared<ctr::AppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
-          std::make_shared<Docker::DockerClient>(), skopeo_cmd, docker_host, compose_cmd, composectl_cmd,
-          cfg_.storage_watermark, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
+          std::make_shared<Docker::DockerClient>(), docker_host, compose_cmd, composectl_cmd, cfg_.storage_watermark,
+          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
 #else
+      const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
       app_engine_ = std::make_shared<Docker::RestorableAppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
           std::make_shared<Docker::DockerClient>(), skopeo_cmd, docker_host, compose_cmd,

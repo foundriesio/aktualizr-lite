@@ -185,8 +185,8 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
       pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client,
       docker_client_http_client ? std::make_shared<Docker::DockerClient>(docker_client_http_client)
                                 : std::make_shared<Docker::DockerClient>(),
-      pacman_cfg.skopeo_bin.string(), docker_host, compose_cmd, pacman_cfg.composectl_bin.string(),
-      pacman_cfg.storage_watermark, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
+      docker_host, compose_cmd, pacman_cfg.composectl_bin.string(), pacman_cfg.storage_watermark,
+      Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
       [offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
         Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
         return "--src-shared-blob-dir " + offline_registry->blobsDir().string() +
