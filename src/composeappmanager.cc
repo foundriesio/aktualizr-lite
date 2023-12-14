@@ -8,10 +8,6 @@
 #include "bootloader/bootloaderlite.h"
 #include "docker/restorableappengine.h"
 #include "target.h"
-#ifdef BUILD_AKLITE_WITH_NERDCTL
-#include "containerd/client.h"
-#include "containerd/engine.h"
-#endif  // BUILD_AKLITE_WITH_NERDCTL
 #ifdef USE_COMPOSEAPP_ENGINE
 #include "composeapp/appengine.h"
 #endif  // USE_COMPOSEAPP_ENGINE
@@ -158,18 +154,8 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
 #endif  // USE_COMPOSEAPP_ENGINE
       is_restorable_engine_ = true;
     } else {
-#ifdef BUILD_AKLITE_WITH_NERDCTL
-      if (cfg_.compose_bin.filename().compare("nerdctl") == 0) {
-        const auto nerdctl_cmd{boost::filesystem::canonical(cfg_.compose_bin).string()};
-        app_engine_ =
-            std::make_shared<containerd::Engine>(cfg_.apps_root, nerdctl_cmd + " compose ",
-                                                 std::make_shared<containerd::Client>(nerdctl_cmd), registry_client);
-      } else
-#endif  // BUILD_AKLITE_WITH_NERDCTL
-      {
-        app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
-            cfg_.apps_root, compose_cmd, std::make_shared<Docker::DockerClient>(), registry_client);
-      }
+      app_engine_ = std::make_shared<Docker::ComposeAppEngine>(
+          cfg_.apps_root, compose_cmd, std::make_shared<Docker::DockerClient>(), registry_client);
     }
   }
 }
