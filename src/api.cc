@@ -683,8 +683,8 @@ class LocalLiteInstall : public LiteInstall {
     std::shared_ptr<RootfsTreeManager> basepacman = std::make_shared<ComposeAppManager>(
         client_->config.pacman, client_->config.bootloader, storage, nullptr, ostree_sysroot, *key_manager, app_engine);
 
-    return std::make_unique<ComposeAppManager>(cfg.pacman, client_->config.bootloader, storage, nullptr,
-                                               ostree_sysroot, *key_manager, app_engine);
+    return std::make_unique<ComposeAppManager>(cfg.pacman, client_->config.bootloader, storage, nullptr, ostree_sysroot,
+                                               *key_manager, app_engine);
   }
 
   DownloadResult Download() override {
