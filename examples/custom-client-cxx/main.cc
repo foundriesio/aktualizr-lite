@@ -83,8 +83,8 @@ int main(int argc, char **argv) {
 
     try {
       CheckInResult res = local_update_path.empty()?
-        client->CheckIn() :
-        client->CheckInLocal(local_update_path);
+                           client->CheckIn():
+                           client->CheckInLocal(local_update_path + "/tuf", local_update_path + "/ostree_repo", local_update_path + "/apps");
       if (res.status != CheckInResult::Status::Ok && res.status != CheckInResult::Status::OkCached) {
         LOG_WARNING << "Unable to update latest metadata, going to sleep for " << interval
                     << " seconds before starting a new update cycle";

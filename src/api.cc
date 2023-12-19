@@ -324,15 +324,15 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
   return ret;
 }
 
-CheckInResult AkliteClient::CheckInLocal(const std::string& path) const {
-  auto repo_src = std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source",
-                                                                 (boost::filesystem::path(path) / "tuf").c_str());
+CheckInResult AkliteClient::CheckInLocal(const std::string& tuf_repo, const std::string& ostree_repo,
+                                         const std::string& apps_dir) const {
+  auto repo_src = std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", tuf_repo.c_str());
   auto result = UpdateMetaAndGetTargets(repo_src);
 
   UpdateSrc src{
-      .TufDir = boost::filesystem::path(path) / "tuf",
-      .OstreeRepoDir = boost::filesystem::path(path) / "ostree_repo",
-      .AppsDir = boost::filesystem::path(path) / "apps",
+      .TufDir = tuf_repo,
+      .OstreeRepoDir = ostree_repo,
+      .AppsDir = apps_dir,
   };
 
   if (result.status == CheckInResult::Status::Failed) {
@@ -342,8 +342,10 @@ CheckInResult AkliteClient::CheckInLocal(const std::string& path) const {
   std::vector<Uptane::Target> available_targets =
       getAvailableTargets(client_->config.pacman, fromTufTargets(result.Targets()), src,
                           false /* get all available targets, not just latest */);
+
   if (available_targets.empty()) {
-    LOG_INFO << "Unable to locate complete target in " << path;
+    LOG_INFO << "Unable to locate complete target in ostree dir  " << src.OstreeRepoDir << " and app dir "
+             << src.AppsDir;
     result.status = CheckInResult::Status::Failed;
   } else {
     LOG_INFO << "Selected target: " << available_targets.front().filename();

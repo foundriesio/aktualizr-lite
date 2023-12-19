@@ -253,7 +253,8 @@ class AkliteClient {
    *
    * This is an EXPERIMENTAL implementation.
    */
-  CheckInResult CheckInLocal(const std::string &path) const;
+  CheckInResult CheckInLocal(const std::string &tuf_repo, const std::string &ostree_repo,
+                             const std::string &apps_dir = "") const;
 
   /**
    * Return the active aktualizr-lite configuration.
