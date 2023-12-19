@@ -340,7 +340,8 @@ CheckInResult AkliteClient::CheckInLocal(const std::string& path) const {
   }
 
   std::vector<Uptane::Target> available_targets =
-      getAvailableTargets(client_->config.pacman, fromTufTargets(result.Targets()), src, true);
+      getAvailableTargets(client_->config.pacman, fromTufTargets(result.Targets()), src,
+                          false /* get all available targets, not just latest */);
   if (available_targets.empty()) {
     LOG_INFO << "Unable to locate complete target in " << path;
     result.status = CheckInResult::Status::Failed;
