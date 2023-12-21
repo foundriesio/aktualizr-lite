@@ -366,6 +366,25 @@ TEST_F(AkliteOffline, OfflineClientAppsOnly) {
   ASSERT_EQ(target, current());
 }
 
+TEST_F(AkliteOffline, OfflineOstreeOnly) {
+  const auto target{addTarget({createApp("app-01")}, false)};
+  // Remove all Target Apps from App store to make sure that only ostree can be updated
+  boost::filesystem::remove_all(app_store_.dir());
+  cfg_.pacman.extra["enforce_pacman_type"] = RootfsTreeManager::Name;
+  auto cr = check();
+  ASSERT_EQ(CheckInResult::Status::Ok, cr.status);
+  ASSERT_EQ(1, cr.Targets().size());
+  ASSERT_EQ(target, cr.GetLatest());
+  auto dr = download(cr.GetLatest());
+  ASSERT_EQ(DownloadResult::Status::Ok, dr.status);
+  auto ir = install(target);
+  ASSERT_EQ(InstallResult::Status::NeedsCompletion, ir.status) << ir.description;
+  reboot();
+  ir = run();
+  ASSERT_EQ(InstallResult::Status::Ok, ir.status) << ir.description;
+  ASSERT_EQ(target, current());
+}
+
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << argv[0] << " invalid arguments\n";

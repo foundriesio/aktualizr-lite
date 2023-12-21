@@ -615,24 +615,51 @@ class OfflineRegistry : public BaseHttpClient {
   const boost::filesystem::path blobs_dir_{root_dir_ / "blobs" / "sha256"};
 };
 
+static void setPacmanType(Config& cfg, bool no_custom_docker_client) {
+  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
+  // unless a package manager type is enforced in the config.
+  std::string type{ComposeAppManager::Name};
+  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
+  if (no_custom_docker_client &&
+      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
+    type = RootfsTreeManager::Name;
+  }
+  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
+    type = cfg.pacman.extra.at("enforce_pacman_type");
+    if (type != RootfsTreeManager::Name && type != ComposeAppManager::Name) {
+      throw std::invalid_argument("unsupported package manager type: " + type);
+    }
+  }
+  cfg.pacman.type = type;
+}
+
 class LocalLiteInstall : public LiteInstall {
  public:
   LocalLiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason,
                    const LocalUpdateSource* local_update_source, InstallMode install_mode = InstallMode::All)
       : LiteInstall(std::move(client), std::move(t), reason, install_mode),
-        local_update_source_{*local_update_source} {}
-
-  std::unique_ptr<Downloader> createOfflineComposeAppManager(const Config& cfg_in, const LocalUpdateSource& src,
-                                                             const Docker::DockerClient::Ptr& docker_client = nullptr) {
-    Config cfg{cfg_in};  // make copy of the input config to avoid its modification by LiteClient
-
+        local_update_source_{*local_update_source},
+        offline_update_config_{client_->config} {
     // turn off reporting update events to DG
-    cfg.tls.server = "";
+    offline_update_config_.tls.server = "";
     // make LiteClient to pull from a local ostree repo
-    cfg.pacman.ostree_server = "file://" + src.ostree_repo;
+    offline_update_config_.pacman.ostree_server = "file://" + local_update_source_.ostree_repo;
 
     // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps.
-    cfg.pacman.type = ComposeAppManager::Name;
+    offline_update_config_.pacman.type = ComposeAppManager::Name;
+    setPacmanType(offline_update_config_, local_update_source_.docker_client_ptr == nullptr);
+    if (offline_update_config_.pacman.type == RootfsTreeManager::Name) {
+      mode_ = InstallMode::OstreeOnly;
+    }
+  }
+
+  std::unique_ptr<Downloader> createOfflineComposeAppManager(const LocalUpdateSource& src) {
+    if (offline_update_config_.pacman.type == RootfsTreeManager::Name) {
+      auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(client_->config.pacman);
+      auto key_manager = std_::make_unique<KeyManager>(client_->storage, client_->config.keymanagerConfig(), nullptr);
+      return std::make_unique<RootfsTreeManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
+                                                 client_->storage, nullptr, ostree_sysroot, *key_manager);
+    }
 
     // Handle DG:/token-auth
     std::shared_ptr<HttpInterface> registry_basic_auth_client{std::make_shared<RegistryBasicAuthClient>()};
@@ -647,7 +674,7 @@ class LocalLiteInstall : public LiteInstall {
           return offline_registry;
         })};
 
-    ComposeAppManager::Config pacman_cfg(cfg.pacman);
+    ComposeAppManager::Config pacman_cfg(offline_update_config_.pacman);
     std::string compose_cmd{pacman_cfg.compose_bin.string()};
     if (boost::filesystem::exists(pacman_cfg.compose_bin) && pacman_cfg.compose_bin.filename().compare("docker") == 0) {
       compose_cmd = boost::filesystem::canonical(pacman_cfg.compose_bin).string() + " ";
@@ -662,9 +689,12 @@ class LocalLiteInstall : public LiteInstall {
       docker_host = env.get("DOCKER_HOST");
     }
 
+    auto docker_client{local_update_source_.docker_client_ptr != nullptr
+                           ? *(reinterpret_cast<Docker::DockerClient::Ptr*>(local_update_source_.docker_client_ptr))
+                           : std::make_shared<Docker::DockerClient>()};
+
     AppEngine::Ptr app_engine{std::make_shared<Docker::RestorableAppEngine>(
-        pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client,
-        docker_client != nullptr ? docker_client : std::make_shared<Docker::DockerClient>(),
+        pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client, docker_client,
         pacman_cfg.skopeo_bin.string(), docker_host, compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
         [offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
           Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
@@ -680,12 +710,13 @@ class LocalLiteInstall : public LiteInstall {
     auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(client_->config.pacman);
     auto storage = INvStorage::newStorage(client_->config.storage, false, StorageClient::kTUF);
 
-    auto key_manager = std_::make_unique<KeyManager>(storage, client_->config.keymanagerConfig(), nullptr);
-    std::shared_ptr<RootfsTreeManager> basepacman = std::make_shared<ComposeAppManager>(
-        client_->config.pacman, client_->config.bootloader, storage, nullptr, ostree_sysroot, *key_manager, app_engine);
+    auto key_manager = std_::make_unique<KeyManager>(storage, offline_update_config_.keymanagerConfig(), nullptr);
+    std::shared_ptr<RootfsTreeManager> basepacman =
+        std::make_shared<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader, storage,
+                                            nullptr, ostree_sysroot, *key_manager, app_engine);
 
-    return std::make_unique<ComposeAppManager>(cfg.pacman, client_->config.bootloader, storage, nullptr, ostree_sysroot,
-                                               *key_manager, app_engine);
+    return std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
+                                               storage, nullptr, ostree_sysroot, *key_manager, app_engine);
   }
 
   DownloadResult Download() override {
@@ -696,17 +727,14 @@ class LocalLiteInstall : public LiteInstall {
 
     client_->logTarget("Downloading: ", *target_);
 
-    auto downloader = createOfflineComposeAppManager(
-        client_->config, local_update_source_,
-        local_update_source_.docker_client_ptr != nullptr
-            ? *reinterpret_cast<Docker::DockerClient::Ptr*>(local_update_source_.docker_client_ptr)
-            : nullptr);
+    auto downloader = createOfflineComposeAppManager(local_update_source_);
     auto dr{downloader->Download(Target::toTufTarget(*target_))};
     return {dr.status, dr.description, dr.destination_path};
   }
 
  private:
   const LocalUpdateSource local_update_source_;
+  Config offline_update_config_;
 };
 
 bool AkliteClient::IsInstallationInProgress() const { return client_->getPendingTarget().IsValid(); }
