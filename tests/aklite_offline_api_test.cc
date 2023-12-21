@@ -354,6 +354,18 @@ TEST_F(AkliteOffline, OfflineClient) {
   ASSERT_EQ(target, current());
 }
 
+TEST_F(AkliteOffline, OfflineClientAppsOnly) {
+  const auto target{addTarget({createApp("app-01")}, true)};
+  auto cr = check();
+  ASSERT_EQ(CheckInResult::Status::Ok, cr.status);
+  ASSERT_EQ(target, cr.GetLatest());
+  auto dr = download(target);
+  ASSERT_EQ(DownloadResult::Status::Ok, dr.status);
+  auto ir = install(target);
+  ASSERT_EQ(InstallResult::Status::Ok, ir.status) << ir.description;
+  ASSERT_EQ(target, current());
+}
+
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << argv[0] << " invalid arguments\n";

@@ -622,8 +622,8 @@ class LocalLiteInstall : public LiteInstall {
       : LiteInstall(std::move(client), std::move(t), reason, install_mode),
         local_update_source_{*local_update_source} {}
 
-  std::unique_ptr<ComposeAppManager> createOfflineComposeAppManager(
-      const Config& cfg_in, const LocalUpdateSource& src, const Docker::DockerClient::Ptr& docker_client = nullptr) {
+  std::unique_ptr<Downloader> createOfflineComposeAppManager(const Config& cfg_in, const LocalUpdateSource& src,
+                                                             const Docker::DockerClient::Ptr& docker_client = nullptr) {
     Config cfg{cfg_in};  // make copy of the input config to avoid its modification by LiteClient
 
     // turn off reporting update events to DG
@@ -696,21 +696,13 @@ class LocalLiteInstall : public LiteInstall {
 
     client_->logTarget("Downloading: ", *target_);
 
-    auto cap = createOfflineComposeAppManager(
+    auto downloader = createOfflineComposeAppManager(
         client_->config, local_update_source_,
         local_update_source_.docker_client_ptr != nullptr
             ? *reinterpret_cast<Docker::DockerClient::Ptr*>(local_update_source_.docker_client_ptr)
             : nullptr);
-    auto download_res{cap->Download(Target::toTufTarget(*target_))};
-    if (!download_res) {
-      return DownloadResult{download_res.status, download_res.description, download_res.destination_path};
-    }
-
-    if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {
-      return DownloadResult{DownloadResult::Status::VerificationFailed, "Downloaded target is invalid"};
-    }
-
-    return DownloadResult{DownloadResult::Status::Ok, ""};
+    auto dr{downloader->Download(Target::toTufTarget(*target_))};
+    return {dr.status, dr.description, dr.destination_path};
   }
 
  private:
