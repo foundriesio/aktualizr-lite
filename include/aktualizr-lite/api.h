@@ -162,6 +162,14 @@ class DeviceResult {
   std::string repo_id;
 };
 
+struct LocalUpdateSource {
+  std::string tuf_repo;
+  std::string ostree_repo;
+  std::string app_store;
+  // needed for unit testing or if a custom container engine is used
+  void *docker_client_ptr;
+};
+
 /**
  * AkliteClient provides an easy-to-use API for users wanting to customize
  * the behavior of aktualizr-lite.
@@ -226,7 +234,7 @@ class AkliteClient {
    * an InstallContext is returned that may be called to synchronize the
    * apps.
    */
-  std::unique_ptr<InstallContext> CheckAppsInSync(std::string src_path = "") const;
+  std::unique_ptr<InstallContext> CheckAppsInSync(const LocalUpdateSource *local_update_source = nullptr) const;
 
   /**
    * Performs a "check-in" with the device-gateway. A check-in consists of:
@@ -289,7 +297,7 @@ class AkliteClient {
    */
   std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
                                             std::string correlation_id = "", InstallMode = InstallMode::All,
-                                            std::string src_path = "") const;
+                                            const LocalUpdateSource *local_update_source = nullptr) const;
 
   /**
    * @brief Complete a pending installation

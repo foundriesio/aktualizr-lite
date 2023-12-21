@@ -131,6 +131,9 @@ class AkliteOffline : public ::testing::Test {
     sys_repo_.getRepo().pullLocal(ostree_repo_.getPath(), hash);
     sys_repo_.deploy(hash);
     setInitialTarget(hash);
+    docker_client_ = std::make_shared<Docker::DockerClient>(daemon_.getClient());
+    local_update_source_ = {tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir().string(),
+                            reinterpret_cast<void*>(&docker_client_)};
   }
 
   void SetUp() {
@@ -143,19 +146,29 @@ class AkliteOffline : public ::testing::Test {
 
   CheckInResult check() {
     AkliteClient client(std::make_shared<LiteClient>(cfg_));
-    return client.CheckInLocal(tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.appsDir().string());
+    return client.CheckInLocal(tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir().string());
+  }
+
+  DownloadResult download(const TufTarget& target) {
+    AkliteClient client(std::make_shared<LiteClient>(cfg_));
+    auto i{client.Installer(target, "", "", InstallMode::All, src())};
+    return i->Download();
   }
 
   InstallResult install(const TufTarget& target) {
-    // TODO
+    AkliteClient client(std::make_shared<LiteClient>(cfg_));
+    auto i{client.Installer(target, "", "", InstallMode::All, src())};
+    return i->Install();
   }
 
-  offline::PostRunAction run() {
-    // TODO
+  InstallResult run() {
+    AkliteClient client(std::make_shared<LiteClient>(cfg_));
+    return client.CompleteInstallation();
   }
 
-  const Uptane::Target getCurrent() {
-    // TODO
+  const TufTarget current() {
+    AkliteClient client(std::make_shared<LiteClient>(cfg_));
+    return client.GetCurrent();
   }
 
   void setInitialTarget(const std::string& hash, bool known = true) {
@@ -226,7 +239,7 @@ class AkliteOffline : public ::testing::Test {
     }
     setAppsShortlist(boost::algorithm::join(apps_to_shortlist, ","));
     // ASSERT_EQ(install(), offline::PostInstallAction::Ok);
-    ASSERT_EQ(run(), offline::PostRunAction::Ok);
+    // ASSERT_EQ(run(), offline::PostRunAction::Ok);
 
     if (add_installed_versions) {
       Json::Value installed_target_json;
@@ -242,7 +255,7 @@ class AkliteOffline : public ::testing::Test {
       custom["arch"] = "arm64";
       installed_target_json[initial_target_.filename()]["custom"] = custom;
       Utils::writeFile(cfg_.import.base_path / "installed_versions", installed_target_json);
-      ASSERT_EQ(getCurrent().filename(), initial_target_.filename());
+      // ASSERT_EQ(getCurrent().filename(), initial_target_.filename());
     } else {
       // we need to remove the initial target from the TUF repo so it's not listed in the source TUF repo
       // for the following offline update and as result it will be "unknown" to the client.
@@ -296,6 +309,8 @@ class AkliteOffline : public ::testing::Test {
 
   void setAppsShortlist(const std::string& shortlist) { cfg_.pacman.extra["compose_apps"] = shortlist; }
 
+  const LocalUpdateSource* src() const { return &local_update_source_; }
+
  protected:
   static const std::string hw_id;
   static const std::string os;
@@ -313,6 +328,8 @@ class AkliteOffline : public ::testing::Test {
   AppStore app_store_;
   BootFlagMgr::Ptr boot_flag_mgr_;
   Uptane::Target initial_target_;
+  Docker::DockerClient::Ptr docker_client_;
+  LocalUpdateSource local_update_source_;
 };
 
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
@@ -327,6 +344,14 @@ TEST_F(AkliteOffline, OfflineClient) {
   ASSERT_EQ(CheckInResult::Status::Ok, cr.status);
   ASSERT_EQ(2, cr.Targets().size());
   ASSERT_EQ(target, cr.GetLatest());
+  auto dr = download(cr.GetLatest());
+  ASSERT_EQ(DownloadResult::Status::Ok, dr.status);
+  auto ir = install(cr.GetLatest());
+  ASSERT_EQ(InstallResult::Status::NeedsCompletion, ir.status) << ir.description;
+  reboot();
+  ir = run();
+  ASSERT_EQ(InstallResult::Status::Ok, ir.status) << ir.description;
+  ASSERT_EQ(target, current());
 }
 
 int main(int argc, char** argv) {

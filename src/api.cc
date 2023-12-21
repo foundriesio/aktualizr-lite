@@ -618,19 +618,18 @@ class OfflineRegistry : public BaseHttpClient {
 class LocalLiteInstall : public LiteInstall {
  public:
   LocalLiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason,
-                   std::string& local_path, InstallMode install_mode = InstallMode::All)
-      : LiteInstall(std::move(client), std::move(t), reason, install_mode) {
-    src_path_ = local_path;
-  }
+                   const LocalUpdateSource* local_update_source, InstallMode install_mode = InstallMode::All)
+      : LiteInstall(std::move(client), std::move(t), reason, install_mode),
+        local_update_source_{*local_update_source} {}
 
   std::unique_ptr<ComposeAppManager> createOfflineComposeAppManager(
-      const Config& cfg_in, const UpdateSrc& src, const std::shared_ptr<HttpInterface>& docker_client_http_client) {
+      const Config& cfg_in, const LocalUpdateSource& src, const Docker::DockerClient::Ptr& docker_client = nullptr) {
     Config cfg{cfg_in};  // make copy of the input config to avoid its modification by LiteClient
 
     // turn off reporting update events to DG
     cfg.tls.server = "";
     // make LiteClient to pull from a local ostree repo
-    cfg.pacman.ostree_server = "file://" + src.OstreeRepoDir.string();
+    cfg.pacman.ostree_server = "file://" + src.ostree_repo;
 
     // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps.
     cfg.pacman.type = ComposeAppManager::Name;
@@ -638,7 +637,7 @@ class LocalLiteInstall : public LiteInstall {
     // Handle DG:/token-auth
     std::shared_ptr<HttpInterface> registry_basic_auth_client{std::make_shared<RegistryBasicAuthClient>()};
 
-    std::shared_ptr<OfflineRegistry> offline_registry{std::make_shared<OfflineRegistry>(src.AppsDir)};
+    std::shared_ptr<OfflineRegistry> offline_registry{std::make_shared<OfflineRegistry>(src.app_store)};
     // Handle requests to Registry aimed to download App
     Docker::RegistryClient::Ptr registry_client{std::make_shared<Docker::RegistryClient>(
         registry_basic_auth_client, "",
@@ -665,8 +664,7 @@ class LocalLiteInstall : public LiteInstall {
 
     AppEngine::Ptr app_engine{std::make_shared<Docker::RestorableAppEngine>(
         pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client,
-        docker_client_http_client ? std::make_shared<Docker::DockerClient>(docker_client_http_client)
-                                  : std::make_shared<Docker::DockerClient>(),
+        docker_client != nullptr ? docker_client : std::make_shared<Docker::DockerClient>(),
         pacman_cfg.skopeo_bin.string(), docker_host, compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
         [offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
           Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
@@ -698,11 +696,11 @@ class LocalLiteInstall : public LiteInstall {
 
     client_->logTarget("Downloading: ", *target_);
 
-    auto updateSrc = UpdateSrc();
-    updateSrc.AppsDir = boost::filesystem::path(src_path_) / "apps";
-    updateSrc.OstreeRepoDir = boost::filesystem::path(src_path_) / "ostree_repo";
-
-    auto cap = createOfflineComposeAppManager(client_->config, updateSrc, nullptr);
+    auto cap = createOfflineComposeAppManager(
+        client_->config, local_update_source_,
+        local_update_source_.docker_client_ptr != nullptr
+            ? *reinterpret_cast<Docker::DockerClient::Ptr*>(local_update_source_.docker_client_ptr)
+            : nullptr);
     auto download_res{cap->Download(Target::toTufTarget(*target_))};
     if (!download_res) {
       return DownloadResult{download_res.status, download_res.description, download_res.destination_path};
@@ -716,14 +714,14 @@ class LocalLiteInstall : public LiteInstall {
   }
 
  private:
-  std::string src_path_;
+  const LocalUpdateSource local_update_source_;
 };
 
 bool AkliteClient::IsInstallationInProgress() const { return client_->getPendingTarget().IsValid(); }
 
 TufTarget AkliteClient::GetPendingTarget() const { return Target::toTufTarget(client_->getPendingTarget()); }
 
-std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync(std::string src_path) const {
+std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync(const LocalUpdateSource* local_update_source) const {
   std::unique_ptr<InstallContext> installer = nullptr;
   auto target = std::make_unique<Uptane::Target>(client_->getCurrent());
   if (!client_->appsInSync(*target)) {
@@ -731,10 +729,11 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync(std::string src_pa
     auto correlation_id = target->custom_version() + "-" + boost::uuids::to_string(tmp);
     target->setCorrelationId(correlation_id);
     std::string reason = "Sync active target apps";
-    if (src_path.empty()) {
+    if (local_update_source == nullptr) {
       installer = std::make_unique<LiteInstall>(client_, std::move(target), reason, InstallMode::All);
     } else {
-      installer = std::make_unique<LocalLiteInstall>(client_, std::move(target), reason, src_path, InstallMode::All);
+      installer =
+          std::make_unique<LocalLiteInstall>(client_, std::move(target), reason, local_update_source, InstallMode::All);
     }
   }
   client_->setAppsNotChecked();
@@ -743,7 +742,7 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync(std::string src_pa
 
 std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason,
                                                         std::string correlation_id, InstallMode install_mode,
-                                                        std::string src_path) const {
+                                                        const LocalUpdateSource* local_update_source) const {
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
@@ -776,10 +775,10 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
     throw std::runtime_error("Correlation ID's must be less than 64 bytes");
   }
   target->setCorrelationId(correlation_id);
-  if (src_path.empty()) {
+  if (local_update_source == nullptr) {
     return std::make_unique<LiteInstall>(client_, std::move(target), reason, install_mode);
   } else {
-    return std::make_unique<LocalLiteInstall>(client_, std::move(target), reason, src_path, install_mode);
+    return std::make_unique<LocalLiteInstall>(client_, std::move(target), reason, local_update_source, install_mode);
   }
 }
 
