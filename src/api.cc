@@ -639,7 +639,8 @@ class LocalLiteInstall : public LiteInstall {
                    const LocalUpdateSource* local_update_source, InstallMode install_mode = InstallMode::All)
       : LiteInstall(std::move(client), std::move(t), reason, install_mode),
         local_update_source_{*local_update_source},
-        offline_update_config_{client_->config} {
+        offline_update_config_{client_->config},
+        ostree_sysroot_{nullptr} {
     // turn off reporting update events to DG
     offline_update_config_.tls.server = "";
     // make LiteClient to pull from a local ostree repo
@@ -651,20 +652,39 @@ class LocalLiteInstall : public LiteInstall {
     if (offline_update_config_.pacman.type == RootfsTreeManager::Name) {
       mode_ = InstallMode::OstreeOnly;
     }
+
+    ostree_sysroot_ = std::make_shared<OSTree::Sysroot>(offline_update_config_.pacman);
+    storage_ = INvStorage::newStorage(offline_update_config_.storage, false, StorageClient::kTUF);
   }
 
-  std::unique_ptr<Downloader> createOfflineComposeAppManager(const LocalUpdateSource& src) {
+  DownloadResult Download() override {
+    auto reason = reason_;
+    if (reason.empty()) {
+      reason = "Update to " + target_->filename();
+    }
+
+    client_->logTarget("Downloading: ", *target_);
+
+    auto downloader = createOfflineDownloader();
+    auto dr{downloader->Download(Target::toTufTarget(*target_))};
+    return {dr.status, dr.description, dr.destination_path};
+  }
+
+  // TODO: implement `Install()` in such the way that `LiteClient` is not required as it is done for `Download()`
+
+ private:
+  std::unique_ptr<Downloader> createOfflineDownloader() {
     if (offline_update_config_.pacman.type == RootfsTreeManager::Name) {
-      auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(client_->config.pacman);
-      auto key_manager = std_::make_unique<KeyManager>(client_->storage, client_->config.keymanagerConfig(), nullptr);
+      // Download just ostree if this is "ostree" only update
       return std::make_unique<RootfsTreeManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
-                                                 client_->storage, nullptr, ostree_sysroot, *key_manager);
+                                                 storage_, nullptr, ostree_sysroot_, *nulled_key_manager_);
     }
 
     // Handle DG:/token-auth
     std::shared_ptr<HttpInterface> registry_basic_auth_client{std::make_shared<RegistryBasicAuthClient>()};
 
-    std::shared_ptr<OfflineRegistry> offline_registry{std::make_shared<OfflineRegistry>(src.app_store)};
+    std::shared_ptr<OfflineRegistry> offline_registry{
+        std::make_shared<OfflineRegistry>(local_update_source_.app_store)};
     // Handle requests to Registry aimed to download App
     Docker::RegistryClient::Ptr registry_client{std::make_shared<Docker::RegistryClient>(
         registry_basic_auth_client, "",
@@ -707,34 +727,16 @@ class LocalLiteInstall : public LiteInstall {
         true   /* indicate that this is an offline client */
         )};
 
-    auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(client_->config.pacman);
-    auto storage = INvStorage::newStorage(client_->config.storage, false, StorageClient::kTUF);
-
-    auto key_manager = std_::make_unique<KeyManager>(storage, offline_update_config_.keymanagerConfig(), nullptr);
-    std::shared_ptr<RootfsTreeManager> basepacman =
-        std::make_shared<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader, storage,
-                                            nullptr, ostree_sysroot, *key_manager, app_engine);
-
     return std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
-                                               storage, nullptr, ostree_sysroot, *key_manager, app_engine);
+                                               storage_, nullptr, ostree_sysroot_, *nulled_key_manager_, app_engine);
   }
 
-  DownloadResult Download() override {
-    auto reason = reason_;
-    if (reason.empty()) {
-      reason = "Update to " + target_->filename();
-    }
-
-    client_->logTarget("Downloading: ", *target_);
-
-    auto downloader = createOfflineComposeAppManager(local_update_source_);
-    auto dr{downloader->Download(Target::toTufTarget(*target_))};
-    return {dr.status, dr.description, dr.destination_path};
-  }
-
- private:
   const LocalUpdateSource local_update_source_;
   Config offline_update_config_;
+  OSTree::Sysroot::Ptr ostree_sysroot_;
+  std::shared_ptr<INvStorage> storage_;
+  // there is no need in the TLS cert/key manager if it is a local download
+  std::unique_ptr<KeyManager> nulled_key_manager_{nullptr};
 };
 
 bool AkliteClient::IsInstallationInProgress() const { return client_->getPendingTarget().IsValid(); }
