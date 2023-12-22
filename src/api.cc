@@ -672,6 +672,13 @@ class LocalLiteInstall : public LiteInstall {
   }
 
   // TODO: implement `Install()` in such the way that `LiteClient` is not required as it is done for `Download()`
+  InstallResult Install() override {
+    const auto tls_server{client_->config.tls.server};
+    client_->config.tls.server = "";
+    auto ir{LiteInstall::Install()};
+    client_->config.tls.server = tls_server;
+    return ir;
+  }
 
  private:
   std::unique_ptr<Downloader> createOfflineDownloader() {
