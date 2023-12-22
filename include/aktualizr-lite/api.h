@@ -234,7 +234,7 @@ class AkliteClient {
    * an InstallContext is returned that may be called to synchronize the
    * apps.
    */
-  std::unique_ptr<InstallContext> CheckAppsInSync(const LocalUpdateSource *local_update_source = nullptr) const;
+  std::unique_ptr<InstallContext> CheckAppsInSync() const;
 
   /**
    * Performs a "check-in" with the device-gateway. A check-in consists of:

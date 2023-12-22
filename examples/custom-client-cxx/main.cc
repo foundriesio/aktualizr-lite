@@ -148,8 +148,8 @@ int main(int argc, char **argv) {
         } else {
           LOG_ERROR << "Unable to install target: " << ires;
         }
-      } else {
-        auto installer = client->CheckAppsInSync(&local_update_source);
+      } else if (!is_local_update || client->IsRollback(latest)) {
+        auto installer = client->CheckAppsInSync();
         if (installer != nullptr) {
           LOG_INFO << "Syncing Active Target Apps";
           auto dres = installer->Download();
@@ -162,6 +162,8 @@ int main(int argc, char **argv) {
             }
           }
         }
+      } else {
+        LOG_INFO << "Device is up-to-date";
       }
     } catch (const std::exception &exc) {
       LOG_ERROR << "Failed to find or update Target: " << exc.what();

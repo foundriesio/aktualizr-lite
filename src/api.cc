@@ -767,7 +767,7 @@ bool AkliteClient::IsInstallationInProgress() const { return client_->getPending
 
 TufTarget AkliteClient::GetPendingTarget() const { return Target::toTufTarget(client_->getPendingTarget()); }
 
-std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync(const LocalUpdateSource* local_update_source) const {
+std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
   std::unique_ptr<InstallContext> installer = nullptr;
   auto target = std::make_unique<Uptane::Target>(client_->getCurrent());
   if (!client_->appsInSync(*target)) {
@@ -775,12 +775,7 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync(const LocalUpdateS
     auto correlation_id = target->custom_version() + "-" + boost::uuids::to_string(tmp);
     target->setCorrelationId(correlation_id);
     std::string reason = "Sync active target apps";
-    if (local_update_source == nullptr) {
-      installer = std::make_unique<LiteInstall>(client_, std::move(target), reason, InstallMode::All);
-    } else {
-      installer =
-          std::make_unique<LocalLiteInstall>(client_, std::move(target), reason, local_update_source, InstallMode::All);
-    }
+    installer = std::make_unique<LiteInstall>(client_, std::move(target), reason, InstallMode::All);
   }
   client_->setAppsNotChecked();
   return installer;
