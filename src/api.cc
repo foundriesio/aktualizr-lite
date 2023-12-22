@@ -15,6 +15,7 @@
 #include "target.h"
 
 #include "aktualizr-lite/tuf/tuf.h"
+#include "composeapp/appengine.h"
 #include "composeappmanager.h"
 #include "docker/restorableappengine.h"
 #include "ostree/repo.h"
@@ -713,6 +714,21 @@ class LocalLiteInstall : public LiteInstall {
                            ? *(reinterpret_cast<Docker::DockerClient::Ptr*>(local_update_source_.docker_client_ptr))
                            : std::make_shared<Docker::DockerClient>()};
 
+#ifdef USE_COMPOSEAPP_ENGINE
+    AppEngine::Ptr app_engine{std::make_shared<composeapp::AppEngine>(
+        pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client, docker_client,
+        docker_host, compose_cmd, pacman_cfg.composectl_bin.string(), pacman_cfg.storage_watermark,
+        Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
+        [offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
+          Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
+          return "--src-shared-blob-dir " + offline_registry->blobsDir().string() +
+                 " oci:" + offline_registry->appsDir().string() + "/" + app_uri.app + "/" + app_uri.digest.hash() +
+                 "/images/" + uri.registryHostname + "/" + uri.repo + "/" + uri.digest.hash();
+        },
+        false, /* don't create containers on install because it makes dockerd check if pinned images
+      present in its store what we should avoid until images are registered (hacked) in dockerd store */
+        local_update_source_.app_store)};
+#else
     AppEngine::Ptr app_engine{std::make_shared<Docker::RestorableAppEngine>(
         pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client, docker_client,
         pacman_cfg.skopeo_bin.string(), docker_host, compose_cmd, Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
@@ -726,6 +742,7 @@ class LocalLiteInstall : public LiteInstall {
       present in its store what we should avoid until images are registered (hacked) in dockerd store */
         true   /* indicate that this is an offline client */
         )};
+#endif
 
     return std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
                                                storage_, nullptr, ostree_sysroot_, *nulled_key_manager_, app_engine);
