@@ -129,20 +129,33 @@ int RunCmd::runUpdate(const Config& cfg_in) const {
   return ret_code;
 }
 
-int CurrentCmd::current(const Config& cfg_in) const {
+int CurrentCmd::current(const po::variables_map& vm) const {
   int ret_code{EXIT_FAILURE};
 
-  auto target = offline::client::getCurrent(cfg_in, nullptr);
+  AkliteClient client(vm);
+  auto target{client.GetCurrent()};
 
-  ComposeAppManager::Config pc{cfg_in.pacman};
-
-  std::cout << "Target: " << target.filename() << std::endl;
-  std::cout << "Ostree hash: " << target.sha256Hash() << std::endl;
-  std::cout << "Apps:" << std::endl;
-  for (const auto& app : Target::Apps(target)) {
-    if (!pc.apps || (*pc.apps).end() != std::find((*pc.apps).begin(), (*pc.apps).end(), app.name)) {
-      std::cout << "    " << app.name + " -> " + app.uri << std::endl;
+  boost::optional<std::vector<std::string>> cfg_apps;
+  const auto cfg{client.GetConfig()};
+  if (cfg.count("pacman.compose_apps") == 1) {
+    std::string val = cfg.get("compose_apps", "");
+    // if compose_apps is specified then `apps` optional configuration variable is initialized with an empty vector
+    cfg_apps = boost::make_optional(std::vector<std::string>());
+    if (val.length() > 0) {
+      // token_compress_on allows lists like: "foo,bar", "foo, bar", or "foo bar"
+      boost::split(*cfg_apps, val, boost::is_any_of(", "), boost::token_compress_on);
     }
+  }
+
+  std::cout << "Target: " << target.Name() << std::endl;
+  std::cout << "Ostree hash: " << target.Sha256Hash() << std::endl;
+  if (target.AppsJson().size() > 0) {
+    std::cout << "Apps:" << std::endl;
+  }
+  for (const auto& app : TufTarget::Apps(target)) {
+    std::string app_status =
+        (!cfg_apps || std::find(cfg_apps->begin(), cfg_apps->end(), app.name) != cfg_apps->end()) ? "on " : "off";
+    std::cout << "\t" << app_status << ": " << app.name + " -> " + app.uri << std::endl;
   }
 
   return ret_code;

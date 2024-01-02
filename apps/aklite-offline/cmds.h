@@ -120,8 +120,7 @@ class CurrentCmd : public Cmd {
 
   int operator()(const po::variables_map& vm) const override {
     try {
-      Config cfg_in{vm};
-      return current(cfg_in);
+      return current(vm);
     } catch (const std::exception& exc) {
       LOG_ERROR << "Failed to get current status information: " << exc.what();
       return EXIT_FAILURE;
@@ -129,7 +128,7 @@ class CurrentCmd : public Cmd {
   }
 
  private:
-  int current(const Config& cfg_in) const;
+  int current(const po::variables_map& vm) const;
 
  private:
   po::options_description _options;
