@@ -347,13 +347,11 @@ CheckInResult AkliteClient::CheckInLocal(const std::string& tuf_repo, const std:
   if (available_targets.empty()) {
     LOG_INFO << "Unable to locate complete target in ostree dir  " << src.OstreeRepoDir << " and app dir "
              << src.AppsDir;
-    result.status = CheckInResult::Status::Failed;
-  } else {
-    LOG_INFO << "Selected target: " << available_targets.front().filename();
-    result = CheckInResult(result.status, client_->config.provision.primary_ecu_hardware_id,
-                           toTufTargets(available_targets));
+    return CheckInResult(CheckInResult::Status::Failed, client_->config.provision.primary_ecu_hardware_id,
+                         std::vector<TufTarget>{});
   }
-  return result;
+  return CheckInResult(result.status, client_->config.provision.primary_ecu_hardware_id,
+                       toTufTargets(available_targets));
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
