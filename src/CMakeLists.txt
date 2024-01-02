@@ -42,7 +42,7 @@ set(HEADERS helpers.h
         downloader.h
         installer.h
         exec.h
-        cli/cli.h
+        ../include/aktualizr-lite/cli/cli.h
         tuf/akhttpsreposource.h
         tuf/localreposource.h
         tuf/akrepo.h

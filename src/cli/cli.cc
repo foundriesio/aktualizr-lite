@@ -1,4 +1,4 @@
-#include "cli.h"
+#include "aktualizr-lite/cli/cli.h"
 
 #include <unordered_map>
 
@@ -6,7 +6,7 @@
 
 #include "logging/logging.h"
 
-namespace cli {
+namespace aklite::cli {
 
 template <typename T>
 static StatusCode res2StatusCode(const std::unordered_map<T, StatusCode> code_map, T rc) {
@@ -187,4 +187,4 @@ StatusCode CompleteInstall(AkliteClient &client) {
   return res2StatusCode<InstallResult::Status>(i2s, ir.status);
 }
 
-}  // namespace cli
+}  // namespace aklite::cli

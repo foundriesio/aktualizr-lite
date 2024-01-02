@@ -6,7 +6,7 @@
 
 class AkliteClient;
 
-namespace cli {
+namespace aklite::cli {
 
 enum class StatusCode {
   UnknownError = EXIT_FAILURE,
@@ -32,6 +32,6 @@ StatusCode Install(AkliteClient &client, int version = -1, const std::string &ta
                    const std::string &install_mode = "");
 StatusCode CompleteInstall(AkliteClient &client);
 
-}  // namespace cli
+}  // namespace aklite::cli
 
 #endif  // AKTUALIZR_LITE_CLI_H_

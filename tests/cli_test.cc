@@ -4,7 +4,7 @@
 #include <boost/format.hpp>
 #include <boost/process.hpp>
 
-#include "cli/cli.h"
+#include "aktualizr-lite/cli/cli.h"
 #include "composeappmanager.h"
 #include "docker/restorableappengine.h"
 #include "liteclient.h"
@@ -13,6 +13,8 @@
 #include "uptane_generator/image_repo.h"
 
 #include "fixtures/aklitetest.cc"
+
+using namespace aklite;
 
 class CliClient : public AkliteTest {
  protected:
