@@ -2,35 +2,18 @@
 #include "composeappmanager.h"
 #include "target.h"
 
+#include "aktualizr-lite/cli/cli.h"
 #include "offline/client.h"
 
 namespace apps {
 namespace aklite_offline {
 
-int CheckCmd::checkSrcDir(const Config& cfg_in, const boost::filesystem::path& src_dir) const {
-  int ret_code{EXIT_FAILURE};
-  try {
-    const auto found_targets =
-        offline::client::check(cfg_in, {src_dir / "tuf", src_dir / "ostree_repo", src_dir / "apps"});
-
-    if (found_targets.empty()) {
-      std::cout << "\nNo Targets found" << std::endl;
-    } else {
-      std::cout << "\nFound Targets: " << std::endl;
-    }
-    for (const auto& t : found_targets) {
-      std::cout << "\tName: " << t.filename() << std::endl;
-      std::cout << "\tOSTree hash: " << t.sha256Hash() << std::endl;
-      std::cout << "\tApps:" << std::endl;
-      for (const auto& a : Target::Apps(t)) {
-        std::cout << "\t\t" << a.name << " -> " << a.uri << std::endl;
-      }
-      std::cout << std::endl;
-    }
-  } catch (const std::exception& exc) {
-    std::cerr << "Failed to check the update source directory; src-dir: " << src_dir << "; err: " << exc.what();
-  }
-  return ret_code;
+int CheckCmd::checkSrcDir(const po::variables_map& vm, const boost::filesystem::path& src_dir) const {
+  aklite::cli::StatusCode ret_code{EXIT_FAILURE};
+  AkliteClient client(vm);
+  ret_code = aklite::cli::CheckLocal(client, (src_dir / "tuf").string(), (src_dir / "ostree_repo").string(),
+                                     (src_dir / "apps").string());
+  return static_cast<int>(ret_code);
 }
 
 int InstallCmd::installUpdate(const Config& cfg_in, const boost::filesystem::path& src_dir,

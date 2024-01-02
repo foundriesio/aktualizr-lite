@@ -39,6 +39,9 @@ class CheckInResult {
    */
   TufTarget GetLatest(std::string hwid = "") const;
 
+  // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
+  operator bool() const { return status == CheckInResult::Status::Ok || status == CheckInResult::Status::OkCached; }
+
  private:
   std::string primary_hwid_;
   std::vector<TufTarget> targets_;

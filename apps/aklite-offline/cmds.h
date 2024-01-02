@@ -42,8 +42,7 @@ class CheckCmd : public Cmd {
 
   int operator()(const po::variables_map& vm) const override {
     try {
-      Config cfg_in{vm};
-      return checkSrcDir(cfg_in, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()));
+      return checkSrcDir(vm, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()));
     } catch (const std::exception& exc) {
       LOG_ERROR << "Failed to check the update source directory: " << exc.what();
       return EXIT_FAILURE;
@@ -51,7 +50,7 @@ class CheckCmd : public Cmd {
   }
 
  private:
-  int checkSrcDir(const Config& cfg_in, const boost::filesystem::path& src_dir) const;
+  int checkSrcDir(const po::variables_map& vm, const boost::filesystem::path& src_dir) const;
 
  private:
   po::options_description _options;

@@ -1,5 +1,6 @@
 #include "aktualizr-lite/cli/cli.h"
 
+#include <iostream>
 #include <unordered_map>
 
 #include "aktualizr-lite/api.h"
@@ -16,6 +17,12 @@ static StatusCode res2StatusCode(const std::unordered_map<T, StatusCode> code_ma
   return StatusCode::UnknownError;
 }
 
+static const std::unordered_map<CheckInResult::Status, StatusCode> c2s = {
+    {CheckInResult::Status::Ok, StatusCode::Ok},
+    {CheckInResult::Status::OkCached, StatusCode::CheckinOkCached},
+    {CheckInResult::Status::Failed, StatusCode::CheckinFailure},
+};
+
 static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {
     {DownloadResult::Status::Ok, StatusCode::Ok},
     {DownloadResult::Status::DownloadFailed, StatusCode::DownloadFailure},
@@ -31,6 +38,28 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::BootFwNeedsCompletion, StatusCode::InstallNeedsRebootForBootFw},
     {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
 };
+
+StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const std::string &ostree_repo,
+                      const std::string &apps_dir) {
+  const CheckInResult cr{client.CheckInLocal(tuf_repo, ostree_repo, apps_dir)};
+  if (cr) {
+    if (cr.Targets().empty()) {
+      std::cout << "\nNo Targets found" << std::endl;
+    } else {
+      std::cout << "\nFound Targets: " << std::endl;
+    }
+    for (const auto &t : cr.Targets()) {
+      std::cout << "\tName: " << t.Name() << std::endl;
+      std::cout << "\tOSTree hash: " << t.Sha256Hash() << std::endl;
+      std::cout << "\tApps:" << std::endl;
+      for (const auto &a : TufTarget::Apps(t)) {
+        std::cout << "\t\t" << a.name << " -> " << a.uri << std::endl;
+      }
+      std::cout << std::endl;
+    }
+  }
+  return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
+}
 
 StatusCode Install(AkliteClient &client, int version, const std::string &target_name, const std::string &install_mode) {
   const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};

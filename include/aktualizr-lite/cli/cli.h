@@ -11,6 +11,8 @@ namespace aklite::cli {
 enum class StatusCode {
   UnknownError = EXIT_FAILURE,
   Ok = EXIT_SUCCESS,
+  CheckinOkCached = 3,
+  CheckinFailure = 4,
   OkNeedsRebootForBootFw = 5,
   TufMetaPullFailure = 10,
   TufTargetNotFound = 20,
@@ -27,6 +29,9 @@ enum class StatusCode {
   InstallRollbackNeedsReboot = 120,
   InstallRollbackFailed = 130,
 };
+
+StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const std::string &ostree_repo,
+                      const std::string &apps_dir = "");
 
 StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "",
                    const std::string &install_mode = "");
