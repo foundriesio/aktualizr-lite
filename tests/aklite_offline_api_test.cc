@@ -400,6 +400,8 @@ TEST_F(AkliteOffline, OfflineClientAppsOnly) {
   auto dr = download(target);
   ASSERT_EQ(DownloadResult::Status::Ok, dr.status);
   auto ir = install(target);
+  ASSERT_EQ(InstallResult::Status::AppsNeedCompletion, ir.status) << ir.description;
+  ir = run();
   ASSERT_EQ(InstallResult::Status::Ok, ir.status) << ir.description;
   ASSERT_EQ(target, current());
 }

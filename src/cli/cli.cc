@@ -61,7 +61,8 @@ StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const s
   return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
 }
 
-StatusCode Install(AkliteClient &client, int version, const std::string &target_name, const std::string &install_mode) {
+StatusCode Install(AkliteClient &client, int version, const std::string &target_name, const std::string &install_mode,
+                   const LocalUpdateSource *local_update_source) {
   const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
   InstallMode mode{InstallMode::All};
   if (!install_mode.empty()) {
@@ -79,7 +80,13 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
   }
 
   const auto current{client.GetCurrent()};
-  const CheckInResult cr{client.CheckIn()};
+  CheckInResult cr{CheckInResult::Status::Failed, "", std::vector<TufTarget>{}};
+  if (local_update_source == nullptr) {
+    cr = client.CheckIn();
+  } else {
+    cr = client.CheckInLocal(local_update_source->tuf_repo, local_update_source->ostree_repo,
+                             local_update_source->app_store);
+  }
   if (cr.status == CheckInResult::Status::Failed) {
     LOG_ERROR << "Failed to pull TUF metadata or they are invalid";
     return StatusCode::TufMetaPullFailure;
@@ -103,6 +110,21 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     return StatusCode::TufTargetNotFound;
   }
 
+  // Check if it is downgrade, apply only to offline update
+  if (local_update_source != nullptr) {
+    if (current.Version() > target.Version()) {
+      LOG_WARNING << "Found TUF Target is lower version than the current on; "
+                  << "current: " << current.Version() << ", found Target: " << target.Version();
+
+      const bool force_downgrade{false};
+      if (!force_downgrade) {
+        LOG_ERROR << "Downgrade is not allowed by default, re-run the command with `--force` option to force downgrade";
+        return StatusCode::InstallDowngradeAttempt;
+      }
+      LOG_WARNING << "Downgrading from " << current.Version() << " to  " << target.Version() << "...";
+    }
+  }
+
   // Check whether the given target is already installed and synced/running
   if (current == target && client.CheckAppsInSync() == nullptr) {
     LOG_INFO
@@ -114,7 +136,7 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     LOG_INFO << "To New Target: " << target.Name();
   }
 
-  const auto installer = client.Installer(target, "", "", mode);
+  const auto installer = client.Installer(target, "", "", mode, local_update_source);
   if (installer == nullptr) {
     LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
     return StatusCode::UnknownError;

@@ -5,6 +5,7 @@
 #include <string>
 
 class AkliteClient;
+class LocalUpdateSource;
 
 namespace aklite::cli {
 
@@ -24,6 +25,7 @@ enum class StatusCode {
   InstallAppPullFailure = 80,
   InstallNeedsRebootForBootFw = 90,
   InstallNeedsReboot = 100,
+  InstallDowngradeAttempt = 102,
   InstallAppsNeedFinalization = 105,
   InstallRollbackOk = 110,
   InstallRollbackNeedsReboot = 120,
@@ -34,7 +36,7 @@ StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const s
                       const std::string &apps_dir = "");
 
 StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "",
-                   const std::string &install_mode = "");
+                   const std::string &install_mode = "", const LocalUpdateSource *local_update_source = nullptr);
 StatusCode CompleteInstall(AkliteClient &client);
 
 }  // namespace aklite::cli

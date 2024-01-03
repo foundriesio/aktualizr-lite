@@ -676,6 +676,9 @@ class LocalLiteInstall : public LiteInstall {
   InstallResult Install() override {
     const auto tls_server{client_->config.tls.server};
     client_->config.tls.server = "";
+    // use the ostree only install mode for offline update by default, so updated containers
+    // are created and started on finalization (aka install completion, run command)
+    mode_ = InstallMode::OstreeOnly;
     auto ir{LiteInstall::Install()};
     client_->config.tls.server = tls_server;
     return ir;

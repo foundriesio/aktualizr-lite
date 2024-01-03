@@ -68,8 +68,7 @@ class InstallCmd : public Cmd {
 
   int operator()(const po::variables_map& vm) const override {
     try {
-      Config cfg_in{vm};
-      return installUpdate(cfg_in, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()),
+      return installUpdate(vm, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()),
                            force_downgrade);
     } catch (const std::exception& exc) {
       LOG_ERROR << "Failed to list Apps: " << exc.what();
@@ -78,7 +77,7 @@ class InstallCmd : public Cmd {
   }
 
  private:
-  int installUpdate(const Config& cfg_in, const boost::filesystem::path& src_dir, bool force_downgrade) const;
+  int installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir, bool force_downgrade) const;
 
  private:
   po::options_description _options;
@@ -96,7 +95,7 @@ class RunCmd : public Cmd {
   int operator()(const po::variables_map& vm) const override {
     try {
       Config cfg_in{vm};
-      return runUpdate(cfg_in);
+      return runUpdate(vm);
     } catch (const std::exception& exc) {
       LOG_ERROR << "Failed to list Apps: " << exc.what();
       return EXIT_FAILURE;
@@ -104,7 +103,7 @@ class RunCmd : public Cmd {
   }
 
  private:
-  int runUpdate(const Config& cfg_in) const;
+  int runUpdate(const po::variables_map& vm) const;
 
  private:
   po::options_description _options;
