@@ -224,7 +224,8 @@ std::string DockerClient::tarString(const std::string& data, const std::string& 
     throw std::invalid_argument("the specified filename to add to tar is empty");
   }
   if (file_name_in_tar.size() > tar_block_size / 2) {
-    throw std::invalid_argument("the specified filename length exceeds the maximum allowed: " + std::to_string(tar_block_size / 2));
+    throw std::invalid_argument("the specified filename length exceeds the maximum allowed: " +
+                                std::to_string(tar_block_size / 2));
   }
   struct archive* a;
   struct archive_entry* entry;

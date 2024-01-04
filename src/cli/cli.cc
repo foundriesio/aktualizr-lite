@@ -41,7 +41,8 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
 
 StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const std::string &ostree_repo,
                       const std::string &apps_dir) {
-  const CheckInResult cr{client.CheckInLocal(tuf_repo, ostree_repo, apps_dir)};
+  const LocalUpdateSource local_update_source{tuf_repo, ostree_repo, apps_dir};
+  const CheckInResult cr{client.CheckInLocal(&local_update_source)};
   if (cr) {
     if (cr.Targets().empty()) {
       std::cout << "\nNo Targets found" << std::endl;
@@ -84,8 +85,7 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
   if (local_update_source == nullptr) {
     cr = client.CheckIn();
   } else {
-    cr = client.CheckInLocal(local_update_source->tuf_repo, local_update_source->ostree_repo,
-                             local_update_source->app_store);
+    cr = client.CheckInLocal(local_update_source);
   }
   if (cr.status == CheckInResult::Status::Failed) {
     LOG_ERROR << "Failed to pull TUF metadata or they are invalid";

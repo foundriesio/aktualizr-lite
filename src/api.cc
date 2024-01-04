@@ -359,20 +359,18 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     return result;
   }
 
+  Config cfg{client_->config};
   setPacmanType(client_->config, local_update_source->docker_client_ptr == nullptr);
-
   std::vector<Uptane::Target> available_targets =
       getAvailableTargets(client_->config.pacman, fromTufTargets(result.Targets()), src,
                           false /* get all available targets, not just latest */);
-
   if (available_targets.empty()) {
     LOG_INFO << "Unable to locate complete target in ostree dir  " << src.OstreeRepoDir << " and app dir "
              << src.AppsDir;
-    return CheckInResult(CheckInResult::Status::Failed, client_->config.provision.primary_ecu_hardware_id,
+    return CheckInResult(CheckInResult::Status::Failed, cfg.provision.primary_ecu_hardware_id,
                          std::vector<TufTarget>{});
   }
-  return CheckInResult(result.status, client_->config.provision.primary_ecu_hardware_id,
-                       toTufTargets(available_targets));
+  return CheckInResult(result.status, cfg.provision.primary_ecu_hardware_id, toTufTargets(available_targets));
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
