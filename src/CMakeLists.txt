@@ -56,8 +56,8 @@ if (BUILD_AKLITE_WITH_NERDCTL)
 endif(BUILD_AKLITE_WITH_NERDCTL)
 
 if(USE_COMPOSEAPP_ENGINE)
-  set(SRC ${SRC} ctr/appengine.cc)
-  set(HEADERS ${HEADERS} ctr/appengine.h)
+  set(SRC ${SRC} composeapp/appengine.cc)
+  set(HEADERS ${HEADERS} composeapp/appengine.h)
 endif(USE_COMPOSEAPP_ENGINE)
 
 add_executable(${TARGET_EXE} main.cc)

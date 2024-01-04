@@ -6,8 +6,8 @@
 
 #include "aktualizr-lite/api.h"
 #include "appengine.h"
+#include "composeapp/appengine.h"
 #include "composeappmanager.h"
-#include "ctr/appengine.h"
 #include "docker/composeinfo.h"
 #include "docker/docker.h"
 #include "docker/restorableappengine.h"
@@ -181,7 +181,7 @@ static std::unique_ptr<LiteClient> createOfflineClient(const Config& cfg_in, con
   }
 
 #ifdef USE_COMPOSEAPP_ENGINE
-  AppEngine::Ptr app_engine{std::make_shared<ctr::AppEngine>(
+  AppEngine::Ptr app_engine{std::make_shared<composeapp::AppEngine>(
       pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client,
       docker_client_http_client ? std::make_shared<Docker::DockerClient>(docker_client_http_client)
                                 : std::make_shared<Docker::DockerClient>(),

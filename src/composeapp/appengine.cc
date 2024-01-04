@@ -6,7 +6,7 @@
 #include "exec.h"
 #include "storage/stat.h"
 
-namespace ctr {
+namespace composeapp {
 enum class ExitCode { ExitCodeInsufficientSpace = 100 };
 
 AppEngine::Result AppEngine::fetch(const App& app) {
@@ -41,4 +41,4 @@ void AppEngine::installAppAndImages(const App& app) {
        "failed to installl compose app");
 }
 
-}  // namespace ctr
+}  // namespace composeapp

@@ -13,7 +13,7 @@
 #include "containerd/engine.h"
 #endif  // BUILD_AKLITE_WITH_NERDCTL
 #ifdef USE_COMPOSEAPP_ENGINE
-#include "ctr/appengine.h"
+#include "composeapp/appengine.h"
 #endif  // USE_COMPOSEAPP_ENGINE
 
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
@@ -145,7 +145,7 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       }
 #ifdef USE_COMPOSEAPP_ENGINE
       const auto composectl_cmd{boost::filesystem::canonical(cfg_.composectl_bin).string()};
-      app_engine_ = std::make_shared<ctr::AppEngine>(
+      app_engine_ = std::make_shared<composeapp::AppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
           std::make_shared<Docker::DockerClient>(), docker_host, compose_cmd, composectl_cmd, cfg_.storage_watermark,
           Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));

@@ -1,9 +1,9 @@
-#ifndef AKTUALIZR_LITE_CTR_APP_ENGINE_H
-#define AKTUALIZR_LITE_CTR_APP_ENGINE_H
+#ifndef AKTUALIZR_LITE_COMPOSEAPP_APP_ENGINE_H
+#define AKTUALIZR_LITE_COMPOSEAPP_APP_ENGINE_H
 
 #include "docker/restorableappengine.h"
 
-namespace ctr {
+namespace composeapp {
 
 class AppEngine : public Docker::RestorableAppEngine {
  public:
@@ -33,6 +33,6 @@ class AppEngine : public Docker::RestorableAppEngine {
   const std::string local_source_path_;
 };
 
-}  // namespace ctr
+}  // namespace composeapp
 
-#endif  // AKTUALIZR_LITE_CTR_APP_ENGINE_H
+#endif  // AKTUALIZR_LITE_COMPOSEAPP_APP_ENGINE_H
