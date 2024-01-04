@@ -345,8 +345,9 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
           if (current_usage_info.isOk() &&
               current_usage_info.available.first < state_when_download_failed.stat.required.first) {
             const std::string err_msg{
-                "Insufficient storage available to download Target's ostree; hash: " + target_to_install.sha256Hash() +
-                ", " + current_usage_info.withRequired(state_when_download_failed.stat.required.first).str()};
+                "Insufficient storage available at " + state_when_download_failed.stat.path +
+                " to download Target: " + target_to_install.filename() + ", " +
+                current_usage_info.withRequired(state_when_download_failed.stat.required.first).str()};
             LOG_ERROR << err_msg;
             target_to_install.setCorrelationId(state_when_download_failed.cor_id);
             client.notifyDownloadFinished(target_to_install, false, err_msg);

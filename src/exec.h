@@ -6,6 +6,15 @@
 #include <boost/format.hpp>
 #include <boost/process.hpp>
 
+struct ExecError : std::runtime_error {
+  ExecError(const std::string& msg_prefix, const std::string& cmd, const std::string& err_msg, int exit_code)
+      : std::runtime_error(msg_prefix + "\n\tcmd: " + cmd + "\n\terr: " + err_msg),
+        ExitCode{exit_code},
+        StdErr{err_msg} {}
+  const int ExitCode;
+  const std::string StdErr;
+};
+
 template <typename... Args>
 static void exec(const std::string& cmd, const std::string& err_msg_prefix, Args&&... args) {
   // Implementation is based on test_utils.cc:Process::spawn that has been proven over time
@@ -33,7 +42,7 @@ static void exec(const std::string& cmd, const std::string& err_msg_prefix, Args
 
   if (exit_code != EXIT_SUCCESS) {
     const auto err_msg{err_output.get()};
-    throw std::runtime_error(err_msg_prefix + "\n\tcmd: " + cmd + "\n\terr: " + err_msg);
+    throw ExecError(err_msg_prefix, cmd, err_msg, exit_code);
   }
 }
 

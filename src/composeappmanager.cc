@@ -12,6 +12,9 @@
 #include "containerd/client.h"
 #include "containerd/engine.h"
 #endif  // BUILD_AKLITE_WITH_NERDCTL
+#ifdef USE_COMPOSEAPP_ENGINE
+#include "composeapp/appengine.h"
+#endif  // USE_COMPOSEAPP_ENGINE
 
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
@@ -59,6 +62,11 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("skopeo_bin") == 1) {
     skopeo_bin = raw.at("skopeo_bin");
   }
+#ifdef USE_COMPOSEAPP_ENGINE
+  if (raw.count("composectl_bin") == 1) {
+    composectl_bin = raw.at("composectl_bin");
+  }
+#endif  // USE_COMPOSEAPP_ENGINE
 
   if (raw.count("docker_prune") == 1) {
     std::string val = raw.at("docker_prune");
@@ -128,7 +136,6 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     }
     LOG_DEBUG << "Compose utility: `" << compose_cmd << "`";
 
-    const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
     std::string docker_host{"unix:///var/run/docker.sock"};
 
     if (!!cfg_.reset_apps) {
@@ -136,10 +143,19 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       if (env.end() != env.find("DOCKER_HOST")) {
         docker_host = env.get("DOCKER_HOST");
       }
+#ifdef USE_COMPOSEAPP_ENGINE
+      const auto composectl_cmd{boost::filesystem::canonical(cfg_.composectl_bin).string()};
+      app_engine_ = std::make_shared<composeapp::AppEngine>(
+          cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
+          std::make_shared<Docker::DockerClient>(), docker_host, compose_cmd, composectl_cmd, cfg_.storage_watermark,
+          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
+#else
+      const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
       app_engine_ = std::make_shared<Docker::RestorableAppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
           std::make_shared<Docker::DockerClient>(), skopeo_cmd, docker_host, compose_cmd,
           Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
+#endif  // USE_COMPOSEAPP_ENGINE
       is_restorable_engine_ = true;
     } else {
 #ifdef BUILD_AKLITE_WITH_NERDCTL
