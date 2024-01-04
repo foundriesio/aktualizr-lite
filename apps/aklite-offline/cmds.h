@@ -1,14 +1,13 @@
 #ifndef AKLITE_OFFLINE_CMD_H
 #define AKLITE_OFFLINE_CMD_H
 
+#include <iostream>
 #include <string>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
-#include "libaktualizr/config.h"
-#include "logging/logging.h"
 
 namespace po = boost::program_options;
 
@@ -44,7 +43,7 @@ class CheckCmd : public Cmd {
     try {
       return checkSrcDir(vm, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()));
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to check the update source directory: " << exc.what();
+      std::cerr << "Failed to check the update source directory: " << exc.what() << std::endl;
       return EXIT_FAILURE;
     }
   }
@@ -96,7 +95,6 @@ class RunCmd : public Cmd {
 
   int operator()(const po::variables_map& vm) const override {
     try {
-      Config cfg_in{vm};
       return runUpdate(vm);
     } catch (const std::exception& exc) {
       std::cerr << "Failed to finalize the update and start updated Apps; err: " << exc.what();
@@ -123,7 +121,7 @@ class CurrentCmd : public Cmd {
     try {
       return current(vm);
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to get current status information: " << exc.what();
+      std::cerr << "Failed to get current status information: " << exc.what() << std::endl;
       return EXIT_FAILURE;
     }
   }
