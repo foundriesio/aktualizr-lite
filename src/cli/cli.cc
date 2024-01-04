@@ -62,7 +62,7 @@ StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const s
 }
 
 StatusCode Install(AkliteClient &client, int version, const std::string &target_name, const std::string &install_mode,
-                   const LocalUpdateSource *local_update_source) {
+                   bool force_downgrade, const LocalUpdateSource *local_update_source) {
   const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
   InstallMode mode{InstallMode::All};
   if (!install_mode.empty()) {
@@ -110,26 +110,26 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     return StatusCode::TufTargetNotFound;
   }
 
-  // Check if it is downgrade, apply only to offline update
-  if (local_update_source != nullptr) {
-    if (current.Version() > target.Version()) {
-      LOG_WARNING << "Found TUF Target is lower version than the current on; "
-                  << "current: " << current.Version() << ", found Target: " << target.Version();
+  if (current.Version() > target.Version()) {
+    LOG_WARNING << "Found TUF Target is lower version than the current on; "
+                << "current: " << current.Version() << ", found Target: " << target.Version();
 
-      const bool force_downgrade{false};
-      if (!force_downgrade) {
-        LOG_ERROR << "Downgrade is not allowed by default, re-run the command with `--force` option to force downgrade";
-        return StatusCode::InstallDowngradeAttempt;
-      }
-      LOG_WARNING << "Downgrading from " << current.Version() << " to  " << target.Version() << "...";
+    if (!force_downgrade) {
+      LOG_ERROR << "Downgrade is not allowed by default, re-run the command with `--force` option to force downgrade";
+      return StatusCode::InstallDowngradeAttempt;
     }
+    LOG_WARNING << "Downgrading from " << current.Version() << " to  " << target.Version() << "...";
   }
 
   // Check whether the given target is already installed and synced/running
   if (current == target && client.CheckAppsInSync() == nullptr) {
-    LOG_INFO
-        << "The specified Target is already installed, enforcing installation to make sure it's synced and running: "
-        << target.Name();
+    if (local_update_source != nullptr) {
+      return StatusCode::InstallAlreadyInstalled;
+    } else {
+      LOG_INFO
+          << "The specified Target is already installed, enforcing installation to make sure it's synced and running: "
+          << target.Name();
+    }
   } else {
     // Run the target installation
     LOG_INFO << "Updating Active Target: " << current.Name();

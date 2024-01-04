@@ -22,6 +22,7 @@ enum class StatusCode {
   DownloadFailure = 50,
   DownloadFailureNoSpace = 60,
   DownloadFailureVerificationFailed = 70,
+  InstallAlreadyInstalled = 75,
   InstallAppPullFailure = 80,
   InstallNeedsRebootForBootFw = 90,
   InstallNeedsReboot = 100,
@@ -36,7 +37,8 @@ StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const s
                       const std::string &apps_dir = "");
 
 StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "",
-                   const std::string &install_mode = "", const LocalUpdateSource *local_update_source = nullptr);
+                   const std::string &install_mode = "", bool force_downgrade = true,
+                   const LocalUpdateSource *local_update_source = nullptr);
 StatusCode CompleteInstall(AkliteClient &client);
 
 }  // namespace aklite::cli
