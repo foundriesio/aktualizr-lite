@@ -25,6 +25,7 @@ enum class StatusCode {
   InstallAlreadyInstalled = 75,
   InstallAppPullFailure = 80,
   InstallNeedsRebootForBootFw = 90,
+  InstallOfflineRollbackOk = 99,
   InstallNeedsReboot = 100,
   InstallDowngradeAttempt = 102,
   InstallAppsNeedFinalization = 105,

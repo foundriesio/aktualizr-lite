@@ -99,7 +99,7 @@ class RunCmd : public Cmd {
       Config cfg_in{vm};
       return runUpdate(vm);
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to list Apps: " << exc.what();
+      std::cerr << "Failed to finalize the update and start updated Apps; err: " << exc.what();
       return EXIT_FAILURE;
     }
   }
