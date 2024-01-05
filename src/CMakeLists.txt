@@ -49,12 +49,6 @@ set(HEADERS helpers.h
         ../include/aktualizr-lite/api.h
         ../include/aktualizr-lite/tuf/tuf.h)
 
-if (BUILD_AKLITE_WITH_NERDCTL)
-  set(SRC ${SRC} containerd/client.cc containerd/engine.cc)
-  set(HEADERS ${HEADERS} containerd/client.h containerd/engine.h)
-  add_definitions(-DBUILD_AKLITE_WITH_NERDCTL)
-endif(BUILD_AKLITE_WITH_NERDCTL)
-
 if(USE_COMPOSEAPP_ENGINE)
   set(SRC ${SRC} composeapp/appengine.cc)
   set(HEADERS ${HEADERS} composeapp/appengine.h)
