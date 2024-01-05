@@ -59,11 +59,32 @@ class Handler(SimpleHTTPRequestHandler):
         return ""
 
     def post_image(self):
-        data_len = int(self.headers.get('content-length', 0))
-        with tarfile.open(fileobj=io.BytesIO(self.rfile.read(data_len)), mode="r|") as tar_stream:
-            for member in tar_stream:
-                if member.name == "manifest.json":
-                    tar_stream.extract(member, self.server.root_dir, set_attrs=False)
+        if 'content-length' in self.headers:
+            data_len = int(self.headers.get('content-length', 0))
+            with tarfile.open(fileobj=io.BytesIO(self.rfile.read(data_len)), mode="r|") as tar_stream:
+                for member in tar_stream:
+                    if member.name == "manifest.json":
+                        tar_stream.extract(member, self.server.root_dir, set_attrs=False)
+        else:
+            # the tarred manifest is transferred as chunked stream
+            with io.BytesIO() as tarred_load_manifest:
+                # extract the load image tarred manifest from the chunked stream passed as a http request body
+                while True:
+                    line = self.rfile.readline().strip()
+                    chunk_length = int(line, 16)
+                    if chunk_length == 0:
+                        break
+                    data = self.rfile.read(chunk_length)
+                    tarred_load_manifest.write(data)
+                    self.rfile.readline()
+
+                # seek to the beginning of the im-memory tar
+                tarred_load_manifest.seek(0)
+                # extract and store the image load manifest
+                with tarfile.open(fileobj=tarred_load_manifest, mode='r') as t:
+                    for member in t:
+                        if member.name == "manifest.json":
+                            t.extract(member, self.server.root_dir, set_attrs=False)
         try:
             with open(os.path.join(self.server.root_dir, "manifest.json")) as mf:
                 lm = json.load(mf)
