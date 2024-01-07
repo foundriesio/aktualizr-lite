@@ -216,10 +216,25 @@ Json::Value DockerClient::getEngineInfo() {
 }
 
 std::string DockerClient::tarString(const std::string& data, const std::string& file_name_in_tar) {
+  static const size_t tar_block_size = 512;
+  if (data.empty()) {
+    throw std::invalid_argument("the specified data for tar is empty");
+  }
+  if (file_name_in_tar.empty()) {
+    throw std::invalid_argument("the specified filename to add to tar is empty");
+  }
+  if (file_name_in_tar.size() > tar_block_size / 2) {
+    throw std::invalid_argument("the specified filename length exceeds the maximum allowed: " + std::to_string(tar_block_size / 2));
+  }
   struct archive* a;
   struct archive_entry* entry;
   size_t archive_size;
-  std::vector<uint8_t> tar_data(2 * data.size() + 500 + 512 + 512);
+  // align size to 512 block size, the size must be a multiple of 512, assumes `dataSize` is not zero
+  const size_t aligned_data_size =
+      (data.size() + tar_block_size - 1) & ~(tar_block_size - 1) /* data_size + 511 (0x1FF) & ~0x1FF */;
+  const size_t estimated_archive_size =
+      tar_block_size /* header */ + aligned_data_size + 512 * 2 /* end-of-file marker, two block filled wth zeros */;
+  std::vector<uint8_t> tar_data(estimated_archive_size);
 
   a = archive_write_new();
   archive_write_set_format_ustar(a);
