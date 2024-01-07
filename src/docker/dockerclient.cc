@@ -235,11 +235,18 @@ std::string DockerClient::tarString(const std::string& data, const std::string& 
   archive_entry_set_perm(entry, 0644);
   archive_write_header(a, entry);
 
-  archive_write_data(a, data.c_str(), data.size());
-  archive_write_finish_entry(a);
+  if (-1 == archive_write_data(a, data.c_str(), data.size())) {
+    throw std::runtime_error("Failed to write data to an in-memory TAR archive: " +
+                             std::string(archive_error_string(a)));
+  }
+  if (ARCHIVE_OK != archive_write_finish_entry(a)) {
+    throw std::runtime_error("Failed to finalize an in-memory TAR archive: " + std::string(archive_error_string(a)));
+  }
   archive_entry_free(entry);
 
-  archive_write_close(a);
+  if (ARCHIVE_OK != archive_write_close(a)) {
+    throw std::runtime_error("Failed to compose an in-memory TAR archive: " + std::string(archive_error_string(a)));
+  }
   archive_write_free(a);
 
   return {tar_data.begin(), tar_data.begin() + archive_size};
