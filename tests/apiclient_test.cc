@@ -139,7 +139,9 @@ TEST_F(ApiClientTest, CheckInLocal) {
 
   // Accessing repo metadata files directly from the local filesystem
   auto repo_dir = getTufRepo().getRepoPath();
-  auto result = client.CheckInLocal(repo_dir, ostree_repo_.getPath());
+
+  const LocalUpdateSource local_update_source_ = {repo_dir, ostree_repo_.getPath()};
+  auto result = client.CheckInLocal(&local_update_source_);
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);
   ASSERT_EQ(1, result.Targets().size());
 
@@ -152,7 +154,7 @@ TEST_F(ApiClientTest, CheckInLocal) {
   ASSERT_EQ(1, result.Targets().size());
 
   auto new_target = createTarget();
-  result = client.CheckInLocal(repo_dir, ostree_repo_.getPath());
+  result = client.CheckInLocal(&local_update_source_);
   ASSERT_EQ(0, getDeviceGateway().getEvents().size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);

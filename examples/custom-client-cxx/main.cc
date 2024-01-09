@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     try {
       CheckInResult res = !is_local_update?
                            client->CheckIn():
-                           client->CheckInLocal(local_update_source.tuf_repo, local_update_source.ostree_repo, local_update_source.app_store);
+                           client->CheckInLocal(&local_update_source);
       if (res.status != CheckInResult::Status::Ok && res.status != CheckInResult::Status::OkCached) {
         LOG_WARNING << "Unable to update latest metadata, going to sleep for " << interval
                     << " seconds before starting a new update cycle";

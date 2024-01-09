@@ -325,20 +325,41 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
   return ret;
 }
 
-CheckInResult AkliteClient::CheckInLocal(const std::string& tuf_repo, const std::string& ostree_repo,
-                                         const std::string& apps_dir) const {
-  auto repo_src = std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", tuf_repo.c_str());
+static void setPacmanType(Config& cfg, bool no_custom_docker_client) {
+  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
+  // unless a package manager type is enforced in the config.
+  std::string type{ComposeAppManager::Name};
+  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
+  if (no_custom_docker_client &&
+      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
+    type = RootfsTreeManager::Name;
+  }
+  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
+    type = cfg.pacman.extra.at("enforce_pacman_type");
+    if (type != RootfsTreeManager::Name && type != ComposeAppManager::Name) {
+      throw std::invalid_argument("unsupported package manager type: " + type);
+    }
+  }
+
+  cfg.pacman.type = type;
+}
+
+CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
+  auto repo_src =
+      std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
   auto result = UpdateMetaAndGetTargets(repo_src);
 
   UpdateSrc src{
-      .TufDir = tuf_repo,
-      .OstreeRepoDir = ostree_repo,
-      .AppsDir = apps_dir,
+      .TufDir = local_update_source->tuf_repo,
+      .OstreeRepoDir = local_update_source->ostree_repo,
+      .AppsDir = local_update_source->app_store,
   };
 
   if (result.status == CheckInResult::Status::Failed) {
     return result;
   }
+
+  setPacmanType(client_->config, local_update_source->docker_client_ptr == nullptr);
 
   std::vector<Uptane::Target> available_targets =
       getAvailableTargets(client_->config.pacman, fromTufTargets(result.Targets()), src,
@@ -613,24 +634,6 @@ class OfflineRegistry : public BaseHttpClient {
   const boost::filesystem::path apps_dir_{root_dir_ / "apps"};
   const boost::filesystem::path blobs_dir_{root_dir_ / "blobs" / "sha256"};
 };
-
-static void setPacmanType(Config& cfg, bool no_custom_docker_client) {
-  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
-  // unless a package manager type is enforced in the config.
-  std::string type{ComposeAppManager::Name};
-  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
-  if (no_custom_docker_client &&
-      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
-    type = RootfsTreeManager::Name;
-  }
-  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
-    type = cfg.pacman.extra.at("enforce_pacman_type");
-    if (type != RootfsTreeManager::Name && type != ComposeAppManager::Name) {
-      throw std::invalid_argument("unsupported package manager type: " + type);
-    }
-  }
-  cfg.pacman.type = type;
-}
 
 class LocalLiteInstall : public LiteInstall {
  public:

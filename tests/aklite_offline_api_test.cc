@@ -146,7 +146,7 @@ class AkliteOffline : public ::testing::Test {
 
   CheckInResult check() {
     AkliteClient client(std::make_shared<LiteClient>(cfg_));
-    return client.CheckInLocal(tuf_repo_.getRepoPath(), ostree_repo_.getPath(), app_store_.dir().string());
+    return client.CheckInLocal(src());
   }
 
   DownloadResult download(const TufTarget& target) {
