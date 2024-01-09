@@ -22,7 +22,7 @@ class Installer;
 
 class LiteClient {
  public:
-  explicit LiteClient(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
+  explicit LiteClient(Config config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
                       const std::shared_ptr<P11EngineGuard>& p11 = nullptr,
                       std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher = nullptr);
   ~LiteClient();

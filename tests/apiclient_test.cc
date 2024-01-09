@@ -72,10 +72,18 @@ class ApiClientTest : public fixtures::ClientTest {
 
   std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
   bool resetEvents() { return getDeviceGateway().resetEvents(lite_client_->http_client); }
+  void tweakConf(Config& conf) override {
+    if (!pacman_type_.empty()) {
+      conf.pacman.type = pacman_type_;
+    }
+  }
+
+  void setPacmanType(const std::string& pacman_type) { pacman_type_ = pacman_type; }
 
  private:
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
   std::shared_ptr<LiteClient> lite_client_;
+  std::string pacman_type_;
 };
 
 TEST_F(ApiClientTest, GetConfig) {
@@ -126,11 +134,14 @@ TEST_F(ApiClientTest, CheckIn) {
 }
 
 TEST_F(ApiClientTest, CheckInLocal) {
+  setPacmanType(RootfsTreeManager::Name);
   AkliteClient client(createLiteClient(InitialVersion::kOn));
 
   // Accessing repo metadata files directly from the local filesystem
   auto repo_dir = getTufRepo().getRepoPath();
-  auto result = client.CheckInLocal(repo_dir);
+
+  const LocalUpdateSource local_update_source_ = {repo_dir, ostree_repo_.getPath()};
+  auto result = client.CheckInLocal(&local_update_source_);
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);
   ASSERT_EQ(1, result.Targets().size());
 
@@ -143,13 +154,13 @@ TEST_F(ApiClientTest, CheckInLocal) {
   ASSERT_EQ(1, result.Targets().size());
 
   auto new_target = createTarget();
-  result = client.CheckInLocal(repo_dir);
+  result = client.CheckInLocal(&local_update_source_);
   ASSERT_EQ(0, getDeviceGateway().getEvents().size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);
   ASSERT_EQ(2, result.Targets().size());
-  ASSERT_EQ(new_target.filename(), result.Targets()[1].Name());
-  ASSERT_EQ(new_target.sha256Hash(), result.Targets()[1].Sha256Hash());
+  ASSERT_EQ(new_target.filename(), result.GetLatest().Name());
+  ASSERT_EQ(new_target.sha256Hash(), result.GetLatest().Sha256Hash());
 }
 
 TEST_F(ApiClientTest, CheckInWithoutTargetImport) {

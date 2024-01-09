@@ -41,6 +41,8 @@ static std::string get_reboot_cmd(const AkliteClient &client) {
 
 int main(int argc, char **argv) {
   boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+  bool is_local_update{false};
+  LocalUpdateSource local_update_source;
 
   std::vector<boost::filesystem::path> cfg_dirs;
   auto env{boost::this_process::environment()};
@@ -48,6 +50,20 @@ int main(int argc, char **argv) {
     cfg_dirs.emplace_back(env.get("AKLITE_CONFIG_DIR"));
   } else {
     cfg_dirs = AkliteClient::CONFIG_DIRS;
+  }
+
+  if (env.end() != env.find("AKLITE_LOCAL_UPDATE_PATH")) {
+    const std::string local_update_path{env.get("AKLITE_LOCAL_UPDATE_PATH")};
+    local_update_source = {
+      local_update_path + "/tuf",
+      local_update_path + "/ostree_repo",
+      local_update_path + "/apps"
+
+    };
+    is_local_update = true;
+    LOG_INFO << "Offline mode. Updates path=" << local_update_path;
+  } else {
+    LOG_INFO << "Online mode";
   }
 
   std::unique_ptr<AkliteClient> client;
@@ -74,7 +90,9 @@ int main(int argc, char **argv) {
     LOG_INFO << "Checking for a new Target...";
 
     try {
-      auto res = client->CheckIn();
+      CheckInResult res = !is_local_update?
+                           client->CheckIn():
+                           client->CheckInLocal(&local_update_source);
       if (res.status != CheckInResult::Status::Ok && res.status != CheckInResult::Status::OkCached) {
         LOG_WARNING << "Unable to update latest metadata, going to sleep for " << interval
                     << " seconds before starting a new update cycle";
@@ -105,7 +123,7 @@ int main(int argc, char **argv) {
 
       if (latest.Name() != current.Name() && !client->IsRollback(latest)) {
         std::string reason = "Updating from " + current.Name() + " to " + latest.Name();
-        auto installer = client->Installer(latest, reason);
+        auto installer = client->Installer(latest, reason, "", InstallMode::All, &local_update_source);
         if (!installer) {
           LOG_ERROR << "Found latest Target but failed to retrieve its metadata from DB, skipping update";
           std::this_thread::sleep_for(std::chrono::seconds(interval));
@@ -130,7 +148,7 @@ int main(int argc, char **argv) {
         } else {
           LOG_ERROR << "Unable to install target: " << ires;
         }
-      } else {
+      } else if (!is_local_update || client->IsRollback(latest)) {
         auto installer = client->CheckAppsInSync();
         if (installer != nullptr) {
           LOG_INFO << "Syncing Active Target Apps";
@@ -144,6 +162,8 @@ int main(int argc, char **argv) {
             }
           }
         }
+      } else {
+        LOG_INFO << "Device is up-to-date";
       }
     } catch (const std::exception &exc) {
       LOG_ERROR << "Failed to find or update Target: " << exc.what();

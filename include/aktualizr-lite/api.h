@@ -162,6 +162,14 @@ class DeviceResult {
   std::string repo_id;
 };
 
+struct LocalUpdateSource {
+  std::string tuf_repo;
+  std::string ostree_repo;
+  std::string app_store;
+  // needed for unit testing or if a custom container engine is used
+  void *docker_client_ptr;
+};
+
 /**
  * AkliteClient provides an easy-to-use API for users wanting to customize
  * the behavior of aktualizr-lite.
@@ -247,10 +255,13 @@ class AkliteClient {
    *  2) read timestamp and snapshot metadata.
    *  3) read a new targets.json if needed
    *
-   * This is an EXPERIMENTAL implementation. If there is Target data to be updated
-   * later on, it will still be fetched from the remote servers (ostree, app registry).
+   * If there is Target data to be updated, it may be later on either fetched from
+   * the remote servers (ostree, app registry) or copied from a local directory,
+   * depending on which Installer is instantiated (LiteInstall or LocalLiteInstall).
+   *
+   * This is an EXPERIMENTAL implementation.
    */
-  CheckInResult CheckInLocal(const std::string &path) const;
+  CheckInResult CheckInLocal(const LocalUpdateSource *local_update_source) const;
 
   /**
    * Return the active aktualizr-lite configuration.
@@ -284,7 +295,8 @@ class AkliteClient {
    * Create an InstallContext object to help drive an update.
    */
   std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
-                                            std::string correlation_id = "", InstallMode = InstallMode::All) const;
+                                            std::string correlation_id = "", InstallMode = InstallMode::All,
+                                            const LocalUpdateSource *local_update_source = nullptr) const;
 
   /**
    * @brief Complete a pending installation

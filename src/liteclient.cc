@@ -20,7 +20,7 @@
 #include "uptane/exceptions.h"
 #include "uptane/fetcher.h"
 
-LiteClient::LiteClient(Config& config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11,
+LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11,
                        std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher)
     : config{std::move(config_in)},
       primary_ecu{Uptane::EcuSerial::Unknown(), ""},
