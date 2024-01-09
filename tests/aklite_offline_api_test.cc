@@ -354,6 +354,44 @@ TEST_F(AkliteOffline, OfflineClient) {
   ASSERT_EQ(target, current());
 }
 
+TEST_F(AkliteOffline, OfflineClientWithoutAppShortlistingFailure) {
+  const auto app03{createApp("zz00-app-03")};
+  const auto target{addTarget({createApp("app-01"), createApp("app-02"), app03})};
+  // remove zz00-app-03 (app03) from the file system
+  // Do NOT set apps shortlist. Check operation should fail because there is no complete target available
+  boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
+
+  cfg_.pacman.extra["enforce_pacman_type"] = ComposeAppManager::Name;
+  auto cr = check();
+  ASSERT_EQ(CheckInResult::Status::Failed, cr.status);
+}
+
+TEST_F(AkliteOffline, OfflineClientWithAppShortlisting) {
+  const auto app03{createApp("zz00-app-03")};
+  const auto target{addTarget({createApp("app-01"), createApp("app-02"), app03})};
+  // remove zz00-app-03 (app03) from the file system to make sure that offline update succeeds
+  // if one of the targets apps is missing in the provided update content and the corresponding app shortlist
+  // is set in the client config.
+  boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
+  setAppsShortlist("app-01, app-02");
+
+  cfg_.pacman.extra["enforce_pacman_type"] = ComposeAppManager::Name;
+  auto cr = check();
+  ASSERT_EQ(CheckInResult::Status::Ok, cr.status);
+  ASSERT_EQ(1, cr.Targets().size());
+
+  ASSERT_EQ(target, cr.GetLatest());
+  auto dr = download(cr.GetLatest());
+  ASSERT_EQ(DownloadResult::Status::Ok, dr.status);
+  auto ir = install(cr.GetLatest());
+  ASSERT_EQ(InstallResult::Status::NeedsCompletion, ir.status) << ir.description;
+  reboot();
+  ir = run();
+  ASSERT_EQ(InstallResult::Status::Ok, ir.status) << ir.description;
+
+  ASSERT_EQ(target, current());
+}
+
 TEST_F(AkliteOffline, OfflineClientAppsOnly) {
   const auto target{addTarget({createApp("app-01")}, true)};
   auto cr = check();
