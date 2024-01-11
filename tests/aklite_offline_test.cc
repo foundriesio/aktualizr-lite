@@ -543,90 +543,91 @@ TEST_F(AkliteOffline, UpdateAfterPreloadingWithShortlisting) {
   ASSERT_TRUE(areAppsInSync());
 }
 
-// TEST_F(AkliteOffline, Rollback) {
-//   preloadApps({createApp("app-01")}, {});
+TEST_F(AkliteOffline, Rollback) {
+  preloadApps({createApp("app-01")}, {});
 
-//   // remove the current target app from the store/install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   const auto new_target{addTarget({createApp("app-01")})};
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   // emulate "normal" rollback - boot on the previous target
-//   sys_repo_.deploy(initial_target_.sha256Hash());
-//   ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
-//   ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
-// }
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01")})};
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.Sha256Hash());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackOk, run());
+  ASSERT_EQ(initial_target_, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
-// TEST_F(AkliteOffline, RollbackWithAppShortlisting) {
-//   // emulate preloading with one of the initial Target apps (app01)
-//   const auto app02{createApp("app-02")};
-//   preloadApps({createApp("app-01"), app02}, {app02.name});
+TEST_F(AkliteOffline, RollbackWithAppShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
 
-//   // remove the current target apps from the store/install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   const auto app02_updated{createApp("app-02")};
-//   const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03")})};
-//   // remove app-02 from the install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   // emulate "normal" rollback - boot on the previous target
-//   sys_repo_.deploy(initial_target_.sha256Hash());
-//   ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
-//   ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
-// }
+  // remove the current target apps from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03")})};
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.Sha256Hash());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackOk, run());
+  ASSERT_EQ(initial_target_, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
-// TEST_F(AkliteOffline, RollbackIfAppStartFailsWithAppShortlisting) {
-//   // emulate preloading with one of the initial Target apps (app01)
-//   const auto app02{createApp("app-02")};
-//   preloadApps({createApp("app-01"), app02}, {app02.name});
+TEST_F(AkliteOffline, RollbackIfAppStartFailsWithAppShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
 
-//   // remove the current target apps from the store/install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   const auto app02_updated{createApp("app-02")};
-//   const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03",
-//   "compose-start-failure")})};
-//   // remove app-02 from the install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
-//   setAppsShortlist("app-01,app-03");
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::RollbackNeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::Ok);
-//   ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
-// }
+  // remove the current target apps from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated, createApp("app-03", "compose-start-failure")})};
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  setAppsShortlist("app-01,app-03");
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackNeedsReboot, run());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(initial_target_, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
-// TEST_F(AkliteOffline, RollbackToInitialTarget) {
-//   preloadApps({createApp("app-01")}, {}, false);
-//   // remove the current target app from the store/install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   const auto new_target{addTarget({createApp("app-01")})};
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   // emulate "normal" rollback - boot on the previous target
-//   sys_repo_.deploy(initial_target_.sha256Hash());
-//   ASSERT_EQ(run(), offline::PostRunAction::RollbackOk);
-//   ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
-// }
+TEST_F(AkliteOffline, RollbackToInitialTarget) {
+  preloadApps({createApp("app-01")}, {}, false);
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01")})};
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  // emulate "normal" rollback - boot on the previous target
+  sys_repo_.deploy(initial_target_.Sha256Hash());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackOk, run());
+  ASSERT_EQ(initial_target_, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
-// TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
-//   const auto app01{createApp("app-01")};
-//   preloadApps({app01}, {}, false);
+TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
+  const auto app01{createApp("app-01")};
+  preloadApps({app01}, {}, false);
 
-//   // remove the current target app from the store/install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::RollbackNeedReboot);
-//   reboot();
-//   const auto current{getCurrent()};
-//   ASSERT_TRUE(initial_target_.MatchTarget(getCurrent()));
-//   ASSERT_EQ(Target::appsJson(current).size(), 1);
-//   ASSERT_TRUE(Target::appsJson(current).isMember(app01.name));
-//   ASSERT_EQ(Target::appsJson(current)[app01.name]["uri"], app01.uri);
-// }
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackNeedsReboot, run());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(initial_target_, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
 // TEST_F(AkliteOffline, RollbackToUnknown) {
 //   const auto app01{createApp("app-01")};
