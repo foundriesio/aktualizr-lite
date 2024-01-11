@@ -629,46 +629,46 @@ TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
   ASSERT_TRUE(areAppsInSync());
 }
 
-// TEST_F(AkliteOffline, RollbackToUnknown) {
-//   const auto app01{createApp("app-01")};
-//   preloadApps({app01}, {}, false);
-//   // remove the current target app from the store/install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   const auto new_target{addTarget({createApp("app-01")})};
+TEST_F(AkliteOffline, RollbackToUnknown) {
+  const auto app01{createApp("app-01")};
+  preloadApps({app01}, {}, false);
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01")})};
 
-//   // make the initial Target setting fail, so the current Target is "unknown"
-//   const Docker::Uri uri{Docker::Uri::parseUri(app01.uri)};
-//   const auto app_dir{test_dir_.Path() / "reset-apps" / "apps" / uri.app / uri.digest.hash()};
-//   Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("broken json"));
+  // make the initial Target setting fail, so the current Target is "unknown"
+  const Docker::Uri uri{Docker::Uri::parseUri(app01.uri)};
+  const auto app_dir{test_dir_.Path() / "reset-apps" / "apps" / uri.app / uri.digest.hash()};
+  Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("broken json"));
 
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   // emulate "normal" rollback - boot on the previous target, which is "unknown"
-//   sys_repo_.deploy(initial_target_.sha256Hash());
-//   ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknown);
-//   const auto current{getCurrent()};
-//   ASSERT_TRUE(Target::isUnknown(current));
-//   ASSERT_EQ(current.sha256Hash(), initial_target_.sha256Hash());
-// }
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  // emulate "normal" rollback - boot on the previous target, which is "unknown"
+  sys_repo_.deploy(initial_target_.Sha256Hash());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackOk, run());
+  ASSERT_EQ(initial_target_, getCurrent());
+  ASSERT_TRUE(Target::isInitial(Target::fromTufTarget(getCurrent())));
+  ASSERT_EQ(initial_target_.Sha256Hash(), getCurrent().Sha256Hash());
+}
 
-// TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
-//   const auto app01{createApp("app-01")};
-//   preloadApps({app01}, {}, false);
+TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
+  const auto app01{createApp("app-01")};
+  preloadApps({app01}, {}, false);
 
-//   // remove the current target app from the store/install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
 
-//   // make the initial Target setting fail, so the current Target is "unknown"
-//   const Docker::Uri uri{Docker::Uri::parseUri(app01.uri)};
-//   const auto app_dir{test_dir_.Path() / "reset-apps" / "apps" / uri.app / uri.digest.hash()};
-//   Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("broken json"));
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::RollbackToUnknownIfAppFailed);
-//   // Cannot perform rollback to unknown, so still booted on a new target's hash
-//   ASSERT_EQ(getCurrent().sha256Hash(), new_target.sha256Hash());
-// }
+  // make the initial Target setting fail, so the current Target is "unknown"
+  const Docker::Uri uri{Docker::Uri::parseUri(app01.uri)};
+  const auto app_dir{test_dir_.Path() / "reset-apps" / "apps" / uri.app / uri.digest.hash()};
+  Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("broken json"));
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackFailed, run());
+  // Cannot perform rollback to unknown, so still booted on a new target's hash
+  ASSERT_EQ(new_target.Sha256Hash(), getCurrent().Sha256Hash());
+}
 
 int main(int argc, char** argv) {
   if (argc != 2) {
