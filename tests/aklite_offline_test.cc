@@ -206,7 +206,7 @@ class AkliteOffline : public ::testing::Test {
       apps_to_shortlist.emplace(app.name);
     }
     tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-1", initial_target_.sha256Hash(),
-                        cfg_.provision.primary_ecu_hardware_id, "0", apps_json);
+                        cfg_.provision.primary_ecu_hardware_id, "1", apps_json);
 
     // content-based shortlisting
     for (const auto& app : apps_not_to_preload) {
