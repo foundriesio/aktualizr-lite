@@ -491,38 +491,39 @@ TEST_F(AkliteOffline, OfflineClientAppsOnly) {
   ASSERT_TRUE(areAppsInSync());
 }
 
-// TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
-//   const auto target{addTarget({createApp("app-01")})};
-//   offline::PostInstallAction post_install_action{offline::PostInstallAction::Undefined};
-//   // Emulate the situation when the previous ostree update that included boot fw update
-//   // hasn't been fully completed.
-//   // I.E. the final reboot that confirms successful reboot on a new boot fw
-//   // and ostree for the bootloader, so it finalizes the boot fw update and resets `bootupgrade_available`.
-//   // Also, it may happen that `bootupgrade_available` is set by mistake.
-//   // The bootloader will detect such situation and reset `bootupgrade_available`.
-//   boot_flag_mgr_->set("bootupgrade_available");
+TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
+  const auto target{addTarget({createApp("app-01")})};
+  // Emulate the situation when the previous ostree update that included boot fw update
+  // hasn't been fully completed.
+  // I.E. the final reboot that confirms successful reboot on a new boot fw
+  // and ostree for the bootloader, so it finalizes the boot fw update and resets `bootupgrade_available`.
+  // Also, it may happen that `bootupgrade_available` is set by mistake.
+  // The bootloader will detect such situation and reset `bootupgrade_available`.
+  boot_flag_mgr_->set("bootupgrade_available");
 
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedRebootForBootFw);
-//   reboot();
-//   boot_flag_mgr_->set("bootupgrade_available", "0");
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::Ok);
-//   ASSERT_TRUE(target.MatchTarget(getCurrent()));
-// }
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsRebootForBootFw, install());
+  reboot();
+  boot_flag_mgr_->set("bootupgrade_available", "0");
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
-// TEST_F(AkliteOffline, BootFwUpdate) {
-//   const auto target{addTarget({createApp("app-01")}, false, true)};
+TEST_F(AkliteOffline, BootFwUpdate) {
+  const auto target{addTarget({createApp("app-01")}, false, true)};
 
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::OkNeedReboot);
-//   reboot();
-//   // emulate boot firmware update confirmation
-//   boot_flag_mgr_->set("bootupgrade_available", "0");
-//   ASSERT_EQ(run(), offline::PostRunAction::OkNoPendingInstall);
-//   ASSERT_TRUE(target.MatchTarget(getCurrent()));
-// }
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::OkNeedsRebootForBootFw, run());
+  reboot();
+  // emulate boot firmware update confirmation
+  boot_flag_mgr_->set("bootupgrade_available", "0");
+  ASSERT_EQ(aklite::cli::StatusCode::NoPendingInstallation, run());
+  ASSERT_EQ(target, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
 // TEST_F(AkliteOffline, UpdateAfterPreloadingWithShortlisting) {
 //   // emulate preloading with one of the initial Target apps (app01)
