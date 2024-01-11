@@ -513,22 +513,23 @@ TEST_F(AkliteOffline, BootFwUpdate) {
   ASSERT_TRUE(areAppsInSync());
 }
 
-// TEST_F(AkliteOffline, UpdateAfterPreloadingWithShortlisting) {
-//   // emulate preloading with one of the initial Target apps (app01)
-//   const auto app02{createApp("app-02")};
-//   preloadApps({createApp("app-01"), app02}, {app02.name});
+TEST_F(AkliteOffline, UpdateAfterPreloadingWithShortlisting) {
+  // emulate preloading with one of the initial Target apps (app01)
+  const auto app02{createApp("app-02")};
+  preloadApps({createApp("app-01"), app02}, {app02.name});
 
-//   // remove the current target app from the store/install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   const auto app02_updated{createApp("app-02")};
-//   const auto new_target{addTarget({createApp("app-01"), app02_updated})};
-//   // remove app-02 from the install source dir
-//   boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::Ok);
-//   ASSERT_TRUE(new_target.MatchTarget(getCurrent()));
-// }
+  // remove the current target app from the store/install source dir
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto app02_updated{createApp("app-02")};
+  const auto new_target{addTarget({createApp("app-01"), app02_updated})};
+  // remove app-02 from the install source dir
+  boost::filesystem::remove_all(app_store_.appsDir() / app02_updated.name);
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(new_target, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
 // TEST_F(AkliteOffline, Rollback) {
 //   preloadApps({createApp("app-01")}, {});
