@@ -12,7 +12,6 @@
 #include "composeappmanager.h"
 #include "docker/restorableappengine.h"
 #include "liteclient.h"
-#include "offline/client.h"
 #include "target.h"
 
 // include test fixtures

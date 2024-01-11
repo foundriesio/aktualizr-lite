@@ -3,7 +3,6 @@
 #include "target.h"
 
 #include "aktualizr-lite/cli/cli.h"
-#include "offline/client.h"
 
 namespace apps {
 namespace aklite_offline {

@@ -94,5 +94,3 @@ install(DIRECTORY ../include/aktualizr-lite DESTINATION ${CMAKE_INSTALL_INCLUDED
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
 aktualizr_source_file_checks(main.cc ${SRC} ${HEADERS})
-
-add_subdirectory(offline)
