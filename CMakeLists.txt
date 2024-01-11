@@ -8,7 +8,6 @@ project(aklite)
 set(AKTUALIZR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/aktualizr)
 set(AKLITE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(MAIN_TARGET_LIB aktualizr_lite)
-set(AKLITE_OFFLINE_LIB aklite-offline_lib)
 
 # export compile commands to make teh aktualizr's clang-tidy stuff working
 # see aktualizr/CMakeLists.txt for more details

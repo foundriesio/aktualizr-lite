@@ -12,13 +12,48 @@
 #include "crypto/p11engine.h"
 #include "helpers.h"
 #include "http/httpclient.h"
-#include "offline/client.h"
 #include "primary/reportqueue.h"
 #include "rootfstreemanager.h"
 #include "storage/invstorage.h"
 #include "target.h"
 #include "uptane/exceptions.h"
 #include "uptane/fetcher.h"
+
+class OfflineMetaFetcher : public Uptane::IMetadataFetcher {
+ public:
+  class NotFoundException : public std::runtime_error {
+   public:
+    NotFoundException(const std::string& role, const std::string& version)
+        : std::runtime_error("Metadata hasn't been found; role: " + role + "; version: " + version) {}
+  };
+
+  explicit OfflineMetaFetcher(boost::filesystem::path tuf_repo_path, Uptane::Version max_root_ver = Uptane::Version())
+      : tuf_repo_path_{std::move(tuf_repo_path)}, max_root_ver_{max_root_ver} {}
+
+  void fetchRole(std::string* result, int64_t /* maxsize */, Uptane::RepositoryType /* repo */,
+                 const Uptane::Role& role, Uptane::Version version) const override {
+    const boost::filesystem::path meta_file_path{tuf_repo_path_ / version.RoleFileName(role)};
+
+    if (!boost::filesystem::exists(meta_file_path) ||
+        (role == Uptane::Role::Root() && max_root_ver_ != Uptane::Version() && max_root_ver_ < version)) {
+      std::stringstream ver_str;
+      ver_str << version;
+      throw NotFoundException(role.ToString(), ver_str.str());
+    }
+
+    std::ifstream meta_file_stream(meta_file_path.string());
+    *result = {std::istreambuf_iterator<char>(meta_file_stream), std::istreambuf_iterator<char>()};
+  }
+
+  void fetchLatestRole(std::string* result, int64_t maxsize, Uptane::RepositoryType repo,
+                       const Uptane::Role& role) const override {
+    fetchRole(result, maxsize, repo, role, Uptane::Version());
+  }
+
+ private:
+  const boost::filesystem::path tuf_repo_path_;
+  const Uptane::Version max_root_ver_;
+};
 
 LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11,
                        std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher)
@@ -287,9 +322,9 @@ std::tuple<bool, boost::filesystem::path> LiteClient::isRootMetaImportNeeded() {
 bool LiteClient::importRootMeta(const boost::filesystem::path& src, Uptane::Version max_ver) {
   bool res{true};
   try {
-    offline::MetaFetcher offline_meta_fetcher{src.string(), max_ver};
+    OfflineMetaFetcher offline_meta_fetcher{src.string(), max_ver};
     image_repo_.updateRoot(*storage, offline_meta_fetcher);
-  } catch (const offline::MetaFetcher::NotFoundException& exc) {
+  } catch (const OfflineMetaFetcher::NotFoundException& exc) {
     // That's OK, it means the latest + 1 root version is not found
     LOG_TRACE << "Not found root role metadata; err: " << exc.what();
   } catch (const Uptane::ExpiredMetadata& exc) {
