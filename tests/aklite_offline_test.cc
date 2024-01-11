@@ -400,76 +400,84 @@ TEST_F(AkliteOffline, OfflineClient) {
   ASSERT_TRUE(areAppsInSync());
 }
 
-// TEST_F(AkliteOffline, OfflineClientInstallNotLatest) {
-//   const auto target{addTarget({createApp("app-01")})};
-//   const auto app01_updated{createApp("app-01")};
-//   const auto latest_target{addTarget({app01_updated})};
-//   const auto app01_updated_uri{Docker::Uri::parseUri(app01_updated.uri)};
-//   boost::filesystem::remove_all(app_store_.appsDir() / app01_updated.name / app01_updated_uri.digest.hash());
+TEST_F(AkliteOffline, OfflineClientInstallNotLatest) {
+  const auto target{addTarget({createApp("app-01")})};
+  const auto app01_updated{createApp("app-01")};
+  const auto latest_target{addTarget({app01_updated})};
+  const auto app01_updated_uri{Docker::Uri::parseUri(app01_updated.uri)};
+  boost::filesystem::remove_all(app_store_.appsDir() / app01_updated.name / app01_updated_uri.digest.hash());
 
-//   ASSERT_EQ(1, check().size());
-//   ASSERT_TRUE(target.MatchTarget(check().front()));
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::Ok);
-//   ASSERT_TRUE(target.MatchTarget(getCurrent()));
-// }
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target, available_targets.back());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
-// TEST_F(AkliteOffline, OfflineClientMultipleTargets) {
-//   const std::vector<Uptane::Target> targets{addTarget({createApp("app-01")}),
-//                                             addTarget({createApp("app-01"), createApp("app-02")}),
-//                                             addTarget({createApp("app-02"), createApp("app-03")})};
+TEST_F(AkliteOffline, OfflineClientMultipleTargets) {
+  const std::vector<TufTarget> targets{addTarget({createApp("app-01")}),
+                                       addTarget({createApp("app-01"), createApp("app-02")}),
+                                       addTarget({createApp("app-02"), createApp("app-03")})};
 
-//   const auto found_targets{check()};
-//   ASSERT_EQ(targets.size(), found_targets.size());
-//   for (int ii = 0; ii < targets.size(); ++ii) {
-//     ASSERT_TRUE(targets[ii].MatchTarget(found_targets[found_targets.size() - ii - 1]));
-//   }
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::Ok);
-//   ASSERT_TRUE(targets[targets.size() - 1].MatchTarget(getCurrent()));
-// }
+  const auto found_targets{check()};
+  ASSERT_EQ(targets.size(), found_targets.size());
+  for (int ii = 0; ii < targets.size(); ++ii) {
+    ASSERT_EQ(targets[ii], found_targets[ii]);
+  }
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(targets[targets.size() - 1], found_targets[found_targets.size() - 1]);
+  ASSERT_TRUE(areAppsInSync());
+}
 
-// TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
-//   const auto app03{createApp("zz00-app-03")};
-//   const auto target{addTarget({createApp("app-01"), createApp("app-02"), app03})};
-//   // remove zz00-app-03 (app03) from the file system to make sure that offline update succeeds
-//   // if one of the targets apps is missing in the provided update content and the corresponding app shortlist
-//   // is set in the client config.
-//   boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
-//   setAppsShortlist("app-01, app-02");
+TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
+  const auto app03{createApp("zz00-app-03")};
+  const auto target{addTarget({createApp("app-01"), createApp("app-02"), app03})};
+  // remove zz00-app-03 (app03) from the file system to make sure that offline update succeeds
+  // if one of the targets apps is missing in the provided update content and the corresponding app shortlist
+  // is set in the client config.
+  boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
+  setAppsShortlist("app-01, app-02");
 
-//   ASSERT_EQ(1, check().size());
-//   ASSERT_TRUE(target.MatchTarget(check().front()));
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::Ok);
-//   ASSERT_TRUE(target.MatchTarget(getCurrent()));
-// }
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target, available_targets.back());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
-// TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
-//   const auto target{addTarget({createApp("app-01")})};
-//   // Remove all Target Apps from App store to make sure that only ostree can be updated
-//   boost::filesystem::remove_all(app_store_.appsDir());
-//   cfg_.pacman.extra["enforce_pacman_type"] = RootfsTreeManager::Name;
+TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
+  const auto target{addTarget({createApp("app-01")})};
+  // Remove all Target Apps from App store to make sure that only ostree can be updated
+  boost::filesystem::remove_all(app_store_.appsDir());
+  cfg_.pacman.type = RootfsTreeManager::Name;
 
-//   ASSERT_EQ(1, check().size());
-//   ASSERT_TRUE(target.MatchTarget(check().front()));
-//   ASSERT_EQ(install(), offline::PostInstallAction::NeedReboot);
-//   reboot();
-//   ASSERT_EQ(run(), offline::PostRunAction::Ok);
-//   ASSERT_TRUE(target.MatchTarget(getCurrent()));
-// }
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target, available_targets.back());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target, getCurrent());
+}
 
-// TEST_F(AkliteOffline, OfflineClientAppsOnly) {
-//   const auto target{addTarget({createApp("app-01")}, true)};
-//   ASSERT_EQ(1, check().size());
-//   ASSERT_TRUE(target.MatchTarget(check().front()));
-//   ASSERT_EQ(install(), offline::PostInstallAction::Ok);
-//   ASSERT_EQ(run(), offline::PostRunAction::Ok);
-//   ASSERT_TRUE(target.MatchTarget(getCurrent()));
-// }
+TEST_F(AkliteOffline, OfflineClientAppsOnly) {
+  const auto target{addTarget({createApp("app-01")}, true)};
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target, available_targets.back());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallAppsNeedFinalization, install());
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
 
 // TEST_F(AkliteOffline, UpdateIfBootFwUpdateIsNotConfirmedBefore) {
 //   const auto target{addTarget({createApp("app-01")})};
