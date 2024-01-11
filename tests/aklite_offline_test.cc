@@ -164,13 +164,11 @@ class AkliteOffline : public ::testing::Test {
                            bool add_bootloader_update = false) {
     const auto& latest_target{tuf_repo_.getLatest()};
     std::string version;
-    if (version.size() == 0) {
-      try {
-        version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
-      } catch (...) {
-        LOG_INFO << "No target available, preparing the first version";
-        version = "2";
-      }
+    try {
+      version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
+    } catch (...) {
+      LOG_INFO << "No target available, preparing the first version";
+      version = "2";
     }
     auto hash{latest_target.IsValid() ? latest_target.sha256Hash() : initial_target_.sha256Hash()};
     if (!just_apps) {
