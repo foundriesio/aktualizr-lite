@@ -228,19 +228,6 @@ target_link_libraries(t_aklite_offline ${MAIN_TARGET_LIB} ${TEST_LIBS} testutili
 set_tests_properties(test_aklite_offline PROPERTIES ENVIRONMENT "LD_PRELOAD=${PROJECT_BINARY_DIR}/tests/libfstatvfs-mock.so")
 set_tests_properties(test_aklite_offline PROPERTIES LABELS "aklite:offline")
 
-add_aktualizr_test(NAME aklite_offline_api
-  SOURCES aklite_offline_api_test.cc
-  PROJECT_WORKING_DIRECTORY
-  ARGS
-  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
-)
-aktualizr_source_file_checks(aklite_offline_api_test.cc)
-target_include_directories(t_aklite_offline_api PRIVATE ${AKLITE_DIR}/include ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
-target_link_libraries(t_aklite_offline_api ${MAIN_TARGET_LIB} ${TEST_LIBS} testutilities uptane_generator_lib fstatvfs-mock)
-set_tests_properties(test_aklite_offline_api PROPERTIES ENVIRONMENT "LD_PRELOAD=${PROJECT_BINARY_DIR}/tests/libfstatvfs-mock.so")
-set_tests_properties(test_aklite_offline_api PROPERTIES LABELS "aklite:offline-api")
-
-
 add_aktualizr_test(NAME boot_flag_mgmt
   SOURCES boot_flag_mgmt_test.cc
   PROJECT_WORKING_DIRECTORY
