@@ -33,6 +33,12 @@ else(BUILD_SOTA_TOOLS)
   set(BUILD_AKLITE ON)
 endif(BUILD_SOTA_TOOLS)
 
+# Don't set the `ostree` package manager by default, otherwise
+# aklite won't be able to determine whether the `ostree` package manager
+# is set by a user or it is just a default value set automatically.
+# If a pacman type is not set by a user then aklite deduces the type based
+# on presence of the docker components on a system.
+add_definitions(-DDONT_DEFINE_DEFAULT_MANAGER)
 # TODO: consider adding a custom target or using ExternalProject so we don't need
 # to encapsulate/inherit all aktualizr's targets and definitions, so e.g. `make all`
 # would aktually means build 'all' of aktualizr-lite but not 'all' of aktualizr

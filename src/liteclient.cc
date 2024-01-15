@@ -96,6 +96,17 @@ LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const
                                                 report_queue_event_limit_);
 
   std::shared_ptr<RootfsTreeManager> basepacman;
+  // Deduce a package manager type if not set explicitly by a user
+  if (config.pacman.type == PACKAGE_MANAGER_NONE) {
+    // If the app engine is defined by a caller or there are both the docker client and docker daemon
+    // executables on a system then assume that the compose app package manager should be used.
+    if (app_engine != nullptr ||
+        (boost::filesystem::exists("/usr/bin/dockerd") && boost::filesystem::exists("/usr/bin/docker"))) {
+      config.pacman.type = ComposeAppManager::Name;
+    } else {
+      config.pacman.type = RootfsTreeManager::Name;
+    }
+  }
   if (config.pacman.type == ComposeAppManager::Name) {
     basepacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
                                                      ostree_sysroot, *key_manager_, app_engine);
