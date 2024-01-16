@@ -325,25 +325,6 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
   return ret;
 }
 
-static void setPacmanType(Config& cfg, bool no_custom_docker_client) {
-  // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps,
-  // unless a package manager type is enforced in the config.
-  std::string type{ComposeAppManager::Name};
-  // Unless there is no `docker` or `dockerd` and a custom docker client is not provided (e.g. by the unit test mock)
-  if (no_custom_docker_client &&
-      (!boost::filesystem::exists("/usr/bin/dockerd") || !boost::filesystem::exists("/usr/bin/docker"))) {
-    type = RootfsTreeManager::Name;
-  }
-  if (cfg.pacman.extra.count("enforce_pacman_type") > 0) {
-    type = cfg.pacman.extra.at("enforce_pacman_type");
-    if (type != RootfsTreeManager::Name && type != ComposeAppManager::Name) {
-      throw std::invalid_argument("unsupported package manager type: " + type);
-    }
-  }
-
-  cfg.pacman.type = type;
-}
-
 CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
   auto repo_src =
       std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
@@ -359,20 +340,16 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     return result;
   }
 
-  setPacmanType(client_->config, local_update_source->docker_client_ptr == nullptr);
-
-  std::vector<Uptane::Target> available_targets =
-      getAvailableTargets(client_->config.pacman, fromTufTargets(result.Targets()), src,
-                          false /* get all available targets, not just latest */);
-
+  const Config& cfg{client_->config};
+  std::vector<Uptane::Target> available_targets = getAvailableTargets(
+      cfg.pacman, fromTufTargets(result.Targets()), src, false /* get all available targets, not just latest */);
   if (available_targets.empty()) {
     LOG_INFO << "Unable to locate complete target in ostree dir  " << src.OstreeRepoDir << " and app dir "
              << src.AppsDir;
-    return CheckInResult(CheckInResult::Status::Failed, client_->config.provision.primary_ecu_hardware_id,
+    return CheckInResult(CheckInResult::Status::Failed, cfg.provision.primary_ecu_hardware_id,
                          std::vector<TufTarget>{});
   }
-  return CheckInResult(result.status, client_->config.provision.primary_ecu_hardware_id,
-                       toTufTargets(available_targets));
+  return CheckInResult(result.status, cfg.provision.primary_ecu_hardware_id, toTufTargets(available_targets));
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
@@ -648,10 +625,9 @@ class LocalLiteInstall : public LiteInstall {
     // make LiteClient to pull from a local ostree repo
     offline_update_config_.pacman.ostree_server = "file://" + local_update_source_.ostree_repo;
 
-    // Always use the compose app manager since it covers both use-cases, just ostree and ostree+apps.
-    offline_update_config_.pacman.type = ComposeAppManager::Name;
-    setPacmanType(offline_update_config_, local_update_source_.docker_client_ptr == nullptr);
-    if (offline_update_config_.pacman.type == RootfsTreeManager::Name) {
+    // use the ostree only install mode for offline update by default, so updated containers
+    // are created and started on finalization (aka install completion, run command)
+    if (offline_update_config_.pacman.type != RootfsTreeManager::Name) {
       mode_ = InstallMode::OstreeOnly;
     }
 

@@ -1,14 +1,13 @@
 #ifndef AKLITE_OFFLINE_CMD_H
 #define AKLITE_OFFLINE_CMD_H
 
+#include <iostream>
 #include <string>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
-#include "libaktualizr/config.h"
-#include "logging/logging.h"
 
 namespace po = boost::program_options;
 
@@ -42,16 +41,15 @@ class CheckCmd : public Cmd {
 
   int operator()(const po::variables_map& vm) const override {
     try {
-      Config cfg_in{vm};
-      return checkSrcDir(cfg_in, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()));
+      return checkSrcDir(vm, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()));
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to check the update source directory: " << exc.what();
+      std::cerr << "Failed to check the update source directory: " << exc.what() << std::endl;
       return EXIT_FAILURE;
     }
   }
 
  private:
-  int checkSrcDir(const Config& cfg_in, const boost::filesystem::path& src_dir) const;
+  int checkSrcDir(const po::variables_map& vm, const boost::filesystem::path& src_dir) const;
 
  private:
   po::options_description _options;
@@ -69,17 +67,18 @@ class InstallCmd : public Cmd {
 
   int operator()(const po::variables_map& vm) const override {
     try {
-      Config cfg_in{vm};
-      return installUpdate(cfg_in, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()),
+      return installUpdate(vm, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()),
                            force_downgrade);
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to list Apps: " << exc.what();
+      std::cerr << "Failed to install offline update; src-dir: "
+                << boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>().string())
+                << ", err: " << exc.what();
       return EXIT_FAILURE;
     }
   }
 
  private:
-  int installUpdate(const Config& cfg_in, const boost::filesystem::path& src_dir, bool force_downgrade) const;
+  int installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir, bool force_downgrade) const;
 
  private:
   po::options_description _options;
@@ -96,16 +95,15 @@ class RunCmd : public Cmd {
 
   int operator()(const po::variables_map& vm) const override {
     try {
-      Config cfg_in{vm};
-      return runUpdate(cfg_in);
+      return runUpdate(vm);
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to list Apps: " << exc.what();
+      std::cerr << "Failed to finalize the update and start updated Apps; err: " << exc.what();
       return EXIT_FAILURE;
     }
   }
 
  private:
-  int runUpdate(const Config& cfg_in) const;
+  int runUpdate(const po::variables_map& vm) const;
 
  private:
   po::options_description _options;
@@ -121,16 +119,15 @@ class CurrentCmd : public Cmd {
 
   int operator()(const po::variables_map& vm) const override {
     try {
-      Config cfg_in{vm};
-      return current(cfg_in);
+      return current(vm);
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Failed to get current status information: " << exc.what();
+      std::cerr << "Failed to get current status information: " << exc.what() << std::endl;
       return EXIT_FAILURE;
     }
   }
 
  private:
-  int current(const Config& cfg_in) const;
+  int current(const po::variables_map& vm) const;
 
  private:
   po::options_description _options;

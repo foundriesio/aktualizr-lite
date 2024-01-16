@@ -43,6 +43,8 @@ class RepoSource {
  */
 class TufTarget {
  public:
+  static constexpr const char* const ComposeAppField{"docker_compose_apps"};
+
   explicit TufTarget() : name_{"unknown"} {}
   TufTarget(std::string name, std::string sha256, int version, Json::Value custom)
       : name_(std::move(name)), sha256_(std::move(sha256)), version_(version), custom_(std::move(custom)) {}
@@ -67,6 +69,11 @@ class TufTarget {
   const Json::Value& Custom() const { return custom_; }
 
   /**
+   * Return Target Apps data in a form of JSON.
+   */
+  Json::Value AppsJson() const { return Custom().get(ComposeAppField, Json::Value(Json::nullValue)); }
+
+  /**
    * Is this a known target in the Tuf manifest? There are two common causes
    * to this situation:
    *  1) A device has been re-registered (sql.db got wiped out) and the
@@ -86,6 +93,59 @@ class TufTarget {
   bool operator==(const TufTarget& other) const {
     return other.name_ == name_ && other.sha256_ == sha256_ && other.version_ == version_;
   }
+
+  /**
+   * @brief Class to iterate over Target Apps
+   */
+  class Apps {
+   public:
+    struct AppDesc {
+      AppDesc(std::string app_name, const Json::Value& app_json) : name{std::move(app_name)} {
+        if (app_json.isNull() || !app_json.isObject() || !app_json.isMember("uri")) {
+          throw std::runtime_error("Invalid format of App in Target json: " + app_json.toStyledString());
+        }
+        uri = app_json["uri"].asString();
+      }
+      AppDesc() = delete;
+      bool operator==(const AppDesc& app_desc) const { return name == app_desc.name && uri == app_desc.uri; }
+
+      std::string name;
+      std::string uri;
+    };
+
+    explicit Apps(const TufTarget& target) : target_apps_json_{target.AppsJson()} {}
+
+    class Iterator {
+     public:
+      Iterator(Iterator&&) = default;
+      ~Iterator() = default;
+      Iterator() = delete;
+      Iterator& operator=(const Iterator&) = delete;
+      Iterator& operator=(Iterator&&) = delete;
+
+      bool operator!=(const Iterator& rhs) const { return json_iter_ != rhs.json_iter_; }
+      AppDesc operator*() const { return {json_iter_.key().asString(), *json_iter_}; }
+      Iterator operator++() {
+        ++json_iter_;
+        return *this;
+      }
+
+     private:
+      friend class TufTarget::Apps;
+      explicit Iterator(Json::ValueConstIterator&& json_iter) : json_iter_{json_iter} {}
+      Iterator(const Iterator&) = default;
+
+      Json::ValueConstIterator json_iter_;
+    };
+
+    Iterator begin() const { return Iterator(target_apps_json_.begin()); }
+    Iterator end() const { return Iterator(target_apps_json_.end()); }
+    bool isPresent(const std::string& app_name) const { return target_apps_json_.isMember(app_name); }
+    AppDesc operator[](const std::string& app_name) const { return AppDesc(app_name, target_apps_json_[app_name]); }
+
+   private:
+    Json::Value target_apps_json_;
+  };  // Apps
 
  private:
   std::string name_;

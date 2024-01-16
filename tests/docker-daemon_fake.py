@@ -114,8 +114,12 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             with open(os.path.join(self.server.root_dir, "images.json"), "r") as f:
                 images = json.load(f)
+                if not images:
+                    images = {}
         except FileNotFoundError:
             images = {}
+        except Exception as exc:
+            logger.error(exc)
 
         try:
             image_uri = lm[0]["RepoTags"][0]

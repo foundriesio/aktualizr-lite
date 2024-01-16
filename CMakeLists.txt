@@ -8,7 +8,6 @@ project(aklite)
 set(AKTUALIZR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/aktualizr)
 set(AKLITE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(MAIN_TARGET_LIB aktualizr_lite)
-set(AKLITE_OFFLINE_LIB aklite-offline_lib)
 
 # export compile commands to make teh aktualizr's clang-tidy stuff working
 # see aktualizr/CMakeLists.txt for more details
@@ -33,6 +32,12 @@ else(BUILD_SOTA_TOOLS)
   set(BUILD_AKLITE ON)
 endif(BUILD_SOTA_TOOLS)
 
+# Don't set the `ostree` package manager by default, otherwise
+# aklite won't be able to determine whether the `ostree` package manager
+# is set by a user or it is just a default value set automatically.
+# If a pacman type is not set by a user then aklite deduces the type based
+# on presence of the docker components on a system.
+add_definitions(-DDONT_DEFINE_DEFAULT_MANAGER)
 # TODO: consider adding a custom target or using ExternalProject so we don't need
 # to encapsulate/inherit all aktualizr's targets and definitions, so e.g. `make all`
 # would aktually means build 'all' of aktualizr-lite but not 'all' of aktualizr
@@ -43,7 +48,7 @@ if(BUILD_AKLITE)
   add_dependencies(aklite aktualizr-lite)
 
   add_custom_target(aklite-tests)
-  add_dependencies(aklite-tests aklite t_lite-helpers uptane-generator t_compose-apps t_ostree t_liteclient t_yaml2json t_composeappengine t_restorableappengine t_aklite t_aklite_rollback t_aklite_rollback_ext t_apiclient t_exec t_docker t_aklite_offline  t_aklite_offline_api t_boot_flag_mgmt t_cli t_nospace)
+  add_dependencies(aklite-tests aklite t_lite-helpers uptane-generator t_compose-apps t_ostree t_liteclient t_yaml2json t_composeappengine t_restorableappengine t_aklite t_aklite_rollback t_aklite_rollback_ext t_apiclient t_exec t_docker t_aklite_offline  t_boot_flag_mgmt t_cli t_nospace)
 
   set(CMAKE_MODULE_PATH "${AKTUALIZR_DIR}/cmake-modules;${CMAKE_MODULE_PATH}")
 

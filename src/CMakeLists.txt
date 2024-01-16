@@ -42,7 +42,7 @@ set(HEADERS helpers.h
         downloader.h
         installer.h
         exec.h
-        cli/cli.h
+        ../include/aktualizr-lite/cli/cli.h
         tuf/akhttpsreposource.h
         tuf/localreposource.h
         tuf/akrepo.h
@@ -94,5 +94,3 @@ install(DIRECTORY ../include/aktualizr-lite DESTINATION ${CMAKE_INSTALL_INCLUDED
 
 # enable creating clang-tidy targets for each source file (see aktualizr/CMakeLists.txt for details)
 aktualizr_source_file_checks(main.cc ${SRC} ${HEADERS})
-
-add_subdirectory(offline)

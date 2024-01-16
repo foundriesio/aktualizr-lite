@@ -10,7 +10,7 @@
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/program_options.hpp>
 
-#include "cli/cli.h"
+#include "aktualizr-lite/cli/cli.h"
 #include "crypto/keymanager.h"
 #include "helpers.h"
 #include "http/httpclient.h"
@@ -444,7 +444,7 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClient akclient{client_ptr, false, true};
 
-  return static_cast<int>(cli::Install(akclient, version, target_name, install_mode));
+  return static_cast<int>(aklite::cli::Install(akclient, version, target_name, install_mode));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
@@ -457,7 +457,7 @@ static int cli_complete_install(LiteClient& client, const bpo::variables_map& pa
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClient akclient{client_ptr, false, true};
 
-  return static_cast<int>(cli::CompleteInstall(akclient));
+  return static_cast<int>(aklite::cli::CompleteInstall(akclient));
 }
 
 static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
