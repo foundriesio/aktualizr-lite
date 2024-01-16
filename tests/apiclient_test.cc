@@ -80,6 +80,13 @@ class ApiClientTest : public fixtures::ClientTest {
 
   void setPacmanType(const std::string& pacman_type) { pacman_type_ = pacman_type; }
 
+  std::string addOstreeCommit() {
+    const std::string unique_content = Utils::randomUuid();
+    const std::string unique_file = Utils::randomUuid();
+    Utils::writeFile(getSysRootFs().path + "/" + unique_file, unique_content, true);
+    return getOsTreeRepo().commit(getSysRootFs().path, "lmp");
+  }
+
  private:
   std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
   std::shared_ptr<LiteClient> lite_client_;
@@ -440,6 +447,86 @@ TEST_F(ApiClientTest, SwitchTag) {
     // make sure the update to tag_target was successful
     ASSERT_EQ(client.GetCurrent().Name(), tag_target.filename());
     ASSERT_EQ(client.GetCurrent().Sha256Hash(), tag_target.sha256Hash());
+  }
+}
+
+TEST_F(ApiClientTest, InstallTargetWithHackedOstree) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  std::vector<AppEngine::App> apps{{"app-01", "app-01-URI"}};
+  auto valid_target = Target::toTufTarget(createTarget(&apps));
+  const auto malicious_ostree_commit{addOstreeCommit()};
+  TufTarget malicious_target{valid_target.Name(), malicious_ostree_commit, valid_target.Version(),
+                             valid_target.Custom()};
+  {
+    AkliteClient client(liteclient);
+
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+    auto latest = result.GetLatest();
+    ASSERT_EQ(latest.Name(), malicious_target.Name());
+    auto installer = client.Installer(malicious_target);
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+    reboot(liteclient);
+  }
+  {
+    AkliteClient client(liteclient);
+
+    auto ciresult = client.CompleteInstallation();
+    ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
+    const auto current{client.GetCurrent()};
+    ASSERT_EQ(current.Name(), malicious_target.Name());
+    // malicious rootfs is not installed, however there is no any installation error
+    ASSERT_NE(current.Sha256Hash(), malicious_target.Sha256Hash());
+    ASSERT_EQ(current.Sha256Hash(), valid_target.Sha256Hash());
+    ASSERT_EQ(current.AppsJson(), valid_target.AppsJson());
+  }
+}
+
+TEST_F(ApiClientTest, InstallTargetWithHackedApps) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  std::vector<AppEngine::App> apps{{"app-01", "app-01-URI"}};
+  auto valid_target = Target::toTufTarget(createAppTarget(apps));
+  auto malicious_apps{valid_target.AppsJson()};
+  malicious_apps["app-01"]["uri"] = "malicious_app_uri";
+  auto custom_data{valid_target.Custom()};
+  custom_data[TufTarget::ComposeAppField] = malicious_apps;
+  TufTarget malicious_target{valid_target.Name(), valid_target.Sha256Hash(), valid_target.Version(), custom_data};
+  {
+    AkliteClient client(liteclient);
+
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+    auto latest = result.GetLatest();
+    ASSERT_EQ(latest.Name(), malicious_target.Name());
+    auto installer = client.Installer(malicious_target, "", "", InstallMode::OstreeOnly);
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::AppsNeedCompletion, iresult.status);
+  }
+  {
+    AkliteClient client(liteclient);
+
+    auto ciresult = client.CompleteInstallation();
+    ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
+    const auto current{client.GetCurrent()};
+    ASSERT_EQ(current.Name(), malicious_target.Name());
+    ASSERT_EQ(current.Sha256Hash(), malicious_target.Sha256Hash());
+    // malicious apps are not installed, however there is no any installation error
+    ASSERT_NE(current.AppsJson(), malicious_target.AppsJson());
+    ASSERT_EQ(current.Sha256Hash(), valid_target.Sha256Hash());
+    ASSERT_EQ(current.AppsJson(), valid_target.AppsJson());
   }
 }
 
