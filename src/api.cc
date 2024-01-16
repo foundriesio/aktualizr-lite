@@ -281,12 +281,9 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
     const ComposeAppManager::AppsContainer required_apps{
         ComposeAppManager::getRequiredApps(ComposeAppManager::Config(pconfig), t)};
     std::set<std::string> missing_apps;
-    Json::Value apps_to_install;
     for (const auto& app : required_apps) {
       if (found_apps.count(app.second) == 0) {
         missing_apps.insert(app.second);
-      } else {
-        apps_to_install[app.first]["uri"] = app.second;
       }
     }
     if (!missing_apps.empty()) {
@@ -296,9 +293,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       }
       continue;
     }
-    Json::Value updated_custom{t.custom_data()};
-    updated_custom[Target::ComposeAppField] = apps_to_install;
-    found_targets.emplace_back(Target::updateCustom(t, updated_custom));
+    found_targets.emplace_back(t);
     LOG_INFO << "\tall target content have been found";
     if (just_latest) {
       break;
