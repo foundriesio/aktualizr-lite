@@ -459,34 +459,14 @@ TEST_F(ApiClientTest, InstallTargetWithHackedOstree) {
   const auto malicious_ostree_commit{addOstreeCommit()};
   TufTarget malicious_target{valid_target.Name(), malicious_ostree_commit, valid_target.Version(),
                              valid_target.Custom()};
-  {
-    AkliteClient client(liteclient);
+  AkliteClient client(liteclient);
 
-    auto result = client.CheckIn();
-    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
-    auto latest = result.GetLatest();
-    ASSERT_EQ(latest.Name(), malicious_target.Name());
-    auto installer = client.Installer(malicious_target);
-    ASSERT_NE(nullptr, installer);
-    auto dresult = installer->Download();
-    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
-
-    auto iresult = installer->Install();
-    ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
-    reboot(liteclient);
-  }
-  {
-    AkliteClient client(liteclient);
-
-    auto ciresult = client.CompleteInstallation();
-    ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
-    const auto current{client.GetCurrent()};
-    ASSERT_EQ(current.Name(), malicious_target.Name());
-    // malicious rootfs is not installed, however there is no any installation error
-    ASSERT_NE(current.Sha256Hash(), malicious_target.Sha256Hash());
-    ASSERT_EQ(current.Sha256Hash(), valid_target.Sha256Hash());
-    ASSERT_EQ(current.AppsJson(), valid_target.AppsJson());
-  }
+  auto result = client.CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  auto latest = result.GetLatest();
+  ASSERT_EQ(latest.Name(), malicious_target.Name());
+  auto installer = client.Installer(malicious_target);
+  ASSERT_EQ(nullptr, installer);
 }
 
 TEST_F(ApiClientTest, InstallTargetWithHackedApps) {
@@ -500,34 +480,14 @@ TEST_F(ApiClientTest, InstallTargetWithHackedApps) {
   auto custom_data{valid_target.Custom()};
   custom_data[TufTarget::ComposeAppField] = malicious_apps;
   TufTarget malicious_target{valid_target.Name(), valid_target.Sha256Hash(), valid_target.Version(), custom_data};
-  {
-    AkliteClient client(liteclient);
+  AkliteClient client(liteclient);
 
-    auto result = client.CheckIn();
-    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
-    auto latest = result.GetLatest();
-    ASSERT_EQ(latest.Name(), malicious_target.Name());
-    auto installer = client.Installer(malicious_target, "", "", InstallMode::OstreeOnly);
-    ASSERT_NE(nullptr, installer);
-    auto dresult = installer->Download();
-    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
-
-    auto iresult = installer->Install();
-    ASSERT_EQ(InstallResult::Status::AppsNeedCompletion, iresult.status);
-  }
-  {
-    AkliteClient client(liteclient);
-
-    auto ciresult = client.CompleteInstallation();
-    ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
-    const auto current{client.GetCurrent()};
-    ASSERT_EQ(current.Name(), malicious_target.Name());
-    ASSERT_EQ(current.Sha256Hash(), malicious_target.Sha256Hash());
-    // malicious apps are not installed, however there is no any installation error
-    ASSERT_NE(current.AppsJson(), malicious_target.AppsJson());
-    ASSERT_EQ(current.Sha256Hash(), valid_target.Sha256Hash());
-    ASSERT_EQ(current.AppsJson(), valid_target.AppsJson());
-  }
+  auto result = client.CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  auto latest = result.GetLatest();
+  ASSERT_EQ(latest.Name(), malicious_target.Name());
+  auto installer = client.Installer(malicious_target, "", "", InstallMode::OstreeOnly);
+  ASSERT_EQ(nullptr, installer);
 }
 
 int main(int argc, char** argv) {
