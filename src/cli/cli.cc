@@ -62,17 +62,8 @@ StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const s
   return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
 }
 
-StatusCode Install(AkliteClient &client, int version, const std::string &target_name, const std::string &install_mode,
+StatusCode Install(AkliteClient &client, int version, const std::string &target_name, InstallMode install_mode,
                    bool force_downgrade, const LocalUpdateSource *local_update_source) {
-  const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
-  InstallMode mode{InstallMode::All};
-  if (!install_mode.empty()) {
-    if (str2Mode.count(install_mode) == 0) {
-      LOG_WARNING << "Unsupported installation mode: " << install_mode << "; falling back to the default install mode";
-    } else {
-      mode = str2Mode.at(install_mode);
-    }
-  }
   // Check if the device is in a correct state to start a new update
   if (client.IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
@@ -136,7 +127,7 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     LOG_INFO << "To New Target: " << target.Name();
   }
 
-  const auto installer = client.Installer(target, "", "", mode, local_update_source);
+  const auto installer = client.Installer(target, "", "", install_mode, local_update_source);
   if (installer == nullptr) {
     LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
     return StatusCode::UnknownError;

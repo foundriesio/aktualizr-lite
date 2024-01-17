@@ -444,7 +444,16 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClient akclient{client_ptr, false, true};
 
-  return static_cast<int>(aklite::cli::Install(akclient, version, target_name, install_mode));
+  const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
+  InstallMode mode{InstallMode::All};
+  if (!install_mode.empty()) {
+    if (str2Mode.count(install_mode) == 0) {
+      LOG_WARNING << "Unsupported installation mode: " << install_mode << "; falling back to the default install mode";
+    } else {
+      mode = str2Mode.at(install_mode);
+    }
+  }
+  return static_cast<int>(aklite::cli::Install(akclient, version, target_name, mode));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {

@@ -4,8 +4,7 @@
 #include <cstdlib>
 #include <string>
 
-class AkliteClient;
-class LocalUpdateSource;
+#include "aktualizr-lite/api.h"
 
 namespace aklite::cli {
 
@@ -38,7 +37,7 @@ StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const s
                       const std::string &apps_dir = "");
 
 StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "",
-                   const std::string &install_mode = "", bool force_downgrade = true,
+                   InstallMode install_mode = InstallMode::All, bool force_downgrade = true,
                    const LocalUpdateSource *local_update_source = nullptr);
 StatusCode CompleteInstall(AkliteClient &client);
 
