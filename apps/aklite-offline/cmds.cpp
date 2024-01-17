@@ -20,7 +20,7 @@ int InstallCmd::installUpdate(const po::variables_map& vm, const boost::filesyst
   const LocalUpdateSource local_update_source{.tuf_repo = (src_dir / "tuf").string(),
                                               .ostree_repo = (src_dir / "ostree_repo").string(),
                                               .app_store = (src_dir / "apps").string()};
-  auto ret_code{aklite::cli::Install(client, -1, "", "", force_downgrade, &local_update_source)};
+  auto ret_code{aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, force_downgrade, &local_update_source)};
   switch (ret_code) {
     case aklite::cli::StatusCode::InstallAppsNeedFinalization: {
       // TBD: The former `aklite-offline` sets `10` as a an exit/status code, while

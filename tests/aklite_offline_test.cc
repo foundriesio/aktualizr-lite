@@ -202,7 +202,7 @@ class AkliteOffline : public ::testing::Test {
 
   aklite::cli::StatusCode install() {
     AkliteClient client(createLiteClient());
-    return aklite::cli::Install(client, -1, "", "", false, src());
+    return aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, false, src());
   }
 
   aklite::cli::StatusCode run() {

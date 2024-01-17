@@ -625,12 +625,6 @@ class LocalLiteInstall : public LiteInstall {
     // make LiteClient to pull from a local ostree repo
     offline_update_config_.pacman.ostree_server = "file://" + local_update_source_.ostree_repo;
 
-    // use the ostree only install mode for offline update by default, so updated containers
-    // are created and started on finalization (aka install completion, run command)
-    if (offline_update_config_.pacman.type != RootfsTreeManager::Name) {
-      mode_ = InstallMode::OstreeOnly;
-    }
-
     ostree_sysroot_ = std::make_shared<OSTree::Sysroot>(offline_update_config_.pacman);
     storage_ = INvStorage::newStorage(offline_update_config_.storage, false, StorageClient::kTUF);
   }
