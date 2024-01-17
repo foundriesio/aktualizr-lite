@@ -360,6 +360,7 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
   LOG_INFO << "Importing root metadata from a local file system...";
   const std::string prod_bc_value{"production"};
   bool prod{false};
+  Uptane::Version max_ver{Uptane::Version()};
 
   try {
     const auto bc{key_manager_->getBC()};
@@ -370,11 +371,11 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
       LOG_DEBUG << "Missing or non-production business category found in a device certificate: " << bc;
     }
   } catch (const std::exception& exc) {
-    LOG_ERROR << "A device certificate is not found or failed to parse it: " << exc.what();
-    LOG_ERROR
-        << "Cannot determine a device type (prodution or CI). Skiping root metadata import, will download them from "
-           "Device Gateway (TOFU)";
-    return;
+    max_ver = Uptane::Version(2);
+    LOG_WARNING << "A device certificate is not found or failed to parse it: " << exc.what();
+    LOG_WARNING << "Cannot determine a device type (prodution or CI). "
+                << "Importing the first two versions of root role metadata since they are the same for both production "
+                   "and CI...";
   }
 
   boost::filesystem::path import_src{std::get<1>(import) / (prod ? "prod" : "ci")};
@@ -385,7 +386,7 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
     return;
   }
 
-  if (importRootMeta(import_src)) {
+  if (importRootMeta(import_src, max_ver)) {
     LOG_INFO << "Successfully imported " << (prod ? "production" : "CI") << " root role metadata from " << import_src;
   } else {
     LOG_ERROR << "Failed to import " << (prod ? "production" : "CI") << " root role metadata from " << import_src
