@@ -665,6 +665,42 @@ TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
   ASSERT_EQ(new_target.Sha256Hash(), getCurrent().Sha256Hash());
 }
 
+TEST_F(AkliteOffline, InvalidTargetInstallOstree) {
+  const auto target_not_available{addTarget({createApp("app-01")})};
+  const auto target_available{addTarget({createApp("app-01")})};
+  // Remove the first target ostree commit so only one target is available for offline update
+  // while the TUF repo contains both targets.
+  ostree_repo_.removeCommitObject(target_not_available.Sha256Hash());
+
+  AkliteClient client(createLiteClient());
+  const auto cr = client.CheckInLocal(src());
+  ASSERT_TRUE(cr);
+  const auto& available_targtets = cr.Targets();
+  ASSERT_EQ(1, available_targtets.size());
+  auto ic = client.Installer(target_not_available, "", "", InstallMode::OstreeOnly, src());
+  ASSERT_TRUE(ic != nullptr);
+  auto dr = ic->Download();
+  ASSERT_EQ(DownloadResult::Status::DownloadFailed, dr.status);
+}
+
+TEST_F(AkliteOffline, InvalidTargetInstallApps) {
+  const auto target_not_available{addTarget({createApp("app-01")})};
+  // Remove app-01 from the install source dir so only one target is available for offline update
+  // while the TUF repo contains both targets.
+  boost::filesystem::remove_all(app_store_.dir());
+  const auto target_available{addTarget({createApp("app-02")})};
+
+  AkliteClient client(createLiteClient());
+  const auto cr = client.CheckInLocal(src());
+  ASSERT_TRUE(cr);
+  const auto& available_targtets = cr.Targets();
+  ASSERT_EQ(1, available_targtets.size());
+  auto ic = client.Installer(target_not_available, "", "", InstallMode::OstreeOnly, src());
+  ASSERT_TRUE(ic != nullptr);
+  auto dr = ic->Download();
+  ASSERT_EQ(DownloadResult::Status::DownloadFailed, dr.status);
+}
+
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << argv[0] << " invalid arguments\n";
