@@ -26,6 +26,10 @@
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                         "/etc/sota/conf.d/"};
 
+// A key for json sub-document containing paths to update content (ostree repo and apps store).
+// It is applicable only to offline/local update.
+const static std::string LocalSrcDirKey{"local-src-dir"};
+
 TufTarget CheckInResult::GetLatest(std::string hwid) const {
   if (hwid.empty()) {
     hwid = primary_hwid_;
@@ -271,7 +275,9 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       continue;
     }
     if (pconfig.type != ComposeAppManager::Name) {
-      found_targets.emplace_back(t);
+      auto custom_data{t.custom_data()};
+      custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
+      found_targets.emplace_back(Target::updateCustom(t, custom_data));
       LOG_INFO << "\tall target content have been found";
       if (!just_latest) {
         continue;
@@ -293,7 +299,10 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       }
       continue;
     }
-    found_targets.emplace_back(t);
+    auto custom_data{t.custom_data()};
+    custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
+    custom_data[LocalSrcDirKey]["apps"] = src.AppsDir.string();
+    found_targets.emplace_back(Target::updateCustom(t, custom_data));
     LOG_INFO << "\tall target content have been found";
     if (just_latest) {
       break;
@@ -787,7 +796,13 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   if (local_update_source == nullptr) {
     return std::make_unique<LiteInstall>(client_, std::move(target), reason, install_mode);
   } else {
-    return std::make_unique<LocalLiteInstall>(client_, std::move(target), reason, local_update_source, install_mode);
+    if (t.Custom().isMember(LocalSrcDirKey)) {
+      return std::make_unique<LocalLiteInstall>(client_, std::move(target), reason, local_update_source, install_mode);
+    } else {
+      LOG_ERROR << "Update content of the specified target is not available locally: \n"
+                << "\tName: " << t.Name() << ", ostree hash: " << t.Sha256Hash() << "\n\tApps: " << t.AppsJson();
+      return nullptr;
+    }
   }
 }
 

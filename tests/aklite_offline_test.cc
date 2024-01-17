@@ -678,9 +678,7 @@ TEST_F(AkliteOffline, InvalidTargetInstallOstree) {
   const auto& available_targtets = cr.Targets();
   ASSERT_EQ(1, available_targtets.size());
   auto ic = client.Installer(target_not_available, "", "", InstallMode::OstreeOnly, src());
-  ASSERT_TRUE(ic != nullptr);
-  auto dr = ic->Download();
-  ASSERT_EQ(DownloadResult::Status::DownloadFailed, dr.status);
+  ASSERT_TRUE(ic == nullptr);
 }
 
 TEST_F(AkliteOffline, InvalidTargetInstallApps) {
@@ -696,9 +694,7 @@ TEST_F(AkliteOffline, InvalidTargetInstallApps) {
   const auto& available_targtets = cr.Targets();
   ASSERT_EQ(1, available_targtets.size());
   auto ic = client.Installer(target_not_available, "", "", InstallMode::OstreeOnly, src());
-  ASSERT_TRUE(ic != nullptr);
-  auto dr = ic->Download();
-  ASSERT_EQ(DownloadResult::Status::DownloadFailed, dr.status);
+  ASSERT_TRUE(ic == nullptr);
 }
 
 int main(int argc, char** argv) {
