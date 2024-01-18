@@ -220,16 +220,20 @@ class AkliteOffline : public ::testing::Test {
     return client.GetCurrent();
   }
 
-  void setInitialTarget(const std::string& hash, bool known = true) {
+  void setInitialTarget(const std::string& hash, bool known = true, Json::Value* custom_data = nullptr) {
     Uptane::EcuMap ecus{{Uptane::EcuSerial("test_primary_ecu_serial_id"), Uptane::HardwareIdentifier(hw_id)}};
     std::vector<Hash> hashes{Hash(Hash::Type::kSha256, hash)};
     Uptane::Target initial_target =
         Uptane::Target{known ? hw_id + "-lmp-1" : Target::InitialTarget, ecus, hashes, 0, "", "OSTREE"};
     // update the initial Target to add the hardware ID so Target::MatchTarget() works correctly
-    auto custom{initial_target.custom_data()};
-    custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
-    custom["version"] = "1";
-    initial_target.updateCustom(custom);
+    if (known && custom_data != nullptr) {
+      initial_target.updateCustom(*custom_data);
+    } else {
+      auto custom{initial_target.custom_data()};
+      custom["hardwareIds"][0] = cfg_.provision.primary_ecu_hardware_id;
+      custom["version"] = "1";
+      initial_target.updateCustom(custom);
+    }
     // set initial bootloader version
     const auto boot_fw_ver{bootloader::BootloaderLite::getVersion(sys_repo_.getDeploymentPath(), hash)};
     boot_flag_mgr_->set("bootfirmware_version", boot_fw_ver);
@@ -306,6 +310,7 @@ class AkliteOffline : public ::testing::Test {
       installed_target_json[initial_target_.Name()]["custom"] = custom;
       Utils::writeFile(cfg_.import.base_path / "installed_versions", installed_target_json);
       // ASSERT_EQ(getCurrent().filename(), initial_target_.filename());
+      setInitialTarget(initial_target_.Sha256Hash(), true, &custom);
     } else {
       // we need to remove the initial target from the TUF repo so it's not listed in the source TUF repo
       // for the following offline update and as result it will be "unknown" to the client.
@@ -597,8 +602,10 @@ TEST_F(AkliteOffline, RollbackToInitialTarget) {
   // emulate "normal" rollback - boot on the previous target
   sys_repo_.deploy(initial_target_.Sha256Hash());
   ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackOk, run());
-  ASSERT_EQ(initial_target_, getCurrent());
-  ASSERT_TRUE(areAppsInSync());
+  // If if's so called "initial" target then we don't know what apps were installed
+  // at a device initial startup, so we just check if name and ostree hash of targets match.
+  ASSERT_EQ(initial_target_.Name(), getCurrent().Name());
+  ASSERT_EQ(initial_target_.Sha256Hash(), getCurrent().Sha256Hash());
 }
 
 TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
@@ -613,8 +620,8 @@ TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
   ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackNeedsReboot, run());
   reboot();
   ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
-  ASSERT_EQ(initial_target_, getCurrent());
-  ASSERT_TRUE(areAppsInSync());
+  ASSERT_EQ(initial_target_.Name(), getCurrent().Name());
+  ASSERT_EQ(initial_target_.Sha256Hash(), getCurrent().Sha256Hash());
 }
 
 TEST_F(AkliteOffline, RollbackToUnknown) {
@@ -656,6 +663,38 @@ TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
   ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackFailed, run());
   // Cannot perform rollback to unknown, so still booted on a new target's hash
   ASSERT_EQ(new_target.Sha256Hash(), getCurrent().Sha256Hash());
+}
+
+TEST_F(AkliteOffline, InvalidTargetInstallOstree) {
+  const auto target_not_available{addTarget({createApp("app-01")})};
+  const auto target_available{addTarget({createApp("app-01")})};
+  // Remove the first target ostree commit so only one target is available for offline update
+  // while the TUF repo contains both targets.
+  ostree_repo_.removeCommitObject(target_not_available.Sha256Hash());
+
+  AkliteClient client(createLiteClient());
+  const auto cr = client.CheckInLocal(src());
+  ASSERT_TRUE(cr);
+  const auto& available_targtets = cr.Targets();
+  ASSERT_EQ(1, available_targtets.size());
+  auto ic = client.Installer(target_not_available, "", "", InstallMode::OstreeOnly, src());
+  ASSERT_TRUE(ic == nullptr);
+}
+
+TEST_F(AkliteOffline, InvalidTargetInstallApps) {
+  const auto target_not_available{addTarget({createApp("app-01")})};
+  // Remove app-01 from the install source dir so only one target is available for offline update
+  // while the TUF repo contains both targets.
+  boost::filesystem::remove_all(app_store_.dir());
+  const auto target_available{addTarget({createApp("app-02")})};
+
+  AkliteClient client(createLiteClient());
+  const auto cr = client.CheckInLocal(src());
+  ASSERT_TRUE(cr);
+  const auto& available_targtets = cr.Targets();
+  ASSERT_EQ(1, available_targtets.size());
+  auto ic = client.Installer(target_not_available, "", "", InstallMode::OstreeOnly, src());
+  ASSERT_TRUE(ic == nullptr);
 }
 
 int main(int argc, char** argv) {

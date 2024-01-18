@@ -91,7 +91,8 @@ class TufTarget {
    * @return true if the targets match, otherwise false
    */
   bool operator==(const TufTarget& other) const {
-    return other.name_ == name_ && other.sha256_ == sha256_ && other.version_ == version_;
+    return other.name_ == name_ && other.sha256_ == sha256_ && other.version_ == version_ &&
+           other.AppsJson() == AppsJson();
   }
 
   /**
