@@ -98,6 +98,7 @@ class LiteClient {
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
   void initRequestHeaders(std::vector<std::string>& headers) const;
   void updateRequestHeaders();
+  static bool isRegistered(const KeyManager& key_manager);
 
   boost::filesystem::path callback_program;
   std::unique_ptr<KeyManager> key_manager_;

@@ -114,6 +114,7 @@ booted = "staged"
 docker_images_reload_cmd = "/bin/true"
 compose_apps_root = "$sota_dir/compose-apps"
 compose_apps_tree = "$sota_dir/apps-tree"
+enforce_composeapp_engine = ""
 EOF
 
 ## Check that we can do the info command
