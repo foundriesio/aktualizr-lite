@@ -340,7 +340,12 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
       .AppsDir = local_update_source->app_store,
   };
 
-  if (result.status == CheckInResult::Status::Failed) {
+  if (result.status == CheckInResult::Status::OkCached) {
+    // There is no reason to allow offline update if the specified TUF metadata are invalid,
+    // even if a local copy is valid.
+    result.status = CheckInResult::Status::Failed;
+  }
+  if (!result) {
     return result;
   }
 
