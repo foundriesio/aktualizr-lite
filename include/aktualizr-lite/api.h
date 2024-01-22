@@ -345,6 +345,7 @@ class AkliteClient {
   bool read_only_{false};
   std::shared_ptr<LiteClient> client_;
   std::shared_ptr<aklite::tuf::Repo> tuf_repo_;
+  std::string hw_id_;
   std::vector<std::string> secondary_hwids_;
   mutable bool configUploaded_{false};
 };

@@ -107,6 +107,7 @@ class AkliteOffline : public ::testing::Test {
     cfg_.bootloader.reboot_sentinel_dir = test_dir_.Path();
     cfg_.bootloader.rollback_mode = RollbackMode::kFioVB;
 
+    cfg_.pacman.extra["tags"] = "default-tag";
     cfg_.pacman.extra["reset_apps"] = "";
     cfg_.pacman.extra["reset_apps_root"] = (test_dir_.Path() / "reset-apps").string();
     cfg_.pacman.extra["compose_apps_root"] = (test_dir_.Path() / "compose-apps").string();

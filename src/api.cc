@@ -7,12 +7,10 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "helpers.h"
 #include "http/httpclient.h"
 #include "libaktualizr/config.h"
 #include "liteclient.h"
 #include "primary/reportqueue.h"
-#include "target.h"
 
 #include "aktualizr-lite/tuf/tuf.h"
 #include "composeapp/appengine.h"
@@ -109,6 +107,7 @@ void AkliteClient::Init(Config& config, bool finalize, bool apply_lock) {
   }
 
   tuf_repo_ = std::make_unique<aklite::tuf::AkRepo>(client_->config);
+  hw_id_ = client_->primary_ecu.second.ToString();
 }
 
 AkliteClient::AkliteClient(const std::vector<boost::filesystem::path>& config_dirs, bool read_only, bool finalize) {
@@ -135,33 +134,24 @@ AkliteClient::~AkliteClient() {
 
 static bool compareTargets(const TufTarget& a, const TufTarget& b) { return a.Version() < b.Version(); }
 
-// Returns a sorted list of targets matching tags and hwid (or one of secondary_hwids)
-static std::vector<TufTarget> filterTargets(const std::vector<Uptane::Target>& allTargets,
-                                            const Uptane::HardwareIdentifier& hwidToFind,
+// Returns a sorted list of targets matching tags if configured and hwid (or one of secondary_hwids)
+static std::vector<TufTarget> filterTargets(const std::vector<TufTarget>& allTargets, const std::string& hwidToFind,
                                             const std::vector<std::string>& tags,
                                             const std::vector<std::string>& secondary_hwids) {
   std::vector<TufTarget> targets;
   for (const auto& t : allTargets) {
-    int ver = 0;
-    try {
-      ver = std::stoi(t.custom_version(), nullptr, 0);
-    } catch (const std::invalid_argument& exc) {
-      LOG_ERROR << "Invalid version number format: " << t.custom_version();
-      ver = -1;
-    }
-    if (!target_has_tags(t, tags)) {
+    if (!tags.empty() /* Should we really allow a device configuration without a tag? */
+        && !t.HasOneOfTags(tags)) {
       continue;
     }
-    for (const auto& it : t.hardwareIds()) {
-      if (it == hwidToFind) {
-        targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
+    if (t.HardwareId() == hwidToFind) {
+      targets.push_back(t);
+      continue;
+    }
+    for (const auto& hwid : secondary_hwids) {
+      if (t.HardwareId() == hwid) {
+        targets.push_back(t);
         break;
-      }
-      for (const auto& hwid : secondary_hwids) {
-        if (it == Uptane::HardwareIdentifier(hwid)) {
-          targets.emplace_back(t.filename(), t.sha256Hash(), ver, t.custom_data());
-          break;
-        }
       }
     }
   }
@@ -186,15 +176,7 @@ CheckInResult AkliteClient::UpdateMetaAndGetTargets(std::shared_ptr<aklite::tuf:
     status = CheckInResult::Status::OkCached;
   }
 
-  auto allTargetsTuf = tuf_repo_->GetTargets();
-  std::vector<Uptane::Target> allTargets;
-  allTargets.reserve(allTargetsTuf.size());
-  for (auto const& ut : allTargetsTuf) {
-    allTargets.emplace_back(Target::fromTufTarget(ut));
-  }
-
-  Uptane::HardwareIdentifier hwidToFind(client_->config.provision.primary_ecu_hardware_id);
-  auto matchingTargets = filterTargets(allTargets, hwidToFind, client_->tags, secondary_hwids_);
+  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
   return CheckInResult(status, client_->config.provision.primary_ecu_hardware_id, matchingTargets);
 }
 
