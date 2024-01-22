@@ -159,27 +159,6 @@ static std::vector<TufTarget> filterTargets(const std::vector<TufTarget>& allTar
   return targets;
 }
 
-CheckInResult AkliteClient::UpdateMetaAndGetTargets(std::shared_ptr<aklite::tuf::RepoSource> repo_src) const {
-  auto status = CheckInResult::Status::Ok;
-
-  LOG_INFO << "Refreshing Targets metadata";
-  try {
-    tuf_repo_->updateMeta(std::move(repo_src));
-  } catch (const std::exception& e) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy: " << e.what();
-    try {
-      tuf_repo_->checkMeta();
-    } catch (const std::exception& e) {
-      LOG_ERROR << "Unable to use local copy of TUF data";
-      return CheckInResult(CheckInResult::Status::Failed, "", {});
-    }
-    status = CheckInResult::Status::OkCached;
-  }
-
-  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
-  return CheckInResult(status, client_->config.provision.primary_ecu_hardware_id, matchingTargets);
-}
-
 CheckInResult AkliteClient::CheckIn() const {
   if (!configUploaded_) {
     client_->reportAktualizrConfiguration();
@@ -196,8 +175,44 @@ CheckInResult AkliteClient::CheckIn() const {
   pt.put<std::string>("target", current.filename());
   pt.put<std::string>("ostreehash", current.sha256Hash());
 
+  LOG_INFO << "Updating the local TUF repo with metadata located in " << client_->config.uptane.repo_server << "...";
   auto repo_src = std::make_shared<aklite::tuf::AkHttpsRepoSource>("temp-remote-repo-source", pt, client_->config);
-  return UpdateMetaAndGetTargets(repo_src);
+  CheckInResult::Status check_status{CheckInResult::Status::Failed};
+  try {
+    tuf_repo_->updateMeta(repo_src);
+    check_status = CheckInResult::Status::Ok;
+    LOG_INFO << "The local TUF repo has been successfully updated";
+  } catch (const std::exception& exc) {
+    const std::string err{exc.what()};
+    LOG_ERROR << "Failed to update the local TUF repo: " << err;
+    if (err.find("Failed to fetch role timestamp") != std::string::npos) {
+      LOG_ERROR << "Check the device tag or verify the existence of a wave for the device";
+    }
+  }
+  if (check_status != CheckInResult::Status::Ok) {
+    LOG_INFO << "Checking the local TUF repo...";
+    try {
+      tuf_repo_->checkMeta();
+      check_status = CheckInResult::Status::OkCached;
+      LOG_INFO << "The local TUF is valid";
+    } catch (const std::exception& exc) {
+      LOG_ERROR << "Local TUF repo is invalid: " << exc.what();
+    }
+  }
+
+  if (check_status == CheckInResult::Status::Failed) {
+    return CheckInResult{check_status, "", {}};
+  }
+
+  LOG_INFO << "Searching for matching TUF Targets...";
+  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
+  if (matchingTargets.empty()) {
+    LOG_ERROR
+        << "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+    return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
+  }
+  LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
+  return CheckInResult(CheckInResult::Status::Ok, hw_id_, matchingTargets);
 }
 
 static bool compareTargets(const Uptane::Target& t1, const Uptane::Target& t2) {
@@ -314,33 +329,39 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
 CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
   auto repo_src =
       std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
-  auto result = UpdateMetaAndGetTargets(repo_src);
 
+  LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
+  try {
+    tuf_repo_->updateMeta(repo_src);
+  } catch (const std::exception& exc) {
+    LOG_ERROR << "Failed to update the local TUF repo: " << exc.what();
+    return CheckInResult{CheckInResult::Status::Failed, "", {}};
+  }
+
+  LOG_INFO << "The local TUF repo has been successfully updated";
+  LOG_INFO << "Searching for matching TUF Targets...";
+  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
+  if (matchingTargets.empty()) {
+    LOG_ERROR
+        << "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+    return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
+  }
+  LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
+
+  LOG_INFO << "Looking for update content for each matching Target...";
   UpdateSrc src{
       .TufDir = local_update_source->tuf_repo,
       .OstreeRepoDir = local_update_source->ostree_repo,
       .AppsDir = local_update_source->app_store,
   };
-
-  if (result.status == CheckInResult::Status::OkCached) {
-    // There is no reason to allow offline update if the specified TUF metadata are invalid,
-    // even if a local copy is valid.
-    result.status = CheckInResult::Status::Failed;
-  }
-  if (!result) {
-    return result;
-  }
-
-  const Config& cfg{client_->config};
-  std::vector<Uptane::Target> available_targets = getAvailableTargets(
-      cfg.pacman, fromTufTargets(result.Targets()), src, false /* get all available targets, not just latest */);
+  std::vector<Uptane::Target> available_targets =
+      getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src,
+                          false /* get all available targets, not just latest */);
   if (available_targets.empty()) {
-    LOG_INFO << "Unable to locate complete target in ostree dir  " << src.OstreeRepoDir << " and app dir "
-             << src.AppsDir;
-    return CheckInResult(CheckInResult::Status::Failed, cfg.provision.primary_ecu_hardware_id,
-                         std::vector<TufTarget>{});
+    LOG_ERROR << "No update content found in ostree dir  " << src.OstreeRepoDir << " and app dir " << src.AppsDir;
+    return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
   }
-  return CheckInResult(result.status, cfg.provision.primary_ecu_hardware_id, toTufTargets(available_targets));
+  return CheckInResult(CheckInResult::Status::Ok, hw_id_, toTufTargets(available_targets));
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {

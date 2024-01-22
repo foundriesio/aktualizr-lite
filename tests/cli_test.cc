@@ -46,11 +46,19 @@ class CliClient : public AkliteTest {
     conf.pacman.ostree_server = ostree_server_uri_;
     conf.uptane.repo_server = tuf_repo_server_;
     conf.pacman.extra[RootfsTreeManager::Config::UpdateBlockParamName] = "1";
+    if (!tag_.empty()) {
+      conf.pacman.extra["tags"] = tag_;
+    }
+    if (!hardware_id_.empty()) {
+      conf.provision.primary_ecu_hardware_id = hardware_id_;
+    }
   }
 
  protected:
   std::string tuf_repo_server_{device_gateway_.getTufRepoUri()};
   std::string ostree_server_uri_{device_gateway_.getOsTreeUri()};
+  std::string tag_;
+  std::string hardware_id_;
 };
 
 TEST_P(CliClient, FullUpdate) {
@@ -65,26 +73,49 @@ TEST_P(CliClient, FullUpdate) {
   ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::Ok);
 }
 
+TEST_P(CliClient, NoMatchingTufTargets_Tag) {
+  tag_ = "device-tag";
+  auto akclient{createAkClient()};
+  const auto target01{createTufTarget()};
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::CheckinNoMatchingTargets);
+}
+
+TEST_P(CliClient, NoMatchingTufTargets_HardwareId) {
+  hardware_id_ = "some-other-hwid";
+  auto akclient{createAkClient()};
+  const auto target01{createTufTarget()};
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::CheckinNoMatchingTargets);
+}
+
 TEST_P(CliClient, TufMetaDownloadFailure) {
   // make the TUF server URI invalid so the TUF metadata update fails
   tuf_repo_server_ = device_gateway_.getTufRepoUri() + "/foobar";
   auto akclient{createAkClient()};
   const auto target01{createTufTarget()};
 
-  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::TufMetaPullFailure);
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::CheckinFailure);
 }
 
 TEST_P(CliClient, TufTargetNotFoundInvalidHardwareId) {
   auto akclient{createAkClient()};
   auto target01 = createTufTarget(nullptr, "foobar-hwid");
-
+  // The TUF update is successful and there is one/initial Target that matches a device's hardware ID, so
+  // the checkin is successful.
+  // However, the specified target to install `target01` is not among the valid TUF targets,
+  // so the install gets TufTargetNotFound.
   ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::TufTargetNotFound);
 }
 
 TEST_P(CliClient, TufTargetNotFoundInvalidVersion) {
   auto akclient{createAkClient()};
-  auto target01 = createTufTarget(nullptr, "foobar-hwid");
+  auto target01 = createTufTarget(nullptr);
 
+  // The TUF update is successful and there are Targets that matches a device's hardware ID, so
+  // the checkin is successful.
+  // However, the specified target to install, target v100, is not among the valid TUF targets,
+  // so the install gets TufTargetNotFound.
   ASSERT_EQ(cli::Install(*akclient, 100), cli::StatusCode::TufTargetNotFound);
 }
 

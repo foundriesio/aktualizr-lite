@@ -14,6 +14,8 @@ enum class StatusCode {
   CheckinOkCached = 3,
   CheckinFailure = 4,
   OkNeedsRebootForBootFw = 5,
+  CheckinNoMatchingTargets = 6,
+  CheckinNoTargetContent = 8,
   TufMetaPullFailure = 10,
   TufTargetNotFound = 20,
   InstallationInProgress = 30,

@@ -28,6 +28,8 @@ class CheckInResult {
     Ok = 0,    // check-in was good
     OkCached,  // check-in failed, but locally cached meta-data is still valid
     Failed,    // check-in failed and there's no valid local meta-data
+    NoMatchingTargets,
+    NoTargetContent,
   };
   CheckInResult(Status status, std::string primary_hwid, std::vector<TufTarget> targets)
       : status(status), primary_hwid_(std::move(primary_hwid)), targets_(std::move(targets)) {}
@@ -340,7 +342,6 @@ class AkliteClient {
 
  private:
   void Init(Config &config, bool finalize = true, bool apply_lock = true);
-  CheckInResult UpdateMetaAndGetTargets(std::shared_ptr<aklite::tuf::RepoSource> repo_src) const;
 
   bool read_only_{false};
   std::shared_ptr<LiteClient> client_;
