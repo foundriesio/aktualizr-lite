@@ -8,7 +8,7 @@ namespace apps {
 namespace aklite_offline {
 
 int CheckCmd::checkSrcDir(const po::variables_map& vm, const boost::filesystem::path& src_dir) const {
-  AkliteClient client(vm);
+  AkliteClient client(vm, false, false);
   const auto ret_code{aklite::cli::CheckLocal(client, (src_dir / "tuf").string(), (src_dir / "ostree_repo").string(),
                                               (src_dir / "apps").string())};
   return static_cast<int>(ret_code);
@@ -16,7 +16,7 @@ int CheckCmd::checkSrcDir(const po::variables_map& vm, const boost::filesystem::
 
 int InstallCmd::installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir,
                               bool force_downgrade) const {
-  AkliteClient client(vm);
+  AkliteClient client(vm, false, false);
   const LocalUpdateSource local_update_source{.tuf_repo = (src_dir / "tuf").string(),
                                               .ostree_repo = (src_dir / "ostree_repo").string(),
                                               .app_store = (src_dir / "apps").string()};
