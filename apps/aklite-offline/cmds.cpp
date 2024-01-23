@@ -68,7 +68,7 @@ int RunCmd::runUpdate(const po::variables_map& vm) const {
                 << " make sure you called `install` before `run`\n";
       break;
     }
-    case aklite::cli::StatusCode::InstallNeedsRebootForBootFw: {
+    case aklite::cli::StatusCode::OkNeedsRebootForBootFw: {
       std::cout << "Successfully applied new version of rootfs and started Apps if present\n";
       std::cout << "Please, optionally reboot a device to confirm the boot firmware update;"
                    " the reboot can be performed now, anytime later, or at the beginning of the next update\n";
