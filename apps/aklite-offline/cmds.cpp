@@ -66,7 +66,6 @@ int RunCmd::runUpdate(const po::variables_map& vm) const {
     case aklite::cli::StatusCode::NoPendingInstallation: {
       std::cout << "No pending installation to run/finalize has been found;"
                 << " make sure you called `install` before `run`\n";
-      ret_code = aklite::cli::StatusCode::Ok;
       break;
     }
     case aklite::cli::StatusCode::InstallNeedsRebootForBootFw: {
