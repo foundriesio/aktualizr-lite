@@ -23,9 +23,6 @@ int InstallCmd::installUpdate(const po::variables_map& vm, const boost::filesyst
   auto ret_code{aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, force_downgrade, &local_update_source)};
   switch (ret_code) {
     case aklite::cli::StatusCode::InstallAppsNeedFinalization: {
-      // TBD: The former `aklite-offline` sets `10` as a an exit/status code, while
-      // the current version returns `InstallAppsNeedFinalization = 105`.
-      // Maybe it makes sense to override it with `10`, but the `10` is already used for `TufMetaPullFailure = 10`?
       std::cout << "Please run `aklite-offline run` command to start the updated Apps\n";
       break;
     }

@@ -22,7 +22,7 @@ static const std::unordered_map<CheckInResult::Status, StatusCode> c2s = {
     {CheckInResult::Status::OkCached, StatusCode::CheckinOkCached},
     {CheckInResult::Status::Failed, StatusCode::CheckinFailure},
     {CheckInResult::Status::NoMatchingTargets, StatusCode::CheckinNoMatchingTargets},
-    {CheckInResult::Status::NoTargetContent, StatusCode::CheckinNoNoTargetContent},
+    {CheckInResult::Status::NoTargetContent, StatusCode::CheckinNoTargetContent},
 };
 
 static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {

@@ -73,6 +73,23 @@ TEST_P(CliClient, FullUpdate) {
   ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::Ok);
 }
 
+TEST_P(CliClient, AppOnlyUpdate_01) {
+  auto akclient{createAkClient()};
+  const auto target01 = createTufTarget(nullptr, "", true);
+
+  ASSERT_EQ(cli::Install(*akclient, target01.Version(), "", InstallMode::OstreeOnly),
+            cli::StatusCode::InstallAppsNeedFinalization);
+  ASSERT_TRUE(akclient->IsInstallationInProgress());
+  ASSERT_EQ(akclient->GetPendingTarget(), target01);
+  ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::Ok);
+}
+
+TEST_P(CliClient, AppOnlyUpdate_02) {
+  auto akclient{createAkClient()};
+  const auto target01 = createTufTarget(nullptr, "", true);
+  ASSERT_EQ(cli::Install(*akclient, target01.Version(), "", InstallMode::All), cli::StatusCode::Ok);
+}
+
 TEST_P(CliClient, NoMatchingTufTargets_Tag) {
   tag_ = "device-tag";
   auto akclient{createAkClient()};
