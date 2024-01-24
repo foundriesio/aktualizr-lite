@@ -70,9 +70,8 @@ class InstallCmd : public Cmd {
       return installUpdate(vm, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()),
                            force_downgrade);
     } catch (const std::exception& exc) {
-      std::cerr << "Failed to install offline update; src-dir: "
-                << boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>().string())
-                << ", err: " << exc.what();
+      std::cerr << "Failed to install offline update; src-dir: " << vm["src-dir"].as<boost::filesystem::path>().string()
+                << ", err: " << exc.what() << "\n";
       return EXIT_FAILURE;
     }
   }

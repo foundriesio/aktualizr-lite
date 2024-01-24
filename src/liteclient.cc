@@ -143,6 +143,13 @@ LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const
     }
   }
   if (config.pacman.type == ComposeAppManager::Name) {
+    if (app_engine == nullptr && config.pacman.extra.count("reset_apps") == 0 && !isRegistered(*key_manager_) &&
+        config.pacman.extra.count("enforce_composeapp_engine") == 0) {
+      LOG_DEBUG << "Device is not registered and the app engine type is not configured,"
+                   " enforcing the use of restorable package manager";
+      // Enforce the restorable app engine usage
+      config.pacman.extra["reset_apps"] = "";
+    }
     basepacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
                                                      ostree_sysroot, *key_manager_, app_engine);
   } else if (config.pacman.type == RootfsTreeManager::Name) {
@@ -808,4 +815,13 @@ bool LiteClient::isRollback(const Uptane::Target& target) {
   std::vector<Uptane::Target> known_but_not_installed_versions;
   get_known_but_not_installed_versions(*this, known_but_not_installed_versions);
   return known_local_target(*this, target, known_but_not_installed_versions);
+}
+
+bool LiteClient::isRegistered(const KeyManager& key_manager) {
+  try {
+    return !key_manager.getCert().empty();
+  } catch (const std::exception& exc) {
+    LOG_DEBUG << "Failed to obtain a device certificate, it implies a device is not registered";
+  }
+  return false;
 }

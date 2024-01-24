@@ -340,7 +340,12 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
       .AppsDir = local_update_source->app_store,
   };
 
-  if (result.status == CheckInResult::Status::Failed) {
+  if (result.status == CheckInResult::Status::OkCached) {
+    // There is no reason to allow offline update if the specified TUF metadata are invalid,
+    // even if a local copy is valid.
+    result.status = CheckInResult::Status::Failed;
+  }
+  if (!result) {
     return result;
   }
 
@@ -631,6 +636,12 @@ class LocalLiteInstall : public LiteInstall {
 
     ostree_sysroot_ = std::make_shared<OSTree::Sysroot>(offline_update_config_.pacman);
     storage_ = INvStorage::newStorage(offline_update_config_.storage, false, StorageClient::kTUF);
+    if (offline_update_config_.pacman.type == ComposeAppManager::Name &&
+        offline_update_config_.pacman.extra.count("reset_apps") == 0) {
+      LOG_ERROR << "Cannot perform offline update if non-restorable app engine is set; set `[pacman].reset_apps = "
+                   "\"\"` in the device config.";
+      throw std::invalid_argument("Invalid app engine type");
+    }
   }
 
   DownloadResult Download() override {
