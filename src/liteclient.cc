@@ -698,6 +698,12 @@ DownloadResultWithStat LiteClient::download(const Uptane::Target& target, const 
 }
 
 data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target, InstallMode install_mode) {
+  auto status = package_manager_->verifyTarget(target);
+  if (status != TargetStatus::kGood) {
+    LOG_ERROR << "Unable to install target " << target.filename() << ". Verification failed.";
+    return data::ResultCode::Numeric::kVerificationFailed;
+  }
+
   notifyInstallStarted(target);
   auto iresult = installPackage(target, install_mode);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
