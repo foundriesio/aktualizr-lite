@@ -321,9 +321,24 @@ TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const
     return ostree_target_status;
   }
 
+  // TBD: we could call `if (!are_apps_checked_) checkForAppsToUpdate(target)` here instead,
+  //      but that would require the const modifier to be removed
+  AppsContainer cur_apps_to_fetch_and_update;
+  AppsContainer cur_apps_to_fetch;
+  if (cfg_.force_update) {
+    cur_apps_to_fetch_and_update = getApps(target);
+  } else {
+    // non-daemon mode (force check) or a new Target to be applied in daemon mode,
+    // then do full check if Target Apps are installed and running
+    cur_apps_to_fetch_and_update = getAppsToUpdate(target);
+    if (!!cfg_.reset_apps) {
+      cur_apps_to_fetch = getAppsToFetch(target);
+    }
+  }
+
   AppsContainer all_apps_to_fetch;
-  all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
-  all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
+  all_apps_to_fetch.insert(cur_apps_to_fetch_and_update.begin(), cur_apps_to_fetch_and_update.end());
+  all_apps_to_fetch.insert(cur_apps_to_fetch.begin(), cur_apps_to_fetch.end());
 
   for (const auto& pair : all_apps_to_fetch) {
     if (!app_engine_->verify({pair.first, pair.second})) {
