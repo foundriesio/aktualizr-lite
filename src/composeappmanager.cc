@@ -352,7 +352,23 @@ data::InstallationResult ComposeAppManager::Install(const TufTarget& target, Ins
   if (mode == InstallMode::OstreeOnly) {
     return RootfsTreeManager::Install(target, mode);
   }
-  return install(Target::fromTufTarget(target));
+
+  const auto uptane_target = Target::fromTufTarget(target);
+  // TBD: We could more the `if (cfg_.force_update)` section to within checkForAppsToUpdate, to reduce code duplication,
+  //      Since checkForAppsToUpdate is also used in LiteClient::appsInSync, where cfg_.force_update is not supposed to
+  //      be checked, we could add a parameter to enable or not checking cfg_.force_update
+  if (cfg_.force_update) {
+    LOG_INFO << "All Apps are forced to be updated...";
+    cur_apps_to_fetch_and_update_ = getApps(uptane_target);
+  } else if (!are_apps_checked_) {
+    // non-daemon mode (force check) or a new Target to be applied in daemon mode,
+    // then do full check if Target Apps are installed and running
+    LOG_INFO << "Checking for Apps to be installed or updated...";
+    checkForAppsToUpdate(uptane_target);
+  }
+  are_apps_checked_ = false;
+
+  return install(uptane_target);
 }
 
 data::InstallationResult ComposeAppManager::install(const Uptane::Target& target) const {
