@@ -180,7 +180,7 @@ TEST_F(ApiClientTest, CheckInWithoutTargetImport) {
   auto val = getDeviceGateway().readSotaToml();
   ASSERT_NE(std::string::npos, val.find("[pacman]"));
 
-  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(CheckInResult::Status::NoMatchingTargets, result.status);
   ASSERT_EQ(0, result.Targets().size());
 
   ASSERT_TRUE(getDeviceGateway().resetSotaToml());

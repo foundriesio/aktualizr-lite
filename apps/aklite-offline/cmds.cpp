@@ -8,7 +8,7 @@ namespace apps {
 namespace aklite_offline {
 
 int CheckCmd::checkSrcDir(const po::variables_map& vm, const boost::filesystem::path& src_dir) const {
-  AkliteClient client(vm);
+  AkliteClient client(vm, false, false);
   const auto ret_code{aklite::cli::CheckLocal(client, (src_dir / "tuf").string(), (src_dir / "ostree_repo").string(),
                                               (src_dir / "apps").string())};
   return static_cast<int>(ret_code);
@@ -16,16 +16,13 @@ int CheckCmd::checkSrcDir(const po::variables_map& vm, const boost::filesystem::
 
 int InstallCmd::installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir,
                               bool force_downgrade) const {
-  AkliteClient client(vm);
+  AkliteClient client(vm, false, false);
   const LocalUpdateSource local_update_source{.tuf_repo = (src_dir / "tuf").string(),
                                               .ostree_repo = (src_dir / "ostree_repo").string(),
                                               .app_store = (src_dir / "apps").string()};
   auto ret_code{aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, force_downgrade, &local_update_source)};
   switch (ret_code) {
     case aklite::cli::StatusCode::InstallAppsNeedFinalization: {
-      // TBD: The former `aklite-offline` sets `10` as a an exit/status code, while
-      // the current version returns `InstallAppsNeedFinalization = 105`.
-      // Maybe it makes sense to override it with `10`, but the `10` is already used for `TufMetaPullFailure = 10`?
       std::cout << "Please run `aklite-offline run` command to start the updated Apps\n";
       break;
     }
@@ -69,10 +66,9 @@ int RunCmd::runUpdate(const po::variables_map& vm) const {
     case aklite::cli::StatusCode::NoPendingInstallation: {
       std::cout << "No pending installation to run/finalize has been found;"
                 << " make sure you called `install` before `run`\n";
-      ret_code = aklite::cli::StatusCode::Ok;
       break;
     }
-    case aklite::cli::StatusCode::InstallNeedsRebootForBootFw: {
+    case aklite::cli::StatusCode::OkNeedsRebootForBootFw: {
       std::cout << "Successfully applied new version of rootfs and started Apps if present\n";
       std::cout << "Please, optionally reboot a device to confirm the boot firmware update;"
                    " the reboot can be performed now, anytime later, or at the beginning of the next update\n";

@@ -107,6 +107,7 @@ class AkliteOffline : public ::testing::Test {
     cfg_.bootloader.reboot_sentinel_dir = test_dir_.Path();
     cfg_.bootloader.rollback_mode = RollbackMode::kFioVB;
 
+    cfg_.pacman.extra["tags"] = "default-tag";
     cfg_.pacman.extra["reset_apps"] = "";
     cfg_.pacman.extra["reset_apps_root"] = (test_dir_.Path() / "reset-apps").string();
     cfg_.pacman.extra["compose_apps_root"] = (test_dir_.Path() / "compose-apps").string();
@@ -390,6 +391,42 @@ class AkliteOffline : public ::testing::Test {
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
 const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
+
+TEST_F(AkliteOffline, OfflineClientCheckinFailure) {
+  const auto prev_target{addTarget({createApp("app-01")})};
+  const auto outdated_repo_path{test_dir_ / "outdated_tuf_repo"};
+  boost::filesystem::copy(tuf_repo_.getRepoPath(), outdated_repo_path);
+  const auto target{addTarget({createApp("app-01")})};
+
+  // Do checkin to update the tuf repo with up-to-date TUF meta
+  const auto available_targets{check()};
+  ASSERT_EQ(2, available_targets.size());
+
+  // Now try to do checkin against the outdated TUF repo
+  AkliteClient client(createLiteClient());
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinFailure,
+            aklite::cli::CheckLocal(client, outdated_repo_path.string(), src()->ostree_repo, src()->app_store));
+}
+
+TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoMatchingTargets) {
+  const auto prev_target{addTarget({createApp("app-01")})};
+  const auto target{addTarget({createApp("app-01")})};
+
+  cfg_.pacman.extra["tags"] = "bad-tag";
+  AkliteClient client(createLiteClient());
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinNoMatchingTargets,
+            aklite::cli::CheckLocal(client, src()->tuf_repo, src()->ostree_repo, src()->app_store));
+}
+
+TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoTargetContent) {
+  const auto prev_target{addTarget({createApp("app-01")})};
+  const auto target{addTarget({createApp("app-01")})};
+
+  boost::filesystem::remove_all(app_store_.appsDir() / "app-01");
+  AkliteClient client(createLiteClient());
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinNoTargetContent,
+            aklite::cli::CheckLocal(client, src()->tuf_repo, src()->ostree_repo, src()->app_store));
+}
 
 TEST_F(AkliteOffline, OfflineClient) {
   const auto prev_target{addTarget({createApp("app-01")})};

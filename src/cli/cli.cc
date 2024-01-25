@@ -21,6 +21,8 @@ static const std::unordered_map<CheckInResult::Status, StatusCode> c2s = {
     {CheckInResult::Status::Ok, StatusCode::Ok},
     {CheckInResult::Status::OkCached, StatusCode::CheckinOkCached},
     {CheckInResult::Status::Failed, StatusCode::CheckinFailure},
+    {CheckInResult::Status::NoMatchingTargets, StatusCode::CheckinNoMatchingTargets},
+    {CheckInResult::Status::NoTargetContent, StatusCode::CheckinNoTargetContent},
 };
 
 static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {
@@ -78,9 +80,8 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
   } else {
     cr = client.CheckInLocal(local_update_source);
   }
-  if (cr.status == CheckInResult::Status::Failed) {
-    LOG_ERROR << "Failed to pull TUF metadata or they are invalid";
-    return StatusCode::TufMetaPullFailure;
+  if (!cr) {
+    return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
   }
 
   TufTarget target;

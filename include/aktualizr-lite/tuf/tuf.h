@@ -4,6 +4,7 @@
 #ifndef AKLITE_TUF_TUF_H_
 #define AKLITE_TUF_TUF_H_
 
+#include <algorithm>
 #include <string>
 
 #include "json/json.h"
@@ -44,6 +45,8 @@ class RepoSource {
 class TufTarget {
  public:
   static constexpr const char* const ComposeAppField{"docker_compose_apps"};
+  static constexpr const char* const TagsField{"tags"};
+  static constexpr const char* const HardwareIDsField{"hardwareIds"};
 
   explicit TufTarget() : name_{"unknown"} {}
   TufTarget(std::string name, std::string sha256, int version, Json::Value custom)
@@ -93,6 +96,32 @@ class TufTarget {
   bool operator==(const TufTarget& other) const {
     return other.name_ == name_ && other.sha256_ == sha256_ && other.version_ == version_ &&
            other.AppsJson() == AppsJson();
+  }
+
+  bool HasOneOfTags(const std::vector<std::string>& tags) const {
+    const auto& custom{Custom()};
+    if (!custom.isMember(TagsField)) {
+      return false;
+    }
+    const auto target_tags{custom[TagsField]};
+    if (!target_tags.isArray()) {
+      return false;
+    }
+    for (const auto& tag : tags) {
+      if (std::find_if(target_tags.begin(), target_tags.end(),
+                       [&tag](const Json::Value& t) { return t.asString() == tag; }) != target_tags.end()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  std::string HardwareId() const {
+    const auto hardware_ids_field{Custom().get(HardwareIDsField, Json::Value(Json::nullValue))};
+    if (hardware_ids_field.isNull() || hardware_ids_field.size() != 1) {
+      return "";
+    }
+    return hardware_ids_field[0].asString();
   }
 
   /**
