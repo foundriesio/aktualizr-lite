@@ -342,6 +342,34 @@ TEST_F(ApiClientTest, InstallModeOstreeOnlyIfJustApps) {
   }
 }
 
+TEST_F(ApiClientTest, InstallWithoutDownload) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createTarget();
+
+  AkliteClient client(liteclient);
+  auto result = client.CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+  auto latest = result.GetLatest();
+
+  auto installer = client.Installer(latest);
+  ASSERT_NE(nullptr, installer);
+
+  // Install before Download will fail
+  auto iresult = installer->Install();
+  ASSERT_EQ(InstallResult::Status::DownloadFailed, iresult.status);
+
+  auto dresult = installer->Download();
+  ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+  // After Download, installation of the same target should succeed
+  iresult = installer->Install();
+  ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+}
+
 TEST_F(ApiClientTest, Secondaries) {
   AkliteClient client(createLiteClient(InitialVersion::kOff));
   std::vector<SecondaryEcu> ecus;
