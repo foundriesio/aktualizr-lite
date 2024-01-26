@@ -326,6 +326,10 @@ TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const
   all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
 
   for (const auto& pair : all_apps_to_fetch) {
+    if (!app_engine_->isFetched({pair.first, pair.second})) {
+      return TargetStatus::kNotFound;
+    }
+
     if (!app_engine_->verify({pair.first, pair.second})) {
       return TargetStatus::kInvalid;
     }
