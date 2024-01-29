@@ -370,6 +370,74 @@ TEST_F(ApiClientTest, InstallWithoutDownload) {
   ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
 }
 
+TEST_F(ApiClientTest, InstallDownloadInSeparateInstances) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  std::vector<AppEngine::App> apps_1{{"app-01", "app-01-URI"}};
+  auto target_1 = createAppTarget(apps_1);
+
+  // Download using one AkliteClient instance
+  {
+    AkliteClient client(liteclient);
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+    auto latest = result.GetLatest();
+    auto installer = client.Installer(latest);
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+    ASSERT_FALSE(targetsMatch(liteclient->getCurrent(), target_1));
+  }
+
+  // Install using another AkliteClient instance
+  {
+    AkliteClient client(liteclient);
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+    auto latest = result.GetLatest();
+    auto installer = client.Installer(latest);
+    ASSERT_NE(nullptr, installer);
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::Ok, iresult.status);
+    ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), target_1));
+  }
+
+  // Repeat same process just updating one app
+  std::vector<AppEngine::App> apps_2{{"app-01", "app-01-URI-NEW"}};
+  auto target_2 = createAppTarget(apps_2);
+
+  // Download using one AkliteClient instance
+  {
+    AkliteClient client(liteclient);
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+    auto latest = result.GetLatest();
+    auto installer = client.Installer(latest);
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+    ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), target_1));
+  }
+
+  // Install using another AkliteClient instance
+  {
+    AkliteClient client(liteclient);
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+    auto latest = result.GetLatest();
+    auto installer = client.Installer(latest);
+    ASSERT_NE(nullptr, installer);
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::Ok, iresult.status);
+    ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), target_2));
+  }
+}
+
 TEST_F(ApiClientTest, Secondaries) {
   AkliteClient client(createLiteClient(InitialVersion::kOff));
   std::vector<SecondaryEcu> ecus;
