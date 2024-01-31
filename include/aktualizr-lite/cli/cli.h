@@ -34,8 +34,8 @@ enum class StatusCode {
   InstallRollbackFailed = 130,
 };
 
-StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const std::string &ostree_repo,
-                      const std::string &apps_dir = "");
+StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source);
+
 
 StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "",
                    InstallMode install_mode = InstallMode::All, bool force_downgrade = true,

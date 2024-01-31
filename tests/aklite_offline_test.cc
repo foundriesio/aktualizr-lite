@@ -404,8 +404,8 @@ TEST_F(AkliteOffline, OfflineClientCheckinFailure) {
 
   // Now try to do checkin against the outdated TUF repo
   AkliteClient client(createLiteClient());
-  ASSERT_EQ(aklite::cli::StatusCode::CheckinFailure,
-            aklite::cli::CheckLocal(client, outdated_repo_path.string(), src()->ostree_repo, src()->app_store));
+  LocalUpdateSource outdated_src = { outdated_repo_path.string(), src()->ostree_repo, src()->app_store };
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinFailure, aklite::cli::CheckIn(client, &outdated_src));
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoMatchingTargets) {
@@ -414,8 +414,7 @@ TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoMatchingTargets) {
 
   cfg_.pacman.extra["tags"] = "bad-tag";
   AkliteClient client(createLiteClient());
-  ASSERT_EQ(aklite::cli::StatusCode::CheckinNoMatchingTargets,
-            aklite::cli::CheckLocal(client, src()->tuf_repo, src()->ostree_repo, src()->app_store));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinNoMatchingTargets, aklite::cli::CheckIn(client, src()));
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoTargetContent) {
@@ -424,8 +423,7 @@ TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoTargetContent) {
 
   boost::filesystem::remove_all(app_store_.appsDir() / "app-01");
   AkliteClient client(createLiteClient());
-  ASSERT_EQ(aklite::cli::StatusCode::CheckinNoTargetContent,
-            aklite::cli::CheckLocal(client, src()->tuf_repo, src()->ostree_repo, src()->app_store));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinNoTargetContent, aklite::cli::CheckIn(client, src()));
 }
 
 TEST_F(AkliteOffline, OfflineClient) {

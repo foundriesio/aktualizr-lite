@@ -41,10 +41,13 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
 };
 
-StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const std::string &ostree_repo,
-                      const std::string &apps_dir) {
-  const LocalUpdateSource local_update_source{tuf_repo, ostree_repo, apps_dir};
-  const CheckInResult cr{client.CheckInLocal(&local_update_source)};
+StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source) {
+  CheckInResult cr{CheckInResult::Status::Failed, "", std::vector<TufTarget>{}};
+  if (local_update_source == nullptr) {
+    cr = client.CheckIn();
+  } else {
+    cr = client.CheckInLocal(local_update_source);
+  }
   if (cr) {
     if (cr.Targets().empty()) {
       std::cout << "\nNo Targets found" << std::endl;
