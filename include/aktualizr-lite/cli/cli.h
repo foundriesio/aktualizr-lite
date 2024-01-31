@@ -34,12 +34,29 @@ enum class StatusCode {
   InstallRollbackFailed = 130,
 };
 
+/**
+ * The installation mode to be applied. Specified during InstallContext context initialization.
+ */
+enum class PullMode {
+  /**
+   * Default mode, do pull target during install operation.
+   */
+  All = 0,
+  /**
+   * Do no pull target during install. Target is expected to be pulled before.
+   */
+  None,
+};
+
 StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source);
 
+StatusCode Pull(AkliteClient &client, int version = -1, const std::string &target_name = "",
+                bool force_downgrade = true, const LocalUpdateSource *local_update_source = nullptr);
 
 StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "",
                    InstallMode install_mode = InstallMode::All, bool force_downgrade = true,
-                   const LocalUpdateSource *local_update_source = nullptr);
+                   const LocalUpdateSource *local_update_source = nullptr, PullMode pull_mode = PullMode::All);
+
 StatusCode CompleteInstall(AkliteClient &client);
 
 bool IsSuccessCode(StatusCode status);
