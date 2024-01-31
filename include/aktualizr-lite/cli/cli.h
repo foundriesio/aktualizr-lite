@@ -42,6 +42,8 @@ StatusCode Install(AkliteClient &client, int version = -1, const std::string &ta
                    const LocalUpdateSource *local_update_source = nullptr);
 StatusCode CompleteInstall(AkliteClient &client);
 
+bool IsSuccessCode(StatusCode status);
+
 }  // namespace aklite::cli
 
 #endif  // AKTUALIZR_LITE_CLI_H_

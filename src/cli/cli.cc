@@ -41,6 +41,12 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
 };
 
+bool IsSuccessCode(StatusCode status) {
+  return (status == StatusCode::Ok || status == StatusCode::CheckinOkCached ||
+          status == StatusCode::OkNeedsRebootForBootFw || status == StatusCode::InstallNeedsReboot ||
+          status == StatusCode::InstallAppsNeedFinalization);
+}
+
 StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source) {
   CheckInResult cr{CheckInResult::Status::Failed, "", std::vector<TufTarget>{}};
   if (local_update_source == nullptr) {
