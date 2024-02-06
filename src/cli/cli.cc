@@ -96,8 +96,20 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     }
   }
   if (target.IsUnknown()) {
-    LOG_ERROR << "No Target found; version: " << (version == -1 ? "latest" : std::to_string(version))
-              << ", hardware ID: " << client.GetConfig().get("provision.primary_ecu_hardware_id", "")
+    std::string target_string;
+    if (version == -1 && target_name.empty()) {
+      target_string = " version: latest,";
+    } else {
+      if (!target_name.empty()) {
+        target_string = " name: " + target_name + ",";
+      }
+      if (version != -1) {
+        target_string += " version: " + std::to_string(version) + ",";
+      }
+    }
+
+    LOG_ERROR << "No Target found;" << target_string
+              << " hardware ID: " << client.GetConfig().get("provision.primary_ecu_hardware_id", "")
               << ", tag: " << client.GetConfig().get("pacman.tags", "");
     return StatusCode::TufTargetNotFound;
   }
