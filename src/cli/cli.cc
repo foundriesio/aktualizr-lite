@@ -41,10 +41,19 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
 };
 
-StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const std::string &ostree_repo,
-                      const std::string &apps_dir) {
-  const LocalUpdateSource local_update_source{tuf_repo, ostree_repo, apps_dir};
-  const CheckInResult cr{client.CheckInLocal(&local_update_source)};
+bool IsSuccessCode(StatusCode status) {
+  return (status == StatusCode::Ok || status == StatusCode::CheckinOkCached ||
+          status == StatusCode::OkNeedsRebootForBootFw || status == StatusCode::InstallNeedsReboot ||
+          status == StatusCode::InstallAppsNeedFinalization);
+}
+
+StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source) {
+  CheckInResult cr{CheckInResult::Status::Failed, "", std::vector<TufTarget>{}};
+  if (local_update_source == nullptr) {
+    cr = client.CheckIn();
+  } else {
+    cr = client.CheckInLocal(local_update_source);
+  }
   if (cr) {
     if (cr.Targets().empty()) {
       std::cout << "\nNo Targets found" << std::endl;
@@ -64,8 +73,9 @@ StatusCode CheckLocal(AkliteClient &client, const std::string &tuf_repo, const s
   return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
 }
 
-StatusCode Install(AkliteClient &client, int version, const std::string &target_name, InstallMode install_mode,
-                   bool force_downgrade, const LocalUpdateSource *local_update_source) {
+static StatusCode pullAndInstall(AkliteClient &client, int version, const std::string &target_name,
+                                 InstallMode install_mode, bool force_downgrade,
+                                 const LocalUpdateSource *local_update_source, PullMode pull_mode, bool do_install) {
   // Check if the device is in a correct state to start a new update
   if (client.IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
@@ -96,8 +106,20 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     }
   }
   if (target.IsUnknown()) {
-    LOG_ERROR << "No Target found; version: " << (version == -1 ? "latest" : std::to_string(version))
-              << ", hardware ID: " << client.GetConfig().get("provision.primary_ecu_hardware_id", "")
+    std::string target_string;
+    if (version == -1 && target_name.empty()) {
+      target_string = " version: latest,";
+    } else {
+      if (!target_name.empty()) {
+        target_string = " name: " + target_name + ",";
+      }
+      if (version != -1) {
+        target_string += " version: " + std::to_string(version) + ",";
+      }
+    }
+
+    LOG_ERROR << "No Target found;" << target_string
+              << " hardware ID: " << client.GetConfig().get("provision.primary_ecu_hardware_id", "")
               << ", tag: " << client.GetConfig().get("pacman.tags", "");
     return StatusCode::TufTargetNotFound;
   }
@@ -134,10 +156,16 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
     return StatusCode::UnknownError;
   }
 
-  auto dr = installer->Download();
-  if (!dr) {
-    LOG_ERROR << "Failed to download Target; target: " << target.Name() << ", err: " << dr;
-    return res2StatusCode<DownloadResult::Status>(d2s, dr.status);
+  if (pull_mode == PullMode::All) {
+    auto dr = installer->Download();
+    if (!dr) {
+      LOG_ERROR << "Failed to download Target; target: " << target.Name() << ", err: " << dr;
+      return res2StatusCode<DownloadResult::Status>(d2s, dr.status);
+    }
+
+    if (!do_install) {
+      return res2StatusCode<DownloadResult::Status>(d2s, dr.status);
+    }
   }
 
   auto ir = installer->Install();
@@ -163,6 +191,18 @@ StatusCode Install(AkliteClient &client, int version, const std::string &target_
   }
 
   return res2StatusCode<InstallResult::Status>(i2s, ir.status);
+}
+
+StatusCode Pull(AkliteClient &client, int version, const std::string &target_name, bool force_downgrade,
+                const LocalUpdateSource *local_update_source) {
+  return pullAndInstall(client, version, target_name, InstallMode::All, force_downgrade, local_update_source,
+                        PullMode::All, false);
+}
+
+StatusCode Install(AkliteClient &client, int version, const std::string &target_name, InstallMode install_mode,
+                   bool force_downgrade, const LocalUpdateSource *local_update_source, PullMode pull_mode) {
+  return pullAndInstall(client, version, target_name, install_mode, force_downgrade, local_update_source, pull_mode,
+                        true);
 }
 
 StatusCode CompleteInstall(AkliteClient &client) {

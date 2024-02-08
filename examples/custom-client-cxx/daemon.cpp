@@ -39,7 +39,7 @@ static std::string get_reboot_cmd(const AkliteClient &client) {
   return reboot_cmd;
 }
 
-int main(int argc, char **argv) {
+int cmd_daemon(std::string local_repo_path) {
   boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
   bool is_local_update{false};
   LocalUpdateSource local_update_source;
@@ -52,16 +52,14 @@ int main(int argc, char **argv) {
     cfg_dirs = AkliteClient::CONFIG_DIRS;
   }
 
-  if (env.end() != env.find("AKLITE_LOCAL_UPDATE_PATH")) {
-    const std::string local_update_path{env.get("AKLITE_LOCAL_UPDATE_PATH")};
+  if (!local_repo_path.empty()) {
     local_update_source = {
-      local_update_path + "/tuf",
-      local_update_path + "/ostree_repo",
-      local_update_path + "/apps"
-
+      local_repo_path + "/tuf",
+      local_repo_path + "/ostree_repo",
+      local_repo_path + "/apps"
     };
     is_local_update = true;
-    LOG_INFO << "Offline mode. Updates path=" << local_update_path;
+    LOG_INFO << "Offline mode. Updates path=" << local_repo_path;
   } else {
     LOG_INFO << "Online mode";
   }
@@ -123,7 +121,8 @@ int main(int argc, char **argv) {
 
       if (latest.Name() != current.Name() && !client->IsRollback(latest)) {
         std::string reason = "Updating from " + current.Name() + " to " + latest.Name();
-        auto installer = client->Installer(latest, reason, "", InstallMode::All, &local_update_source);
+        auto installer = client->Installer(latest, reason, "", InstallMode::All,
+                                      is_local_update ? &local_update_source : nullptr);
         if (!installer) {
           LOG_ERROR << "Found latest Target but failed to retrieve its metadata from DB, skipping update";
           std::this_thread::sleep_for(std::chrono::seconds(interval));
@@ -172,4 +171,5 @@ int main(int argc, char **argv) {
 
     std::this_thread::sleep_for(std::chrono::seconds(interval));
   }
+  return EXIT_FAILURE;
 }
