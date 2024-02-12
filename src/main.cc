@@ -1,3 +1,4 @@
+#include <sys/file.h>
 #include <iostream>
 #include <thread>
 #include <unordered_map>
@@ -25,15 +26,23 @@ static const char* const AkliteSystemLock{"/var/lock/aklite.lock"};
 
 class FileLock {
  public:
-  explicit FileLock(const char* path = AkliteSystemLock) : path_{path}, file_{path}, lock_{path} {
-    if (!lock_.try_lock()) {
-      throw std::runtime_error("Failed to obtain the aklite lock, another instance of aklite must be running !!!");
+  explicit FileLock(const char* path = AkliteSystemLock) : path_{path} {
+    fd_ = open(AkliteSystemLock, O_CREAT | O_RDONLY, 0444);
+    if (fd_ == -1) {
+      throw std::system_error(errno, std::system_category(), "An error occurred opening the aklite lock");
+    }
+
+    if (flock(fd_, LOCK_NB | LOCK_EX) == -1) {
+      if (errno == EWOULDBLOCK) {
+        throw std::runtime_error("Failed to obtain the aklite lock, another instance is running!");
+      }
+      throw std::system_error(errno, std::system_category(), "An error occurred obtaining the aklite lock");
     }
   }
 
   ~FileLock() {
     try {
-      lock_.unlock();
+      flock(fd_, LOCK_NB | LOCK_UN);
       boost::filesystem::remove(path_);
     } catch (const std::exception& exc) {
       LOG_WARNING << "Failed to unlock, " << path_ << ", error: " << exc.what();
@@ -46,8 +55,7 @@ class FileLock {
 
  private:
   const char* const path_{nullptr};
-  boost::filesystem::ofstream file_;
-  boost::interprocess::file_lock lock_;
+  int fd_;
 };
 
 static int status_finalize(LiteClient& client, const bpo::variables_map& unused) {
@@ -418,11 +426,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 }
 
 static int cli_install(LiteClient& client, const bpo::variables_map& params) {
-  // Make sure no any other update instances are running, i.e. neither the daemon or the other CLI update/finalize is
-  // running
-  // The API's AkliteClient uses different type of file locking, so it cannot be used for syncing of the daemon and the
-  // CLI command running. Specifically, the API's lock relies on "#define LOCK_EX 2 /* Exclusive lock.  */" while the
-  // daemon's lock is based on "# define F_WRLCK 1 /* Write lock.  */"
+  // Make sure no other update instances are running, i.e. neither the daemon or other CLI update/finalize
   FileLock lock;
   std::string target_name;
   int version = -1;
@@ -442,7 +446,8 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClient akclient{client_ptr, false, true};
+  // Setting apply_lock parameter to false, since we already took the FileLock above
+  AkliteClient akclient{client_ptr, false, false};
 
   const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
   InstallMode mode{InstallMode::All};
@@ -457,14 +462,12 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
-  // Make sure no any other update instances are running, i.e. neither the daemon or the other CLI update/finalize is
-  // running The API's AkliteClient uses different type of file locking, so it cannot be used for syncing of the daemon
-  // and the CLI command running. Specifically, the API's lock relies on "#define LOCK_EX 2 /* Exclusive lock.  */"
-  // while the daemon's lock is based on "# define F_WRLCK 1 /* Write lock.  */"
+  // Make sure no other update instances are running, i.e. neither the daemon or other CLI update/finalize
   FileLock lock;
   (void)params;
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClient akclient{client_ptr, false, true};
+  // Setting apply_lock parameter to false, since we already took the FileLock above
+  AkliteClient akclient{client_ptr, false, false};
 
   return static_cast<int>(aklite::cli::CompleteInstall(akclient));
 }
