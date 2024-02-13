@@ -789,7 +789,7 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   tuf_repo_->checkMeta();
   for (const auto& tt : tuf_repo_->GetTargets()) {
     if (tt == t) {
-      target = std::make_unique<Uptane::Target>(Target::fromTufTarget(tt));
+      target = std::make_unique<Uptane::Target>(Target::fromTufTarget(t));
       break;
     }
   }
