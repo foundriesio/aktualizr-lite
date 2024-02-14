@@ -801,7 +801,7 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
       // and not installed_versions)
       target = std::make_unique<Uptane::Target>(uptane_target);
     } else {
-      LOG_ERROR << "The specified Target is not found amoung trusted TUF targets:\n"
+      LOG_ERROR << "The specified Target is not found among trusted TUF targets:\n"
                 << "\tName: " << t.Name() << ", ostree hash: " << t.Sha256Hash() << "\n\tApps: " << t.AppsJson();
       return nullptr;
     }

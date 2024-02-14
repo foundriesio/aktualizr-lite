@@ -322,7 +322,7 @@ void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> ev
 std::tuple<bool, boost::filesystem::path> LiteClient::isRootMetaImportNeeded() {
   std::string data;
   if (storage->loadRoot(&data, Uptane::RepositoryType::Image(), Uptane::Version(2))) {
-    LOG_DEBUG << "Root role metadata are already present in DB, skiping their import from FS";
+    LOG_DEBUG << "Root role metadata are already present in DB, skipping their import from FS";
     return {false, ""};
   }
   boost::filesystem::path tuf_meta_src{config.storage.uptane_metadata_path.get("/")};
@@ -380,7 +380,7 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
   } catch (const std::exception& exc) {
     max_ver = Uptane::Version(2);
     LOG_WARNING << "A device certificate is not found or failed to parse it: " << exc.what();
-    LOG_WARNING << "Cannot determine a device type (prodution or CI). "
+    LOG_WARNING << "Cannot determine a device type (production or CI). "
                 << "Importing the first two versions of root role metadata since they are the same for both production "
                    "and CI...";
   }
