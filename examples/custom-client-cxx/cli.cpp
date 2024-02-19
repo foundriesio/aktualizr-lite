@@ -26,13 +26,22 @@ static void print_status(aklite::cli::StatusCode ret) {
       std::cout << "SUCCESS: Unable to fetch updated TUF metadata, but stored metadata is valid";
       break;
     case aklite::cli::StatusCode::CheckinFailure:
-      std::cout << "FAILURE: Unable to get TUF metadata";
+      std::cout << "FAILURE: Failed to update TUF metadata";
       break;
     case aklite::cli::StatusCode::CheckinNoMatchingTargets:
       std::cout << "FAILURE: There is no matching target for the device";
       break;
     case aklite::cli::StatusCode::CheckinNoTargetContent:
       std::cout << "FAILURE: There is no target metadata in the local path";
+      break;
+    case aklite::cli::StatusCode::CheckinSecurityError:
+      std::cout << "FAILURE: Invalid TUF metadata";
+      break;
+    case aklite::cli::StatusCode::CheckinExpiredMetadata:
+      std::cout << "FAILURE: TUF metadata is expired";
+      break;
+    case aklite::cli::StatusCode::CheckinMetadataFetchFailure:
+      std::cout << "FAILURE: Unable to fetch TUF metadata";
       break;
     case aklite::cli::StatusCode::TufTargetNotFound:
       std::cout << "FAILURE: Selected target not found";

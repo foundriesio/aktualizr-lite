@@ -23,6 +23,10 @@ static const std::unordered_map<CheckInResult::Status, StatusCode> c2s = {
     {CheckInResult::Status::Failed, StatusCode::CheckinFailure},
     {CheckInResult::Status::NoMatchingTargets, StatusCode::CheckinNoMatchingTargets},
     {CheckInResult::Status::NoTargetContent, StatusCode::CheckinNoTargetContent},
+    {CheckInResult::Status::SecurityError, StatusCode::CheckinSecurityError},
+    {CheckInResult::Status::ExpiredMetadata, StatusCode::CheckinExpiredMetadata},
+    {CheckInResult::Status::MetadataFetchFailure, StatusCode::CheckinMetadataFetchFailure},
+    {CheckInResult::Status::MetadataNotFound, StatusCode::CheckinMetadataNotFound},
 };
 
 static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {
