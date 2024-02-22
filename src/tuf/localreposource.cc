@@ -13,7 +13,7 @@ LocalRepoSource::LocalRepoSource(const std::string &name_in, const std::string &
 
 std::string LocalRepoSource::fetchFile(const boost::filesystem::path &meta_file_path) {
   if (!boost::filesystem::exists(meta_file_path)) {
-    throw NotFoundException(meta_file_path.string());
+    throw MetadataNotFoundException(meta_file_path.string());
   }
 
   return Utils::readFile(meta_file_path);

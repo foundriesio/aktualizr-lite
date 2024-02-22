@@ -7,12 +7,6 @@ namespace aklite::tuf {
 // TufRepoSource implementation for fetching local meta-dat
 class LocalRepoSource : public RepoSource {
  public:
-  class NotFoundException : public std::runtime_error {
-   public:
-    explicit NotFoundException(const std::string &path)
-        : std::runtime_error("Metadata hasn't been found; file path: " + path) {}
-  };
-
   LocalRepoSource(const std::string &name_in, const std::string &local_path);
 
   std::string fetchRoot(int version) override;
