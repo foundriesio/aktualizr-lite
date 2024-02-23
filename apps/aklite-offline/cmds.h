@@ -62,13 +62,14 @@ class InstallCmd : public Cmd {
                                                     "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
         "config,c", po::value<std::vector<boost::filesystem::path>>()->composing(), "Configuration file or directory")(
         "src-dir,s", po::value<boost::filesystem::path>()->required(), "Directory that contains an update")(
-        "force,f", po::bool_switch(&force_downgrade), "Force downgrade");
+        "force,f", po::bool_switch(&force_downgrade), "Force downgrade")(
+        "target,t", po::value<std::string>()->default_value(std::string("")), "Target name");
   }
 
   int operator()(const po::variables_map& vm) const override {
     try {
       return installUpdate(vm, boost::filesystem::canonical(vm["src-dir"].as<boost::filesystem::path>()),
-                           force_downgrade);
+                           vm["target"].as<std::string>(), force_downgrade);
     } catch (const std::exception& exc) {
       std::cerr << "Failed to install offline update; src-dir: " << vm["src-dir"].as<boost::filesystem::path>().string()
                 << ", err: " << exc.what() << "\n";
@@ -77,7 +78,8 @@ class InstallCmd : public Cmd {
   }
 
  private:
-  int installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir, bool force_downgrade) const;
+  int installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir,
+                    const std::string& target_name, bool force_downgrade) const;
 
  private:
   po::options_description _options;
