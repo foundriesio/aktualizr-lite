@@ -204,6 +204,14 @@ class Repo {
   Repo() = default;
 };
 
+class MetadataNotFoundException : public std::runtime_error {
+ public:
+  explicit MetadataNotFoundException(const std::string& path)
+      : std::runtime_error("Metadata hasn't been found; file path: " + path) {}
+  MetadataNotFoundException(const std::string& role, const std::string& version)
+      : std::runtime_error("Metadata hasn't been found; role: " + role + "; version: " + version) {}
+};
+
 }  // namespace aklite::tuf
 
 #endif

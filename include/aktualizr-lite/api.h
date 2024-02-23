@@ -30,6 +30,10 @@ class CheckInResult {
     Failed,    // check-in failed and there's no valid local meta-data
     NoMatchingTargets,
     NoTargetContent,
+    SecurityError,
+    ExpiredMetadata,
+    MetadataFetchFailure,
+    MetadataNotFound,
   };
   CheckInResult(Status status, std::string primary_hwid, std::vector<TufTarget> targets)
       : status(status), primary_hwid_(std::move(primary_hwid)), targets_(std::move(targets)) {}

@@ -241,9 +241,9 @@ class AkliteOffline : public ::testing::Test {
     initial_target_ = Target::toTufTarget(initial_target);
   }
 
-  TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
+  TufTarget addTarget(TufRepoMock& repo, const std::vector<AppEngine::App>& apps, bool just_apps = false,
                       bool add_bootloader_update = false) {
-    const auto& latest_target{tuf_repo_.getLatest()};
+    const auto& latest_target{repo.getLatest()};
     std::string version;
     try {
       version = std::to_string(std::stoi(latest_target.custom_version()) + 1);
@@ -269,7 +269,12 @@ class AkliteOffline : public ::testing::Test {
     }
     // add new target to TUF repo
     const std::string name = hw_id + "-" + os + "-" + version;
-    return Target::toTufTarget(tuf_repo_.addTarget(name, hash, hw_id, version, apps_json));
+    return Target::toTufTarget(repo.addTarget(name, hash, hw_id, version, apps_json));
+  }
+
+  TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
+                      bool add_bootloader_update = false) {
+    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update);
   }
 
   void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload,
@@ -392,7 +397,7 @@ const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
 const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
 
-TEST_F(AkliteOffline, OfflineClientCheckinFailure) {
+TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
   const auto prev_target{addTarget({createApp("app-01")})};
   const auto outdated_repo_path{test_dir_ / "outdated_tuf_repo"};
   boost::filesystem::copy(tuf_repo_.getRepoPath(), outdated_repo_path);
@@ -404,8 +409,29 @@ TEST_F(AkliteOffline, OfflineClientCheckinFailure) {
 
   // Now try to do checkin against the outdated TUF repo
   AkliteClient client(createLiteClient());
-  LocalUpdateSource outdated_src = { outdated_repo_path.string(), src()->ostree_repo, src()->app_store };
-  ASSERT_EQ(aklite::cli::StatusCode::CheckinFailure, aklite::cli::CheckIn(client, &outdated_src));
+  LocalUpdateSource outdated_src = {outdated_repo_path.string(), src()->ostree_repo, src()->app_store};
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinSecurityError, aklite::cli::CheckIn(client, &outdated_src));
+}
+
+TEST_F(AkliteOffline, OfflineClientCheckinMetadataNotFound) {
+  const auto prev_target{addTarget({createApp("app-01")})};
+  const auto target{addTarget({createApp("app-01")})};
+  const auto invalid_repo_path{test_dir_ / "invalid_tuf_repo"};
+
+  // Now try to do checkin against an invalid TUF repo path
+  AkliteClient client(createLiteClient());
+  LocalUpdateSource invalid_src = {invalid_repo_path.string(), src()->ostree_repo, src()->app_store};
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinMetadataNotFound, aklite::cli::CheckIn(client, &invalid_src));
+}
+
+TEST_F(AkliteOffline, OfflineClientCheckinExpiredMetadata) {
+  TufRepoMock expired_repo{src_dir_ / "tuf", "2010-01-01T00:00:00Z"};
+
+  const auto prev_target{addTarget(expired_repo, {createApp("app-01")})};
+  const auto target{addTarget(expired_repo, {createApp("app-01")})};
+
+  AkliteClient client(createLiteClient());
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinExpiredMetadata, aklite::cli::CheckIn(client, src()));
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoMatchingTargets) {

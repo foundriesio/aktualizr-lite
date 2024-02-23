@@ -20,6 +20,7 @@
 #include "tuf/akhttpsreposource.h"
 #include "tuf/akrepo.h"
 #include "tuf/localreposource.h"
+#include "uptane/exceptions.h"
 
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                         "/etc/sota/conf.d/"};
@@ -182,12 +183,25 @@ CheckInResult AkliteClient::CheckIn() const {
     tuf_repo_->updateMeta(repo_src);
     check_status = CheckInResult::Status::Ok;
     LOG_INFO << "The local TUF repo has been successfully updated";
-  } catch (const std::exception& exc) {
+  } catch (const Uptane::SecurityException& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo: " << err;
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata check failure: " << err;
+    check_status = CheckInResult::Status::SecurityError;
+  } catch (const Uptane::ExpiredMetadata& exc) {
+    const std::string err{exc.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata is expired: " << err;
+    check_status = CheckInResult::Status::ExpiredMetadata;
+  } catch (const Uptane::MetadataFetchFailure& exc) {
+    const std::string err{exc.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata fetch failure: " << err;
     if (err.find("Failed to fetch role timestamp") != std::string::npos) {
       LOG_ERROR << "Check the device tag or verify the existence of a wave for the device";
     }
+    check_status = CheckInResult::Status::MetadataFetchFailure;
+  } catch (const std::exception& exc) {
+    const std::string err{exc.what()};
+    LOG_ERROR << "Failed to update the local TUF repo: " << err;
+    check_status = CheckInResult::Status::Failed;
   }
   if (check_status != CheckInResult::Status::Ok) {
     LOG_INFO << "Checking the local TUF repo...";
@@ -200,7 +214,7 @@ CheckInResult AkliteClient::CheckIn() const {
     }
   }
 
-  if (check_status == CheckInResult::Status::Failed) {
+  if (check_status != CheckInResult::Status::Ok && check_status != CheckInResult::Status::OkCached) {
     return CheckInResult{check_status, "", {}};
   }
 
@@ -333,8 +347,22 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
   LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
   try {
     tuf_repo_->updateMeta(repo_src);
+    LOG_INFO << "The local TUF repo has been successfully updated";
+  } catch (const Uptane::SecurityException& exc) {
+    const std::string err{exc.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata check failure: " << err;
+    return CheckInResult{CheckInResult::Status::SecurityError, "", {}};
+  } catch (const Uptane::ExpiredMetadata& exc) {
+    const std::string err{exc.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata is expired: " << err;
+    return CheckInResult{CheckInResult::Status::ExpiredMetadata, "", {}};
+  } catch (const aklite::tuf::MetadataNotFoundException& exc) {
+    const std::string err{exc.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata not found: " << err;
+    return CheckInResult{CheckInResult::Status::MetadataNotFound, "", {}};
   } catch (const std::exception& exc) {
-    LOG_ERROR << "Failed to update the local TUF repo: " << exc.what();
+    const std::string err{exc.what()};
+    LOG_ERROR << "Failed to update the local TUF repo: " << err;
     return CheckInResult{CheckInResult::Status::Failed, "", {}};
   }
 

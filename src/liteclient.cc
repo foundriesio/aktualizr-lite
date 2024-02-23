@@ -21,12 +21,6 @@
 
 class OfflineMetaFetcher : public Uptane::IMetadataFetcher {
  public:
-  class NotFoundException : public std::runtime_error {
-   public:
-    NotFoundException(const std::string& role, const std::string& version)
-        : std::runtime_error("Metadata hasn't been found; role: " + role + "; version: " + version) {}
-  };
-
   explicit OfflineMetaFetcher(boost::filesystem::path tuf_repo_path, Uptane::Version max_root_ver = Uptane::Version())
       : tuf_repo_path_{std::move(tuf_repo_path)}, max_root_ver_{max_root_ver} {}
 
@@ -38,7 +32,7 @@ class OfflineMetaFetcher : public Uptane::IMetadataFetcher {
         (role == Uptane::Role::Root() && max_root_ver_ != Uptane::Version() && max_root_ver_ < version)) {
       std::stringstream ver_str;
       ver_str << version;
-      throw NotFoundException(role.ToString(), ver_str.str());
+      throw aklite::tuf::MetadataNotFoundException(role.ToString(), ver_str.str());
     }
 
     std::ifstream meta_file_stream(meta_file_path.string());
@@ -342,7 +336,7 @@ bool LiteClient::importRootMeta(const boost::filesystem::path& src, Uptane::Vers
   try {
     OfflineMetaFetcher offline_meta_fetcher{src.string(), max_ver};
     image_repo_.updateRoot(*storage, offline_meta_fetcher);
-  } catch (const OfflineMetaFetcher::NotFoundException& exc) {
+  } catch (const aklite::tuf::MetadataNotFoundException& exc) {
     // That's OK, it means the latest + 1 root version is not found
     LOG_TRACE << "Not found root role metadata; err: " << exc.what();
   } catch (const Uptane::ExpiredMetadata& exc) {
@@ -544,6 +538,21 @@ data::InstallationResult LiteClient::installPackage(const Uptane::Target& target
 std::tuple<bool, std::string> LiteClient::updateImageMeta() {
   try {
     image_repo_.updateMeta(*storage, *uptane_fetcher_);
+  } catch (const Uptane::SecurityException& e) {
+    const std::string err{e.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata check failure: " << err;
+    return {false, err};
+  } catch (const Uptane::ExpiredMetadata& e) {
+    const std::string err{e.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata is expired: " << err;
+    return {false, err};
+  } catch (const Uptane::MetadataFetchFailure& e) {
+    const std::string err{e.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata fetch failure: " << err;
+    if (err.find("Failed to fetch role timestamp") != std::string::npos) {
+      LOG_ERROR << "Check the device tag or verify the existence of a wave for the device";
+    }
+    return {false, err};
   } catch (const std::exception& e) {
     LOG_ERROR << "Failed to update Image repo metadata: " << e.what();
     return {false, e.what()};
@@ -564,11 +573,20 @@ const std::vector<Uptane::Target>& LiteClient::allTargets() const {
 bool LiteClient::checkImageMetaOffline() {
   try {
     image_repo_.checkMetaOffline(*storage);
+    return true;
+  } catch (const Uptane::SecurityException& e) {
+    const std::string err{e.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata check failure: " << err;
+  } catch (const Uptane::ExpiredMetadata& e) {
+    const std::string err{e.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata is expired: " << err;
+  } catch (const aklite::tuf::MetadataNotFoundException& e) {
+    const std::string err{e.what()};
+    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata not found: " << err;
   } catch (const std::exception& e) {
     LOG_ERROR << "Failed to check Image repo metadata: " << e.what();
-    return false;
   }
-  return true;
+  return false;
 }
 
 DownloadResultWithStat LiteClient::downloadImage(const Uptane::Target& target, const api::FlowControlToken* token) {

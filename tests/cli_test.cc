@@ -112,7 +112,7 @@ TEST_P(CliClient, TufMetaDownloadFailure) {
   auto akclient{createAkClient()};
   const auto target01{createTufTarget()};
 
-  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::CheckinFailure);
+  ASSERT_EQ(cli::Install(*akclient, target01.Version()), cli::StatusCode::CheckinMetadataFetchFailure);
 }
 
 TEST_P(CliClient, TufTargetNotFoundInvalidHardwareId) {
