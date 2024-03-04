@@ -157,15 +157,9 @@ TEST_P(AkliteTest, RollbackIfOstreeInstallFails) {
     client->checkForUpdatesBegin();
     ASSERT_TRUE(client->isRollback(target_02));
     const auto app_engine_type{GetParam()};
-    if (app_engine_type == "RestorableAppEngine") {
-      // a download process doesn't "break" currently installed and running retsorable apps
-      // appsInSync cleans any unneeded layers stored in the skopeo/OCI store
-      ASSERT_TRUE(client->appsInSync(client->getCurrent()));
-    } else {
-      ASSERT_FALSE(client->appsInSync(client->getCurrent()));
-      // sync target_01 apps
-      updateApps(*client, client->getCurrent(), client->getCurrent());
-    }
+    ASSERT_FALSE(client->appsInSync(client->getCurrent()));
+    // sync target_01 apps
+    updateApps(*client, client->getCurrent(), client->getCurrent());
     client->checkForUpdatesEnd(target_01);
 
     // make sure the initial target_01 is running

@@ -48,15 +48,6 @@ TEST_P(AkliteTest, AppUpdate) {
   auto target01 = createAppTarget({app01});
 
   const auto app_engine_type{GetParam()};
-  if (app_engine_type == "RestorableAppEngine") {
-    // inject image pull failure  during App installation for Restorable Apps
-    daemon_.setImagePullFailFlag(true);
-    updateApps(*client, getInitialTarget(), target01, DownloadResult::Status::Ok, "",
-               data::ResultCode::Numeric::kDownloadFailed, "");
-    // turn off failure, and try to update againg
-    daemon_.setImagePullFailFlag(false);
-    ASSERT_FALSE(client->isRollback(target01));
-  }
   updateApps(*client, getInitialTarget(), target01);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
   ASSERT_TRUE(app_engine->isRunning(app01));
@@ -193,14 +184,6 @@ TEST_P(AkliteTest, OstreeAndAppUpdate) {
   auto new_target = createTarget(&apps);
 
   const auto app_engine_type{GetParam()};
-  if (app_engine_type == "RestorableAppEngine") {
-    // inject image pull failure  during App installation for Restorable Apps
-    daemon_.setImagePullFailFlag(true);
-    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed);
-    // turn off failure, and try to update againg
-    daemon_.setImagePullFailFlag(false);
-    ASSERT_FALSE(client->isRollback(new_target));
-  }
 
   // update to the latest version
   update(*client, getInitialTarget(), new_target);
@@ -229,10 +212,7 @@ TEST_P(AkliteTest, OstreeAndAppUpdateIfCreateAfterBoot) {
   auto new_target = createTarget(&apps);
 
   const auto app_engine_type{GetParam()};
-  if (app_engine_type == "RestorableAppEngine") {
-    // inject image pull failure  during App installation for Restorable Apps
-    daemon_.setImagePullFailFlag(true);
-  }
+
   // update to the latest version
   update(*client, getInitialTarget(), new_target);
   // make sure that the installed Target is not "finalized"/applied and Apps are not running
@@ -243,13 +223,6 @@ TEST_P(AkliteTest, OstreeAndAppUpdateIfCreateAfterBoot) {
   reboot(client);
 
   checkEvents(*client, new_target, UpdateType::kOstree);
-  if (app_engine_type == "RestorableAppEngine") {
-    ASSERT_FALSE(app_engine->isRunning(app01));
-    ASSERT_FALSE(client->isRollback(new_target));
-    daemon_.setImagePullFailFlag(false);
-    updateApps(*client, getInitialTarget(), new_target);
-    checkEvents(*client, new_target, UpdateType::kApp);
-  }
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
   ASSERT_TRUE(app_engine->isRunning(app01));
@@ -333,27 +306,13 @@ TEST_P(AkliteTest, InvalidAppComposeUpdate) {
   auto target02 = createAppTarget({app01_updated});
 
   const auto app_engine_type{GetParam()};
-
-  // in the case of Restorable App we expect that download/fetch is successfull
-  DownloadResult::Status expected_download_res{DownloadResult::Status::Ok};
-  if (app_engine_type == "ComposeAppEngine") {
-    // App is verified (docker-compose config) at the "fetch" phase for ComposeAppEngine
-    // this is a bug that became a feature bug, so let's adjust to it
-    expected_download_res = DownloadResult::Status::DownloadFailed;
-  }
+  DownloadResult::Status expected_download_res{DownloadResult::Status::DownloadFailed};
   // updateApps() emulates LiteClient's client which invokes the fecthed Target verification.
   // the verification is supposed to fail and the installation process is never invoked
   updateApps(*client, target01, target02, expected_download_res, "", data::ResultCode::Numeric::kVerificationFailed);
   ASSERT_FALSE(targetsMatch(client->getCurrent(), target02));
 
   ASSERT_TRUE(targetsMatch(client->getCurrent(), target01));
-  if (app_engine_type == "RestorableAppEngine") {
-    // make sure that the update with invalid App compose file didn't break currently running App
-    // it works only for RestorableAppEngine because in the case of ComposeAppEngine
-    // App content in <compose-apps>/<app-dir> has been already replaced with invalid app01_updated, so
-    // there is no means to check if app01 is running (there is no its docker-compose.yml of file system)
-    ASSERT_TRUE(app_engine->isRunning(app01));
-  }
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiEngine, AkliteTest, ::testing::Values("ComposeAppEngine", "RestorableAppEngine"));

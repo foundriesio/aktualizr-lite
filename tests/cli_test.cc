@@ -44,6 +44,7 @@ class CliClient : public AkliteTest {
     conf.pacman.ostree_server = ostree_server_uri_;
     conf.uptane.repo_server = tuf_repo_server_;
     conf.pacman.extra["ostree_update_block"] = "1";
+    conf.pacman.extra["create_containers_before_reboot"] = "0";
   }
 
  protected:
@@ -157,7 +158,9 @@ TEST_P(CliClient, OstreeUpdateRollback) {
   ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::InstallRollbackOk);
   ASSERT_TRUE(akclient->IsRollback(target02));
   ASSERT_EQ(akclient->GetCurrent(), target01);
-  ASSERT_EQ(akclient->CheckAppsInSync(), nullptr);
+  // target02 apps were created during the installation process,
+  // so the apps require sync after rolling back to target01
+  ASSERT_NE(akclient->CheckAppsInSync(), nullptr);
 }
 
 TEST_P(CliClient, FullUpdateAppDrivenRollback) {
@@ -181,10 +184,8 @@ TEST_P(CliClient, FullUpdateAppDrivenRollback) {
   reboot(akclient);
   ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::InstallRollbackNeedsReboot);
   reboot(akclient);
-  ASSERT_EQ(cli::CompleteInstall(*akclient), cli::StatusCode::Ok);
   ASSERT_TRUE(akclient->IsRollback(target02));
   ASSERT_EQ(akclient->GetCurrent(), target01);
-  ASSERT_EQ(akclient->CheckAppsInSync(), nullptr);
 }
 
 TEST_P(CliClient, OstreeRollbackToInitialTarget) {

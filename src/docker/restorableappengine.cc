@@ -124,6 +124,21 @@ AppEngine::Result RestorableAppEngine::fetch(const App& app) {
     const auto images_dir{app_dir / "images"};
     LOG_DEBUG << app.name << ": downloading App images from Registry(ies): " << app.uri << " --> " << images_dir;
     pullAppImages(uri, app_compose_file, images_dir);
+
+    // Install compose app to the `install_root` (`/var/sota/compose-apps`) and
+    // load app images to the docker engine store.
+    installAppAndImages(app);
+    // The docker engine's API doesn't allow to load digest referenced images (an uri with sha256 hash).
+    // Only tag referenced images can be loaded into the docker store.
+    // It leads to a need for connectivity to Registry when `docker compose up` is invoked
+    // and the app's `docker-compose.yml` contains digest references to images.
+    // To overcome this issue we need to invoke `docker compose pull` after the app image loading,
+    // so the docker engine pulls the image index/manifest and updates its "image DB" with
+    // digest references to the app's images.
+    // After that, the `install` or `run` phase (`docker compose up`) does not require connectivity/networking to start
+    // the app.
+    pullComposeAppImages(compose_cmd_, install_root_ / app.name);
+
     res = true;
   } catch (const InsufficientSpaceError& exc) {
     res = {Result::ID::InsufficientSpace, exc.what()};
@@ -164,7 +179,9 @@ AppEngine::Result RestorableAppEngine::verify(const App& app) {
 
 AppEngine::Result RestorableAppEngine::install(const App& app) {
   if (!create_containers_if_install_) {
-    return installContainerless(app);
+    // Nothing to do if there is no need to create containers of the updated images
+    // since images are already installed at the fetch phase.
+    return true;
   }
   return installAndCreateOrRunContainers(app);
 }
@@ -183,28 +200,8 @@ AppEngine::Result RestorableAppEngine::installContainerless(const App& app) {
 AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App& app, bool run) {
   Result res{false};
 
-  try {
-    const auto app_install_root{installAppAndImages(app)};
-    res = true;
-  } catch (const std::exception& exc) {
-    res = {false, exc.what()};
-  }
-
-  if (!offline_) {
-    try {
-      const auto app_install_root{install_root_ / app.name};
-      // Make the docker store aware about the app images by invoking `docker compose pull` command.
-      // The command fetches just image manifests since `installAppAndImages` injects all image data
-      // to the docker store. The goal is to update the docker store map (`repositories.json`) between
-      // image URIs and internal image represntation's hash.
-      // If the pull fails then `ImagePullFailure` error is returned so the client can distnguish it from
-      // the other image install/run errors and keep trying to install/run App containers.
-      pullComposeAppImages(compose_cmd_, app_install_root);
-    } catch (const std::exception& exc) {
-      return {Result::ID::ImagePullFailure, exc.what()};
-    }
-  }
-
+  // App is supposed to be installed in the fetch/download phase,
+  // so just create containers and optionally start the app at this stage.
   try {
     const auto app_install_root{install_root_ / app.name};
     const std::string flags{run ? "--remove-orphans -d" : "--remove-orphans --no-start"};

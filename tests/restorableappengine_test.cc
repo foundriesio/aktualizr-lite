@@ -284,9 +284,6 @@ TEST_F(RestorableAppEngineTest, FetchAndInstall) {
   ASSERT_TRUE(app_engine->isFetched(app));
   ASSERT_TRUE(app_engine->verify(app));
   ASSERT_FALSE(app_engine->isRunning(app));
-  daemon_.setImagePullFailFlag(true);
-  ASSERT_FALSE(app_engine->install(app));
-  daemon_.setImagePullFailFlag(false);
   const auto install_res{app_engine->install(app)};
   ASSERT_EQ(install_res, true) << install_res.err;
   ASSERT_TRUE(app_engine->getInstalledApps() & app);
@@ -298,10 +295,6 @@ TEST_F(RestorableAppEngineTest, FetchAndRun) {
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
   ASSERT_TRUE(app_engine->verify(app));
-  daemon_.setImagePullFailFlag(true);
-  ASSERT_FALSE(app_engine->run(app));
-  ASSERT_FALSE(app_engine->isRunning(app));
-  daemon_.setImagePullFailFlag(false);
   const auto run_res{app_engine->run(app)};
   ASSERT_EQ(run_res, true) << run_res.err;
   ASSERT_TRUE(app_engine->getInstalledApps() & app);
@@ -446,7 +439,7 @@ TEST_F(RestorableAppEngineTest, FetchFetchAndRun) {
 
   ASSERT_TRUE(app_engine->fetch(app));
   ASSERT_TRUE(app_engine->isFetched(app));
-  ASSERT_FALSE(app_engine->getInstalledApps() & app);
+  ASSERT_TRUE(app_engine->getInstalledApps() & app);
   ASSERT_FALSE(app_engine->isRunning(app));
   ASSERT_EQ(1, registry.getAppManifestPullNumb(app.uri));
 
@@ -481,7 +474,7 @@ TEST_F(RestorableAppEngineTest, FetchRunAndUpdate) {
   ASSERT_TRUE(app_engine->isFetched(updated_app));
   ASSERT_TRUE(app_engine->verify(updated_app));
   ASSERT_FALSE(app_engine->isRunning(updated_app));
-  ASSERT_FALSE(app_engine->getInstalledApps() & updated_app);
+  ASSERT_TRUE(app_engine->getInstalledApps() & updated_app);
 
   // run updated App
   ASSERT_TRUE(app_engine->run(updated_app));
@@ -586,10 +579,8 @@ TEST_F(RestorableAppEngineTest, VerifyFailure) {
   auto app =
       registry.addApp(fixtures::ComposeApp::create("app-005", "service-01", "image-01", AppInvalidServiceTemplate));
 
-  ASSERT_TRUE(app_engine->fetch(app));
-  ASSERT_TRUE(app_engine->isFetched(app));
+  ASSERT_FALSE(app_engine->fetch(app));
   ASSERT_EQ(1, registry.getAppManifestPullNumb(app.uri));
-  ASSERT_FALSE(app_engine->verify(app));
 }
 
 TEST_F(RestorableAppEngineTest, VerifySkopeoTmpFileRemoval) {
