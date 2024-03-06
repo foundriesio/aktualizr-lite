@@ -690,7 +690,10 @@ class LocalLiteInstall : public LiteInstall {
     client_->logTarget("Downloading: ", *target_);
 
     auto downloader = createOfflineDownloader();
+    client_->notifyDownloadStarted(*target_, reason);
     auto dr{downloader->Download(Target::toTufTarget(*target_))};
+    client_->notifyDownloadFinished(*target_, dr, dr.description);
+
     return {dr.status, dr.description, dr.destination_path};
   }
 
