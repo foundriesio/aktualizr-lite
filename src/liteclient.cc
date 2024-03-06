@@ -299,7 +299,7 @@ void LiteClient::checkForUpdatesEndWithFailure(const std::string& err) {
 }
 
 void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const {
-  if (!(config.tls.server.empty() || t.custom_data().isMember("local-src-dir"))) {
+  if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
     event->custom["version"] = t.custom_version();
     if (event->custom.isMember("details")) {

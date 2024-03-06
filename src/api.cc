@@ -668,8 +668,6 @@ class LocalLiteInstall : public LiteInstall {
         local_update_source_{*local_update_source},
         offline_update_config_{client_->config},
         ostree_sysroot_{nullptr} {
-    // turn off reporting update events to DG
-    offline_update_config_.tls.server = "";
     // make LiteClient to pull from a local ostree repo
     offline_update_config_.pacman.ostree_server = "file://" + local_update_source_.ostree_repo;
 
@@ -694,15 +692,6 @@ class LocalLiteInstall : public LiteInstall {
     auto downloader = createOfflineDownloader();
     auto dr{downloader->Download(Target::toTufTarget(*target_))};
     return {dr.status, dr.description, dr.destination_path};
-  }
-
-  // TODO: implement `Install()` in such the way that `LiteClient` is not required as it is done for `Download()`
-  InstallResult Install() override {
-    const auto tls_server{client_->config.tls.server};
-    client_->config.tls.server = "";
-    auto ir{LiteInstall::Install()};
-    client_->config.tls.server = tls_server;
-    return ir;
   }
 
  private:
