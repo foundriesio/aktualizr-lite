@@ -25,9 +25,21 @@
 #include "fixtures/liteclient/sysrootfs.cc"
 #include "fixtures/liteclient/tufrepomock.cc"
 
+
+#include <gtest/gtest.h>
+#include <gmock/gmock.h>
+
 // Defined in fstatvfs-mock.cc
 extern void SetFreeBlockNumb(uint64_t, uint64_t);
 extern void UnsetFreeBlockNumb();
+
+
+class LiteClientMock : public LiteClient {
+ public:
+  LiteClientMock(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr): LiteClient(config_in, app_engine) {}
+
+  MOCK_METHOD(void, callback, (const char* msg, const Uptane::Target& install_target, const std::string& result));
+};
 
 class AppStore {
  public:
@@ -184,11 +196,11 @@ class AkliteOffline : public ::testing::Test {
     return app_engine;
   }
 
-  std::shared_ptr<LiteClient> createLiteClient() {
+  std::shared_ptr<LiteClientMock> createLiteClient() {
     if (cfg_.pacman.type != RootfsTreeManager::Name) {
-      return std::make_shared<LiteClient>(cfg_, createAppEngine());
+      return std::make_shared<LiteClientMock>(cfg_, createAppEngine());
     } else {
-      return std::make_shared<LiteClient>(cfg_);
+      return std::make_shared<LiteClientMock>(cfg_);
     }
   }
 
@@ -202,7 +214,8 @@ class AkliteOffline : public ::testing::Test {
   }
 
   aklite::cli::StatusCode install() {
-    AkliteClient client(createLiteClient());
+    auto liteClient = createLiteClient();
+    AkliteClient client(liteClient);
     return aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, false, src());
   }
 
@@ -457,9 +470,17 @@ TEST_F(AkliteOffline, OfflineClient) {
   const auto target{addTarget({createApp("app-01")})};
 
   const auto available_targets{check()};
+  
   ASSERT_EQ(2, available_targets.size());
   ASSERT_EQ(target, available_targets.back());
-  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  // ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+
+    auto liteClient = createLiteClient();
+    AkliteClient client(liteClient);
+    EXPECT_CALL(*liteClient, callback).Times(1);
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, false, src()));
+
+
   reboot();
   ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
   ASSERT_EQ(target, getCurrent());

@@ -80,6 +80,8 @@ StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_s
 static StatusCode pullAndInstall(AkliteClient &client, int version, const std::string &target_name,
                                  InstallMode install_mode, bool force_downgrade,
                                  const LocalUpdateSource *local_update_source, PullMode pull_mode, bool do_install) {
+LOG_WARNING << "** pullAndInstall";
+
   // Check if the device is in a correct state to start a new update
   if (client.IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
@@ -171,7 +173,7 @@ static StatusCode pullAndInstall(AkliteClient &client, int version, const std::s
       return res2StatusCode<DownloadResult::Status>(d2s, dr.status);
     }
   }
-
+LOG_WARNING << "** installer->Install";
   auto ir = installer->Install();
   if (!ir) {
     LOG_ERROR << "Failed to install Target; target: " << target.Name() << ", err: " << ir;

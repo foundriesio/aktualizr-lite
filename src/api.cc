@@ -430,6 +430,7 @@ class LiteInstall : public InstallContext {
       : client_(std::move(client)), target_(std::move(t)), reason_(reason), mode_{install_mode} {}
 
   InstallResult Install() override {
+  LOG_WARNING << " *** LiteInstall::install";
     client_->logTarget("Installing: ", *target_);
 
     // Call appsInSync to update applications list inside the package manager
@@ -440,6 +441,7 @@ class LiteInstall : public InstallContext {
       return InstallResult{InstallResult::Status::DownloadFailed, ""};
     }
 
+  LOG_WARNING << " *** client_->install...";
     auto rc = client_->install(*target_, mode_);
     auto status = InstallResult::Status::Failed;
     if (rc == data::ResultCode::Numeric::kNeedCompletion) {
