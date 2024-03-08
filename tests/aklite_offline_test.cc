@@ -25,9 +25,21 @@
 #include "fixtures/liteclient/sysrootfs.cc"
 #include "fixtures/liteclient/tufrepomock.cc"
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 // Defined in fstatvfs-mock.cc
 extern void SetFreeBlockNumb(uint64_t, uint64_t);
 extern void UnsetFreeBlockNumb();
+
+class LiteClientMock : public LiteClient {
+ public:
+  LiteClientMock(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr)
+      : LiteClient(config_in, app_engine) {}
+
+  MOCK_METHOD(void, callback, (const char* msg, const Uptane::Target& install_target, const std::string& result),
+              (override));
+};
 
 class AppStore {
  public:
@@ -184,11 +196,11 @@ class AkliteOffline : public ::testing::Test {
     return app_engine;
   }
 
-  std::shared_ptr<LiteClient> createLiteClient() {
+  std::shared_ptr<testing::NiceMock<LiteClientMock>> createLiteClient() {
     if (cfg_.pacman.type != RootfsTreeManager::Name) {
-      return std::make_shared<LiteClient>(cfg_, createAppEngine());
+      return std::make_shared<testing::NiceMock<LiteClientMock>>(cfg_, createAppEngine());
     } else {
-      return std::make_shared<LiteClient>(cfg_);
+      return std::make_shared<testing::NiceMock<LiteClientMock>>(cfg_);
     }
   }
 
@@ -202,7 +214,8 @@ class AkliteOffline : public ::testing::Test {
   }
 
   aklite::cli::StatusCode install() {
-    AkliteClient client(createLiteClient());
+    auto liteClient = createLiteClient();
+    AkliteClient client(liteClient);
     return aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, false, src());
   }
 
@@ -455,15 +468,41 @@ TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoTargetContent) {
 TEST_F(AkliteOffline, OfflineClient) {
   const auto prev_target{addTarget({createApp("app-01")})};
   const auto target{addTarget({createApp("app-01")})};
+  {
+    auto lite_cli = createLiteClient();
+    AkliteClient client(lite_cli);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")))
+        .Times(1);
+    const CheckInResult cr{client.CheckInLocal(src())};
+    ASSERT_TRUE(cr);
+    const auto available_targets = cr.Targets();
 
-  const auto available_targets{check()};
-  ASSERT_EQ(2, available_targets.size());
-  ASSERT_EQ(target, available_targets.back());
-  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
-  reboot();
-  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
-  ASSERT_EQ(target, getCurrent());
-  ASSERT_TRUE(areAppsInSync());
+    ASSERT_EQ(2, available_targets.size());
+    ASSERT_EQ(target, available_targets.back());
+
+    // Install operation calls CheckInLocal as well
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")))
+        .Times(1);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("download-pre"), testing::_, testing::StrEq(""))).Times(1);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("download-post"), testing::_, testing::StrEq("OK"))).Times(1);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("install-pre"), testing::_, testing::StrEq(""))).Times(1);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("install-post"), testing::_, testing::StrEq("NEEDS_COMPLETION")))
+        .Times(1);
+    ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot,
+              aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, false, src()));
+    reboot();
+  }
+  {
+    auto lite_cli = createLiteClient();
+    AkliteClient client(lite_cli);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("install-final-pre"), testing::_, testing::StrEq(""))).Times(1);
+    EXPECT_CALL(*lite_cli, callback(testing::StrEq("install-post"), testing::_, testing::StrEq("OK"))).Times(1);
+    ASSERT_EQ(aklite::cli::StatusCode::Ok, aklite::cli::CompleteInstall(client));
+    ASSERT_EQ(target, getCurrent());
+    ASSERT_TRUE(areAppsInSync());
+  }
 }
 
 TEST_F(AkliteOffline, OfflineClientInstallNotLatest) {

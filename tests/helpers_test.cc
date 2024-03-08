@@ -139,7 +139,7 @@ TEST(helpers, callback) {
 
   LiteClient bad_client(bad_config, createAppEngine(bad_config));
   ASSERT_EQ(0, bad_client.callback_program.size());
-  bad_client.callback("Just call to make sure it doesnt crash", Uptane::Target::Unknown());
+  bad_client.callback("Just call to make sure it doesnt crash", Uptane::Target::Unknown(), "");
 
   // Second - good callback. Make sure it works as expected
   Config config;

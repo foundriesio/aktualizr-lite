@@ -215,7 +215,7 @@ bool LiteClient::finalizeInstall(data::InstallationResult* ir) {
   // finalize pending installs
   storage->loadInstalledVersions("", nullptr, &pending);
   if (!!pending) {
-    callback("install-final-pre", *pending);
+    callback("install-final-pre", *pending, "");
     ret = finalizePendingUpdate(pending);
   } else {
     LOG_INFO << "No Pending Installs";
@@ -438,7 +438,7 @@ class DetailedDownloadCompletedReport : public EcuDownloadCompletedReport {
   }
 };
 
-void LiteClient::notifyTufUpdateStarted() { callback("check-for-update-pre", Uptane::Target::Unknown()); }
+void LiteClient::notifyTufUpdateStarted() { callback("check-for-update-pre", Uptane::Target::Unknown(), ""); }
 
 void LiteClient::notifyTufUpdateFinished(const std::string& err, const Uptane::Target& t) {
   auto msg = err.empty() ? "OK" : "FAILED: " + err;
@@ -446,7 +446,7 @@ void LiteClient::notifyTufUpdateFinished(const std::string& err, const Uptane::T
 }
 
 void LiteClient::notifyDownloadStarted(const Uptane::Target& t, const std::string& reason) {
-  callback("download-pre", t);
+  callback("download-pre", t, "");
   notify(t, std_::make_unique<DetailedDownloadReport>(primary_ecu.first, t.correlation_id(), reason));
 }
 
@@ -457,7 +457,7 @@ void LiteClient::notifyDownloadFinished(const Uptane::Target& t, bool success, c
 }
 
 void LiteClient::notifyInstallStarted(const Uptane::Target& t) {
-  callback("install-pre", t);
+  callback("install-pre", t, "");
   notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 

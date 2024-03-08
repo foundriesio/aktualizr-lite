@@ -88,7 +88,7 @@ class LiteClient {
   FRIEND_TEST(AkliteTest, RollbackIfAppsInstallFails);
   FRIEND_TEST(AkliteTest, RollbackIfAppsInstallFailsAndPowerCut);
 
-  void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
+  virtual void callback(const char* msg, const Uptane::Target& install_target, const std::string& result);
 
   void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const;
   void notifyInstallStarted(const Uptane::Target& t);
