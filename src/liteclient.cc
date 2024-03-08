@@ -284,19 +284,16 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
 }
 
 bool LiteClient::checkForUpdatesBegin() {
-  Uptane::Target t = Uptane::Target::Unknown();
-  callback("check-for-update-pre", t);
+  notifyTufUpdateStarted();
   const auto rc = updateImageMeta();
   if (!std::get<0>(rc)) {
-    callback("check-for-update-post", t, "FAILED: " + std::get<1>(rc));
+    notifyTufUpdateFinished(std::get<1>(rc));
   }
   return std::get<0>(rc);
 }
 
-void LiteClient::checkForUpdatesEnd(const Uptane::Target& target) { callback("check-for-update-post", target, "OK"); }
-void LiteClient::checkForUpdatesEndWithFailure(const std::string& err) {
-  callback("check-for-update-post", Uptane::Target::Unknown(), "FAILED: " + err);
-}
+void LiteClient::checkForUpdatesEnd(const Uptane::Target& target) { notifyTufUpdateFinished("", target); }
+void LiteClient::checkForUpdatesEndWithFailure(const std::string& err) { notifyTufUpdateFinished(err); }
 
 void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const {
   if (!config.tls.server.empty()) {
@@ -440,6 +437,13 @@ class DetailedDownloadCompletedReport : public EcuDownloadCompletedReport {
     custom["details"] = details;
   }
 };
+
+void LiteClient::notifyTufUpdateStarted() { callback("check-for-update-pre", Uptane::Target::Unknown()); }
+
+void LiteClient::notifyTufUpdateFinished(const std::string& err, const Uptane::Target& t) {
+  auto msg = err.empty() ? "OK" : "FAILED: " + err;
+  callback("check-for-update-post", t, msg);
+}
 
 void LiteClient::notifyDownloadStarted(const Uptane::Target& t, const std::string& reason) {
   callback("download-pre", t);

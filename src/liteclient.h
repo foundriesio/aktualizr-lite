@@ -70,6 +70,8 @@ class LiteClient {
   std::unique_ptr<ReportQueue> report_queue;
   bool isRollback(const Uptane::Target& target);
 
+  void notifyTufUpdateStarted();
+  void notifyTufUpdateFinished(const std::string& err = "", const Uptane::Target& t = Uptane::Target::Unknown());
   void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
   void notifyDownloadFinished(const Uptane::Target& t, bool success, const std::string& err_msg = "");
   std::tuple<bool, boost::filesystem::path> isRootMetaImportNeeded();
