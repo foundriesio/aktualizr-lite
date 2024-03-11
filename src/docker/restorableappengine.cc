@@ -10,6 +10,7 @@
 #include <boost/format.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/process.hpp>
+#include <boost/range/iterator_range_core.hpp>
 
 #include "crypto/crypto.h"
 #include "docker/composeappengine.h"
