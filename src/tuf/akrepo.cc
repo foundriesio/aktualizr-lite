@@ -24,6 +24,15 @@ std::vector<TufTarget> AkRepo::GetTargets() {
   }
 }
 
+std::string AkRepo::GetRoot(int version) {
+  std::string data;
+  if (storage_->loadRoot(&data, Uptane::RepositoryType::Image(),
+                         version == -1 ? Uptane::Version() : Uptane::Version(version))) {
+    return data;
+  }
+  return "";
+}
+
 void AkRepo::updateMeta(std::shared_ptr<RepoSource> repo_src) {
   FetcherWrapper wrapper(repo_src);
   image_repo_.updateMeta(*storage_, wrapper);
