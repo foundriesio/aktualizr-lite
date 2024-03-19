@@ -4,6 +4,7 @@
 
 #include <boost/format.hpp>
 #include <boost/process.hpp>
+#include <boost/range/iterator_range_core.hpp>
 
 #include "bootloader/bootloaderlite.h"
 #include "docker/restorableappengine.h"

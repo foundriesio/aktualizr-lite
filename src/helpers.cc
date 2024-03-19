@@ -1,5 +1,6 @@
 #include "helpers.h"
 
+#include <boost/range/iterator_range_core.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
