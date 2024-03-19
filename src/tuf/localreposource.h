@@ -9,10 +9,10 @@ class LocalRepoSource : public RepoSource {
  public:
   LocalRepoSource(const std::string &name_in, const std::string &local_path);
 
-  std::string fetchRoot(int version) override;
-  std::string fetchTimestamp() override;
-  std::string fetchSnapshot() override;
-  std::string fetchTargets() override;
+  std::string FetchRoot(int version) override;
+  std::string FetchTimestamp() override;
+  std::string FetchSnapshot() override;
+  std::string FetchTargets() override;
 
  private:
   static std::string fetchFile(const boost::filesystem::path &meta_file_path);

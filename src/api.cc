@@ -180,7 +180,7 @@ CheckInResult AkliteClient::CheckIn() const {
   auto repo_src = std::make_shared<aklite::tuf::AkHttpsRepoSource>("temp-remote-repo-source", pt, client_->config);
   CheckInResult::Status check_status{CheckInResult::Status::Failed};
   try {
-    tuf_repo_->updateMeta(repo_src);
+    tuf_repo_->UpdateMeta(repo_src);
     check_status = CheckInResult::Status::Ok;
     LOG_INFO << "The local TUF repo has been successfully updated";
   } catch (const Uptane::SecurityException& exc) {
@@ -206,7 +206,7 @@ CheckInResult AkliteClient::CheckIn() const {
   if (check_status != CheckInResult::Status::Ok) {
     LOG_INFO << "Checking the local TUF repo...";
     try {
-      tuf_repo_->checkMeta();
+      tuf_repo_->CheckMeta();
       check_status = CheckInResult::Status::OkCached;
       LOG_INFO << "The local TUF is valid";
     } catch (const std::exception& exc) {
@@ -346,7 +346,7 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
 
   LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
   try {
-    tuf_repo_->updateMeta(repo_src);
+    tuf_repo_->UpdateMeta(repo_src);
     LOG_INFO << "The local TUF repo has been successfully updated";
   } catch (const Uptane::SecurityException& exc) {
     const std::string err{exc.what()};
@@ -814,7 +814,7 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   }
   std::unique_ptr<Uptane::Target> target;
   // Make sure the metadata is loaded from storage and valid.
-  tuf_repo_->checkMeta();
+  tuf_repo_->CheckMeta();
   for (const auto& tt : tuf_repo_->GetTargets()) {
     if (tt == t) {
       target = std::make_unique<Uptane::Target>(Target::fromTufTarget(t));

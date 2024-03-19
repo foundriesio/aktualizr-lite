@@ -10,10 +10,10 @@ class AkHttpsRepoSource : public RepoSource {
   AkHttpsRepoSource(const std::string& name_in, boost::property_tree::ptree& pt);
   AkHttpsRepoSource(const std::string& name_in, boost::property_tree::ptree& pt, Config& config);
 
-  std::string fetchRoot(int version) override;
-  std::string fetchTimestamp() override;
-  std::string fetchSnapshot() override;
-  std::string fetchTargets() override;
+  std::string FetchRoot(int version) override;
+  std::string FetchTimestamp() override;
+  std::string FetchSnapshot() override;
+  std::string FetchTargets() override;
 
  private:
   void init(const std::string& name_in, boost::property_tree::ptree& pt, Config& config);

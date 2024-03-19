@@ -115,19 +115,19 @@ std::string AkHttpsRepoSource::fetchRole(const Uptane::Role& role, int64_t maxsi
   return reply;
 }
 
-std::string AkHttpsRepoSource::fetchRoot(int version) {
+std::string AkHttpsRepoSource::FetchRoot(int version) {
   return fetchRole(Uptane::Role::Root(), Uptane::kMaxRootSize, Uptane::Version(version));
 }
 
-std::string AkHttpsRepoSource::fetchTimestamp() {
+std::string AkHttpsRepoSource::FetchTimestamp() {
   return fetchRole(Uptane::Role::Timestamp(), Uptane::kMaxTimestampSize, Uptane::Version());
 }
 
-std::string AkHttpsRepoSource::fetchSnapshot() {
+std::string AkHttpsRepoSource::FetchSnapshot() {
   return fetchRole(Uptane::Role::Snapshot(), Uptane::kMaxSnapshotSize, Uptane::Version());
 }
 
-std::string AkHttpsRepoSource::fetchTargets() {
+std::string AkHttpsRepoSource::FetchTargets() {
   return fetchRole(Uptane::Role::Targets(), Uptane::kMaxImageTargetsSize, Uptane::Version());
 }
 
