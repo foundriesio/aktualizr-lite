@@ -19,14 +19,14 @@ std::string LocalRepoSource::fetchFile(const boost::filesystem::path &meta_file_
   return Utils::readFile(meta_file_path);
 }
 
-std::string LocalRepoSource::fetchRoot(int version) {
+std::string LocalRepoSource::FetchRoot(int version) {
   return fetchFile(src_dir_ / (std::to_string(version) + ".root.json"));
 }
 
-std::string LocalRepoSource::fetchTimestamp() { return fetchFile(src_dir_ / "timestamp.json"); }
+std::string LocalRepoSource::FetchTimestamp() { return fetchFile(src_dir_ / "timestamp.json"); }
 
-std::string LocalRepoSource::fetchSnapshot() { return fetchFile(src_dir_ / "snapshot.json"); }
+std::string LocalRepoSource::FetchSnapshot() { return fetchFile(src_dir_ / "snapshot.json"); }
 
-std::string LocalRepoSource::fetchTargets() { return fetchFile(src_dir_ / "targets.json"); }
+std::string LocalRepoSource::FetchTargets() { return fetchFile(src_dir_ / "targets.json"); }
 
 }  // namespace aklite::tuf

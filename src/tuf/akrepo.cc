@@ -24,7 +24,16 @@ std::vector<TufTarget> AkRepo::GetTargets() {
   }
 }
 
-void AkRepo::updateMeta(std::shared_ptr<RepoSource> repo_src) {
+std::string AkRepo::GetRoot(int version) {
+  std::string data;
+  if (storage_->loadRoot(&data, Uptane::RepositoryType::Image(),
+                         version == -1 ? Uptane::Version() : Uptane::Version(version))) {
+    return data;
+  }
+  return "";
+}
+
+void AkRepo::UpdateMeta(std::shared_ptr<RepoSource> repo_src) {
   FetcherWrapper wrapper(repo_src);
   image_repo_.updateMeta(*storage_, wrapper);
 }
@@ -44,13 +53,13 @@ void AkRepo::FetcherWrapper::fetchRole(std::string* result, int64_t maxsize, Upt
   (void)repo;
   std::string json;
   if (role == Uptane::Role::Root()) {
-    json = repo_src->fetchRoot(version.version());
+    json = repo_src->FetchRoot(version.version());
   } else if (role == Uptane::Role::Timestamp()) {
-    json = repo_src->fetchTimestamp();
+    json = repo_src->FetchTimestamp();
   } else if (role == Uptane::Role::Snapshot()) {
-    json = repo_src->fetchSnapshot();
+    json = repo_src->FetchSnapshot();
   } else if (role == Uptane::Role::Targets()) {
-    json = repo_src->fetchTargets();
+    json = repo_src->FetchTargets();
   } else {
     throw std::runtime_error("Invalid TUF Role " + role.ToString());
   }
@@ -62,6 +71,6 @@ void AkRepo::FetcherWrapper::fetchLatestRole(std::string* result, int64_t maxsiz
   fetchRole(result, maxsize, repo, role, Uptane::Version());
 }
 
-void AkRepo::checkMeta() { image_repo_.checkMetaOffline(*storage_); }
+void AkRepo::CheckMeta() { image_repo_.checkMetaOffline(*storage_); }
 
 }  // namespace aklite::tuf

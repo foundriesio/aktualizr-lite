@@ -29,10 +29,10 @@ class RepoSource {
   RepoSource& operator=(const RepoSource&) = delete;
   RepoSource& operator=(const RepoSource&&) = delete;
 
-  virtual std::string fetchRoot(int version) = 0;
-  virtual std::string fetchTimestamp() = 0;
-  virtual std::string fetchSnapshot() = 0;
-  virtual std::string fetchTargets() = 0;
+  virtual std::string FetchRoot(int version) = 0;
+  virtual std::string FetchTimestamp() = 0;
+  virtual std::string FetchSnapshot() = 0;
+  virtual std::string FetchTargets() = 0;
 
  protected:
   RepoSource() = default;
@@ -197,8 +197,9 @@ class Repo {
   Repo& operator=(const Repo&&) = delete;
 
   virtual std::vector<TufTarget> GetTargets() = 0;
-  virtual void updateMeta(std::shared_ptr<RepoSource> repo_src) = 0;
-  virtual void checkMeta() = 0;
+  virtual std::string GetRoot(int version) = 0;
+  virtual void UpdateMeta(std::shared_ptr<RepoSource> repo_src) = 0;
+  virtual void CheckMeta() = 0;
 
  protected:
   Repo() = default;

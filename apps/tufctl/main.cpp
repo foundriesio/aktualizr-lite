@@ -64,26 +64,26 @@ int main(int argc, char** argv) {
       Json::StreamWriterBuilder builder;
       builder["indentation"] = "  ";
       try {
-        auto json = source->fetchRoot(1);
+        auto json = source->FetchRoot(1);
         std::cout << json << std::endl;
       } catch (std::runtime_error e) {
         std::cout << e.what() << std::endl;
       }
       try {
-        auto json = source->fetchTimestamp();
+        auto json = source->FetchTimestamp();
         std::cout << json << std::endl;
       } catch (std::runtime_error e) {
         std::cout << e.what() << std::endl;
       }
 
       try {
-        auto json = source->fetchSnapshot();
+        auto json = source->FetchSnapshot();
         std::cout << json << std::endl;
       } catch (std::runtime_error e) {
         std::cout << e.what() << std::endl;
       }
       try {
-        auto json = source->fetchTargets();
+        auto json = source->FetchTargets();
         // std::cout << json << std::endl;
       } catch (std::runtime_error e) {
         std::cout << e.what() << std::endl;
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
   {
     aklite::tuf::AkRepo repo(storage_path);
     for (auto const& source : sources) {
-      repo.updateMeta(source);
+      repo.UpdateMeta(source);
     }
 
     auto targets = repo.GetTargets();

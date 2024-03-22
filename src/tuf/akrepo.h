@@ -14,8 +14,9 @@ class AkRepo : public Repo {
   explicit AkRepo(const boost::filesystem::path& storage_path);
   explicit AkRepo(const Config& config);
   std::vector<TufTarget> GetTargets() override;
-  void updateMeta(std::shared_ptr<RepoSource> repo_src) override;
-  void checkMeta() override;
+  std::string GetRoot(int version) override;
+  void UpdateMeta(std::shared_ptr<RepoSource> repo_src) override;
+  void CheckMeta() override;
 
  private:
   void init(const boost::filesystem::path& storage_path);
