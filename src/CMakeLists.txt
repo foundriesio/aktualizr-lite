@@ -21,7 +21,8 @@ set(SRC helpers.cc
         api.cc
         tuf/akhttpsreposource.cc
         tuf/localreposource.cc
-        tuf/akrepo.cc)
+        tuf/akrepo.cc
+        aklitereportqueue.cc)
 
 set(HEADERS helpers.h
         storage/stat.h
@@ -47,7 +48,8 @@ set(HEADERS helpers.h
         tuf/localreposource.h
         tuf/akrepo.h
         ../include/aktualizr-lite/api.h
-        ../include/aktualizr-lite/tuf/tuf.h)
+        ../include/aktualizr-lite/tuf/tuf.h
+        aklitereportqueue.h)
 
 if(USE_COMPOSEAPP_ENGINE)
   set(SRC ${SRC} composeapp/appengine.cc)

@@ -7,6 +7,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include "aklitereportqueue.h"
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
 #include "crypto/p11engine.h"
@@ -121,8 +122,8 @@ LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const
   if (!uptane_fetcher_) {
     uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
   }
-  report_queue = std_::make_unique<ReportQueue>(config, http_client, storage, report_queue_run_pause_s_,
-                                                report_queue_event_limit_);
+  report_queue = std_::make_unique<AkLiteReportQueue>(config, http_client, storage, report_queue_run_pause_s_,
+                                                      report_queue_event_limit_);
 
   std::shared_ptr<RootfsTreeManager> basepacman;
   // Deduce a package manager type if not set explicitly by a user
