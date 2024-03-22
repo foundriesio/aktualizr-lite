@@ -792,18 +792,6 @@ void LiteClient::setAppsNotChecked() {
 
 std::string LiteClient::getDeviceID() const { return key_manager_->getCN(); }
 
-void LiteClient::add_apps_header(std::vector<std::string>& headers, PackageConfig& config) {
-  if (config.type == ComposeAppManager::Name) {
-    ComposeAppManager::Config cfg(config);
-    // TODO: consider this header renaming
-    if (!!cfg.apps) {
-      headers.emplace_back("x-ats-dockerapps: " + boost::algorithm::join(*cfg.apps, ","));
-    } else {
-      headers.emplace_back("x-ats-dockerapps: ");
-    }
-  }
-}
-
 void LiteClient::initRequestHeaders(std::vector<std::string>& headers) const {
   headers.emplace_back("x-ats-ostreehash: unknown");
   headers.emplace_back("x-ats-target: unknown");
