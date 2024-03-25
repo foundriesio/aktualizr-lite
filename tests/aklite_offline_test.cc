@@ -397,7 +397,7 @@ const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
 const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
 
-TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
+TEST_F(AkliteOffline, OfflineClientCheckinCached) {
   const auto prev_target{addTarget({createApp("app-01")})};
   const auto outdated_repo_path{test_dir_ / "outdated_tuf_repo"};
   boost::filesystem::copy(tuf_repo_.getRepoPath(), outdated_repo_path);
@@ -410,7 +410,7 @@ TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
   // Now try to do checkin against the outdated TUF repo
   AkliteClient client(createLiteClient());
   LocalUpdateSource outdated_src = {outdated_repo_path.string(), src()->ostree_repo, src()->app_store};
-  ASSERT_EQ(aklite::cli::StatusCode::CheckinSecurityError, aklite::cli::CheckIn(client, &outdated_src));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinOkCached, aklite::cli::CheckIn(client, &outdated_src));
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinMetadataNotFound) {

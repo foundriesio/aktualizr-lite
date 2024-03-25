@@ -341,6 +341,7 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
 }
 
 CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
+  CheckInResult::Status check_status_success{CheckInResult::Status::Ok};
   auto repo_src =
       std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
 
@@ -351,7 +352,20 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
   } catch (const Uptane::SecurityException& exc) {
     const std::string err{exc.what()};
     LOG_ERROR << "Failed to update the local TUF repo; TUF metadata check failure: " << err;
-    return CheckInResult{CheckInResult::Status::SecurityError, "", {}};
+    if (err.find("Rollback attempt") != std::string::npos) {
+      LOG_INFO << "Checking the local TUF repo...";
+      try {
+        tuf_repo_->checkMeta();
+        // If we are successful after this point, make it clear the previously stored metadata is in use (cached)
+        check_status_success = CheckInResult::Status::OkCached;
+        LOG_INFO << "The local TUF is valid";
+      } catch (const std::exception& exc) {
+        LOG_ERROR << "Local TUF repo is invalid: " << exc.what();
+        return CheckInResult{CheckInResult::Status::SecurityError, "", {}};
+      }
+    } else {
+      return CheckInResult{CheckInResult::Status::SecurityError, "", {}};
+    }
   } catch (const Uptane::ExpiredMetadata& exc) {
     const std::string err{exc.what()};
     LOG_ERROR << "Failed to update the local TUF repo; TUF metadata is expired: " << err;
@@ -389,7 +403,7 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     LOG_ERROR << "No update content found in ostree dir  " << src.OstreeRepoDir << " and app dir " << src.AppsDir;
     return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
   }
-  return CheckInResult(CheckInResult::Status::Ok, hw_id_, toTufTargets(available_targets));
+  return CheckInResult(check_status_success, hw_id_, toTufTargets(available_targets));
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
