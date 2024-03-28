@@ -7,6 +7,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include "aklitereportqueue.h"
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
 #include "crypto/p11engine.h"
@@ -121,8 +122,8 @@ LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const
   if (!uptane_fetcher_) {
     uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
   }
-  report_queue = std_::make_unique<ReportQueue>(config, http_client, storage, report_queue_run_pause_s_,
-                                                report_queue_event_limit_);
+  report_queue = std_::make_unique<AkLiteReportQueue>(config, http_client, storage, report_queue_run_pause_s_,
+                                                      report_queue_event_limit_);
 
   std::shared_ptr<RootfsTreeManager> basepacman;
   // Deduce a package manager type if not set explicitly by a user
@@ -215,7 +216,7 @@ bool LiteClient::finalizeInstall(data::InstallationResult* ir) {
   // finalize pending installs
   storage->loadInstalledVersions("", nullptr, &pending);
   if (!!pending) {
-    callback("install-final-pre", *pending);
+    callback("install-final-pre", *pending, "");
     ret = finalizePendingUpdate(pending);
   } else {
     LOG_INFO << "No Pending Installs";
@@ -284,22 +285,19 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
 }
 
 bool LiteClient::checkForUpdatesBegin() {
-  Uptane::Target t = Uptane::Target::Unknown();
-  callback("check-for-update-pre", t);
+  notifyTufUpdateStarted();
   const auto rc = updateImageMeta();
   if (!std::get<0>(rc)) {
-    callback("check-for-update-post", t, "FAILED: " + std::get<1>(rc));
+    notifyTufUpdateFinished(std::get<1>(rc));
   }
   return std::get<0>(rc);
 }
 
-void LiteClient::checkForUpdatesEnd(const Uptane::Target& target) { callback("check-for-update-post", target, "OK"); }
-void LiteClient::checkForUpdatesEndWithFailure(const std::string& err) {
-  callback("check-for-update-post", Uptane::Target::Unknown(), "FAILED: " + err);
-}
+void LiteClient::checkForUpdatesEnd(const Uptane::Target& target) { notifyTufUpdateFinished("", target); }
+void LiteClient::checkForUpdatesEndWithFailure(const std::string& err) { notifyTufUpdateFinished(err); }
 
 void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const {
-  if (!(config.tls.server.empty() || t.custom_data().isMember("local-src-dir"))) {
+  if (!config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
     event->custom["version"] = t.custom_version();
     if (event->custom.isMember("details")) {
@@ -441,8 +439,15 @@ class DetailedDownloadCompletedReport : public EcuDownloadCompletedReport {
   }
 };
 
+void LiteClient::notifyTufUpdateStarted() { callback("check-for-update-pre", Uptane::Target::Unknown(), ""); }
+
+void LiteClient::notifyTufUpdateFinished(const std::string& err, const Uptane::Target& t) {
+  auto msg = err.empty() ? "OK" : "FAILED: " + err;
+  callback("check-for-update-post", t, msg);
+}
+
 void LiteClient::notifyDownloadStarted(const Uptane::Target& t, const std::string& reason) {
-  callback("download-pre", t);
+  callback("download-pre", t, "");
   notify(t, std_::make_unique<DetailedDownloadReport>(primary_ecu.first, t.correlation_id(), reason));
 }
 
@@ -453,7 +458,7 @@ void LiteClient::notifyDownloadFinished(const Uptane::Target& t, bool success, c
 }
 
 void LiteClient::notifyInstallStarted(const Uptane::Target& t) {
-  callback("install-pre", t);
+  callback("install-pre", t, "");
   notify(t, std_::make_unique<EcuInstallationStartedReport>(primary_ecu.first, t.correlation_id()));
 }
 

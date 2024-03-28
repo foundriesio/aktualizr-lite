@@ -161,6 +161,7 @@ static std::vector<TufTarget> filterTargets(const std::vector<TufTarget>& allTar
 }
 
 CheckInResult AkliteClient::CheckIn() const {
+  client_->notifyTufUpdateStarted();
   if (!configUploaded_) {
     client_->reportAktualizrConfiguration();
     configUploaded_ = true;
@@ -179,28 +180,29 @@ CheckInResult AkliteClient::CheckIn() const {
   LOG_INFO << "Updating the local TUF repo with metadata located in " << client_->config.uptane.repo_server << "...";
   auto repo_src = std::make_shared<aklite::tuf::AkHttpsRepoSource>("temp-remote-repo-source", pt, client_->config);
   CheckInResult::Status check_status{CheckInResult::Status::Failed};
+  std::string err_msg;
   try {
     tuf_repo_->UpdateMeta(repo_src);
     check_status = CheckInResult::Status::Ok;
     LOG_INFO << "The local TUF repo has been successfully updated";
   } catch (const Uptane::SecurityException& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata check failure: " << err;
+    err_msg = "Failed to update the local TUF repo; TUF metadata check failure: " + err;
     check_status = CheckInResult::Status::SecurityError;
   } catch (const Uptane::ExpiredMetadata& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata is expired: " << err;
+    err_msg = "Failed to update the local TUF repo; TUF metadata is expired: " + err;
     check_status = CheckInResult::Status::ExpiredMetadata;
   } catch (const Uptane::MetadataFetchFailure& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata fetch failure: " << err;
+    err_msg = "Failed to update the local TUF repo; TUF metadata fetch failure: " + err;
     if (err.find("Failed to fetch role timestamp") != std::string::npos) {
-      LOG_ERROR << "Check the device tag or verify the existence of a wave for the device";
+      err_msg += "Check the device tag or verify the existence of a wave for the device";
     }
     check_status = CheckInResult::Status::MetadataFetchFailure;
   } catch (const std::exception& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo: " << err;
+    err_msg = "Failed to update the local TUF repo: " + err;
     check_status = CheckInResult::Status::Failed;
   }
   if (check_status != CheckInResult::Status::Ok) {
@@ -210,22 +212,29 @@ CheckInResult AkliteClient::CheckIn() const {
       check_status = CheckInResult::Status::OkCached;
       LOG_INFO << "The local TUF is valid";
     } catch (const std::exception& exc) {
-      LOG_ERROR << "Local TUF repo is invalid: " << exc.what();
+      err_msg = std::string("Local TUF repo is invalid: ") + exc.what();
     }
+  }
+  if (!err_msg.empty()) {
+    LOG_ERROR << err_msg;
   }
 
   if (check_status != CheckInResult::Status::Ok && check_status != CheckInResult::Status::OkCached) {
+    client_->notifyTufUpdateFinished(err_msg);
     return CheckInResult{check_status, "", {}};
   }
 
   LOG_INFO << "Searching for matching TUF Targets...";
   auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
-    LOG_ERROR
-        << "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+    err_msg =
+        "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+    LOG_ERROR << err_msg;
+    client_->notifyTufUpdateFinished(err_msg);
     return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
   }
   LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
+  client_->notifyTufUpdateFinished();
   return CheckInResult(CheckInResult::Status::Ok, hw_id_, matchingTargets);
 }
 
@@ -341,37 +350,47 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
 }
 
 CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
+  client_->notifyTufUpdateStarted();
   auto repo_src =
       std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
 
   LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
+  std::string err_msg;
+  CheckInResult::Status check_status{CheckInResult::Status::Ok};
   try {
     tuf_repo_->UpdateMeta(repo_src);
     LOG_INFO << "The local TUF repo has been successfully updated";
   } catch (const Uptane::SecurityException& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata check failure: " << err;
-    return CheckInResult{CheckInResult::Status::SecurityError, "", {}};
+    err_msg = "Failed to update the local TUF repo; TUF metadata check failure: " + err;
+    check_status = CheckInResult::Status::SecurityError;
   } catch (const Uptane::ExpiredMetadata& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata is expired: " << err;
-    return CheckInResult{CheckInResult::Status::ExpiredMetadata, "", {}};
+    err_msg = "Failed to update the local TUF repo; TUF metadata is expired: " + err;
+    check_status = CheckInResult::Status::ExpiredMetadata;
   } catch (const aklite::tuf::MetadataNotFoundException& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo; TUF metadata not found: " << err;
-    return CheckInResult{CheckInResult::Status::MetadataNotFound, "", {}};
+    err_msg = "Failed to update the local TUF repo; TUF metadata not found: " + err;
+    check_status = CheckInResult::Status::MetadataNotFound;
   } catch (const std::exception& exc) {
     const std::string err{exc.what()};
-    LOG_ERROR << "Failed to update the local TUF repo: " << err;
-    return CheckInResult{CheckInResult::Status::Failed, "", {}};
+    err_msg = "Failed to update the local TUF repo: " + err;
+    check_status = CheckInResult::Status::Failed;
+  }
+
+  if (check_status != CheckInResult::Status::Ok) {
+    LOG_ERROR << err_msg;
+    client_->notifyTufUpdateFinished(err_msg);
+    return CheckInResult{check_status, "", {}};
   }
 
   LOG_INFO << "The local TUF repo has been successfully updated";
   LOG_INFO << "Searching for matching TUF Targets...";
   auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
-    LOG_ERROR
-        << "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+    err_msg =
+        "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+    LOG_ERROR << err_msg;
     return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
   }
   LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
@@ -386,9 +405,14 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
       getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src,
                           false /* get all available targets, not just latest */);
   if (available_targets.empty()) {
-    LOG_ERROR << "No update content found in ostree dir  " << src.OstreeRepoDir << " and app dir " << src.AppsDir;
+    err_msg =
+        "No update content found in ostree dir  " + src.OstreeRepoDir.string() + " and app dir " + src.AppsDir.string();
+    LOG_ERROR << err_msg;
+    client_->notifyTufUpdateFinished(err_msg);
     return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
   }
+
+  client_->notifyTufUpdateFinished();
   return CheckInResult(CheckInResult::Status::Ok, hw_id_, toTufTargets(available_targets));
 }
 
@@ -668,8 +692,6 @@ class LocalLiteInstall : public LiteInstall {
         local_update_source_{*local_update_source},
         offline_update_config_{client_->config},
         ostree_sysroot_{nullptr} {
-    // turn off reporting update events to DG
-    offline_update_config_.tls.server = "";
     // make LiteClient to pull from a local ostree repo
     offline_update_config_.pacman.ostree_server = "file://" + local_update_source_.ostree_repo;
 
@@ -692,17 +714,11 @@ class LocalLiteInstall : public LiteInstall {
     client_->logTarget("Downloading: ", *target_);
 
     auto downloader = createOfflineDownloader();
+    client_->notifyDownloadStarted(*target_, reason);
     auto dr{downloader->Download(Target::toTufTarget(*target_))};
-    return {dr.status, dr.description, dr.destination_path};
-  }
+    client_->notifyDownloadFinished(*target_, dr, dr.description);
 
-  // TODO: implement `Install()` in such the way that `LiteClient` is not required as it is done for `Download()`
-  InstallResult Install() override {
-    const auto tls_server{client_->config.tls.server};
-    client_->config.tls.server = "";
-    auto ir{LiteInstall::Install()};
-    client_->config.tls.server = tls_server;
-    return ir;
+    return {dr.status, dr.description, dr.destination_path};
   }
 
  private:

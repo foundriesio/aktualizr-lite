@@ -78,8 +78,8 @@ class InstallCmd : public Cmd {
   }
 
  private:
-  int installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir,
-                    const std::string& target_name, bool force_downgrade) const;
+  int installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir, const std::string& target_name,
+                    bool force_downgrade) const;
 
  private:
   po::options_description _options;

@@ -70,6 +70,9 @@ class LiteClient {
   std::unique_ptr<ReportQueue> report_queue;
   bool isRollback(const Uptane::Target& target);
 
+  void notifyTufUpdateStarted();
+  void notifyTufUpdateFinished(const std::string& err = "", const Uptane::Target& t = Uptane::Target::Unknown());
+  void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
   void notifyDownloadFinished(const Uptane::Target& t, bool success, const std::string& err_msg = "");
   std::tuple<bool, boost::filesystem::path> isRootMetaImportNeeded();
   bool importRootMeta(const boost::filesystem::path& src, Uptane::Version max_ver = Uptane::Version());
@@ -85,10 +88,9 @@ class LiteClient {
   FRIEND_TEST(AkliteTest, RollbackIfAppsInstallFails);
   FRIEND_TEST(AkliteTest, RollbackIfAppsInstallFailsAndPowerCut);
 
-  void callback(const char* msg, const Uptane::Target& install_target, const std::string& result = "");
+  virtual void callback(const char* msg, const Uptane::Target& install_target, const std::string& result);
 
   void notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const;
-  void notifyDownloadStarted(const Uptane::Target& t, const std::string& reason);
   void notifyInstallStarted(const Uptane::Target& t);
   void writeCurrentTarget(const Uptane::Target& t) const;
 
