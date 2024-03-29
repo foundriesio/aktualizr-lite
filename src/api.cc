@@ -25,6 +25,10 @@
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                         "/etc/sota/conf.d/"};
 
+static std::pair<CheckInResult::Status, std::string> checkAndGetBundleTargets(
+    const std::shared_ptr<aklite::tuf::Repo>& tuf_repo, const boost::filesystem::path& bundle_tuf_path,
+    std::vector<TufTarget>& out_bundle_targets);
+
 // A key for json sub-document containing paths to update content (ostree repo and apps store).
 // It is applicable only to offline/local update.
 const static std::string LocalSrcDirKey{"local-src-dir"};
@@ -385,8 +389,17 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
   }
 
   LOG_INFO << "The local TUF repo has been successfully updated";
-  LOG_INFO << "Searching for matching TUF Targets...";
-  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
+  LOG_INFO << "Checking the bundle metadata...";
+  std::vector<TufTarget> bundle_targets;
+  const auto bundle_targets_check{checkAndGetBundleTargets(tuf_repo_, local_update_source->tuf_repo, bundle_targets)};
+  if (bundle_targets_check.first != CheckInResult::Status::Ok) {
+    LOG_ERROR << bundle_targets_check.second;
+    client_->notifyTufUpdateFinished(bundle_targets_check.second);
+    return CheckInResult{bundle_targets_check.first, "", {}};
+  }
+
+  LOG_INFO << "Searching for TUF Targets matching a device's tag and hardware ID...";
+  auto matchingTargets = filterTargets(bundle_targets, hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
     err_msg =
         "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
@@ -921,4 +934,123 @@ InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus
   }
   secondary_hwids_ = std::move(hwids);
   return InstallResult{InstallResult::Status::Ok, ""};
+}
+
+static std::map<std::string, PublicKey> getTargetsKeys(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo,
+                                                       int& out_threshold) {
+  const auto root_meta{Utils::parseJSON(tuf_repo->GetRoot(-1))};
+  std::set<std::string> targets_key_ids;
+  for (const auto& key : root_meta["signed"]["roles"]["targets"]["keyids"]) {
+    targets_key_ids.insert(key.asString());
+  }
+
+  std::map<std::string, PublicKey> targets_pub_keys;
+  for (Json::ValueConstIterator it = root_meta["signed"]["keys"].begin(); it != root_meta["signed"]["keys"].end();
+       ++it) {
+    const std::string keyid{it.key().asString()};
+    if (targets_key_ids.count(keyid) == 1) {
+      targets_pub_keys.insert({keyid, PublicKey{*it}});
+    }
+  }
+
+  out_threshold = root_meta["signed"]["roles"]["targets"]["threshold"].asInt();
+  return targets_pub_keys;
+}
+
+static Json::Value getAndCheckBundleMeta(const boost::filesystem::path& bundle_tuf_path,
+                                         const std::map<std::string, PublicKey>& targets_pub_keys,
+                                         const int threshold) {
+  int found_valid_sig_number{0};
+  const auto bundle_meta_path{bundle_tuf_path / "bundle-targets.json"};
+  if (!boost::filesystem::exists(bundle_meta_path)) {
+    throw std::runtime_error("Failed to find the bundle metadata: " + bundle_meta_path.string());
+  }
+  const auto bundle_targets_str{Utils::readFile(bundle_meta_path)};
+  auto bundle_targets_json{Utils::parseJSON(bundle_targets_str)};
+  if (bundle_targets_json.isNull() || bundle_targets_json.empty() || !bundle_targets_json.isMember("signed") ||
+      !bundle_targets_json.isMember("signatures")) {
+    throw std::runtime_error(
+        "The bundle metadata is invalid;"
+        " expecting JSON with `signed` and `signatures` fields; got: \n" +
+        bundle_targets_str);
+  }
+  if (!bundle_targets_json["signatures"].isArray()) {
+    throw std::runtime_error("The `signatures` field is not an array; got: \n" + bundle_targets_str);
+  }
+  const std::string signed_body{Utils::jsonToCanonicalStr(bundle_targets_json["signed"])};
+  LOG_INFO << "Checking the bundle metadata singatures (required: " << threshold << ")...";
+  for (const auto& signature : bundle_targets_json["signatures"]) {
+    if (!signature.isObject() || !signature.isMember("keyid") || !signature["keyid"].isString() ||
+        !signature.isMember("sig") || !signature["sig"].isString() || !signature.isMember("method") ||
+        !signature["method"].isString()) {
+      throw std::runtime_error("Invalid signature metadata was found in the bundle metadata: " +
+                               signature.toStyledString());
+    }
+    const auto sig_key_id{signature["keyid"].asString()};
+    if (targets_pub_keys.count(sig_key_id) != 1) {
+      throw std::runtime_error("The bundle is signed with an unknown key: " + sig_key_id);
+    }
+    if (!(targets_pub_keys.at(sig_key_id).VerifySignature(signature["sig"].asString(), signed_body))) {
+      throw std::runtime_error("An invalid signature was found for the bundle; key ID: " + sig_key_id);
+    }
+    LOG_INFO << "\t" << sig_key_id << " : OK";
+    ++found_valid_sig_number;
+  }
+  if (found_valid_sig_number < threshold) {
+    throw std::runtime_error(
+        "An insufficient number of signatures for the bundle were found; "
+        "required: " +
+        std::to_string(threshold) + ", found: " + std::to_string(found_valid_sig_number));
+  }
+
+  TimeStamp timestamp(bundle_targets_json["signed"]["expires"].asString());
+  if (timestamp.IsExpiredAt(TimeStamp::Now())) {
+    throw Uptane::ExpiredMetadata("offline bundle", "The offline bundle metadata has expired: " + timestamp.ToString());
+  }
+  return bundle_targets_json;
+}
+
+static std::vector<TufTarget> getBundleTargets(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo,
+                                               const Json::Value& bundle_targets_meta) {
+  std::vector<TufTarget> bundle_targets;
+  const auto tuf_targets{tuf_repo->GetTargets()};
+  for (const auto& bundle_target : bundle_targets_meta["signed"]["x-fio-offline-bundle"]["targets"]) {
+    for (const auto& target : tuf_targets) {
+      if (bundle_target == target.Name()) {
+        bundle_targets.push_back(target);
+      }
+    }
+  }
+  return bundle_targets;
+}
+
+static std::pair<CheckInResult::Status, std::string> checkAndGetBundleTargets(
+    const std::shared_ptr<aklite::tuf::Repo>& tuf_repo, const boost::filesystem::path& bundle_tuf_path,
+    std::vector<TufTarget>& out_bundle_targets) {
+  std::vector<TufTarget> bundle_targets;
+  try {
+    int threshold{-1};
+    std::map<std::string, PublicKey> targets_pub_keys;
+    targets_pub_keys = getTargetsKeys(tuf_repo, threshold);
+    LOG_INFO << "Targets key IDs: ";
+    for (const auto& k : targets_pub_keys) {
+      LOG_INFO << "\t" << k.first;
+    }
+
+    Json::Value bundle_targets_meta;
+    bundle_targets_meta = getAndCheckBundleMeta(bundle_tuf_path, targets_pub_keys, threshold);
+    LOG_INFO << "Getting bundle targets TUF metadata...";
+    bundle_targets = getBundleTargets(tuf_repo, bundle_targets_meta);
+    if (bundle_targets.empty()) {
+      throw std::runtime_error("None of the bundle targets are present in the TUF targets of the local TUF repository");
+    }
+    LOG_INFO << "The following bundle targets are allowed to intall: ";
+    for (const auto& t : bundle_targets) {
+      LOG_INFO << "\t" << t.Name();
+    }
+  } catch (const std::exception& exc) {
+    return {CheckInResult::Status::BundleMetadataError, exc.what()};
+  }
+  out_bundle_targets = bundle_targets;
+  return {CheckInResult::Status::Ok, ""};
 }

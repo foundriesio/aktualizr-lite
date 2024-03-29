@@ -21,6 +21,7 @@ enum class StatusCode {
   CheckinExpiredMetadata = 12,
   CheckinMetadataFetchFailure = 13,
   CheckinMetadataNotFound = 14,
+  CheckinInvalidBundleMetadata = 15,
   TufTargetNotFound = 20,
   InstallationInProgress = 30,
   NoPendingInstallation = 40,
