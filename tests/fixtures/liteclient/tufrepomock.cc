@@ -94,6 +94,10 @@ class TufRepoMock {
     Utils::writeFile(bundle_meta_path, bundle_meta);
   }
 
+  std::string getBundleMetaPath() const {
+    return getRepoPath() + "/bundle-targets.json";
+  }
+
  private:
   const boost::filesystem::path root_;
   ImageRepo repo_;

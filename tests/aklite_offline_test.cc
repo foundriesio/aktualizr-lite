@@ -413,6 +413,25 @@ const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
 const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
 
+TEST_F(AkliteOffline, OfflineClientInvalidBundleMeta) {
+  const auto prev_target{addTarget({createApp("app-01")})};
+  const auto target{addTarget({createApp("app-01")})};
+  auto lite_cli = createLiteClient();
+  AkliteClient client(lite_cli);
+
+  // invalidate the bundle metadata signature
+  Json::Value bundle_meta{Utils::parseJSONFile(tuf_repo_.getBundleMetaPath())};
+  bundle_meta["signed"]["foo"] = "bar";
+  Utils::writeFile(tuf_repo_.getBundleMetaPath(), bundle_meta);
+
+  const CheckInResult cr{client.CheckInLocal(src())};
+  ASSERT_EQ(CheckInResult::Status::BundleMetadataError, cr.status);
+
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinInvalidBundleMetadata, aklite::cli::CheckIn(client, src()));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinInvalidBundleMetadata,
+            aklite::cli::Install(client, -1, "", InstallMode::All, false, src()));
+}
+
 TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
   const auto prev_target{addTarget({createApp("app-01")})};
   const auto outdated_repo_path{test_dir_ / "outdated_tuf_repo"};
