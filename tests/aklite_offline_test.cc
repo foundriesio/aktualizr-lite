@@ -287,7 +287,9 @@ class AkliteOffline : public ::testing::Test {
 
   TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
                       bool add_bootloader_update = false) {
-    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update);
+    auto target{addTarget(tuf_repo_, apps, just_apps, add_bootloader_update)};
+    tuf_repo_.updateBundleMeta(target.Name());
+    return target;
   }
 
   void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload,
@@ -304,6 +306,7 @@ class AkliteOffline : public ::testing::Test {
     }
     tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-1", initial_target_.Sha256Hash(),
                         cfg_.provision.primary_ecu_hardware_id, "1", apps_json);
+    tuf_repo_.updateBundleMeta(preloaded_target.Name());
 
     // content-based shortlisting
     for (const auto& app : apps_not_to_preload) {
