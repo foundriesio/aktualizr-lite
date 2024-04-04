@@ -18,7 +18,8 @@ class TufRepoMock {
   void setLatest(const Uptane::Target& latest) { latest_ = latest; }
 
   Uptane::Target addTarget(const std::string& name, const std::string& hash, const std::string& hardware_id,
-                           const std::string& version, const Json::Value& apps_json = Json::Value(), const Json::Value& delta_stat = Json::Value()) {
+                           const std::string& version, const Json::Value& apps_json = Json::Value(),
+                           const Json::Value& delta_stat = Json::Value(), const std::string& ci_app_shortlist = "") {
     Delegation null_delegation{};
     Hash hash_obj{Hash::Type::kSha256, hash};
 
@@ -29,6 +30,9 @@ class TufRepoMock {
     custom_json["hardwareIds"][0] = hardware_id;
     custom_json["ecuIdentifiers"]["test_primary_ecu_serial_id"]["hardwareId"] = hardware_id;
     custom_json["tags"][0] = "default-tag";
+    if (!ci_app_shortlist.empty()) {
+      custom_json["fetched-apps"]["shortlist"] = ci_app_shortlist;
+    }
 
     custom_json[Target::ComposeAppField] = apps_json;
     repo_.addCustomImage(name, hash_obj, 0, hardware_id, "", 0, null_delegation, custom_json);

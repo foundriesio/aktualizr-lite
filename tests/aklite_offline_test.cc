@@ -255,7 +255,7 @@ class AkliteOffline : public ::testing::Test {
   }
 
   TufTarget addTarget(TufRepoMock& repo, const std::vector<AppEngine::App>& apps, bool just_apps = false,
-                      bool add_bootloader_update = false) {
+                      bool add_bootloader_update = false, const std::string& ci_app_shortlist = "") {
     const auto& latest_target{repo.getLatest()};
     std::string version;
     try {
@@ -282,12 +282,12 @@ class AkliteOffline : public ::testing::Test {
     }
     // add new target to TUF repo
     const std::string name = hw_id + "-" + os + "-" + version;
-    return Target::toTufTarget(repo.addTarget(name, hash, hw_id, version, apps_json));
+    return Target::toTufTarget(repo.addTarget(name, hash, hw_id, version, apps_json, Json::Value(), ci_app_shortlist));
   }
 
   TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
-                      bool add_bootloader_update = false) {
-    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update);
+                      bool add_bootloader_update = false, const std::string& ci_app_shortlist = "") {
+    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update, ci_app_shortlist);
   }
 
   void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload,
@@ -555,6 +555,25 @@ TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
   reboot();
   ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
   ASSERT_EQ(target, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
+
+TEST_F(AkliteOffline, OfflineClientShortlistedAppsInCI) {
+  const auto app02{createApp("app-02")};
+  const auto app03{createApp("zz00-app-03")};
+  const auto target{addTarget({createApp("app-01"), app02, app03}, false, false, "app-01")};
+
+  boost::filesystem::remove_all(app_store_.appsDir() / app02.name);
+  boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
+  setAppsShortlist("app-01, app-02");
+
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target.Name(), available_targets.back().Name());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target.Name(), getCurrent().Name());
   ASSERT_TRUE(areAppsInSync());
 }
 

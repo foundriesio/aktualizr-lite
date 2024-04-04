@@ -307,8 +307,19 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
     const ComposeAppManager::AppsContainer required_apps{
         ComposeAppManager::getRequiredApps(ComposeAppManager::Config(pconfig), t)};
     std::set<std::string> missing_apps;
+
+    std::set<std::string> offline_app_shortlist;
+    const auto custom{t.custom_data()};
+    if (custom.isMember("fetched-apps") && custom["fetched-apps"].isObject() &&
+        custom["fetched-apps"].isMember("shortlist")) {
+      boost::split(offline_app_shortlist, custom["fetched-apps"]["shortlist"].asString(), boost::is_any_of(", "),
+                   boost::token_compress_on);
+    }
     for (const auto& app : required_apps) {
-      if (found_apps.count(app.second) == 0) {
+      if (found_apps.count(app.second) == 0 &&
+          // If the app shortlist is ON and the missing app is not in the app shortlist, then
+          // don't treat it as a missing app.
+          (offline_app_shortlist.empty() || offline_app_shortlist.count(app.first) == 1)) {
         missing_apps.insert(app.second);
       }
     }
@@ -320,6 +331,15 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       continue;
     }
     auto custom_data{t.custom_data()};
+    if (!offline_app_shortlist.empty()) {
+      // If the app shortlist is ON then update the found target app list so the downloader
+      // and the installer will update only the apps specified in the shortlist.
+      Json::Value app_shortlist;
+      for (const auto& app : offline_app_shortlist) {
+        app_shortlist[app] = custom_data["docker_compose_apps"][app];
+      }
+      custom_data["docker_compose_apps"] = app_shortlist;
+    }
     custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
     custom_data[LocalSrcDirKey]["apps"] = src.AppsDir.string();
     found_targets.emplace_back(Target::updateCustom(t, custom_data));
@@ -845,7 +865,15 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   // Make sure the metadata is loaded from storage and valid.
   tuf_repo_->CheckMeta();
   for (const auto& tt : tuf_repo_->GetTargets()) {
-    if (tt == t) {
+    bool target_match{false};
+    if (local_update_source == nullptr) {
+      target_match = tt == t;
+    } else {
+      // Don't compare app list since it can be shortlisted in the case of the offline/local update during the checkin
+      // caused by the offline/preloading shortlist set in the factory CI config.
+      target_match = (tt.Name() == t.Name() && tt.Sha256Hash() == t.Sha256Hash() && tt.Version() == t.Version());
+    }
+    if (target_match) {
       target = std::make_unique<Uptane::Target>(Target::fromTufTarget(t));
       break;
     }
