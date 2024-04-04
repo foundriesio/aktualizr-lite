@@ -393,7 +393,17 @@ PostInstallAction install(const Config& cfg_in, const UpdateSrc& src,
 
   auto rc = client->updateImageMeta();
   if (!std::get<0>(rc)) {
-    throw std::runtime_error("Failed to pull TUF metadata: " + std::get<1>(rc));
+    const auto err{std::get<1>(rc)};
+    if (std::string::npos != err.find("Rollback attempt")) {
+      LOG_WARNING << "TUF metadata provided in the offline bundle is older than the device's TUF metadata";
+      LOG_INFO << "Checking the device's TUF metadata...";
+      if (!client->checkImageMetaOffline()) {
+        throw std::runtime_error("The device's TUF metadata is invalid");
+      }
+      LOG_INFO << "The device's TUF metadata is valid, using it for the offline update";
+    } else {
+      throw std::runtime_error("Failed to pull TUF metadata: " + std::get<1>(rc));
+    }
   }
 
   auto target{getTarget(*client, src)};
