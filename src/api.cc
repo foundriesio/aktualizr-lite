@@ -385,8 +385,21 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     LOG_INFO << "The local TUF repo has been successfully updated";
   } catch (const Uptane::SecurityException& exc) {
     const std::string err{exc.what()};
-    err_msg = "Failed to update the local TUF repo; TUF metadata check failure: " + err;
-    check_status = CheckInResult::Status::SecurityError;
+    if (std::string::npos != err.find("Rollback attempt")) {
+      LOG_WARNING << "TUF metadata provided in the offline bundle is older than the device's TUF metadata";
+      LOG_INFO << "Checking the device's TUF metadata...";
+      try {
+        tuf_repo_->CheckMeta();
+        LOG_INFO << "The device's TUF metadata is valid, using it for the offline update";
+        check_status = CheckInResult::Status::OkCached;
+      } catch (const std::exception& exc) {
+        err_msg = "The device's TUF repo/metadata is invalid: " + err;
+        check_status = CheckInResult::Status::SecurityError;
+      }
+    } else {
+      err_msg = "Failed to update the local TUF repo; TUF metadata check failure: " + err;
+      check_status = CheckInResult::Status::SecurityError;
+    }
   } catch (const Uptane::ExpiredMetadata& exc) {
     const std::string err{exc.what()};
     err_msg = "Failed to update the local TUF repo; TUF metadata is expired: " + err;
@@ -401,14 +414,13 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     check_status = CheckInResult::Status::Failed;
   }
 
-  if (check_status != CheckInResult::Status::Ok) {
+  if (!(check_status == CheckInResult::Status::Ok || check_status == CheckInResult::Status::OkCached)) {
     LOG_ERROR << err_msg;
     client_->notifyTufUpdateFinished(err_msg);
     return CheckInResult{check_status, "", {}};
   }
 
-  LOG_INFO << "The local TUF repo has been successfully updated";
-  LOG_INFO << "Checking the bundle metadata...";
+  LOG_INFO << "Getting and checking the bundle metadata...";
   std::vector<TufTarget> bundle_targets;
   const auto bundle_targets_check{checkAndGetBundleTargets(tuf_repo_, local_update_source->tuf_repo, bundle_targets)};
   if (bundle_targets_check.first != CheckInResult::Status::Ok) {
@@ -446,7 +458,7 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
   }
 
   client_->notifyTufUpdateFinished();
-  return CheckInResult(CheckInResult::Status::Ok, hw_id_, toTufTargets(available_targets));
+  return CheckInResult(check_status, hw_id_, toTufTargets(available_targets));
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
@@ -1067,14 +1079,30 @@ static std::pair<CheckInResult::Status, std::string> checkAndGetBundleTargets(
 
     Json::Value bundle_targets_meta;
     bundle_targets_meta = getAndCheckBundleMeta(bundle_tuf_path, targets_pub_keys, threshold);
-    LOG_INFO << "Getting bundle targets TUF metadata...";
+
+    LOG_INFO << "Bundle metadata";
+    LOG_INFO << "\ttype: " << bundle_targets_meta["signed"]["x-fio-offline-bundle"]["type"];
+    LOG_INFO << "\ttag: " << bundle_targets_meta["signed"]["x-fio-offline-bundle"]["tag"];
+    LOG_INFO << "\tversion: " << bundle_targets_meta["signed"]["version"];
+    LOG_INFO << "\texpires: " << bundle_targets_meta["signed"]["expires"];
+    LOG_INFO << "\ttargets:";
+    for (const auto& t : bundle_targets_meta["signed"]["x-fio-offline-bundle"]["targets"]) {
+      LOG_INFO << "\t\t" << t;
+    }
+    // Get bundle targets that are listed among the device's targets in the device's TUF repo
     bundle_targets = getBundleTargets(tuf_repo, bundle_targets_meta);
     if (bundle_targets.empty()) {
-      throw std::runtime_error("None of the bundle targets are present in the TUF targets of the local TUF repository");
+      return {CheckInResult::Status::NoMatchingTargets,
+              "None of the bundle targets are listed among the TUF targets allowed for the device"};
     }
-    LOG_INFO << "The following bundle targets are allowed to intall: ";
-    for (const auto& t : bundle_targets) {
-      LOG_INFO << "\t" << t.Name();
+    if (bundle_targets.size() == bundle_targets_meta["signed"]["x-fio-offline-bundle"]["targets"].size()) {
+      LOG_INFO << "All bundle targets can be installed on the device";
+    } else {
+      LOG_INFO << "The following bundle targets are found among the TUF targets allowed for the device and can be "
+                  "installed: ";
+      for (const auto& t : bundle_targets) {
+        LOG_INFO << "\t" << t.Name();
+      }
     }
   } catch (const std::exception& exc) {
     return {CheckInResult::Status::BundleMetadataError, exc.what()};
