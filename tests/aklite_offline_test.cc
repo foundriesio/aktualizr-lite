@@ -423,7 +423,7 @@ TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
   // Now try to do checkin against the outdated TUF repo
   AkliteClient client(createLiteClient());
   LocalUpdateSource outdated_src = {outdated_repo_path.string(), src()->ostree_repo, src()->app_store};
-  ASSERT_EQ(aklite::cli::StatusCode::CheckinSecurityError, aklite::cli::CheckIn(client, &outdated_src));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinOkCached, aklite::cli::CheckIn(client, &outdated_src));
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinMetadataNotFound) {
