@@ -281,8 +281,8 @@ class AkliteOffline : public ::testing::Test {
       apps_json[app.name]["uri"] = app.uri;
     }
     // add new target to TUF repo
-    const std::string name = hw_id + "-" + os + "-" + version;
-    return Target::toTufTarget(repo.addTarget(name, hash, hw_id, version, apps_json, Json::Value(), ci_app_shortlist));
+    const std::string name = hw_id_ + "-" + os + "-" + version;
+    return Target::toTufTarget(repo.addTarget(name, hash, hw_id_, version, apps_json, Json::Value(), ci_app_shortlist));
   }
 
   TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
@@ -384,6 +384,7 @@ class AkliteOffline : public ::testing::Test {
   const LocalUpdateSource* src() const { return &local_update_source_; }
 
   void setAppsShortlist(const std::string& shortlist) { cfg_.pacman.extra["compose_apps"] = shortlist; }
+  void setTargetHwId(const std::string& hw_id) { hw_id_ = hw_id; }
 
  protected:
   static const std::string hw_id;
@@ -404,6 +405,7 @@ class AkliteOffline : public ::testing::Test {
   TufTarget initial_target_;
   Docker::DockerClient::Ptr docker_client_;
   LocalUpdateSource local_update_source_;
+  std::string hw_id_{hw_id};
 };
 
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
@@ -448,11 +450,12 @@ TEST_F(AkliteOffline, OfflineClientCheckinExpiredMetadata) {
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoMatchingTargets) {
+  AkliteClient client(createLiteClient());
+
+  setTargetHwId("some-other-hw-id");
   const auto prev_target{addTarget({createApp("app-01")})};
   const auto target{addTarget({createApp("app-01")})};
 
-  cfg_.pacman.extra["tags"] = "bad-tag";
-  AkliteClient client(createLiteClient());
   ASSERT_EQ(aklite::cli::StatusCode::CheckinNoMatchingTargets, aklite::cli::CheckIn(client, src()));
 }
 

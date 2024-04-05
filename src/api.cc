@@ -141,8 +141,7 @@ static std::vector<TufTarget> filterTargets(const std::vector<TufTarget>& allTar
                                             const std::vector<std::string>& secondary_hwids) {
   std::vector<TufTarget> targets;
   for (const auto& t : allTargets) {
-    if (!tags.empty() /* Should we really allow a device configuration without a tag? */
-        && !t.HasOneOfTags(tags)) {
+    if (!tags.empty() && !t.HasOneOfTags(tags)) {
       continue;
     }
     if (t.HardwareId() == hwidToFind) {
@@ -419,10 +418,11 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
 
   LOG_INFO << "The local TUF repo has been successfully updated";
   LOG_INFO << "Searching for matching TUF Targets...";
-  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
+  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, {}, secondary_hwids_);
   if (matchingTargets.empty()) {
     err_msg =
-        "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+        "Couldn't find Targets matching the device's hardware ID; check a tag or a hardware ID of the device and the "
+        "bundle's tag";
     LOG_ERROR << err_msg;
     return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
   }
