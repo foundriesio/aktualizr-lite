@@ -20,6 +20,12 @@ class DownloadResult;
 class Downloader;
 class Installer;
 
+enum class ClientType {
+  Undefined = -1,
+  Ci,
+  Prod,
+};
+
 class LiteClient {
  public:
   explicit LiteClient(Config config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
@@ -77,6 +83,7 @@ class LiteClient {
   std::tuple<bool, boost::filesystem::path> isRootMetaImportNeeded();
   bool importRootMeta(const boost::filesystem::path& src, Uptane::Version max_ver = Uptane::Version());
   void importRootMetaIfNeededAndPresent();
+  ClientType getClientType() const;
   bool isPendingTarget(const Uptane::Target& target) const;
   Uptane::Target getPendingTarget() const;
   bool isBootFwUpdateInProgress() const;

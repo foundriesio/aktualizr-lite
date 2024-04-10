@@ -358,20 +358,12 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
 
   LOG_INFO << "Importing root metadata from a local file system...";
   const std::string prod_bc_value{"production"};
-  bool prod{false};
   Uptane::Version max_ver{Uptane::Version()};
 
-  try {
-    const auto bc{key_manager_->getBC()};
-    if (bc == prod_bc_value) {
-      prod = true;
-      LOG_DEBUG << "Found production business category in a device certificate: " << bc;
-    } else {
-      LOG_DEBUG << "Missing or non-production business category found in a device certificate: " << bc;
-    }
-  } catch (const std::exception& exc) {
+  const auto device_type{getClientType()};
+  bool prod{device_type == ClientType::Prod};
+  if (device_type == ClientType::Undefined) {
     max_ver = Uptane::Version(2);
-    LOG_WARNING << "A device certificate is not found or failed to parse it: " << exc.what();
     LOG_WARNING << "Cannot determine a device type (production or CI). "
                 << "Importing the first two versions of root role metadata since they are the same for both production "
                    "and CI...";
@@ -391,6 +383,25 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
     LOG_ERROR << "Failed to import " << (prod ? "production" : "CI") << " root role metadata from " << import_src
               << ", will download them from Device Gateway (TOFU)";
   }
+}
+
+ClientType LiteClient::getClientType() const {
+  ClientType res{ClientType::Undefined};
+
+  const std::string prod_bc_value{"production"};
+  try {
+    const auto bc{key_manager_->getBC()};
+    if (bc == prod_bc_value) {
+      res = ClientType::Prod;
+      LOG_DEBUG << "Found production business category in a device certificate: " << bc;
+    } else {
+      res = ClientType::Ci;
+      LOG_DEBUG << "Missing or non-production business category found in a device certificate: " << bc;
+    }
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "A device certificate is not found or failed to parse it: " << exc.what();
+  }
+  return res;
 }
 
 bool LiteClient::isPendingTarget(const Uptane::Target& target) const {
