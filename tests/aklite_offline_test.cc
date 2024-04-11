@@ -282,14 +282,15 @@ class AkliteOffline : public ::testing::Test {
     }
     // add new target to TUF repo
     const std::string name = hw_id_ + "-" + os + "-" + version;
-    return Target::toTufTarget(repo.addTarget(name, hash, hw_id_, version, apps_json, Json::Value(), ci_app_shortlist));
+    auto target{
+        Target::toTufTarget(repo.addTarget(name, hash, hw_id_, version, apps_json, Json::Value(), ci_app_shortlist))};
+    repo.updateBundleMeta(target.Name());
+    return target;
   }
 
   TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
                       bool add_bootloader_update = false, const std::string& ci_app_shortlist = "") {
-    auto target{addTarget(tuf_repo_, apps, just_apps, add_bootloader_update, ci_app_shortlist)};
-    tuf_repo_.updateBundleMeta(target.Name());
-    return target;
+    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update, ci_app_shortlist);
   }
 
   void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload,

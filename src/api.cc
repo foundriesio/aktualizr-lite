@@ -390,65 +390,6 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
 
 CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
   client_->notifyTufUpdateStarted();
-
-  // LOG_INFO << "Checking the bundle metadata...";
-
-  // {
-  //   LOG_DEBUG << "Checking the bundle TUF root metadata...";
-  //   aklite::tuf::LocalRepoSource bundleTufRepo{"offline-bundle-tuf-repo", local_update_source->tuf_repo};
-
-  //   auto latest_root{tuf_repo_->GetRoot(-1)};
-  //   Uptane::ImageRepository repo;
-  //   repo.initRoot(Uptane::RepositoryType::Image(), latest_root);
-
-  //   int version{repo.getRoleVersion(Uptane::Role::Root()) + 1};
-  //   do {
-  //     try {
-  //       latest_root = bundleTufRepo.FetchRoot(version);
-  //       repo.verifyRoot(latest_root);
-  //     } catch (const aklite::tuf::MetadataNotFoundException& exc) {
-  //       break;
-  //     }
-  //   } while (true);
-
-  //   Json::Value trusted_root{Utils::parseJSON(latest_root)};
-
-  //   //   const std::string err{"The bundle's TUF root metadata is invalid; not signed by any known keys"};
-  //   //   LOG_ERROR << err;
-  //   //   client_->notifyTufUpdateFinished(err);
-  //   //   return CheckInResult{CheckInResult::Status::BundleMetadataError, "", {}};
-  //   // }
-
-  //   std::map<std::string, PublicKey> targets_pub_keys;
-  //   int threshold{-1};
-  //   targets_pub_keys = getTargetsKeys(trusted_root, threshold);
-  //   Json::Value bundle_targets_meta;
-  //   bundle_targets_meta = getAndCheckBundleMeta(local_update_source->tuf_repo, targets_pub_keys, threshold);
-  //   const auto& bundle_type{bundle_targets_meta["signed"]["x-fio-offline-bundle"]["type"].asString()};
-  //   const auto& bundle_tag{bundle_targets_meta["signed"]["x-fio-offline-bundle"]["tag"].asString()};
-
-  //   LOG_INFO << "Bundle type: " << bundle_type;
-  //   LOG_INFO << "Bundle tag: " << bundle_tag;
-
-  //   const auto client_type{client_->getClientType()};
-  //   if ((bundle_type == "prod" && client_type != ClientType::Prod) ||
-  //       (bundle_type == "ci" && client_type != ClientType::Ci)) {
-  //     const std::string err{"The bundle type is different than the device type; bundle type: " + bundle_type +
-  //                           ", device type: "};
-  //     LOG_ERROR << err;
-  //     client_->notifyTufUpdateFinished(err);
-  //     return CheckInResult{CheckInResult::Status::BundleMetadataError, "", {}};
-  //   }
-
-  //   if (client_->tags.end() == std::find(client_->tags.begin(), client_->tags.end(), bundle_tag)) {
-  //     const std::string err{"The bundle's tag is different than the device's one; bundle tag: " + bundle_tag +
-  //                           ", device tag: " + boost::algorithm::join(client_->tags, ",")};
-  //     LOG_ERROR << err;
-  //     client_->notifyTufUpdateFinished(err);
-  //     return CheckInResult{CheckInResult::Status::BundleMetadataError, "", {}};
-  //   }
-  // }
-
   std::string err_msg;
   CheckInResult::Status check_status{CheckInResult::Status::Ok};
   Json::Value bundle_meta;
@@ -490,7 +431,13 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
   } catch (const BundleMetaError& exc) {
     const std::string err{exc.what()};
     err_msg = "The bundle metadata check failed: " + err;
-    check_status = CheckInResult::Status::BundleMetadataError;
+    if (exc.type == BundleMetaError::Type::Expired) {
+      check_status = CheckInResult::Status::ExpiredMetadata;
+    } else if (exc.type == BundleMetaError::Type::NotFound) {
+      check_status = CheckInResult::Status::MetadataNotFound;
+    } else {
+      check_status = CheckInResult::Status::BundleMetadataError;
+    }
   } catch (const std::exception& exc) {
     const std::string err{exc.what()};
     err_msg = "Failed to update the local TUF repo: " + err;
@@ -1087,73 +1034,27 @@ static std::map<std::string, PublicKey> getTargetsKeys(const Json::Value& root_m
   return targets_pub_keys;
 }
 
-static Json::Value getAndCheckBundleMeta(const boost::filesystem::path& bundle_tuf_path,
-                                         const std::map<std::string, PublicKey>& targets_pub_keys,
-                                         const int threshold) {
-  int found_valid_sig_number{0};
-  const auto bundle_meta_path{bundle_tuf_path / "bundle-targets.json"};
-  if (!boost::filesystem::exists(bundle_meta_path)) {
-    throw std::runtime_error("Failed to find the bundle metadata: " + bundle_meta_path.string());
-  }
-  const auto bundle_targets_str{Utils::readFile(bundle_meta_path)};
-  auto bundle_targets_json{Utils::parseJSON(bundle_targets_str)};
-  if (bundle_targets_json.isNull() || bundle_targets_json.empty() || !bundle_targets_json.isMember("signed") ||
-      !bundle_targets_json.isMember("signatures")) {
-    throw std::runtime_error(
-        "The bundle metadata is invalid;"
-        " expecting JSON with `signed` and `signatures` fields; got: \n" +
-        bundle_targets_str);
-  }
-  if (!bundle_targets_json["signatures"].isArray()) {
-    throw std::runtime_error("The `signatures` field is not an array; got: \n" + bundle_targets_str);
-  }
-  const std::string signed_body{Utils::jsonToCanonicalStr(bundle_targets_json["signed"])};
-  LOG_INFO << "Checking the bundle metadata singatures (required: " << threshold << ")...";
-  for (const auto& signature : bundle_targets_json["signatures"]) {
-    if (!signature.isObject() || !signature.isMember("keyid") || !signature["keyid"].isString() ||
-        !signature.isMember("sig") || !signature["sig"].isString() || !signature.isMember("method") ||
-        !signature["method"].isString()) {
-      throw std::runtime_error("Invalid signature metadata was found in the bundle metadata: " +
-                               signature.toStyledString());
-    }
-    const auto sig_key_id{signature["keyid"].asString()};
-    if (targets_pub_keys.count(sig_key_id) != 1) {
-      throw std::runtime_error("The bundle is signed with an unknown key: " + sig_key_id);
-    }
-    if (!(targets_pub_keys.at(sig_key_id).VerifySignature(signature["sig"].asString(), signed_body))) {
-      throw std::runtime_error("An invalid signature was found for the bundle; key ID: " + sig_key_id);
-    }
-    LOG_INFO << "\t" << sig_key_id << " : OK";
-    ++found_valid_sig_number;
-  }
-  if (found_valid_sig_number < threshold) {
-    throw std::runtime_error(
-        "An insufficient number of signatures for the bundle were found; "
-        "required: " +
-        std::to_string(threshold) + ", found: " + std::to_string(found_valid_sig_number));
-  }
-
-  TimeStamp timestamp(bundle_targets_json["signed"]["expires"].asString());
-  if (timestamp.IsExpiredAt(TimeStamp::Now())) {
-    throw Uptane::ExpiredMetadata("offline bundle", "The offline bundle metadata has expired: " + timestamp.ToString());
-  }
-  return bundle_targets_json;
-}
-
 static Json::Value checkAndGetRootMeta(const std::shared_ptr<aklite::tuf::Repo>& device_tuf_repo,
                                        const boost::filesystem::path& bundle_tuf_repo_path) {
   auto latest_root{device_tuf_repo->GetRoot(-1)};
   Uptane::ImageRepository repo;
-  repo.initRoot(Uptane::RepositoryType::Image(), latest_root);
-
   const int max_version{std::numeric_limits<int>::max()};
-  int version{repo.getRoleVersion(Uptane::Role::Root())};
+  int version{0};
+  if (!latest_root.empty()) {
+    repo.initRoot(Uptane::RepositoryType::Image(), latest_root);
+    version = repo.getRoleVersion(Uptane::Role::Root());
+  }
+
   aklite::tuf::LocalRepoSource bundle_tuf_repo{"offline-bundle-tuf-repo", bundle_tuf_repo_path.string()};
   do {
     try {
       ++version;
       latest_root = bundle_tuf_repo.FetchRoot(version);
-      repo.verifyRoot(latest_root);
+      if (repo.rootVersion() > 0) {
+        repo.verifyRoot(latest_root);
+      } else {
+        repo.initRoot(Uptane::RepositoryType::Image(), latest_root);
+      }
     } catch (const aklite::tuf::MetadataNotFoundException& exc) {
       break;
     }
@@ -1236,7 +1137,7 @@ static Json::Value checkAndGetBundleMeta(const std::shared_ptr<aklite::tuf::Repo
 
   TimeStamp timestamp(bundle_targets_json["signed"]["expires"].asString());
   if (timestamp.IsExpiredAt(TimeStamp::Now())) {
-    throw BundleMetaError(BundleMetaError::Type::UnmetSignatureThreshold,
+    throw BundleMetaError(BundleMetaError::Type::Expired,
                           "The offline bundle metadata has expired: " + timestamp.ToString());
   }
   return bundle_targets_json;
