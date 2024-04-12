@@ -31,6 +31,8 @@ class BundleMetaError : public std::logic_error {
     BadSignature,
     UnmetSignatureThreshold,
     Expired,
+    IncorrectType,
+    IncorrectTagType,
   };
   BundleMetaError(Type type_in, const std::string& err_msg) : std::logic_error(err_msg), type{type_in} {}
   Type type;
@@ -399,6 +401,17 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     LOG_INFO << "Checking metadata of the bundle located in " << local_update_source->tuf_repo << "...";
     bundle_meta = checkAndGetBundleMeta(tuf_repo_, local_update_source->tuf_repo);
     printBundleMeta(bundle_meta);
+
+    if (client_->type() != LiteClient::Type::Undefined) {
+      const auto bundle_meta_type{bundle_meta["signed"]["x-fio-offline-bundle"]["type"].asString()};
+      if ((bundle_meta_type == "ci" && client_->type() != LiteClient::Type::Dev) ||
+          (bundle_meta_type == "prod" && client_->type() != LiteClient::Type::Prod)) {
+        const std::string device_type{client_->type() == LiteClient::Type::Prod ? "production" : "CI"};
+        const std::string err{"Cannot apply the update bundle to the device:  the bundle type `" + bundle_meta_type +
+                              "` differs from the device type `" + device_type + "`"};
+        throw BundleMetaError(BundleMetaError::Type::IncorrectType, err);
+      }
+    }
 
     LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
     auto repo_src =
