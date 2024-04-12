@@ -282,7 +282,10 @@ class AkliteOffline : public ::testing::Test {
     }
     // add new target to TUF repo
     const std::string name = hw_id_ + "-" + os + "-" + version;
-    return Target::toTufTarget(repo.addTarget(name, hash, hw_id_, version, apps_json, Json::Value(), ci_app_shortlist));
+    auto target{
+        Target::toTufTarget(repo.addTarget(name, hash, hw_id_, version, apps_json, Json::Value(), ci_app_shortlist))};
+    repo.updateBundleMeta(target.Name());
+    return target;
   }
 
   TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
@@ -304,6 +307,7 @@ class AkliteOffline : public ::testing::Test {
     }
     tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-1", initial_target_.Sha256Hash(),
                         cfg_.provision.primary_ecu_hardware_id, "1", apps_json);
+    tuf_repo_.updateBundleMeta(preloaded_target.Name());
 
     // content-based shortlisting
     for (const auto& app : apps_not_to_preload) {
@@ -411,6 +415,25 @@ class AkliteOffline : public ::testing::Test {
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
 const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
+
+TEST_F(AkliteOffline, OfflineClientInvalidBundleMeta) {
+  const auto prev_target{addTarget({createApp("app-01")})};
+  const auto target{addTarget({createApp("app-01")})};
+  auto lite_cli = createLiteClient();
+  AkliteClient client(lite_cli);
+
+  // invalidate the bundle metadata signature
+  Json::Value bundle_meta{Utils::parseJSONFile(tuf_repo_.getBundleMetaPath())};
+  bundle_meta["signed"]["foo"] = "bar";
+  Utils::writeFile(tuf_repo_.getBundleMetaPath(), bundle_meta);
+
+  const CheckInResult cr{client.CheckInLocal(src())};
+  ASSERT_EQ(CheckInResult::Status::BundleMetadataError, cr.status);
+
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinInvalidBundleMetadata, aklite::cli::CheckIn(client, src()));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinInvalidBundleMetadata,
+            aklite::cli::Install(client, -1, "", InstallMode::All, false, src()));
+}
 
 TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
   const auto prev_target{addTarget({createApp("app-01")})};
