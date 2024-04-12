@@ -168,6 +168,7 @@ LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const
     throw std::runtime_error("Invalid package manager: cannot cast to Installer type");
   }
   sysroot_ = ostree_sysroot;
+  type_ = getClientType(*key_manager_);
 }
 
 LiteClient::~LiteClient() {
@@ -357,21 +358,11 @@ void LiteClient::importRootMetaIfNeededAndPresent() {
   }
 
   LOG_INFO << "Importing root metadata from a local file system...";
-  const std::string prod_bc_value{"production"};
-  bool prod{false};
+  bool prod{type() == Type::Prod};
   Uptane::Version max_ver{Uptane::Version()};
 
-  try {
-    const auto bc{key_manager_->getBC()};
-    if (bc == prod_bc_value) {
-      prod = true;
-      LOG_DEBUG << "Found production business category in a device certificate: " << bc;
-    } else {
-      LOG_DEBUG << "Missing or non-production business category found in a device certificate: " << bc;
-    }
-  } catch (const std::exception& exc) {
+  if (Type::Undefined == type()) {
     max_ver = Uptane::Version(2);
-    LOG_WARNING << "A device certificate is not found or failed to parse it: " << exc.what();
     LOG_WARNING << "Cannot determine a device type (production or CI). "
                 << "Importing the first two versions of root role metadata since they are the same for both production "
                    "and CI...";
@@ -835,4 +826,23 @@ bool LiteClient::isRegistered(const KeyManager& key_manager) {
     LOG_DEBUG << "Failed to obtain a device certificate, it implies a device is not registered";
   }
   return false;
+}
+
+LiteClient::Type LiteClient::getClientType(const KeyManager& key_manager) {
+  static const std::string prod_bc_value{"production"};
+
+  Type res{Type::Undefined};
+  try {
+    const auto bc{key_manager.getBC()};
+    if (bc == prod_bc_value) {
+      res = Type::Prod;
+      LOG_DEBUG << "Found production business category in a device certificate: " << bc;
+    } else {
+      res = Type::Dev;
+      LOG_DEBUG << "Missing or non-production business category found in a device certificate: " << bc;
+    }
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "A device certificate is not found or failed to parse it: " << exc.what();
+  }
+  return res;
 }
