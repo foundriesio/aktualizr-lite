@@ -413,6 +413,15 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
       }
     }
 
+    if (!client_->tags.empty()) {
+      const auto bundle_tag{bundle_meta["signed"]["x-fio-offline-bundle"]["tag"].asString()};
+      if (client_->tags.end() == std::find(client_->tags.begin(), client_->tags.end(), bundle_tag)) {
+        const std::string err{"Cannot apply the update bundle to the device:  the bundle tag `" + bundle_tag +
+                              "` differs from the device tag(s) `" + boost::algorithm::join(client_->tags, ",") + "`"};
+        throw BundleMetaError(BundleMetaError::Type::IncorrectTagType, err);
+      }
+    }
+
     LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
     auto repo_src =
         std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
