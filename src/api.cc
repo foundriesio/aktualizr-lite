@@ -492,8 +492,9 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     }
   }
 
-  LOG_INFO << "Searching for TUF Targets matching a device's hardware ID (`" << hw_id_ << "`)...";
-  auto matchingTargets = filterTargets(bundle_targets, hw_id_, {}, secondary_hwids_);
+  LOG_INFO << "Searching for TUF Targets matching a device's hardware ID and tag; hw-id: " + hw_id_ +
+                  ", tag: " + (client_->tags.empty() ? "<not set>" : boost::algorithm::join(client_->tags, ","));
+  auto matchingTargets = filterTargets(bundle_targets, hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
     err_msg =
         "Couldn't find Targets matching the device's hardware ID; check a tag or a hardware ID of the device and the "
