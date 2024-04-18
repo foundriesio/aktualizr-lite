@@ -400,11 +400,18 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
   Json::Value bundle_meta;
 
   try {
-    LOG_INFO << "Checking metadata of the bundle located in " << local_update_source->tuf_repo << "...";
-    bundle_meta = checkAndGetBundleMeta(tuf_repo_, local_update_source->tuf_repo);
-    printBundleMeta(bundle_meta);
-    checkBundleType(bundle_meta, client_->type());
-    checkBundleTag(bundle_meta, client_->tags);
+    const auto bundle_path{boost::filesystem::path(local_update_source->tuf_repo) / "bundle-targets.json"};
+    if (!boost::filesystem::exists(bundle_path)) {
+      LOG_WARNING << "Failed to find the bundle metadata; " << bundle_path << " is missing!";
+      LOG_WARNING << "Please update `fioctl` to version >= v0.42 and re-run `fioctl targets offline-update`"
+                     " to generate a bundle with metadata";
+    } else {
+      LOG_INFO << "Checking metadata of the bundle located in " << local_update_source->tuf_repo << "...";
+      bundle_meta = checkAndGetBundleMeta(tuf_repo_, local_update_source->tuf_repo);
+      printBundleMeta(bundle_meta);
+      checkBundleType(bundle_meta, client_->type());
+      checkBundleTag(bundle_meta, client_->tags);
+    }
 
     LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
     auto repo_src =
