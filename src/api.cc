@@ -41,6 +41,8 @@ class BundleMetaError : public std::logic_error {
 static Json::Value checkAndGetBundleMeta(const std::shared_ptr<aklite::tuf::Repo>& device_tuf_repo,
                                          const boost::filesystem::path& bundle_tuf_repo_path);
 static void printBundleMeta(const Json::Value& bundle_meta);
+static void checkBundleType(const Json::Value& bundle_meta, LiteClient::Type client_type);
+static void checkBundleTag(const Json::Value& bundle_meta, const std::vector<std::string>& tags);
 static std::vector<TufTarget> getTrustedBundleTargets(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo,
                                                       const Json::Value& bundle_meta);
 
@@ -401,26 +403,8 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     LOG_INFO << "Checking metadata of the bundle located in " << local_update_source->tuf_repo << "...";
     bundle_meta = checkAndGetBundleMeta(tuf_repo_, local_update_source->tuf_repo);
     printBundleMeta(bundle_meta);
-
-    if (client_->type() != LiteClient::Type::Undefined) {
-      const auto bundle_meta_type{bundle_meta["signed"]["x-fio-offline-bundle"]["type"].asString()};
-      if ((bundle_meta_type == "ci" && client_->type() != LiteClient::Type::Dev) ||
-          (bundle_meta_type == "prod" && client_->type() != LiteClient::Type::Prod)) {
-        const std::string device_type{client_->type() == LiteClient::Type::Prod ? "production" : "CI"};
-        const std::string err{"Cannot apply the update bundle to the device:  the bundle type `" + bundle_meta_type +
-                              "` differs from the device type `" + device_type + "`"};
-        throw BundleMetaError(BundleMetaError::Type::IncorrectType, err);
-      }
-    }
-
-    if (!client_->tags.empty()) {
-      const auto bundle_tag{bundle_meta["signed"]["x-fio-offline-bundle"]["tag"].asString()};
-      if (client_->tags.end() == std::find(client_->tags.begin(), client_->tags.end(), bundle_tag)) {
-        const std::string err{"Cannot apply the update bundle to the device:  the bundle tag `" + bundle_tag +
-                              "` differs from the device tag(s) `" + boost::algorithm::join(client_->tags, ",") + "`"};
-        throw BundleMetaError(BundleMetaError::Type::IncorrectTagType, err);
-      }
-    }
+    checkBundleType(bundle_meta, client_->type());
+    checkBundleTag(bundle_meta, client_->tags);
 
     LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
     auto repo_src =
@@ -1177,4 +1161,28 @@ static std::vector<TufTarget> getTrustedBundleTargets(const std::shared_ptr<akli
     }
   }
   return bundle_targets;
+}
+
+static void checkBundleType(const Json::Value& bundle_meta, LiteClient::Type client_type) {
+  if (client_type != LiteClient::Type::Undefined) {
+    const auto bundle_meta_type{bundle_meta["signed"]["x-fio-offline-bundle"]["type"].asString()};
+    if ((bundle_meta_type == "ci" && client_type != LiteClient::Type::Dev) ||
+        (bundle_meta_type == "prod" && client_type != LiteClient::Type::Prod)) {
+      const std::string device_type{client_type == LiteClient::Type::Prod ? "production" : "CI"};
+      const std::string err{"Cannot apply the update bundle to the device:  the bundle type `" + bundle_meta_type +
+                            "` differs from the device type `" + device_type + "`"};
+      throw BundleMetaError(BundleMetaError::Type::IncorrectType, err);
+    }
+  }
+}
+
+static void checkBundleTag(const Json::Value& bundle_meta, const std::vector<std::string>& tags) {
+  if (!tags.empty()) {
+    const auto bundle_tag{bundle_meta["signed"]["x-fio-offline-bundle"]["tag"].asString()};
+    if (tags.end() == std::find(tags.begin(), tags.end(), bundle_tag)) {
+      const std::string err{"Cannot apply the update bundle to the device:  the bundle tag `" + bundle_tag +
+                            "` differs from the device tag(s) `" + boost::algorithm::join(tags, ",") + "`"};
+      throw BundleMetaError(BundleMetaError::Type::IncorrectTagType, err);
+    }
+  }
 }
