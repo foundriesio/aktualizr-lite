@@ -43,7 +43,7 @@ static Json::Value checkAndGetBundleMeta(const std::shared_ptr<aklite::tuf::Repo
 static void printBundleMeta(const Json::Value& bundle_meta);
 static void checkBundleType(const Json::Value& bundle_meta, LiteClient::Type client_type);
 static void checkBundleTag(const Json::Value& bundle_meta, const std::vector<std::string>& tags);
-static std::vector<TufTarget> getTrustedBundleTargets(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo,
+static std::vector<TufTarget> getTrustedBundleTargets(const std::vector<TufTarget>& tuf_targets,
                                                       const Json::Value& bundle_meta);
 
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
@@ -458,27 +458,31 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     return CheckInResult{check_status, "", {}};
   }
 
-  LOG_INFO << "Getting and checking the bundle metadata...";
-  std::vector<TufTarget> bundle_targets{getTrustedBundleTargets(tuf_repo_, bundle_meta)};
-  if (bundle_targets.empty()) {
-    const std::string err{"None of the bundle targets are listed among the TUF targets allowed for the device"};
-    check_status = CheckInResult::Status::Failed;
-    client_->notifyTufUpdateFinished(err);
-    return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
-  }
-
-  if (bundle_targets.size() == bundle_meta["signed"]["x-fio-offline-bundle"]["targets"].size()) {
-    LOG_INFO << "Any of the bundle targets is allowed to be installed";
-  } else {
-    LOG_INFO << "The following bundle targets are allowed to be installed: ";
-    for (const auto& t : bundle_targets) {
-      LOG_INFO << "\t" << t.Name();
+  auto trusted_targets{tuf_repo_->GetTargets()};
+  if (!bundle_meta.empty()) {
+    LOG_INFO << "Getting and checking the bundle metadata...";
+    std::vector<TufTarget> bundle_targets{getTrustedBundleTargets(trusted_targets, bundle_meta)};
+    if (bundle_targets.empty()) {
+      const std::string err{"None of the bundle targets are listed among the TUF targets allowed for the device"};
+      check_status = CheckInResult::Status::Failed;
+      client_->notifyTufUpdateFinished(err);
+      return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
     }
+
+    if (bundle_targets.size() == bundle_meta["signed"]["x-fio-offline-bundle"]["targets"].size()) {
+      LOG_INFO << "Any of the bundle targets is allowed to be installed";
+    } else {
+      LOG_INFO << "The following bundle targets are allowed to be installed: ";
+      for (const auto& t : bundle_targets) {
+        LOG_INFO << "\t" << t.Name();
+      }
+    }
+    trusted_targets = bundle_targets;
   }
 
   LOG_INFO << "Searching for TUF Targets matching a device's hardware ID and tag; hw-id: " + hw_id_ +
                   ", tag: " + (client_->tags.empty() ? "<not set>" : boost::algorithm::join(client_->tags, ","));
-  auto matchingTargets = filterTargets(bundle_targets, hw_id_, client_->tags, secondary_hwids_);
+  auto matchingTargets = filterTargets(trusted_targets, hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
     err_msg =
         "Couldn't find Targets matching the device's hardware ID; check a tag or a hardware ID of the device and the "
@@ -1149,10 +1153,9 @@ static void printBundleMeta(const Json::Value& bundle_meta) {
   }
 }
 
-static std::vector<TufTarget> getTrustedBundleTargets(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo,
+static std::vector<TufTarget> getTrustedBundleTargets(const std::vector<TufTarget>& tuf_targets,
                                                       const Json::Value& bundle_meta) {
   std::vector<TufTarget> bundle_targets;
-  const auto tuf_targets{tuf_repo->GetTargets()};
   for (const auto& bundle_target : bundle_meta["signed"]["x-fio-offline-bundle"]["targets"]) {
     for (const auto& target : tuf_targets) {
       if (bundle_target == target.Name()) {
