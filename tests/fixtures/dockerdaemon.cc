@@ -31,7 +31,7 @@ class DockerDaemon {
 
   const std::string& dataRoot() const { return dir_.string(); }
 
-  std::string getUrl() const { return "http://localhost:" + port_; }
+  std::string getUrl() const { return "tcp://localhost:" + port_; }
   std::string getUnixSocket() const { return "unix://" +  unix_sock_.PathString(); }
 
   std::shared_ptr<HttpInterface> getClient() { return std::make_shared<DockerDaemon::HttpClient>(*this); }

@@ -34,6 +34,7 @@ class CheckInResult {
     ExpiredMetadata,
     MetadataFetchFailure,
     MetadataNotFound,
+    BundleMetadataError,
   };
   CheckInResult(Status status, std::string primary_hwid, std::vector<TufTarget> targets)
       : status(status), primary_hwid_(std::move(primary_hwid)), targets_(std::move(targets)) {}

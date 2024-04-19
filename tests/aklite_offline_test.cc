@@ -255,7 +255,7 @@ class AkliteOffline : public ::testing::Test {
   }
 
   TufTarget addTarget(TufRepoMock& repo, const std::vector<AppEngine::App>& apps, bool just_apps = false,
-                      bool add_bootloader_update = false) {
+                      bool add_bootloader_update = false, const std::string& ci_app_shortlist = "") {
     const auto& latest_target{repo.getLatest()};
     std::string version;
     try {
@@ -281,13 +281,16 @@ class AkliteOffline : public ::testing::Test {
       apps_json[app.name]["uri"] = app.uri;
     }
     // add new target to TUF repo
-    const std::string name = hw_id + "-" + os + "-" + version;
-    return Target::toTufTarget(repo.addTarget(name, hash, hw_id, version, apps_json));
+    const std::string name = hw_id_ + "-" + os + "-" + version;
+    auto target{
+        Target::toTufTarget(repo.addTarget(name, hash, hw_id_, version, apps_json, Json::Value(), ci_app_shortlist))};
+    repo.updateBundleMeta(target.Name());
+    return target;
   }
 
   TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
-                      bool add_bootloader_update = false) {
-    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update);
+                      bool add_bootloader_update = false, const std::string& ci_app_shortlist = "") {
+    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update, ci_app_shortlist);
   }
 
   void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload,
@@ -304,6 +307,7 @@ class AkliteOffline : public ::testing::Test {
     }
     tuf_repo_.addTarget(cfg_.provision.primary_ecu_hardware_id + "-lmp-1", initial_target_.Sha256Hash(),
                         cfg_.provision.primary_ecu_hardware_id, "1", apps_json);
+    tuf_repo_.updateBundleMeta(preloaded_target.Name());
 
     // content-based shortlisting
     for (const auto& app : apps_not_to_preload) {
@@ -384,6 +388,7 @@ class AkliteOffline : public ::testing::Test {
   const LocalUpdateSource* src() const { return &local_update_source_; }
 
   void setAppsShortlist(const std::string& shortlist) { cfg_.pacman.extra["compose_apps"] = shortlist; }
+  void setTargetHwId(const std::string& hw_id) { hw_id_ = hw_id; }
 
  protected:
   static const std::string hw_id;
@@ -404,11 +409,31 @@ class AkliteOffline : public ::testing::Test {
   TufTarget initial_target_;
   Docker::DockerClient::Ptr docker_client_;
   LocalUpdateSource local_update_source_;
+  std::string hw_id_{hw_id};
 };
 
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
 const std::string AkliteOffline::os{"lmp"};
 const std::string AkliteOffline::branch{hw_id + "-" + os};
+
+TEST_F(AkliteOffline, OfflineClientInvalidBundleMeta) {
+  const auto prev_target{addTarget({createApp("app-01")})};
+  const auto target{addTarget({createApp("app-01")})};
+  auto lite_cli = createLiteClient();
+  AkliteClient client(lite_cli);
+
+  // invalidate the bundle metadata signature
+  Json::Value bundle_meta{Utils::parseJSONFile(tuf_repo_.getBundleMetaPath())};
+  bundle_meta["signed"]["foo"] = "bar";
+  Utils::writeFile(tuf_repo_.getBundleMetaPath(), bundle_meta);
+
+  const CheckInResult cr{client.CheckInLocal(src())};
+  ASSERT_EQ(CheckInResult::Status::BundleMetadataError, cr.status);
+
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinInvalidBundleMetadata, aklite::cli::CheckIn(client, src()));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinInvalidBundleMetadata,
+            aklite::cli::Install(client, -1, "", InstallMode::All, false, src()));
+}
 
 TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
   const auto prev_target{addTarget({createApp("app-01")})};
@@ -423,7 +448,7 @@ TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
   // Now try to do checkin against the outdated TUF repo
   AkliteClient client(createLiteClient());
   LocalUpdateSource outdated_src = {outdated_repo_path.string(), src()->ostree_repo, src()->app_store};
-  ASSERT_EQ(aklite::cli::StatusCode::CheckinSecurityError, aklite::cli::CheckIn(client, &outdated_src));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinOkCached, aklite::cli::CheckIn(client, &outdated_src));
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinMetadataNotFound) {
@@ -448,11 +473,12 @@ TEST_F(AkliteOffline, OfflineClientCheckinExpiredMetadata) {
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoMatchingTargets) {
+  AkliteClient client(createLiteClient());
+
+  setTargetHwId("some-other-hw-id");
   const auto prev_target{addTarget({createApp("app-01")})};
   const auto target{addTarget({createApp("app-01")})};
 
-  cfg_.pacman.extra["tags"] = "bad-tag";
-  AkliteClient client(createLiteClient());
   ASSERT_EQ(aklite::cli::StatusCode::CheckinNoMatchingTargets, aklite::cli::CheckIn(client, src()));
 }
 
@@ -555,6 +581,25 @@ TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
   reboot();
   ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
   ASSERT_EQ(target, getCurrent());
+  ASSERT_TRUE(areAppsInSync());
+}
+
+TEST_F(AkliteOffline, OfflineClientShortlistedAppsInCI) {
+  const auto app02{createApp("app-02")};
+  const auto app03{createApp("zz00-app-03")};
+  const auto target{addTarget({createApp("app-01"), app02, app03}, false, false, "app-01")};
+
+  boost::filesystem::remove_all(app_store_.appsDir() / app02.name);
+  boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
+  setAppsShortlist("app-01, app-02");
+
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target.Name(), available_targets.back().Name());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target.Name(), getCurrent().Name());
   ASSERT_TRUE(areAppsInSync());
 }
 

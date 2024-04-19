@@ -22,6 +22,12 @@ class Installer;
 
 class LiteClient {
  public:
+  enum class Type {
+    Undefined = -1,
+    Dev,
+    Prod,
+  };
+
   explicit LiteClient(Config config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
                       const std::shared_ptr<P11EngineGuard>& p11 = nullptr,
                       std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher = nullptr);
@@ -81,6 +87,7 @@ class LiteClient {
   Uptane::Target getPendingTarget() const;
   bool isBootFwUpdateInProgress() const;
   bool wasTargetInstalled(const Uptane::Target& target) const;
+  Type type() const { return type_; }
 
  private:
   FRIEND_TEST(helpers, locking);
@@ -101,6 +108,7 @@ class LiteClient {
   void initRequestHeaders(std::vector<std::string>& headers) const;
   void updateRequestHeaders();
   static bool isRegistered(const KeyManager& key_manager);
+  static Type getClientType(const KeyManager& key_manager);
 
   boost::filesystem::path callback_program;
   std::unique_ptr<KeyManager> key_manager_;
@@ -121,6 +129,7 @@ class LiteClient {
   Json::Value apps_state_;
   const int report_queue_run_pause_s_{10};
   const int report_queue_event_limit_{6};
+  Type type_{Type::Undefined};
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_
