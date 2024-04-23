@@ -116,6 +116,7 @@ class RestorableAppEngine : public AppEngine {
   const std::string& dockerHost() const { return docker_host_; }
   const StorageSpaceFunc& storageSpaceFunc() const { return storage_space_func_; }
 
+  virtual bool isAppFetched(const App& app) const;
   virtual void installAppAndImages(const App& app);
 
  private:
@@ -135,7 +136,6 @@ class RestorableAppEngine : public AppEngine {
   static void installApp(const boost::filesystem::path& app_dir, const boost::filesystem::path& dst_dir);
   void installAppImages(const boost::filesystem::path& app_dir);
 
-  bool isAppFetched(const App& app) const;
   bool areAppImagesFetched(const App& app) const;
   bool isAppInstalled(const App& app) const;
 

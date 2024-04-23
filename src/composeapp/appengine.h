@@ -26,6 +26,7 @@ class AppEngine : public Docker::RestorableAppEngine {
   Result fetch(const App& app) override;
 
  private:
+  bool isAppFetched(const App& app) const override;
   void installAppAndImages(const App& app) override;
 
   const std::string composectl_cmd_;
