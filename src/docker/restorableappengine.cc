@@ -137,7 +137,14 @@ AppEngine::Result RestorableAppEngine::fetch(const App& app) {
     // digest references to the app's images.
     // After that, the `install` or `run` phase (`docker compose up`) does not require connectivity/networking to start
     // the app.
-    pullComposeAppImages(compose_cmd_, install_root_ / app.name);
+    if (!offline_) {
+      // If this is an offline update, do not pull compose app images to register them
+      // in the Docker store, as the offline client handles registration "manually"
+      // immediately after successful installation. Subsequently, the user is prompted
+      // to either reboot the device or restart the Docker daemon to finalize the image registration.
+      // Hence, no internet connectivity is required during this process.
+      pullComposeAppImages(compose_cmd_, install_root_ / app.name);
+    }
 
     res = true;
   } catch (const InsufficientSpaceError& exc) {
