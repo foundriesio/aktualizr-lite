@@ -117,6 +117,7 @@ class RestorableAppEngine : public AppEngine {
   const StorageSpaceFunc& storageSpaceFunc() const { return storage_space_func_; }
 
   virtual bool isAppFetched(const App& app) const;
+  virtual bool isAppInstalled(const App& app) const;
   virtual void installAppAndImages(const App& app);
 
  private:
@@ -137,7 +138,6 @@ class RestorableAppEngine : public AppEngine {
   void installAppImages(const boost::filesystem::path& app_dir);
 
   bool areAppImagesFetched(const App& app) const;
-  bool isAppInstalled(const App& app) const;
 
   // check if App&Images are running
   static bool isRunning(const App& app, const std::string& compose_file,
