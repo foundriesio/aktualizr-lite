@@ -226,7 +226,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
     }
 
     LOG_DEBUG << app_name << " performing full status check";
-    if (!app_engine_->isRunning({app_name, app_pair.second})) {
+    if (!app_engine_->isFetched({app_name, app_pair.second}) || !app_engine_->isRunning({app_name, app_pair.second})) {
       // an App that is supposed to be installed and running is not fully installed or running
       apps_to_update.insert(app_pair);
       LOG_INFO << app_name << " update will be re-installed or completed";

@@ -24,6 +24,7 @@ class AppEngine : public Docker::RestorableAppEngine {
         local_source_path_{local_source_path} {}
 
   Result fetch(const App& app) override;
+  bool isRunning(const App& app) const override;
 
  private:
   bool isAppFetched(const App& app) const override;
