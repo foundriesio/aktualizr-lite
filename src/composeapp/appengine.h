@@ -25,6 +25,7 @@ class AppEngine : public Docker::RestorableAppEngine {
 
   Result fetch(const App& app) override;
   bool isRunning(const App& app) const override;
+  Json::Value getRunningAppsInfo() const override;
 
  private:
   bool isAppFetched(const App& app) const override;
