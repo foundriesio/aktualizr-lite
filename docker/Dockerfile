@@ -2,7 +2,7 @@ FROM golang:1.22.2-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
 RUN git clone https://github.com/foundriesio/composeapp.git && \
-    cd composeapp && make && cp ./bin/composectl /usr/bin/
+    cd composeapp && git checkout 9875947a7dd4adbe155324241e8bb17ea9be7f1a && make && cp ./bin/composectl /usr/bin/
 
 
 FROM ubuntu:jammy
