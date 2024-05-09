@@ -1,4 +1,4 @@
-FROM golang:1.20.12-bookworm AS composeapp
+FROM golang:1.22.2-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
 RUN git clone https://github.com/foundriesio/composeapp.git && \

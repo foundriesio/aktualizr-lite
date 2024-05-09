@@ -13,12 +13,13 @@ from socketserver import UnixStreamServer
 
 logger = logging.getLogger("Fake Docker Daemon")
 
+API_VERSION = "1.44"
 
 class Handler(SimpleHTTPRequestHandler):
     def do_HEAD(self):
         logger.info(">>> HEAD  %s" % self.path)
         self.send_response(200)
-        self.send_header('Api-Version:', '1.41')
+        self.send_header('Api-Version:', API_VERSION)
         self.end_headers()
 
     def do_GET(self):
@@ -26,11 +27,11 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.startswith('/_ping'):
             self.send_response(200)
             self.send_header('Content-type', 'text/plain; charset=utf-8')
-            self.send_header('Api-Version:', '1.41')
+            self.send_header('Api-Version:', API_VERSION)
             self.end_headers()
         else:
             self.send_response(200)
-            self.send_header('Api-Version:', '1.41')
+            self.send_header('Api-Version:', API_VERSION)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'Arch': 'amd64'}).encode())
@@ -38,7 +39,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         logger.info(">>> POST  %s" % self.path)
 
-        if self.path.startswith('/images/load') or self.path.startswith('/v1.43/images/load'):
+        if self.path.find('/images/load') != -1:
             self.post_image()
             return
 
