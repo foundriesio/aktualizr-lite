@@ -71,14 +71,17 @@ def up(out_dir, app_name, compose, flags):
                                       " since the networking is down")
             container = {"Labels": {}}
             container["Labels"]["com.docker.compose.project"] = app_name
+            container["Labels"]["com.docker.compose.project.working_dir"] = os.getcwd()
             container["Labels"]["com.docker.compose.service"] = service
             container["Labels"]["io.compose-spec.config-hash"] = compose["services"][service]["labels"][
                 "io.compose-spec.config-hash"]
             container["Image"] = compose["services"][service]["image"]
             container["State"] = "running" if "-d" in flags else "created"
+            container["Status"] = "Up 1 minute" if "-d" in flags else "Ready"
             containers.append(container)
         else:
             container["State"] = "running" if "-d" in flags else "created"
+            container["Status"] = "Up 1 minute" if "-d" in flags else "Ready"
 
     with open(os.path.join(out_dir, "containers.json"), "w") as f:
         json.dump(containers, f)

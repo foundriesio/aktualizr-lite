@@ -24,8 +24,12 @@ class AppEngine : public Docker::RestorableAppEngine {
         local_source_path_{local_source_path} {}
 
   Result fetch(const App& app) override;
+  bool isRunning(const App& app) const override;
+  Json::Value getRunningAppsInfo() const override;
 
  private:
+  bool isAppFetched(const App& app) const override;
+  bool isAppInstalled(const App& app) const override;
   void installAppAndImages(const App& app) override;
 
   const std::string composectl_cmd_;
