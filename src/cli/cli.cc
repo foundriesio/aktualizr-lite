@@ -99,17 +99,7 @@ static StatusCode pullAndInstall(AkliteClient &client, int version, const std::s
     return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
   }
 
-  TufTarget target;
-  if (version == -1 && target_name.empty()) {
-    target = cr.GetLatest();
-  } else {
-    for (const auto &t : cr.Targets()) {
-      if (t.Version() == version || t.Name() == target_name) {
-        target = t;
-        break;
-      }
-    }
-  }
+  auto target = cr.SelectTarget(version, target_name);
   if (target.IsUnknown()) {
     std::string target_string;
     if (version == -1 && target_name.empty()) {

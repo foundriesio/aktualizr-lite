@@ -59,16 +59,34 @@ const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/li
 const static std::string LocalSrcDirKey{"local-src-dir"};
 
 TufTarget CheckInResult::GetLatest(std::string hwid) const {
+  auto ret = SelectTarget(-1, "", std::move(hwid));
+  if (ret.IsUnknown()) {
+    throw std::runtime_error("no target for this hwid");
+  }
+  return ret;
+}
+
+TufTarget CheckInResult::SelectTarget(int version, const std::string& target_name, std::string hwid) const {
   if (hwid.empty()) {
     hwid = primary_hwid_;
   }
 
-  for (auto it = targets_.crbegin(); it != targets_.crend(); ++it) {
-    if ((*it).Custom()["hardwareIds"][0] == hwid) {
-      return *it;
+  if (version == -1 && target_name.empty()) {
+    for (auto it = targets_.crbegin(); it != targets_.crend(); ++it) {
+      if ((*it).HardwareId() == hwid) {
+        return *it;
+      }
+    }
+  } else {
+    for (const auto& t : targets_) {
+      if ((t.Version() == version || t.Name() == target_name) && t.HardwareId() == hwid) {
+        return t;
+      }
     }
   }
-  throw std::runtime_error("no target for this hwid");
+
+  LOG_INFO << "no target for hwid " << hwid;
+  return TufTarget();
 }
 
 std::ostream& operator<<(std::ostream& os, const DownloadResult& res) {
