@@ -38,6 +38,25 @@ AppEngine::Result AppEngine::fetch(const App& app) {
   return res;
 }
 
+void AppEngine::remove(const App& app) {
+  try {
+    // Remove app from the store. Skip blob pruning because unused blobs will be pruned in the `prune` call
+    // after all non-target apps are removed.
+    exec(boost::format{"%s --store %s --compose %s rm %s --prune=false --quiet"} % composectl_cmd_ % storeRoot() %
+             installRoot() % app.name,
+         "failed to remove app");
+    // Make sure app is stopped before trying to uninstall it
+    exec(boost::format{"%s --store %s --compose %s stop %s"} % composectl_cmd_ % storeRoot() % installRoot() % app.name,
+         "failed to stop app");
+    // Uninstall app, it only removes the app compose/project directory, docker store pruning is in the `prune` call
+    exec(boost::format{"%s --store %s --compose %s uninstall --ignore-non-installed %s"} % composectl_cmd_ %
+             storeRoot() % installRoot() % app.name,
+         "failed to uninstall app");
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "App: " << app.name << ", failed to remove: " << exc.what();
+  }
+}
+
 bool AppEngine::isRunning(const App& app) const {
   bool res{false};
   try {
@@ -65,6 +84,61 @@ Json::Value AppEngine::getRunningAppsInfo() const {
   }
 
   return app_statuses;
+}
+
+void AppEngine::prune(const Apps& app_shortlist) {
+  try {
+    // Remove apps that are not in the shortlist
+    std::future<std::string> output;
+    exec(boost::format{"%s --store %s ls --format json"} % composectl_cmd_ % storeRoot(), "failed to list apps",
+         boost::process::std_out > output);
+    const std::string output_str{output.get()};
+    const auto app_list{Utils::parseJSON(output_str)};
+
+    Apps apps_to_prune;
+    for (const auto& store_app_json : app_list) {
+      if (!(store_app_json.isMember("name") && store_app_json.isMember("uri"))) {
+        continue;
+      }
+
+      bool is_in_shortlist{false};
+      App store_app{store_app_json["name"].asString(), store_app_json["uri"].asString()};
+      for (const auto& shortlisted_app : app_shortlist) {
+        if (store_app == shortlisted_app) {
+          is_in_shortlist = true;
+          break;
+        }
+      }
+      if (!is_in_shortlist) {
+        apps_to_prune.push_back(store_app);
+      }
+    }
+    for (const auto& app : apps_to_prune) {
+      exec(boost::format{"%s --store %s rm %s --prune=false --quiet"} % composectl_cmd_ % storeRoot() % app.uri,
+           "failed to remove app");
+    }
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to remove unused apps: " << exc.what();
+  }
+  try {
+    // Pruning unused store blobs
+    std::future<std::string> output;
+    exec(boost::format{"%s --store %s prune --format=json"} % composectl_cmd_ % storeRoot(),
+         "failed to prune app blobs", boost::process::std_out > output);
+    const std::string output_str{output.get()};
+    const auto pruned_blobs{Utils::parseJSON(output_str)};
+
+    // If at least one blob was pruned then the docker store needs to be pruned too to remove corresponding blobs
+    // from the docker store
+    if (!pruned_blobs.isNull() && !pruned_blobs.empty()) {
+      LOG_INFO << "Pruning unused docker containers";
+      dockerClient()->pruneContainers();
+      LOG_INFO << "Pruning unused docker images";
+      dockerClient()->pruneImages();
+    }
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to remove unused apps: " << exc.what();
+  }
 }
 
 bool AppEngine::isAppFetched(const App& app) const {
