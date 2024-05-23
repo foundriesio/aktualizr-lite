@@ -87,6 +87,10 @@ class DockerDaemon {
       return BaseHttpClient::post(url, content_type, data);
     }
 
+    HttpResponse post(const std::string&, const Json::Value&) override {
+      return HttpResponse("", 200, CURLE_OK, "");
+    }
+
    private:
     DockerDaemon& daemon_;
   };
