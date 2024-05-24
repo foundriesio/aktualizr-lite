@@ -11,6 +11,7 @@
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/program_options.hpp>
 
+#include "aktualizr-lite/aklite_client_ext.h"
 #include "aktualizr-lite/cli/cli.h"
 #include "crypto/keymanager.h"
 #include "helpers.h"
@@ -447,7 +448,7 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   // Setting apply_lock parameter to false, since we already took the FileLock above
-  AkliteClient akclient{client_ptr, false, false};
+  AkliteClientExt akclient{client_ptr, false, false};
 
   const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
   InstallMode mode{InstallMode::All};

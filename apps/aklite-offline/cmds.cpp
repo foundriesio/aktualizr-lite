@@ -1,4 +1,5 @@
 #include "cmds.h"
+#include "aktualizr-lite/aklite_client_ext.h"
 #include "composeappmanager.h"
 #include "target.h"
 
@@ -18,7 +19,7 @@ int CheckCmd::checkSrcDir(const po::variables_map& vm, const boost::filesystem::
 
 int InstallCmd::installUpdate(const po::variables_map& vm, const boost::filesystem::path& src_dir,
                               const std::string& target_name, bool force_downgrade) const {
-  AkliteClient client(vm, false, false);
+  AkliteClientExt client(vm, false, false);
   const LocalUpdateSource local_update_source{.tuf_repo = (src_dir / "tuf").string(),
                                               .ostree_repo = (src_dir / "ostree_repo").string(),
                                               .app_store = (src_dir / "apps").string()};

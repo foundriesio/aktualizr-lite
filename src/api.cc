@@ -2,6 +2,7 @@
 
 #include <sys/file.h>
 #include <unistd.h>
+#include <boost/format.hpp>
 #include <boost/process.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -285,7 +286,9 @@ CheckInResult AkliteClient::CheckIn() const {
     return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
   }
   LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
-  client_->notifyTufUpdateFinished();
+  if (!usingUpdateClientApi) {
+    client_->notifyTufUpdateFinished();
+  }
   return CheckInResult(CheckInResult::Status::Ok, hw_id_, matchingTargets);
 }
 
@@ -440,6 +443,8 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
 
 CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
   client_->notifyTufUpdateStarted();
+  auto repo_src =
+      std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
 
   std::string err_msg;
   CheckInResult::Status check_status{CheckInResult::Status::Ok};
@@ -562,7 +567,9 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
   }
 
-  client_->notifyTufUpdateFinished();
+  if (!usingUpdateClientApi) {
+    client_->notifyTufUpdateFinished();
+  }
   return CheckInResult(check_status, hw_id_, toTufTargets(available_targets));
 }
 

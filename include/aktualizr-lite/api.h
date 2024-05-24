@@ -347,11 +347,14 @@ class AkliteClient {
    */
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
+ protected:
+  bool usingUpdateClientApi{false};
+  std::shared_ptr<LiteClient> client_;
+
  private:
   void Init(Config &config, bool finalize = true, bool apply_lock = true);
 
   bool read_only_{false};
-  std::shared_ptr<LiteClient> client_;
   std::shared_ptr<aklite::tuf::Repo> tuf_repo_;
   std::string hw_id_;
   std::vector<std::string> secondary_hwids_;

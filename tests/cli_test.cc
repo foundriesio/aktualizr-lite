@@ -4,6 +4,7 @@
 #include <boost/format.hpp>
 #include <boost/process.hpp>
 
+#include "aktualizr-lite/aklite_client_ext.h"
 #include "aktualizr-lite/cli/cli.h"
 #include "composeappmanager.h"
 #include "docker/restorableappengine.h"
@@ -18,8 +19,8 @@ using namespace aklite;
 
 class CliClient : public AkliteTest {
  protected:
-  std::shared_ptr<AkliteClient> createAkClient(InitialVersion initial_version = InitialVersion::kOn) {
-    return std::make_shared<AkliteClient>(createLiteClient(initial_version));
+  std::shared_ptr<AkliteClientExt> createAkClient(InitialVersion initial_version = InitialVersion::kOn) {
+    return std::make_shared<AkliteClientExt>(createLiteClient(initial_version));
   }
 
   TufTarget createTufTarget(AppEngine::App* app = nullptr, const std::string& hwid = "", bool just_app_target = false) {
@@ -33,13 +34,13 @@ class CliClient : public AkliteTest {
                            : Target::toTufTarget(createTarget(&apps, hwid));
   }
 
-  void reboot(std::shared_ptr<AkliteClient>& client, bool reset_bootupgrade_flag = true) {
+  void reboot(std::shared_ptr<AkliteClientExt>& client, bool reset_bootupgrade_flag = true) {
     client.reset();
     boost::filesystem::remove(ClientTest::test_dir_.Path() / "need_reboot");
     if (reset_bootupgrade_flag) {
       boot_flag_mgr_->set("bootupgrade_available", "0");
     }
-    client = std::make_shared<AkliteClient>(createLiteClient(InitialVersion::kOff, app_shortlist_, false));
+    client = std::make_shared<AkliteClientExt>(createLiteClient(InitialVersion::kOff, app_shortlist_, false));
   }
 
   void tweakConf(Config& conf) override {
