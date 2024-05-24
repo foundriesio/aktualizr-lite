@@ -65,15 +65,6 @@ std::string generate_correlation_id(const TufTarget& t) {
   return id + "-" + boost::uuids::to_string(tmp);
 }
 
-void generate_correlation_id(Uptane::Target& t) {
-  std::string id = t.custom_version();
-  if (id.empty()) {
-    id = t.filename();
-  }
-  boost::uuids::uuid tmp = boost::uuids::random_generator()();
-  t.setCorrelationId(id + "-" + boost::uuids::to_string(tmp));
-}
-
 bool target_has_tags(const Uptane::Target& t, const std::vector<std::string>& config_tags) {
   if (!config_tags.empty()) {
     auto tags = t.custom_data()["tags"];
