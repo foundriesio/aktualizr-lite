@@ -279,11 +279,13 @@ CheckInResult AkliteClient::CheckIn() const {
   LOG_INFO << "Searching for matching TUF Targets...";
   auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
-    err_msg =
-        "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+    // TODO: consider reporting about it to the backend to make it easier to figure out
+    // why specific devices are not picking up a new Target
+    err_msg = boost::str(boost::format("No Target found for the device; hw ID: %s; tags: %s") % hw_id_ %
+                         boost::algorithm::join(client_->tags, ","));
     LOG_ERROR << err_msg;
     client_->notifyTufUpdateFinished(err_msg);
-    return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
+    return CheckInResult{CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
   }
   LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
   if (!usingUpdateClientApi) {
