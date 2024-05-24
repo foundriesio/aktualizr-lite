@@ -1,4 +1,4 @@
-#include "stat.h"
+#include "aktualizr-lite/storage/stat.h"
 
 #include <fcntl.h>
 #include <sys/statvfs.h>

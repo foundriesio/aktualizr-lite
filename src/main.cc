@@ -187,9 +187,9 @@ static std::pair<bool, std::unique_ptr<Uptane::Target>> find_target(LiteClient& 
   return {false, std_::make_unique<Uptane::Target>(Uptane::Target::Unknown())};
 }
 
-static std::tuple<data::ResultCode::Numeric, DownloadResultWithStat, std::string> do_update(LiteClient& client,
-                                                                                            Uptane::Target target,
-                                                                                            const std::string& reason) {
+static std::tuple<data::ResultCode::Numeric, DownloadResult, std::string> do_update(LiteClient& client,
+                                                                                    Uptane::Target target,
+                                                                                    const std::string& reason) {
   client.logTarget("Updating Active Target: ", client.getCurrent());
   client.logTarget("To New Target: ", target);
 
@@ -371,7 +371,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
                              " to " + target_to_install.filename();
 
         data::ResultCode::Numeric rc;
-        DownloadResultWithStat dr;
+        DownloadResult dr;
         std::string cor_id;
         std::tie(rc, dr, cor_id) = do_update(client, target_to_install, reason);
         if (rc == data::ResultCode::Numeric::kOk) {

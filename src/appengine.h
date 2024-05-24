@@ -8,7 +8,7 @@
 
 #include "json/json.h"
 
-#include "storage/stat.h"
+#include "aktualizr-lite/storage/stat.h"
 
 class AppEngine {
  public:

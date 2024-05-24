@@ -26,7 +26,7 @@ set(SRC helpers.cc
         aklitereportqueue.cc)
 
 set(HEADERS helpers.h
-        storage/stat.h
+        ../include/aktualizr-lite/storage/stat.h
         composeappmanager.h
         rootfstreemanager.h
         docker/restorableappengine.h

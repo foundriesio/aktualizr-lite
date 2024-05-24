@@ -3,8 +3,8 @@
 #include <boost/format.hpp>
 #include <boost/process.hpp>
 
+#include "aktualizr-lite/storage/stat.h"
 #include "exec.h"
-#include "storage/stat.h"
 
 namespace composeapp {
 enum class ExitCode { ExitCodeInsufficientSpace = 100 };

@@ -12,6 +12,7 @@
 
 #include "json/json.h"
 
+#include "aktualizr-lite/storage/stat.h"
 #include "tuf/tuf.h"
 
 class Config;
@@ -95,6 +96,7 @@ class DownloadResult {
   Status status;
   std::string description;
   std::string destination_path;
+  storage::Volume::UsageInfo stat;
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const { return status == Status::Ok; }

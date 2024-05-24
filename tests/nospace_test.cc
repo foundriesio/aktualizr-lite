@@ -9,10 +9,10 @@
 #include "test_utils.h"
 #include "uptane_generator/image_repo.h"
 
+#include "aktualizr-lite/storage/stat.h"
 #include "composeappmanager.h"
 #include "liteclient.h"
 #include "ostree/repo.h"
-#include "storage/stat.h"
 
 #include "fixtures/aklitetest.cc"
 

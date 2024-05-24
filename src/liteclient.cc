@@ -587,10 +587,10 @@ bool LiteClient::checkImageMetaOffline() {
   return false;
 }
 
-DownloadResultWithStat LiteClient::downloadImage(const Uptane::Target& target, const api::FlowControlToken* token) {
+DownloadResult LiteClient::downloadImage(const Uptane::Target& target, const api::FlowControlToken* token) {
   key_manager_->loadKeys();
 
-  DownloadResultWithStat download_result{DownloadResult::Status::DownloadFailed, ""};
+  DownloadResult download_result{DownloadResult::Status::DownloadFailed, ""};
   {
     const int max_tries = 3;
     int tries = 0;
@@ -706,7 +706,7 @@ void LiteClient::reportAppsState() {
   }
 }
 
-DownloadResultWithStat LiteClient::download(const Uptane::Target& target, const std::string& reason) {
+DownloadResult LiteClient::download(const Uptane::Target& target, const std::string& reason) {
   notifyDownloadStarted(target, reason);
   auto download_result{downloadImage(target)};
   notifyDownloadFinished(target, download_result, download_result.description);

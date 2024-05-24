@@ -5,9 +5,9 @@
 
 #include <functional>
 
+#include "aktualizr-lite/storage/stat.h"
 #include "docker/docker.h"
 #include "docker/dockerclient.h"
-#include "storage/stat.h"
 
 namespace Docker {
 

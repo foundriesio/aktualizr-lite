@@ -28,7 +28,7 @@ RootfsTreeManager::RootfsTreeManager(const PackageConfig& pconfig, const Bootloa
       keys_{keys},
       cfg_{pconfig} {}
 
-DownloadResultWithStat RootfsTreeManager::Download(const TufTarget& target) {
+DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
   auto prog_cb = [this](const Uptane::Target& t, const std::string& description, unsigned int progress) {
     // report_progress_cb(events_channel.get(), t, description, progress);
     // TODO: consider make use of it for download progress reporting
@@ -44,7 +44,7 @@ DownloadResultWithStat RootfsTreeManager::Download(const TufTarget& target) {
     getAdditionalRemotes(remotes, target.Name());
   }
 
-  DownloadResultWithStat res{DownloadResult::Status::Ok, ""};
+  DownloadResult res{DownloadResult::Status::Ok, ""};
   data::InstallationResult pull_err{data::ResultCode::Numeric::kUnknown, ""};
   std::string error_desc;
   for (const auto& remote : remotes) {
