@@ -69,8 +69,15 @@ class InstallResult {
     AppsNeedCompletion,
     BootFwNeedsCompletion,
     Failed,
-    DownloadFailed,
+    DownloadFailed,  // App pull failure
 
+    DownloadOstreeFailed = 100,
+    VerificationFailed,
+    DownloadFailed_NoSpace,
+    InstallationInProgress,
+    InstallRollbackFailed,
+    InstallRollbackOk,
+    UnknownError,
   };
   Status status;
   std::string description;
@@ -78,7 +85,7 @@ class InstallResult {
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const {
     return status == Status::Ok || status == Status::OkBootFwNeedsCompletion || status == Status::NeedsCompletion ||
-           status == Status::AppsNeedCompletion;
+           status == Status::AppsNeedCompletion || status == Status::InstallRollbackOk;
   }
 };
 

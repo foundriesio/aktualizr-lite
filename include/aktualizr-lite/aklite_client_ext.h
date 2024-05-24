@@ -56,10 +56,22 @@ class AkliteClientExt : public AkliteClient {
   // Inherit constructors
   using AkliteClient::AkliteClient;
 
+  struct NoSpaceDownloadState {
+    std::string ostree_commit_hash;
+    std::string cor_id;
+    storage::Volume::UsageInfo stat;
+  } state_when_download_failed{"", "", {.err = "undefined"}};
+
  public:
   GetTargetToInstallResult GetTargetToInstall(const LocalUpdateSource *local_update_source = nullptr, int version = -1,
                                               const std::string &target_name = "", bool allow_bad_target = false,
                                               bool force_apps_sync = false);
+  InstallResult PullAndInstall(const TufTarget &target, const std::string &reason = "",
+                               const std::string &correlation_id = "", InstallMode install_mode = InstallMode::All,
+                               const LocalUpdateSource *local_update_source = nullptr, bool do_download = true,
+                               bool do_install = true);
+
+  bool RebootIfRequired();
 };
 
 #endif

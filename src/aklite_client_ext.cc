@@ -138,3 +138,121 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const LocalUpdateSo
 
   return res;
 }
+
+static const std::unordered_map<DownloadResult::Status, InstallResult::Status> dr2ir = {
+    {DownloadResult::Status::Ok, InstallResult::Status::Ok},
+    {DownloadResult::Status::DownloadFailed, InstallResult::Status::DownloadOstreeFailed},
+    {DownloadResult::Status::VerificationFailed, InstallResult::Status::VerificationFailed},
+    {DownloadResult::Status::DownloadFailed_NoSpace, InstallResult::Status::DownloadFailed_NoSpace},
+};
+
+InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std::string& reason,
+                                              const std::string& correlation_id, const InstallMode install_mode,
+                                              const LocalUpdateSource* local_update_source, const bool do_download,
+                                              const bool do_install) {
+  // Check if the device is in a correct state to start a new update
+  if (IsInstallationInProgress()) {
+    LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
+              << GetPendingTarget().Name();
+    return InstallResult{InstallResult::Status::InstallationInProgress};
+  }
+
+  const auto current{GetCurrent()};
+
+  // Prior to performing the update, check if aklite haven't tried to fetch the target ostree before,
+  // and it failed due to lack of space, and the space has not increased since that time.
+  if (state_when_download_failed.stat.required.first > 0 && state_when_download_failed.stat.isOk() &&
+      target.Sha256Hash() == state_when_download_failed.ostree_commit_hash) {
+    storage::Volume::UsageInfo current_usage_info{storage::Volume::getUsageInfo(
+        state_when_download_failed.stat.path, static_cast<int>(state_when_download_failed.stat.reserved.second),
+        state_when_download_failed.stat.reserved_by)};
+    if (!current_usage_info.isOk()) {
+      LOG_ERROR << "Failed to obtain storage usage statistic: " << current_usage_info.err;
+    }
+
+    if (current_usage_info.isOk() &&
+        current_usage_info.available.first < state_when_download_failed.stat.required.first) {
+      const std::string err_msg{"Insufficient storage available at " + state_when_download_failed.stat.path +
+                                " to download Target: " + target.Name() + ", " +
+                                current_usage_info.withRequired(state_when_download_failed.stat.required.first).str() +
+                                " (cached status)"};
+      LOG_ERROR << err_msg;
+      auto event_target = Target::fromTufTarget(target);
+      event_target.setCorrelationId(state_when_download_failed.cor_id);
+      client_->notifyDownloadFinished(event_target, false, err_msg);
+      return InstallResult{InstallResult::Status::DownloadFailed_NoSpace, err_msg};
+    }
+  }
+  state_when_download_failed = {"", "", {.err = "undefined"}};
+
+  const auto installer = Installer(target, reason, correlation_id, install_mode, local_update_source);
+  if (installer == nullptr) {
+    LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
+    return InstallResult{InstallResult::Status::UnknownError};
+  }
+
+  if (do_download) {
+    auto dr = installer->Download();
+    if (!dr) {
+      if (dr.noSpace()) {
+        state_when_download_failed = {target.Sha256Hash(), correlation_id, dr.stat};
+      }
+
+      LOG_ERROR << "Failed to download Target; target: " << target.Name() << ", err: " << dr;
+      return InstallResult{dr2ir.at(dr.status), dr.description};
+    }
+
+    if (!do_install) {
+      return InstallResult{dr2ir.at(dr.status), dr.description};
+    }
+  }
+
+  auto ir = installer->Install();
+  if (!ir) {
+    LOG_ERROR << "Failed to install Target; target: " << target.Name() << ", err: " << ir;
+    if (ir.status == InstallResult::Status::Failed) {
+      LOG_INFO << "Rolling back to the previous target: " << current.Name() << "...";
+      const auto installer = Installer(current);
+      if (installer == nullptr) {
+        LOG_ERROR << "Failed to find the previous target in the TUF Targets DB";
+        return InstallResult{InstallResult::Status::InstallRollbackFailed, ir.description};
+      }
+      ir = installer->Install();
+      if (!ir) {
+        LOG_ERROR << "Failed to rollback to " << current.Name() << ", err: " << ir;
+      }
+      if (ir.status == InstallResult::Status::Ok) {
+        return InstallResult{InstallResult::Status::InstallRollbackOk, ir.description};
+      } else {
+        return InstallResult{InstallResult::Status::InstallRollbackFailed, ir.description};
+      }
+    }
+  }
+
+  return ir;
+}
+
+bool AkliteClientExt::RebootIfRequired() {
+  auto is_reboot_required = client_->isRebootRequired();
+
+  if (is_reboot_required.first) {
+    if (is_reboot_required.second.empty()) {
+      LOG_WARNING << "Skipping reboot operation since reboot command is not set";
+    } else {
+      LOG_INFO << "Device is going to reboot (" << is_reboot_required.second << ")";
+      if (setuid(0) != 0) {
+        LOG_ERROR << "Failed to set/verify a root user so cannot reboot system programmatically";
+      } else {
+        sync();
+        // let's try to reboot the system, if it fails we just throw an exception and exit the process
+        if (std::system(is_reboot_required.second.c_str()) != 0) {
+          LOG_ERROR << "Failed to execute the reboot command: " + is_reboot_required.second;
+        }
+      }
+    }
+    // Return true means we are supposed to stop execution
+    return true;
+  }
+
+  return false;
+}

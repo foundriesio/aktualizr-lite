@@ -10,7 +10,9 @@
 
 #include "http/httpclient.h"
 #include "libaktualizr/config.h"
+#include "libaktualizr/types.h"
 #include "liteclient.h"
+#include "logging/logging.h"
 #include "primary/reportqueue.h"
 
 #include "aktualizr-lite/tuf/tuf.h"

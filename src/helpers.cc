@@ -4,6 +4,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include "aktualizr-lite/tuf/tuf.h"
 #include "composeappmanager.h"
 #include "storage/invstorage.h"
 
@@ -53,6 +54,15 @@ bool LiteClient::composeAppsChanged() const {
   }
 
   return false;
+}
+
+std::string generate_correlation_id(const TufTarget& t) {
+  std::string id = std::to_string(t.Version());
+  if (id.empty()) {
+    id = t.Name();
+  }
+  boost::uuids::uuid tmp = boost::uuids::random_generator()();
+  return id + "-" + boost::uuids::to_string(tmp);
 }
 
 void generate_correlation_id(Uptane::Target& t) {

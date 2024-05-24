@@ -60,6 +60,13 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::AppsNeedCompletion, StatusCode::InstallAppsNeedFinalization},
     {InstallResult::Status::BootFwNeedsCompletion, StatusCode::InstallNeedsRebootForBootFw},
     {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
+    {InstallResult::Status::DownloadOstreeFailed, StatusCode::DownloadFailure},
+    {InstallResult::Status::VerificationFailed, StatusCode::DownloadFailureVerificationFailed},
+    {InstallResult::Status::DownloadFailed_NoSpace, StatusCode::DownloadFailureNoSpace},
+    {InstallResult::Status::InstallationInProgress, StatusCode::InstallationInProgress},
+    {InstallResult::Status::InstallRollbackFailed, StatusCode::InstallRollbackFailed},
+    {InstallResult::Status::InstallRollbackOk, StatusCode::InstallRollbackOk},
+    {InstallResult::Status::UnknownError, StatusCode::UnknownError},
 };
 
 bool IsSuccessCode(StatusCode status) {
@@ -142,46 +149,8 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
     LOG_WARNING << "Downgrading from " << current.Version() << " to  " << cr.selected_target.Version() << "...";
   }
 
-  const auto installer = client.Installer(cr.selected_target, "", "", install_mode, local_update_source);
-  if (installer == nullptr) {
-    LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
-    return StatusCode::UnknownError;
-  }
-
-  if (pull_mode == PullMode::All) {
-    auto dr = installer->Download();
-    if (!dr) {
-      LOG_ERROR << "Failed to download Target; target: " << cr.selected_target.Name() << ", err: " << dr;
-      return res2StatusCode<DownloadResult::Status>(d2s, dr.status);
-    }
-
-    if (!do_install) {
-      return res2StatusCode<DownloadResult::Status>(d2s, dr.status);
-    }
-  }
-
-  auto ir = installer->Install();
-  if (!ir) {
-    LOG_ERROR << "Failed to install Target; target: " << cr.selected_target.Name() << ", err: " << ir;
-    if (ir.status == InstallResult::Status::Failed) {
-      LOG_INFO << "Rolling back to the previous target: " << current.Name() << "...";
-      const auto installer = client.Installer(current);
-      if (installer == nullptr) {
-        LOG_ERROR << "Failed to find the previous target in the TUF Targets DB";
-        return StatusCode::InstallRollbackFailed;
-      }
-      ir = installer->Install();
-      if (!ir) {
-        LOG_ERROR << "Failed to rollback to " << current.Name() << ", err: " << ir;
-      }
-      if (ir.status == InstallResult::Status::Ok) {
-        return StatusCode::InstallRollbackOk;
-      } else {
-        return StatusCode::InstallRollbackFailed;
-      }
-    }
-  }
-
+  auto ir = client.PullAndInstall(cr.selected_target, "", "", install_mode, local_update_source,
+                                  pull_mode == PullMode::All, do_install);
   return res2StatusCode<InstallResult::Status>(i2s, ir.status);
 }
 
