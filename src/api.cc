@@ -46,6 +46,11 @@ static void checkBundleTag(const Json::Value& bundle_meta, const std::vector<std
 static std::vector<TufTarget> getTrustedBundleTargets(const std::vector<TufTarget>& tuf_targets,
                                                       const Json::Value& bundle_meta);
 
+enum class OfflineUpdateAppsShortlistType { AllTargetApps = 0, NoneOfTargetApps, OnlyShortlistedApps };
+
+static std::tuple<OfflineUpdateAppsShortlistType, std::set<std::string>> getAppsFetchedForOfflineUpdate(
+    const Json::Value& custom, const Target::Apps& target_apps);
+
 const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/lib/sota/conf.d", "/var/sota/sota.toml",
                                                                         "/etc/sota/conf.d/"};
 
@@ -327,22 +332,32 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       }
       break;
     }
+
+    OfflineUpdateAppsShortlistType offline_app_shortlist_type;
+    std::set<std::string> offline_app_shortlist;
+    std::tie(offline_app_shortlist_type, offline_app_shortlist) =
+        getAppsFetchedForOfflineUpdate(t.custom_data(), Target::Apps(t));
+    if (offline_app_shortlist_type == OfflineUpdateAppsShortlistType::NoneOfTargetApps) {
+      auto custom_data{t.custom_data()};
+      custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
+      custom_data.removeMember("docker_compose_apps");
+      found_targets.emplace_back(Target::updateCustom(t, custom_data));
+      LOG_INFO << "\tall target content have been found";
+      if (!just_latest) {
+        continue;
+      }
+      break;
+    }
+
     const ComposeAppManager::AppsContainer required_apps{
         ComposeAppManager::getRequiredApps(ComposeAppManager::Config(pconfig), t)};
     std::set<std::string> missing_apps;
-
-    std::set<std::string> offline_app_shortlist;
-    const auto custom{t.custom_data()};
-    if (custom.isMember("fetched-apps") && custom["fetched-apps"].isObject() &&
-        custom["fetched-apps"].isMember("shortlist")) {
-      boost::split(offline_app_shortlist, custom["fetched-apps"]["shortlist"].asString(), boost::is_any_of(", "),
-                   boost::token_compress_on);
-    }
     for (const auto& app : required_apps) {
+      // If required app is not found in the bundle and all target apps are required for an update
+      // or the given app is in the shortlist then consider the app as missing in the bundle.
       if (found_apps.count(app.second) == 0 &&
-          // If the app shortlist is ON and the missing app is not in the app shortlist, then
-          // don't treat it as a missing app.
-          (offline_app_shortlist.empty() || offline_app_shortlist.count(app.first) == 1)) {
+          (offline_app_shortlist_type == OfflineUpdateAppsShortlistType::AllTargetApps ||
+           offline_app_shortlist.count(app.first) == 1)) {
         missing_apps.insert(app.second);
       }
     }
@@ -354,14 +369,22 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       continue;
     }
     auto custom_data{t.custom_data()};
-    if (!offline_app_shortlist.empty()) {
-      // If the app shortlist is ON then update the found target app list so the downloader
-      // and the installer will update only the apps specified in the shortlist.
+    if (offline_app_shortlist_type == OfflineUpdateAppsShortlistType::OnlyShortlistedApps &&
+        custom_data.isMember("docker_compose_apps") && !custom_data["docker_compose_apps"].isNull() &&
+        custom_data["docker_compose_apps"].isObject()) {
       Json::Value app_shortlist;
-      for (const auto& app : offline_app_shortlist) {
-        app_shortlist[app] = custom_data["docker_compose_apps"][app];
+      for (Json::ValueConstIterator it = custom_data["docker_compose_apps"].begin();
+           it != custom_data["docker_compose_apps"].end(); ++it) {
+        const std::string app_name{it.key().asString()};
+        if (offline_app_shortlist.count(app_name) == 1) {
+          app_shortlist[app_name] = *it;
+        }
       }
-      custom_data["docker_compose_apps"] = app_shortlist;
+      if (!app_shortlist.empty()) {
+        custom_data["docker_compose_apps"] = app_shortlist;
+      } else {
+        custom_data.removeMember("docker_compose_apps");
+      }
     }
     custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
     custom_data[LocalSrcDirKey]["apps"] = src.AppsDir.string();
@@ -1195,4 +1218,51 @@ static void checkBundleTag(const Json::Value& bundle_meta, const std::vector<std
       throw BundleMetaError(BundleMetaError::Type::IncorrectTagType, err);
     }
   }
+}
+
+std::tuple<OfflineUpdateAppsShortlistType, std::set<std::string>> getAppsFetchedForOfflineUpdate(
+    const Json::Value& custom, const Target::Apps& target_apps) {
+  std::set<std::string> target_apps_shortlist;
+  if (!(custom.isMember("fetched-apps") && custom["fetched-apps"].isObject())) {
+    // If `custom.fetched-apps` is not specified or it is an invalid object then
+    // consider all target apps for an update.
+    LOG_DEBUG << "No fetched apps for offline update is found; consider all target apps for the update";
+    return {OfflineUpdateAppsShortlistType::AllTargetApps, target_apps_shortlist};
+  }
+  if (!custom["fetched-apps"].isMember("uri") || custom["fetched-apps"]["uri"].isNull() ||
+      !custom["fetched-apps"]["uri"].isString() || custom["fetched-apps"]["uri"].asString().empty()) {
+    // If `custom.fetched-apps.uri` is not specified or `null` or empty string then it implies
+    // that none of the target apps should be updated.
+    LOG_DEBUG
+        << "Apps were turned off and not fetched for offline update, consider none of the target apps for the update";
+    return {OfflineUpdateAppsShortlistType::NoneOfTargetApps, target_apps_shortlist};
+  }
+  if (!custom["fetched-apps"].isMember("shortlist") || custom["fetched-apps"]["shortlist"].isNull() ||
+      !custom["fetched-apps"]["shortlist"].isString() || custom["fetched-apps"]["shortlist"].asString().empty()) {
+    // If `custom.fetched-apps` and `custom.fetched-apps.uri` are present and valid and
+    // `custom.fetched-apps.shortlist` is not present or is not valid or empty string then
+    // consider all target apps for an update
+    LOG_DEBUG << "Apps were fetched for offline update, and shortlist is not specified or empty, consider all target "
+                 "apps for the update";
+    return {OfflineUpdateAppsShortlistType::AllTargetApps, target_apps_shortlist};
+  }
+
+  std::set<std::string> fetched_apps_shortlist;
+  boost::split(fetched_apps_shortlist, custom["fetched-apps"]["shortlist"].asString(), boost::is_any_of(", "),
+               boost::token_compress_on);
+  for (const auto& app : fetched_apps_shortlist) {
+    if (target_apps.isPresent(app)) {
+      target_apps_shortlist.insert(app);
+    }
+  }
+  if (target_apps_shortlist.empty()) {
+    // If an intersection of apps fetched for offline update (the shortlist value)
+    // and the target apps is empty it implies that none of target apps should be considered for offline update
+    LOG_DEBUG << "None of fetched and shortlisted apps are present among the target apps; consider none of the target "
+                 "apps for the update";
+    return {OfflineUpdateAppsShortlistType::NoneOfTargetApps, target_apps_shortlist};
+  }
+  LOG_DEBUG << "The following fetched and shortlisted apps are considered for the update: "
+            << boost::algorithm::join(target_apps_shortlist, ",");
+  return {OfflineUpdateAppsShortlistType::OnlyShortlistedApps, target_apps_shortlist};
 }
