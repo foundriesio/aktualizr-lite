@@ -207,6 +207,15 @@ TEST_F(RestorableAppEngineTest, FetchCheckAndRefetch) {
     ASSERT_TRUE(app_engine->isFetched(app));
     ASSERT_TRUE(app_engine->verify(app));
   }
+  {
+    // empty App image index manifest
+    Utils::writeFile(index_manifest, std::string{""});
+    ASSERT_FALSE(app_engine->isFetched(app));
+
+    ASSERT_TRUE(app_engine->fetch(app));
+    ASSERT_TRUE(app_engine->isFetched(app));
+    ASSERT_TRUE(app_engine->verify(app));
+  }
 
   const auto manifest_desc{Utils::parseJSONFile(index_manifest)};
   Docker::HashedDigest manifest_digest{manifest_desc["manifests"][0]["digest"].asString()};
