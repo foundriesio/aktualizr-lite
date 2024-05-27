@@ -364,21 +364,27 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
           continue;
         }
 
-        const auto image_manifest_desc{Utils::parseJSONFile(index_manifest)};
-        HashedDigest image_digest{image_manifest_desc["manifests"][0]["digest"].asString()};
-        blob_shortlist.emplace(image_digest.hash());
+        try {
+          const auto image_manifest_desc{Utils::parseJSONFile(index_manifest)};
+          HashedDigest image_digest{image_manifest_desc["manifests"][0]["digest"].asString()};
+          blob_shortlist.emplace(image_digest.hash());
 
-        const auto image_manifest{Utils::parseJSONFile(blobs_root_ / "sha256" / image_digest.hash())};
-        blob_shortlist.emplace(HashedDigest(image_manifest["config"]["digest"].asString()).hash());
+          const auto image_manifest{Utils::parseJSONFile(blobs_root_ / "sha256" / image_digest.hash())};
+          blob_shortlist.emplace(HashedDigest(image_manifest["config"]["digest"].asString()).hash());
 
-        const auto image_layers{image_manifest["layers"]};
-        for (Json::ValueConstIterator ii = image_layers.begin(); ii != image_layers.end(); ++ii) {
-          if ((*ii).isObject() && (*ii).isMember("digest")) {
-            const auto layer_digest{HashedDigest{(*ii)["digest"].asString()}};
-            blob_shortlist.emplace(layer_digest.hash());
-          } else {
-            LOG_ERROR << "Invalid image manifest: " << ii.key().asString() << " -> " << *ii;
+          const auto image_layers{image_manifest["layers"]};
+          for (Json::ValueConstIterator ii = image_layers.begin(); ii != image_layers.end(); ++ii) {
+            if ((*ii).isObject() && (*ii).isMember("digest")) {
+              const auto layer_digest{HashedDigest{(*ii)["digest"].asString()}};
+              blob_shortlist.emplace(layer_digest.hash());
+            } else {
+              LOG_ERROR << "Invalid image manifest: " << ii.key().asString() << " -> " << *ii;
+            }
           }
+        } catch (const std::exception& exc) {
+          LOG_WARNING << "Found invalid app image manifest in the store, its blobs will be pruned; image: " << image
+                      << "err: " << exc.what();
+          boost::filesystem::remove_all(image_root);
         }
       }
     }
