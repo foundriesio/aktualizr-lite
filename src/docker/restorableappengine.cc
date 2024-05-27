@@ -323,23 +323,34 @@ void RestorableAppEngine::prune(const Apps& app_shortlist) {
         continue;
       }
 
-      // add blobs of the shortlisted apps to the blob shortlist
-      const auto appManifestPath{blobs_root_ / "sha256" / uri.digest.hash()};
-      if (boost::filesystem::exists(appManifestPath)) {
-        // The composeapp utility stores all nodes of an image merkle tree, specifically
-        // app manifest, app bundle, and app layers meta blob
-        // Skopeo, and aklite does not store them. Therefore is the app amnifest is found in the store,
-        // then we need to make sure that the related blobs are not removed.
+      if (boost::filesystem::exists(entry.path() / Manifest::Filename)) {
+        // add app manifest to the blob shortlist
         blob_shortlist.emplace(uri.digest.hash());
-        const Manifest manifest{Utils::parseJSONFile(appManifestPath)};
-        blob_shortlist.emplace(HashedDigest(manifest.archiveDigest()).hash());
-        blob_shortlist.emplace(manifest.layersMetaDescr().digest.hash());
+        // add blobs of the shortlisted app's manifest to the blob shortlist
+        try {
+          const Manifest app_manifest{Utils::parseJSONFile(entry.path() / Manifest::Filename)};
+          for (const auto& element : std::vector<std::string>{"manifests", "layers"}) {
+            if (!app_manifest.isNull() && app_manifest.isMember(element) && app_manifest[element].isArray()) {
+              for (const auto& b : app_manifest[element]) {
+                if (!b.isNull() && b.isMember("digest")) {
+                  blob_shortlist.emplace(HashedDigest{b["digest"].asString()}.hash());
+                }
+              }
+            }
+          }
+        } catch (const std::exception& exc) {
+          LOG_WARNING << "Found invalid app manifest in the store, its blobs will be pruned; app: " << app.name
+                      << "err: " << exc.what();
+        }
       }
 
+      // add blobs of each image of the shortlisted app to the blob shortlist
       ComposeInfo compose{(entry.path() / ComposeFile).string()};
       for (const auto& service : compose.getServices()) {
         const auto image = compose.getImage(service);
         const Uri image_uri{Uri::parseUri(image, false)};
+        // add image manifest to the blob shortlist
+        blob_shortlist.emplace(image_uri.digest.hash());
         const auto image_root{app_dir / app_version_dir / "images" / image_uri.registryHostname / image_uri.repo /
                               image_uri.digest.hash()};
 
