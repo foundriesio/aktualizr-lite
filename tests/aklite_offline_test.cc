@@ -198,7 +198,8 @@ class AkliteOffline : public ::testing::Test {
 
   std::shared_ptr<testing::NiceMock<LiteClientMock>> createLiteClient() {
     if (cfg_.pacman.type != RootfsTreeManager::Name) {
-      return std::make_shared<testing::NiceMock<LiteClientMock>>(cfg_, createAppEngine());
+      app_engine_ = createAppEngine();
+      return std::make_shared<testing::NiceMock<LiteClientMock>>(cfg_, app_engine_);
     } else {
       return std::make_shared<testing::NiceMock<LiteClientMock>>(cfg_);
     }
@@ -255,7 +256,8 @@ class AkliteOffline : public ::testing::Test {
   }
 
   TufTarget addTarget(TufRepoMock& repo, const std::vector<AppEngine::App>& apps, bool just_apps = false,
-                      bool add_bootloader_update = false, const std::string& ci_app_shortlist = "") {
+                      bool add_bootloader_update = false, const std::string* ci_app_shortlist = nullptr,
+                      const std::string& ci_app_uri = "http://apps.tar") {
     const auto& latest_target{repo.getLatest()};
     std::string version;
     try {
@@ -282,15 +284,16 @@ class AkliteOffline : public ::testing::Test {
     }
     // add new target to TUF repo
     const std::string name = hw_id_ + "-" + os + "-" + version;
-    auto target{
-        Target::toTufTarget(repo.addTarget(name, hash, hw_id_, version, apps_json, Json::Value(), ci_app_shortlist))};
+    auto target{Target::toTufTarget(
+        repo.addTarget(name, hash, hw_id_, version, apps_json, Json::Value(), ci_app_shortlist, ci_app_uri))};
     repo.updateBundleMeta(target.Name());
     return target;
   }
 
   TufTarget addTarget(const std::vector<AppEngine::App>& apps, bool just_apps = false,
-                      bool add_bootloader_update = false, const std::string& ci_app_shortlist = "") {
-    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update, ci_app_shortlist);
+                      bool add_bootloader_update = false, const std::string* ci_app_shortlist = nullptr,
+                      const std::string& ci_app_uri = "http://apps.tar") {
+    return addTarget(tuf_repo_, apps, just_apps, add_bootloader_update, ci_app_shortlist, ci_app_uri);
   }
 
   void preloadApps(const std::vector<AppEngine::App>& apps, const std::vector<std::string>& apps_not_to_preload,
@@ -410,6 +413,7 @@ class AkliteOffline : public ::testing::Test {
   Docker::DockerClient::Ptr docker_client_;
   LocalUpdateSource local_update_source_;
   std::string hw_id_{hw_id};
+  AppEngine::Ptr app_engine_;
 };
 
 const std::string AkliteOffline::hw_id{"raspberrypi4-64"};
@@ -584,12 +588,14 @@ TEST_F(AkliteOffline, OfflineClientShortlistedApps) {
   ASSERT_TRUE(areAppsInSync());
 }
 
-TEST_F(AkliteOffline, OfflineClientShortlistedAppsInCI) {
-  const auto app02{createApp("app-02")};
+TEST_F(AkliteOffline, OfflineClientShortlistedAppsInCIEmptyShortlist) {
   const auto app03{createApp("zz00-app-03")};
-  const auto target{addTarget({createApp("app-01"), app02, app03}, false, false, "app-01")};
-
-  boost::filesystem::remove_all(app_store_.appsDir() / app02.name);
+  const std::string fetched_apps_shortlist{""};
+  const auto target{
+      addTarget({createApp("app-01"), createApp("app-02"), app03}, false, false, &fetched_apps_shortlist)};
+  // remove zz00-app-03 (app03) from the file system to make sure that offline update succeeds
+  // if one of the targets apps is missing in the provided update content and the corresponding app shortlist
+  // is set in the client config.
   boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
   setAppsShortlist("app-01, app-02");
 
@@ -601,6 +607,70 @@ TEST_F(AkliteOffline, OfflineClientShortlistedAppsInCI) {
   ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
   ASSERT_EQ(target.Name(), getCurrent().Name());
   ASSERT_TRUE(areAppsInSync());
+  // Make sure only "app-01" and "app-02" were installed was installed and running
+  const auto running_apps{app_engine_->getRunningAppsInfo()};
+  for (const auto& app : {"app-01", "app-02"}) {
+    ASSERT_TRUE(running_apps.isMember(app));
+  }
+  ASSERT_FALSE(running_apps.isMember(app03.name));
+}
+
+TEST_F(AkliteOffline, OfflineClientShortlistedAppsInCI) {
+  const auto app02{createApp("app-02")};
+  const auto app03{createApp("zz00-app-03")};
+  const std::string fetched_apps_shortlist{"app-01,app-02"};
+  const auto target{addTarget({createApp("app-01"), app02, app03}, false, false, &fetched_apps_shortlist)};
+
+  boost::filesystem::remove_all(app_store_.appsDir() / app03.name);
+
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target.Name(), available_targets.back().Name());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target.Name(), getCurrent().Name());
+  ASSERT_TRUE(areAppsInSync());
+  // Make sure only "app-01" was installed and running
+  const auto running_apps{app_engine_->getRunningAppsInfo()};
+  ASSERT_TRUE(running_apps.isMember("app-01"));
+  ASSERT_TRUE(running_apps.isMember("app-02"));
+  ASSERT_TRUE(running_apps.size() == 2);
+}
+
+TEST_F(AkliteOffline, OfflineClientShortlistedAppsInCIEmptyIntersection) {
+  const auto app02{createApp("app-02")};
+  const auto app03{createApp("zz00-app-03")};
+  const std::string fetched_apps_shortlist{"foobar"};
+  const auto target{addTarget({createApp("app-01"), app02, app03}, false, false, &fetched_apps_shortlist)};
+
+  boost::filesystem::remove_all(app_store_.appsDir());
+  setAppsShortlist("app-01, app-02");
+
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target.Name(), available_targets.back().Name());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target.Name(), getCurrent().Name());
+  // Make sure none of apps is installed and running
+  ASSERT_TRUE(app_engine_->getRunningAppsInfo().empty());
+}
+
+TEST_F(AkliteOffline, OfflineClientShortlistedAppsInCIFetchedAppsAreOff) {
+  const std::string fetched_apps_shortlist{""};
+  const auto target{addTarget({createApp("app-01"), createApp("app-02")}, false, false, &fetched_apps_shortlist, "")};
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target.Name(), available_targets.back().Name());
+  ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
+  ASSERT_EQ(target.Name(), getCurrent().Name());
+  // Make sure none of apps is installed and running
+  ASSERT_TRUE(app_engine_->getRunningAppsInfo().empty());
 }
 
 TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
