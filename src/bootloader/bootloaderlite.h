@@ -35,6 +35,7 @@ class BootFwUpdateStatus {
 class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
  public:
   static constexpr const char* const VersionFile{"/usr/lib/firmware/version.txt"};
+  static constexpr const char* const OstreeTargetPathVar{"FIO_OSTREE_TARGET_SYSROOT"};
 
   explicit BootloaderLite(BootloaderConfig config, INvStorage& storage, OSTree::Sysroot::Ptr sysroot);
 
@@ -42,6 +43,8 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
 
   static std::string getVersion(const std::string& deployment_dir, const std::string& hash,
                                 const std::string& ver_file = VersionFile);
+  static std::string getTargetDir(const std::string& deployment_dir,
+                                  const std::string& target_hash);
 
   void installNotify(const Uptane::Target& target) const override;
 
@@ -61,6 +64,7 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
   OSTree::Sysroot::Ptr sysroot_;
   const std::string get_env_cmd_;
   const std::string set_env_cmd_;
+  mutable std::string env_cmd_vars_;
 };
 
 }  // namespace bootloader
