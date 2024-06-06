@@ -105,7 +105,7 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
-static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
+int daemon_main_(LiteClient& client, uint64_t interval, bool return_on_sleep) {
   if (client.config.uptane.repo_server.empty()) {
     LOG_ERROR << "[uptane]/repo_server is not configured";
     return EXIT_FAILURE;
@@ -120,10 +120,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   akclient.CompleteInstallation();
 
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
-  uint64_t interval = client.config.uptane.polling_sec;
-  if (variables_map.count("interval") > 0) {
-    interval = variables_map["interval"].as<uint64_t>();
-  }
 
   while (true) {
     auto current = akclient.GetCurrent();
@@ -146,10 +142,25 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       }
     }
 
+    if (return_on_sleep) {
+      break;
+    }
+
     std::this_thread::sleep_for(std::chrono::seconds(interval));
   }  // while true
 
   return EXIT_SUCCESS;
+}
+
+static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
+  uint64_t interval = client.config.uptane.polling_sec;
+  if (variables_map.count("interval") > 0) {
+    interval = variables_map["interval"].as<uint64_t>();
+  }
+
+  bool return_on_sleep = std::getenv("AKLITE_TEST_RETURN_ON_SLEEP") != nullptr;
+
+  return daemon_main_(client, interval, return_on_sleep);
 }
 
 static int cli_install(LiteClient& client, const bpo::variables_map& params) {
