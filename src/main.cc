@@ -25,42 +25,6 @@
 
 namespace bpo = boost::program_options;
 
-static const char* const AkliteSystemLock{"/var/lock/aklite.lock"};
-
-class FileLock {
- public:
-  explicit FileLock(const char* path = AkliteSystemLock) : path_{path} {
-    fd_ = open(AkliteSystemLock, O_CREAT | O_RDONLY, 0444);
-    if (fd_ == -1) {
-      throw std::system_error(errno, std::system_category(), "An error occurred opening the aklite lock");
-    }
-
-    if (flock(fd_, LOCK_NB | LOCK_EX) == -1) {
-      if (errno == EWOULDBLOCK) {
-        throw std::runtime_error("Failed to obtain the aklite lock, another instance is running!");
-      }
-      throw std::system_error(errno, std::system_category(), "An error occurred obtaining the aklite lock");
-    }
-  }
-
-  ~FileLock() {
-    try {
-      flock(fd_, LOCK_NB | LOCK_UN);
-      boost::filesystem::remove(path_);
-    } catch (const std::exception& exc) {
-      LOG_WARNING << "Failed to unlock, " << path_ << ", error: " << exc.what();
-    }
-  }
-  FileLock(const FileLock&) = delete;
-  FileLock(const FileLock&&) = delete;
-  FileLock& operator=(const FileLock&) = delete;
-  FileLock& operator=(const FileLock&&) = delete;
-
- private:
-  const char* const path_{nullptr};
-  int fd_;
-};
-
 static int status_finalize(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
   return client.finalizeInstall() ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -142,7 +106,6 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
-  FileLock lock;
   if (client.config.uptane.repo_server.empty()) {
     LOG_ERROR << "[uptane]/repo_server is not configured";
     return EXIT_FAILURE;
@@ -153,8 +116,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  // Setting apply_lock parameter to false, since we already took the FileLock above
-  AkliteClientExt akclient{client_ptr, false, false};
+  AkliteClientExt akclient{client_ptr, false, true};
   akclient.CompleteInstallation();
 
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
@@ -192,7 +154,6 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
 static int cli_install(LiteClient& client, const bpo::variables_map& params) {
   // Make sure no other update instances are running, i.e. neither the daemon or other CLI update/finalize
-  FileLock lock;
   std::string target_name;
   int version = -1;
   if (params.count("update-name") > 0) {
@@ -211,8 +172,7 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  // Setting apply_lock parameter to false, since we already took the FileLock above
-  AkliteClientExt akclient{client_ptr, false, false};
+  AkliteClientExt akclient{client_ptr, false, true};
 
   const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
   InstallMode mode{InstallMode::All};
@@ -228,11 +188,10 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
   // Make sure no other update instances are running, i.e. neither the daemon or other CLI update/finalize
-  FileLock lock;
   (void)params;
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   // Setting apply_lock parameter to false, since we already took the FileLock above
-  AkliteClient akclient{client_ptr, false, false};
+  AkliteClient akclient{client_ptr, false, true};
 
   return static_cast<int>(aklite::cli::CompleteInstall(akclient));
 }
