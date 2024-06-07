@@ -15,10 +15,12 @@ namespace bootloader {
 static const std::unordered_map<RollbackMode, std::string> setCmds{
     {RollbackMode::kUbootMasked, "fw_setenv"},
     {RollbackMode::kFioVB, "fiovb_setenv"},
+    {RollbackMode::kFioEFI, "fioefi_setenv"},
 };
 static const std::unordered_map<RollbackMode, std::string> getCmds{
     {RollbackMode::kUbootMasked, "fw_printenv -n"},
     {RollbackMode::kFioVB, "fiovb_printenv"},
+    {RollbackMode::kFioEFI, "fioefi_printenv"},
 };
 static const std::string noneCmd;
 
