@@ -16,10 +16,13 @@ all: config build
 config:
 	cmake -S . -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DBUILD_P11=ON -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations" -DPKCS11_ENGINE_PATH=${PKCS11_ENGINE_PATH} ${EXTRA_CMAKE_CONFIG_ARGS}
 
+config-coverage:
+	cmake -S . -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DBUILD_P11=ON -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations" -DPKCS11_ENGINE_PATH=${PKCS11_ENGINE_PATH} ${EXTRA_CMAKE_CONFIG_ARGS} -DTEST_LABEL=${TEST_LABEL} -DBUILD_WITH_CODE_COVERAGE_AKLITE=ON
+
 build:
 	cmake --build ${BUILD_DIR} --target ${TARGET}
 
-format:
+format test-coverage-html:
 	cmake --build ${BUILD_DIR} --target $@
 
 tidy:

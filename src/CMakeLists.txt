@@ -84,6 +84,20 @@ set(INCS
 
 target_include_directories(${TARGET_EXE} PRIVATE ${INCS})
 target_include_directories(${TARGET_LIB} PRIVATE ${AKLITE_DIR}/include ${INCS})
+if(BUILD_WITH_CODE_COVERAGE_AKLITE)
+  target_link_options(
+    ${TARGET_LIB}
+    PRIVATE "-fprofile-arcs"
+    PRIVATE "-ftest-coverage"
+  )
+  target_compile_options(
+    ${TARGET_LIB}
+    PRIVATE "--coverage"
+    PRIVATE "-fprofile-arcs"
+    PRIVATE "-ftest-coverage"
+  )
+  target_link_libraries(${TARGET_LIB} gcov)
+endif()
 
 target_link_libraries(${TARGET_LIB} aktualizr_lib)
 target_link_libraries(${TARGET_EXE} ${TARGET_LIB})
