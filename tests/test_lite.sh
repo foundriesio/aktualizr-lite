@@ -190,3 +190,14 @@ if [ -f ${sota_dir}/${callback}.log ] ; then
     echo "ERROR: Callback not performed for $callback"
     exit 1
 fi
+
+cat >>$sota_dir/sota.toml <<EOF
+[bootloader]
+reboot_command = "/bin/true"
+EOF
+
+AKLITE_TEST_RETURN_ON_SLEEP=1 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml daemon | grep "Device is up-to-date"
+
+promoted_version=1004
+add_target $promoted_version promoted2-$name "" promoted
+AKLITE_TEST_RETURN_ON_SLEEP=1 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml daemon | grep "Going to install"
