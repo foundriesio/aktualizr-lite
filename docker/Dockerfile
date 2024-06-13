@@ -83,7 +83,8 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   zip \
   docker-compose \
   sudo \
-  shellcheck
+  shellcheck \
+  gcovr
 
 RUN ln -s clang-11 /usr/bin/clang && \
     ln -s clang++-11 /usr/bin/clang++

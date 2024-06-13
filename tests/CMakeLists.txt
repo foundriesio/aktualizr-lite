@@ -34,6 +34,25 @@ set(TEST_LIBS
   gmock
 )
 
+# Setup coverage
+if(BUILD_WITH_CODE_COVERAGE_AKLITE)
+  include(CodeCoverage)
+  add_definitions(${COVERAGE_COMPILER_FLAGS})
+
+  set(COVERAGE_GCOVR_EXCLUDES
+    '${CMAKE_SOURCE_DIR}/aktualizr/'
+    '${CMAKE_SOURCE_DIR}/tests/'
+    '${CMAKE_BINARY_DIR}'
+  )
+  SET(GCOVR_ADDITIONAL_ARGS --exclude-unreachable-branches --print-summary)
+  include(ProcessorCount)
+  ProcessorCount(PROC_COUNT)
+  setup_target_for_coverage_gcovr_html(
+    NAME test-coverage-html
+    EXECUTABLE ${CMAKE_CTEST_COMMAND} ${CTEST_EXTRA_ARGS} -j ${PROC_COUNT} -L ${TEST_LABEL} USES_TERMINAL
+  )
+endif(BUILD_WITH_CODE_COVERAGE_AKLITE)
+
 add_aktualizr_test(NAME yaml2json
   SOURCES yaml2json_test.cc
   PROJECT_WORKING_DIRECTORY
