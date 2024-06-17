@@ -187,6 +187,7 @@ class Handler(SimpleHTTPRequestHandler):
                     cur_events.append(e)
                     event_ids.add(e["id"])
             json.dump(cur_events, f)
+            os.fsync(f)
 
     def _reset_events(self):
         if os.path.exists(self.server.events_file):

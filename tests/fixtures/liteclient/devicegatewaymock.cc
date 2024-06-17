@@ -50,8 +50,15 @@ class DeviceGatewayMock {
   std::string getTlsUri() const { return url_; }
   const std::string& getPort() const { return port_; }
   Json::Value getReqHeaders() const { return Utils::parseJSONFile(req_headers_file_); }
-  Json::Value getEvents() const { return Utils::parseJSONFile(events_file_); }
+  Json::Value getEvents() const {
+    // Allow some time for the ReportQueue to be flushed and the events to arrive at the Device Gateway mock.
+    // The flush operation is forced in the LiteClient destructor, but we inspect the sent events while keeping an
+    // LiteClient instance active.
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    return Utils::parseJSONFile(events_file_);
+  }
   bool resetEvents(std::shared_ptr<HttpClient> http_client) const {
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     const HttpResponse r = http_client->post(url_ + "/events/reset", Json::nullValue);
     return r.isOk();
   }
