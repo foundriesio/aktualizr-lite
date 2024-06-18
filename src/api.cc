@@ -147,6 +147,7 @@ void AkliteClient::Init(Config& config, bool finalize, bool apply_lock) {
     config.telemetry.report_network = !config.tls.server.empty();
     config.telemetry.report_config = !config.tls.server.empty();
   }
+  is_booted_env = config.pacman.booted == BootedType::kBooted;
   if (client_ == nullptr) {
     client_ = std::make_unique<LiteClient>(config, nullptr);
   }

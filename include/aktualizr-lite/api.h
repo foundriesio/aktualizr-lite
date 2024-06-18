@@ -358,6 +358,7 @@ class AkliteClient {
 
  protected:
   bool usingUpdateClientApi{false};
+  bool is_booted_env{true};
   std::shared_ptr<LiteClient> client_;
 
  private:

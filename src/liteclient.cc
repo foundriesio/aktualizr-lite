@@ -718,7 +718,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target, Inst
   auto iresult = installPackage(target, install_mode);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
-    is_reboot_required_ = (config.pacman.booted == BootedType::kBooted);
+    is_reboot_required_ = true;
     if (target.sha256Hash() == sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending)) {
       // Don't mark Target as pending if its ostree deployment is not really pending.
       // It happens if rootfs/ostreemanager::install() detects the boot firmware update during installation

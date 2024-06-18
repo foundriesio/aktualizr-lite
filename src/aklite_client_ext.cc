@@ -236,7 +236,9 @@ bool AkliteClientExt::RebootIfRequired() {
   auto is_reboot_required = client_->isRebootRequired();
 
   if (is_reboot_required.first) {
-    if (is_reboot_required.second.empty()) {
+    if (!is_booted_env) {
+      LOG_WARNING << "Skipping reboot operation because this is not a booted environment";
+    } else if (is_reboot_required.second.empty()) {
       LOG_WARNING << "Skipping reboot operation since reboot command is not set";
     } else {
       LOG_INFO << "Device is going to reboot (" << is_reboot_required.second << ")";
