@@ -29,6 +29,7 @@ class GetTargetToInstallResult {
     // Additional values, specific for GetTargetToInstallResult
     TufTargetNotFound = 100,
     TargetAlreadyInstalled,
+    RollbackTargetNotFound,
   };
 
   explicit GetTargetToInstallResult(const CheckInResult &check_in_result)

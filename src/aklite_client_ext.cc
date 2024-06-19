@@ -63,8 +63,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const LocalUpdateSo
 
       LOG_ERROR << err;
       client_->notifyTufUpdateFinished(err);
-      // TODO: Specify proper error status
-      return {GetTargetToInstallResult::Status::Failed, TufTarget(), err};
+      return {GetTargetToInstallResult::Status::RollbackTargetNotFound, TufTarget(), err};
     }
     candidate_target = rollback_target;
     rollback_operation = true;

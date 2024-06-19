@@ -24,6 +24,7 @@ enum class StatusCode {
   CheckinMetadataNotFound = 14,
   CheckinInvalidBundleMetadata = 15,
   TufTargetNotFound = 20,
+  RollbackTargetNotFound = 21,
   InstallationInProgress = 30,
   NoPendingInstallation = 40,
   DownloadFailure = 50,

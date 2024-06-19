@@ -44,6 +44,7 @@ static const std::unordered_map<GetTargetToInstallResult::Status, StatusCode> t2
     {GetTargetToInstallResult::Status::BundleMetadataError, StatusCode::CheckinInvalidBundleMetadata},
     {GetTargetToInstallResult::Status::TufTargetNotFound, StatusCode::TufTargetNotFound},
     {GetTargetToInstallResult::Status::TargetAlreadyInstalled, StatusCode::InstallAlreadyInstalled},
+    {GetTargetToInstallResult::Status::RollbackTargetNotFound, StatusCode::RollbackTargetNotFound},
 };
 
 static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {
