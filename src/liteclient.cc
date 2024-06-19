@@ -766,7 +766,7 @@ bool LiteClient::appsInSync(const Uptane::Target& target) const {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
       return false;
     }
-    LOG_INFO << "Checking Active Target status...";
+    LOG_INFO << "Checking status of Active Target (" << target.filename() << ")";
     auto no_any_app_to_update = compose_pacman->checkForAppsToUpdate(target);
     if (no_any_app_to_update) {
       compose_pacman->handleRemovedApps(getCurrent());
