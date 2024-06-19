@@ -290,7 +290,8 @@ CheckInResult AkliteClient::CheckIn() const {
     client_->notifyTufUpdateFinished(err_msg);
     return CheckInResult{CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
   }
-  LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
+  LOG_INFO << "Latest targets metadata contains " << matchingTargets.size() << " entries for tag=\""
+           << boost::algorithm::join(client_->tags, ",") << "\" and hardware id=\"" << hw_id_ << "\"";
   if (!usingUpdateClientApi) {
     client_->notifyTufUpdateFinished();
   }
