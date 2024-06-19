@@ -37,8 +37,8 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
     case RollbackMode::kUbootGeneric:
       break;
     case RollbackMode::kFioEFI:
-          env_cmd_vars_ = boost::str(boost::format("%s=%s") % OstreeTargetPathVar %
-                                     getTargetDir(sysroot_->deployment_path(), target.sha256Hash()));
+      env_cmd_vars_ = boost::str(boost::format("%s=%s") % OstreeTargetPathVar %
+                                 getTargetDir(sysroot_->deployment_path(), target.sha256Hash()));
     case RollbackMode::kUbootMasked:
     case RollbackMode::kFioVB: {
       const auto target_version_val{getDeploymentVersion(target.sha256Hash())};
@@ -101,8 +101,7 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
     std::string target_dir = getTargetDir(deployment_dir, hash);
 
     if (target_dir.empty()) {
-      LOG_WARNING << "Target's system root directory is not found for hash: " << hash <<
-                   " in: " << deployment_dir;
+      LOG_WARNING << "Target's system root directory is not found for hash: " << hash << " in: " << deployment_dir;
       return std::string();
     }
 
@@ -122,8 +121,7 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
   }
 }
 
-std::string BootloaderLite::getTargetDir(const std::string& deployment_dir,
-                                         const std::string& target_hash) {
+std::string BootloaderLite::getTargetDir(const std::string& deployment_dir, const std::string& target_hash) {
   for (auto& p : boost::filesystem::directory_iterator(deployment_dir)) {
     std::string dir = p.path().string();
     if (!boost::filesystem::is_directory(dir)) {
