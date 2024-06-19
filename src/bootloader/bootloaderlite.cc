@@ -15,10 +15,12 @@ namespace bootloader {
 static const std::unordered_map<RollbackMode, std::string> setCmds{
     {RollbackMode::kUbootMasked, "fw_setenv"},
     {RollbackMode::kFioVB, "fiovb_setenv"},
+    {RollbackMode::kFioEFI, "fioefi_setenv"},
 };
 static const std::unordered_map<RollbackMode, std::string> getCmds{
     {RollbackMode::kUbootMasked, "fw_printenv -n"},
     {RollbackMode::kFioVB, "fiovb_printenv"},
+    {RollbackMode::kFioEFI, "fioefi_printenv"},
 };
 static const std::string noneCmd;
 
@@ -34,6 +36,9 @@ void BootloaderLite::installNotify(const Uptane::Target& target) const {
     case RollbackMode::kBootloaderNone:
     case RollbackMode::kUbootGeneric:
       break;
+    case RollbackMode::kFioEFI:
+          env_cmd_vars_ = boost::str(boost::format("%s=%s") % OstreeTargetPathVar %
+                                     getTargetDir(sysroot_->deployment_path(), target.sha256Hash()));
     case RollbackMode::kUbootMasked:
     case RollbackMode::kFioVB: {
       const auto target_version_val{getDeploymentVersion(target.sha256Hash())};
@@ -93,23 +98,17 @@ BootloaderLite::VersionStrRes BootloaderLite::getDeploymentVersion(const std::st
 std::string BootloaderLite::getVersion(const std::string& deployment_dir, const std::string& hash,
                                        const std::string& ver_file) {
   try {
-    std::string file;
-    for (auto& p : boost::filesystem::directory_iterator(deployment_dir)) {
-      std::string dir = p.path().string();
-      if (!boost::filesystem::is_directory(dir)) {
-        continue;
-      }
-      if (boost::algorithm::contains(dir, hash)) {
-        file = dir + ver_file;
-        break;
-      }
-    }
-    if (file.empty()) {
-      LOG_WARNING << "Target deployment hash was not found";
+    std::string target_dir = getTargetDir(deployment_dir, hash);
+
+    if (target_dir.empty()) {
+      LOG_WARNING << "Target's system root directory is not found for hash: " << hash <<
+                   " in: " << deployment_dir;
       return std::string();
     }
+
+    std::string file = target_dir + ver_file;
     if (!boost::filesystem::exists(file)) {
-      LOG_DEBUG << "Target's bootloader version file is not found, expected: " << file;
+      LOG_WARNING << "Target's bootloader version file is not found, expected: " << file;
       return std::string();
     }
 
@@ -121,6 +120,21 @@ std::string BootloaderLite::getVersion(const std::string& deployment_dir, const 
     LOG_ERROR << "Failed to get Target firmware version:  " << exc.what();
     return "";
   }
+}
+
+std::string BootloaderLite::getTargetDir(const std::string& deployment_dir,
+                                         const std::string& target_hash) {
+  for (auto& p : boost::filesystem::directory_iterator(deployment_dir)) {
+    std::string dir = p.path().string();
+    if (!boost::filesystem::is_directory(dir)) {
+      continue;
+    }
+    if (boost::algorithm::contains(dir, target_hash)) {
+      return dir;
+    }
+  }
+
+  return "";
 }
 
 bool BootloaderLite::isUpdateInProgress() const {
@@ -166,7 +180,7 @@ std::tuple<std::string, bool> BootloaderLite::setEnvVar(const std::string& var_n
         config_.rollback_mode};
     return {er_msg.str(), false};
   }
-  const auto cmd{boost::format{"%s %s %s"} % set_env_cmd_ % var_name % var_val};
+  const auto cmd{boost::format{"%s %s %s %s"} % env_cmd_vars_ % set_env_cmd_ % var_name % var_val};
   std::string output;
   if (Utils::shell(cmd.str(), &output) != 0) {
     const auto er_msg{boost::format("Failed to set a bootloader environment variable; cmd: %s, err: %s") % cmd %
@@ -183,7 +197,7 @@ std::tuple<std::string, bool> BootloaderLite::getEnvVar(const std::string& var_n
         config_.rollback_mode};
     return {er_msg.str(), false};
   }
-  const auto cmd{boost::format{"%s %s"} % get_env_cmd_ % var_name};
+  const auto cmd{boost::format{"%s %s %s"} % env_cmd_vars_ % get_env_cmd_ % var_name};
   std::string output;
   if (Utils::shell(cmd.str(), &output) != 0) {
     const auto er_msg{boost::format("Failed to get a bootloader environment variable; cmd: %s, err: %s") % cmd %
