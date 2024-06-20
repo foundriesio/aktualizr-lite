@@ -58,8 +58,7 @@ class BootloaderLite : public Bootloader, public BootFwUpdateStatus {
 
   static VersionNumbRes verStrToNumber(const std::string& ver_str);
   static std::string extractVersionValue(const std::string& version_line);
-  static std::string getTargetDir(const std::string& deployment_dir,
-                                  const std::string& target_hash);
+  static std::string getTargetDir(const std::string& deployment_dir, const std::string& target_hash);
 
   OSTree::Sysroot::Ptr sysroot_;
   const std::string get_env_cmd_;
