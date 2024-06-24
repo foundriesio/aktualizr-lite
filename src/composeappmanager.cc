@@ -246,13 +246,13 @@ bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
   return cur_apps_to_fetch_and_update_.empty() && cur_apps_to_fetch_.empty();
 }
 
-DownloadResultWithStat ComposeAppManager::Download(const TufTarget& target) {
+DownloadResult ComposeAppManager::Download(const TufTarget& target) {
   auto ostree_download_res{RootfsTreeManager::Download(target)};
   if (!ostree_download_res) {
     return ostree_download_res;
   }
 
-  DownloadResultWithStat res{ostree_download_res};
+  DownloadResult res{ostree_download_res};
   const Uptane::Target uptane_target{Target::fromTufTarget(target)};
 
   if (cfg_.force_update) {

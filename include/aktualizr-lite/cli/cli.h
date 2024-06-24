@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "aktualizr-lite/aklite_client_ext.h"
 #include "aktualizr-lite/api.h"
 
 namespace aklite::cli {
@@ -23,6 +24,7 @@ enum class StatusCode {
   CheckinMetadataNotFound = 14,
   CheckinInvalidBundleMetadata = 15,
   TufTargetNotFound = 20,
+  RollbackTargetNotFound = 21,
   InstallationInProgress = 30,
   NoPendingInstallation = 40,
   DownloadFailure = 50,
@@ -55,10 +57,10 @@ enum class PullMode {
 
 StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source);
 
-StatusCode Pull(AkliteClient &client, int version = -1, const std::string &target_name = "",
+StatusCode Pull(AkliteClientExt &client, int version = -1, const std::string &target_name = "",
                 bool force_downgrade = true, const LocalUpdateSource *local_update_source = nullptr);
 
-StatusCode Install(AkliteClient &client, int version = -1, const std::string &target_name = "",
+StatusCode Install(AkliteClientExt &client, int version = -1, const std::string &target_name = "",
                    InstallMode install_mode = InstallMode::All, bool force_downgrade = true,
                    const LocalUpdateSource *local_update_source = nullptr, PullMode pull_mode = PullMode::All);
 

@@ -19,13 +19,14 @@ set(SRC helpers.cc
         appengine.cc
         cli/cli.cc
         api.cc
+        aklite_client_ext.cc
         tuf/akhttpsreposource.cc
         tuf/localreposource.cc
         tuf/akrepo.cc
         aklitereportqueue.cc)
 
 set(HEADERS helpers.h
-        storage/stat.h
+        ../include/aktualizr-lite/storage/stat.h
         composeappmanager.h
         rootfstreemanager.h
         docker/restorableappengine.h
@@ -48,6 +49,7 @@ set(HEADERS helpers.h
         tuf/localreposource.h
         tuf/akrepo.h
         ../include/aktualizr-lite/api.h
+        ../include/aktualizr-lite/aklite_client_ext.h
         ../include/aktualizr-lite/tuf/tuf.h
         aklitereportqueue.h)
 

@@ -1,13 +1,13 @@
 #ifndef AKTUALIZR_LITE_ROOTFS_TREE_MANAGER_H_
 #define AKTUALIZR_LITE_ROOTFS_TREE_MANAGER_H_
 
+#include "aktualizr-lite/storage/stat.h"
 #include "bootloader/bootloaderlite.h"
 #include "downloader.h"
 #include "http/httpinterface.h"
 #include "installer.h"
 #include "ostree/sysroot.h"
 #include "package_manager/ostreemanager.h"
-#include "storage/stat.h"
 
 class RootfsTreeManager : public OstreeManager, public Downloader, public Installer {
  public:
@@ -35,7 +35,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader, public Instal
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
                     std::shared_ptr<OSTree::Sysroot> sysroot, const KeyManager& keys);
 
-  DownloadResultWithStat Download(const TufTarget& target) override;
+  DownloadResult Download(const TufTarget& target) override;
   data::InstallationResult Install(const TufTarget& target, InstallMode mode) override;
 
   bool fetchTarget(const Uptane::Target& target, Uptane::Fetcher& fetcher, const KeyManager& keys,

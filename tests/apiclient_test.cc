@@ -11,6 +11,7 @@
 #include "uptane_generator/image_repo.h"
 #include "utilities/utils.h"
 
+#include "aktualizr-lite/aklite_client_ext.h"
 #include "aktualizr-lite/api.h"
 #include "composeappmanager.h"
 #include "liteclient.h"
@@ -586,6 +587,127 @@ TEST_F(ApiClientTest, InstallTargetWithHackedApps) {
   ASSERT_EQ(latest.Name(), malicious_target.Name());
   auto installer = client.Installer(malicious_target, "", "", InstallMode::OstreeOnly);
   ASSERT_EQ(nullptr, installer);
+}
+
+// Tests using Extended Aklite Client methods:
+TEST_F(ApiClientTest, ExtApiRollback) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto new_target = createTarget();
+  update(*liteclient, getInitialTarget(), new_target);
+
+  AkliteClientExt client(liteclient);
+  auto result = client.GetTargetToInstall();
+  ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
+  ASSERT_FALSE(result.selected_target.IsUnknown());
+  ASSERT_FALSE(client.IsRollback(result.selected_target));
+
+  // deploy the initial version/commit to emulate rollback
+  getSysRepo().deploy(getInitialTarget().sha256Hash());
+
+  reboot(liteclient);
+  // reboot re-creates an instance of LiteClient so `client` refers to an invalid/removed instance of LiteClient now,
+  // hence we need to re-create an instance of AkliteClient
+  AkliteClientExt rebooted_client(liteclient);
+
+  ASSERT_TRUE(rebooted_client.IsRollback(result.selected_target));
+  ASSERT_EQ(rebooted_client.GetCurrent().Sha256Hash(), getInitialTarget().sha256Hash());
+
+  // Verify that GetTargetToInstall returns no target, because the latest one was already tried, and rolled back
+  result = client.GetTargetToInstall();
+  ASSERT_TRUE(result.selected_target.IsUnknown());
+  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+
+  ASSERT_EQ(result.reason.find(new_target.filename() + " is a failing Target"), std::string::npos) << result.reason;
+}
+
+TEST_F(ApiClientTest, ExtApiInstallationInProgress) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto target1 = createTarget();
+  update(*liteclient, getInitialTarget(), target1);
+  reboot(liteclient);
+
+  auto target2 = createTarget();
+  AkliteClientExt client(liteclient);
+  client.CompleteInstallation();
+  auto result = client.GetTargetToInstall();
+  ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
+  ASSERT_FALSE(result.selected_target.IsUnknown());
+  ASSERT_EQ(target2.filename(), result.selected_target.Name());
+  ASSERT_FALSE(client.IsRollback(result.selected_target));
+
+  liteclient->config.pacman.booted = BootedType::kBooted;
+  auto install_result = client.PullAndInstall(result.selected_target, result.reason);
+  ASSERT_EQ(install_result.status, InstallResult::Status::NeedsCompletion);
+  ASSERT_TRUE(client.RebootIfRequired());
+
+  install_result = client.PullAndInstall(result.selected_target, result.reason);
+  ASSERT_EQ(install_result.status, InstallResult::Status::InstallationInProgress);
+
+  reboot(liteclient);
+  // reboot re-creates an instance of LiteClient so `client` refers to an invalid/removed instance of LiteClient now,
+  // hence we need to re-create an instance of AkliteClient
+  AkliteClientExt rebooted_client(liteclient);
+  install_result = rebooted_client.CompleteInstallation();
+  ASSERT_EQ(install_result.status, InstallResult::Status::Ok);
+
+  auto current = rebooted_client.GetCurrent();
+  ASSERT_EQ(current.Sha256Hash(), target2.sha256Hash());
+  result = rebooted_client.GetTargetToInstall();
+  ASSERT_TRUE(result.selected_target.IsUnknown());
+  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+}
+
+TEST_F(ApiClientTest, ExtApiSeparatePullAndInstall) {
+  auto liteclient = createLiteClient();
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+
+  // Create a new Target: update rootfs and commit it into Treehub's repo
+  auto target1 = createTarget();
+  update(*liteclient, getInitialTarget(), target1);
+  reboot(liteclient);
+
+  auto target2 = createTarget();
+  AkliteClientExt client(liteclient);
+  client.CompleteInstallation();
+  auto result = client.GetTargetToInstall();
+  ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
+  ASSERT_FALSE(result.selected_target.IsUnknown());
+  ASSERT_EQ(target2.filename(), result.selected_target.Name());
+  ASSERT_FALSE(client.IsRollback(result.selected_target));
+
+  liteclient->config.pacman.booted = BootedType::kBooted;
+  // Install without download, should fail
+  auto install_result =
+      client.PullAndInstall(result.selected_target, result.reason, "", InstallMode::All, nullptr, false, true);
+  ASSERT_EQ(install_result.status, InstallResult::Status::DownloadFailed);
+
+  // Download only
+  install_result =
+      client.PullAndInstall(result.selected_target, result.reason, "", InstallMode::All, nullptr, true, false);
+  ASSERT_EQ(install_result.status, InstallResult::Status::Ok);
+
+  // Install only
+  install_result = client.PullAndInstall(result.selected_target, result.reason);
+  ASSERT_EQ(install_result.status, InstallResult::Status::NeedsCompletion);
+
+  reboot(liteclient);
+  // reboot re-creates an instance of LiteClient so `client` refers to an invalid/removed instance of LiteClient now,
+  // hence we need to re-create an instance of AkliteClient
+  AkliteClientExt rebooted_client(liteclient);
+  install_result = rebooted_client.CompleteInstallation();
+  ASSERT_EQ(install_result.status, InstallResult::Status::Ok);
+
+  auto current = rebooted_client.GetCurrent();
+  ASSERT_EQ(current.Sha256Hash(), target2.sha256Hash());
+  result = rebooted_client.GetTargetToInstall();
+  ASSERT_TRUE(result.selected_target.IsUnknown());
+  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
 }
 
 int main(int argc, char** argv) {

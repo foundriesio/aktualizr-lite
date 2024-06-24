@@ -587,10 +587,10 @@ bool LiteClient::checkImageMetaOffline() {
   return false;
 }
 
-DownloadResultWithStat LiteClient::downloadImage(const Uptane::Target& target, const api::FlowControlToken* token) {
+DownloadResult LiteClient::downloadImage(const Uptane::Target& target, const api::FlowControlToken* token) {
   key_manager_->loadKeys();
 
-  DownloadResultWithStat download_result{DownloadResult::Status::DownloadFailed, ""};
+  DownloadResult download_result{DownloadResult::Status::DownloadFailed, ""};
   {
     const int max_tries = 3;
     int tries = 0;
@@ -706,7 +706,7 @@ void LiteClient::reportAppsState() {
   }
 }
 
-DownloadResultWithStat LiteClient::download(const Uptane::Target& target, const std::string& reason) {
+DownloadResult LiteClient::download(const Uptane::Target& target, const std::string& reason) {
   notifyDownloadStarted(target, reason);
   auto download_result{downloadImage(target)};
   notifyDownloadFinished(target, download_result, download_result.description);
@@ -718,7 +718,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target, Inst
   auto iresult = installPackage(target, install_mode);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
-    is_reboot_required_ = (config.pacman.booted == BootedType::kBooted);
+    is_reboot_required_ = true;
     if (target.sha256Hash() == sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending)) {
       // Don't mark Target as pending if its ostree deployment is not really pending.
       // It happens if rootfs/ostreemanager::install() detects the boot firmware update during installation
@@ -766,7 +766,7 @@ bool LiteClient::appsInSync(const Uptane::Target& target) const {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
       return false;
     }
-    LOG_INFO << "Checking Active Target status...";
+    LOG_INFO << "Checking status of Active Target (" << target.filename() << ")";
     auto no_any_app_to_update = compose_pacman->checkForAppsToUpdate(target);
     if (no_any_app_to_update) {
       compose_pacman->handleRemovedApps(getCurrent());

@@ -9,6 +9,7 @@
 
 #include "aktualizr-lite/api.h"
 #include "aktualizr-lite/cli/cli.h"
+#include "aktualizr-lite/aklite_client_ext.h"
 #include "cli.h"
 
 #define LOG_INFO BOOST_LOG_TRIVIAL(info)
@@ -112,7 +113,7 @@ static void print_status(aklite::cli::StatusCode ret) {
   std::cout << std::endl;
 }
 
-static std::unique_ptr<AkliteClient> init_client(bool online_mode) {
+static std::unique_ptr<AkliteClientExt> init_client(bool online_mode) {
   boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
 
   std::vector<boost::filesystem::path> cfg_dirs;
@@ -132,7 +133,7 @@ static std::unique_ptr<AkliteClient> init_client(bool online_mode) {
   }
 
   try {
-    return std::make_unique<AkliteClient>(cfg_dirs, false, false);
+    return std::make_unique<AkliteClientExt>(cfg_dirs, false, false);
   } catch (const std::exception& exc) {
     LOG_ERROR << "Failed to initialize the client: " << exc.what();
     return nullptr;

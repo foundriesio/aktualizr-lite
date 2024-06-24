@@ -47,9 +47,9 @@ uptane_gen() {
 }
 
 add_target() {
-    custom_json="${dest_dir}/custom.json"
-    version=$1
-    name=$2
+    local custom_json="${dest_dir}/custom.json"
+    local version=$1
+    local name=$2
     if [ -n "$3" ] ; then
         sha=$3
     else
@@ -171,7 +171,7 @@ cat >$sota_dir/callback.sh <<EOF
 env >> ${sota_dir}/\$MESSAGE.log
 EOF
 chmod +x $sota_dir/callback.sh
-$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: $name"
+$valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml update | grep "To New Target: promoted-$name"
 for callback in download-pre download-post install-pre ; do
   if [ -f ${sota_dir}/${callback}.log ] ; then
     grep "INSTALL_TARGET_NAME=promoted-zlast" ${sota_dir}/${callback}.log
@@ -190,3 +190,14 @@ if [ -f ${sota_dir}/${callback}.log ] ; then
     echo "ERROR: Callback not performed for $callback"
     exit 1
 fi
+
+cat >>$sota_dir/sota.toml <<EOF
+[bootloader]
+reboot_command = "/bin/true"
+EOF
+
+AKLITE_TEST_RETURN_ON_SLEEP=1 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml daemon | grep "Device is up-to-date"
+
+promoted_version=1004
+add_target $promoted_version promoted2-$name "" promoted
+AKLITE_TEST_RETURN_ON_SLEEP=1 $valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml daemon | grep "Going to install"

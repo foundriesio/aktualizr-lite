@@ -9,10 +9,12 @@
 #include "test_utils.h"
 #include "uptane_generator/image_repo.h"
 
+#include "aktualizr-lite/aklite_client_ext.h"
+#include "aktualizr-lite/api.h"
+#include "aktualizr-lite/storage/stat.h"
 #include "composeappmanager.h"
 #include "liteclient.h"
 #include "ostree/repo.h"
-#include "storage/stat.h"
 
 #include "fixtures/aklitetest.cc"
 
@@ -560,6 +562,68 @@ TEST_P(AkliteNoSpaceTest, OstreeAndAppUpdateNotEnoughSpaceForApps) {
     ASSERT_TRUE(std::string::npos !=
                 event_err_msg.find("free: 151552B 37%, reserved: 81920B 20%(by `pacman:storage_watermark`)"))
         << event_err_msg;
+  }
+  UnsetFreeBlockNumb();
+}
+
+// Tests using Extended Aklite Client methods:
+TEST_F(NoSpaceTest, ExtApiOstreeUpdateNoSpaceBeforeUpdate) {
+  setMinFreeSpace("50");
+  auto liteclient = createLiteClient();
+
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+  auto new_target = createTarget();
+
+  {
+    // 50% reserved, 49% free -> 0% available
+    SetFreeBlockNumb(49, 100);
+    AkliteClientExt client(liteclient);
+    auto result = client.GetTargetToInstall();
+    ASSERT_FALSE(result.selected_target.IsUnknown());
+    ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+
+    auto install_result = client.PullAndInstall(result.selected_target, result.reason);
+    ASSERT_EQ(install_result.status, InstallResult::Status::DownloadFailed_NoSpace);
+    ASSERT_TRUE(std::string::npos != install_result.description.find("available: 0B 0%")) << install_result.description;
+  }
+}
+
+TEST_P(AkliteNoSpaceTest, ExtApiNotEnoughSpaceForApps) {
+  // App's containers are re-created before reboot
+  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  ASSERT_FALSE(app_engine->isRunning(app01));
+
+  std::vector<AppEngine::App> apps{app01};
+  auto new_target = createTarget(&apps);
+
+  {
+    // Not enough free space to pull an App bundle/archive since there is only 20% of free space
+    // and 20% is reserved, so 0% is available for the update
+    SetFreeBlockNumb(20, 100);
+
+    AkliteClientExt akclient(client);
+    auto result = akclient.GetTargetToInstall();
+    ASSERT_FALSE(result.selected_target.IsUnknown());
+    ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+
+    // First try: there is not enough space
+    auto install_result = akclient.PullAndInstall(result.selected_target, result.reason);
+    ASSERT_EQ(install_result.status, InstallResult::Status::DownloadFailed_NoSpace);
+    ASSERT_TRUE(std::string::npos != install_result.description.find(
+                                         "free: 81920B 20%, reserved: 81920B 20%(by `pacman:storage_watermark`)"))
+        << install_result.description;
+
+    // Verify that we are correctly re-using last (cached) attempt results since there is still
+    // not enough space available
+    install_result = akclient.PullAndInstall(result.selected_target, result.reason);
+    ASSERT_EQ(install_result.status, InstallResult::Status::DownloadFailed_NoSpace);
+    ASSERT_TRUE(std::string::npos != install_result.description.find(
+                                         "free: 81920B 20%, reserved: 81920B 20%(by `pacman:storage_watermark`)"))
+        << install_result.description;
+    ASSERT_TRUE(std::string::npos != install_result.description.find("(cached status)")) << install_result.description;
   }
   UnsetFreeBlockNumb();
 }

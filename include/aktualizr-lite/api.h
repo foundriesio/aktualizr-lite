@@ -12,6 +12,7 @@
 
 #include "json/json.h"
 
+#include "aktualizr-lite/storage/stat.h"
 #include "tuf/tuf.h"
 
 class Config;
@@ -46,6 +47,8 @@ class CheckInResult {
    */
   TufTarget GetLatest(std::string hwid = "") const;
 
+  TufTarget SelectTarget(int version = -1, const std::string &target_name = "", std::string hwid = "") const;
+
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const { return status == CheckInResult::Status::Ok || status == CheckInResult::Status::OkCached; }
 
@@ -66,8 +69,15 @@ class InstallResult {
     AppsNeedCompletion,
     BootFwNeedsCompletion,
     Failed,
-    DownloadFailed,
+    DownloadFailed,  // App pull failure
 
+    DownloadOstreeFailed = 100,
+    VerificationFailed,
+    DownloadFailed_NoSpace,
+    InstallationInProgress,
+    InstallRollbackFailed,
+    InstallRollbackOk,
+    UnknownError,
   };
   Status status;
   std::string description;
@@ -75,7 +85,7 @@ class InstallResult {
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const {
     return status == Status::Ok || status == Status::OkBootFwNeedsCompletion || status == Status::NeedsCompletion ||
-           status == Status::AppsNeedCompletion;
+           status == Status::AppsNeedCompletion || status == Status::InstallRollbackOk;
   }
 };
 
@@ -93,6 +103,7 @@ class DownloadResult {
   Status status;
   std::string description;
   std::string destination_path;
+  storage::Volume::UsageInfo stat;
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const { return status == Status::Ok; }
@@ -345,11 +356,15 @@ class AkliteClient {
    */
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
+ protected:
+  bool usingUpdateClientApi{false};
+  bool is_booted_env{true};
+  std::shared_ptr<LiteClient> client_;
+
  private:
   void Init(Config &config, bool finalize = true, bool apply_lock = true);
 
   bool read_only_{false};
-  std::shared_ptr<LiteClient> client_;
   std::shared_ptr<aklite::tuf::Repo> tuf_repo_;
   std::string hw_id_;
   std::vector<std::string> secondary_hwids_;

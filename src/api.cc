@@ -2,6 +2,7 @@
 
 #include <sys/file.h>
 #include <unistd.h>
+#include <boost/format.hpp>
 #include <boost/process.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -9,7 +10,9 @@
 
 #include "http/httpclient.h"
 #include "libaktualizr/config.h"
+#include "libaktualizr/types.h"
 #include "liteclient.h"
+#include "logging/logging.h"
 #include "primary/reportqueue.h"
 
 #include "aktualizr-lite/tuf/tuf.h"
@@ -59,16 +62,34 @@ const std::vector<boost::filesystem::path> AkliteClient::CONFIG_DIRS = {"/usr/li
 const static std::string LocalSrcDirKey{"local-src-dir"};
 
 TufTarget CheckInResult::GetLatest(std::string hwid) const {
+  auto ret = SelectTarget(-1, "", std::move(hwid));
+  if (ret.IsUnknown()) {
+    throw std::runtime_error("no target for this hwid");
+  }
+  return ret;
+}
+
+TufTarget CheckInResult::SelectTarget(int version, const std::string& target_name, std::string hwid) const {
   if (hwid.empty()) {
     hwid = primary_hwid_;
   }
 
-  for (auto it = targets_.crbegin(); it != targets_.crend(); ++it) {
-    if ((*it).Custom()["hardwareIds"][0] == hwid) {
-      return *it;
+  if (version == -1 && target_name.empty()) {
+    for (auto it = targets_.crbegin(); it != targets_.crend(); ++it) {
+      if ((*it).HardwareId() == hwid) {
+        return *it;
+      }
+    }
+  } else {
+    for (const auto& t : targets_) {
+      if ((t.Version() == version || t.Name() == target_name) && t.HardwareId() == hwid) {
+        return t;
+      }
     }
   }
-  throw std::runtime_error("no target for this hwid");
+
+  LOG_INFO << "no target for hwid " << hwid;
+  return TufTarget();
 }
 
 std::ostream& operator<<(std::ostream& os, const DownloadResult& res) {
@@ -126,6 +147,7 @@ void AkliteClient::Init(Config& config, bool finalize, bool apply_lock) {
     config.telemetry.report_network = !config.tls.server.empty();
     config.telemetry.report_config = !config.tls.server.empty();
   }
+  is_booted_env = config.pacman.booted == BootedType::kBooted;
   if (client_ == nullptr) {
     client_ = std::make_unique<LiteClient>(config, nullptr);
   }
@@ -164,12 +186,17 @@ AkliteClient::~AkliteClient() {
 
 static bool compareTargets(const TufTarget& a, const TufTarget& b) { return a.Version() < b.Version(); }
 
-// Returns a sorted list of targets matching tags if configured and hwid (or one of secondary_hwids)
+// Returns a sorted list of OSTREE targets matching tags if configured and hwid (or one of secondary_hwids)
 static std::vector<TufTarget> filterTargets(const std::vector<TufTarget>& allTargets, const std::string& hwidToFind,
                                             const std::vector<std::string>& tags,
                                             const std::vector<std::string>& secondary_hwids) {
   std::vector<TufTarget> targets;
   for (const auto& t : allTargets) {
+    if (t.Custom()["targetFormat"] != "OSTREE") {
+      LOG_WARNING << "Unexpected target format: \"" << t.Custom()["targetFormat"] << "\" target: " << t.Name();
+      continue;
+    }
+
     if (!tags.empty() && !t.HasOneOfTags(tags)) {
       continue;
     }
@@ -255,14 +282,19 @@ CheckInResult AkliteClient::CheckIn() const {
   LOG_INFO << "Searching for matching TUF Targets...";
   auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
-    err_msg =
-        "Couldn't find Targets matching the current device tag and hardware ID; check a device tag or a hardware ID";
+    // TODO: consider reporting about it to the backend to make it easier to figure out
+    // why specific devices are not picking up a new Target
+    err_msg = boost::str(boost::format("No Target found for the device; hw ID: %s; tags: %s") % hw_id_ %
+                         boost::algorithm::join(client_->tags, ","));
     LOG_ERROR << err_msg;
     client_->notifyTufUpdateFinished(err_msg);
-    return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
+    return CheckInResult{CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
   }
-  LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
-  client_->notifyTufUpdateFinished();
+  LOG_INFO << "Latest targets metadata contains " << matchingTargets.size() << " entries for tag=\""
+           << boost::algorithm::join(client_->tags, ",") << "\" and hardware id=\"" << hw_id_ << "\"";
+  if (!usingUpdateClientApi) {
+    client_->notifyTufUpdateFinished();
+  }
   return CheckInResult(CheckInResult::Status::Ok, hw_id_, matchingTargets);
 }
 
@@ -417,6 +449,8 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
 
 CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
   client_->notifyTufUpdateStarted();
+  auto repo_src =
+      std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
 
   std::string err_msg;
   CheckInResult::Status check_status{CheckInResult::Status::Ok};
@@ -539,7 +573,9 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
   }
 
-  client_->notifyTufUpdateFinished();
+  if (!usingUpdateClientApi) {
+    client_->notifyTufUpdateFinished();
+  }
   return CheckInResult(check_status, hw_id_, toTufTargets(available_targets));
 }
 
@@ -623,7 +659,8 @@ class LiteInstall : public InstallContext {
 
     auto download_res{client_->download(*target_, reason)};
     if (!download_res) {
-      return DownloadResult{download_res.status, download_res.description, download_res.destination_path};
+      return DownloadResult{download_res.status, download_res.description, download_res.destination_path,
+                            download_res.stat};
     }
 
     if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {

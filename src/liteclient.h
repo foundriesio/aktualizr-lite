@@ -49,7 +49,7 @@ class LiteClient {
   void checkForUpdatesEndWithFailure(const std::string& err);
   bool finalizeInstall(data::InstallationResult* ir = nullptr);
   Uptane::Target getRollbackTarget();
-  DownloadResultWithStat download(const Uptane::Target& target, const std::string& reason);
+  DownloadResult download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target, InstallMode install_mode = InstallMode::All);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);
   std::pair<bool, std::string> isRebootRequired() const {
@@ -102,7 +102,7 @@ class LiteClient {
   void writeCurrentTarget(const Uptane::Target& t) const;
 
   data::InstallationResult installPackage(const Uptane::Target& target, InstallMode install_mode = InstallMode::All);
-  DownloadResultWithStat downloadImage(const Uptane::Target& target, const api::FlowControlToken* token = nullptr);
+  DownloadResult downloadImage(const Uptane::Target& target, const api::FlowControlToken* token = nullptr);
   static void add_apps_header(std::vector<std::string>& headers, PackageConfig& config);
   data::InstallationResult finalizePendingUpdate(boost::optional<Uptane::Target>& target);
   void initRequestHeaders(std::vector<std::string>& headers) const;

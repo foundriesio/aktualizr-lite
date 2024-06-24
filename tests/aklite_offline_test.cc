@@ -7,6 +7,7 @@
 #include "test_utils.h"
 #include "uptane_generator/image_repo.h"
 
+#include "aktualizr-lite/aklite_client_ext.h"
 #include "aktualizr-lite/cli/cli.h"
 #include "appengine.h"
 #include "composeapp/appengine.h"
@@ -216,7 +217,7 @@ class AkliteOffline : public ::testing::Test {
 
   aklite::cli::StatusCode install() {
     auto liteClient = createLiteClient();
-    AkliteClient client(liteClient);
+    AkliteClientExt client(liteClient);
     return aklite::cli::Install(client, -1, "", InstallMode::OstreeOnly, false, src());
   }
 
@@ -424,7 +425,7 @@ TEST_F(AkliteOffline, OfflineClientInvalidBundleMeta) {
   const auto prev_target{addTarget({createApp("app-01")})};
   const auto target{addTarget({createApp("app-01")})};
   auto lite_cli = createLiteClient();
-  AkliteClient client(lite_cli);
+  AkliteClientExt client(lite_cli);
 
   // invalidate the bundle metadata signature
   Json::Value bundle_meta{Utils::parseJSONFile(tuf_repo_.getBundleMetaPath())};
@@ -500,7 +501,7 @@ TEST_F(AkliteOffline, OfflineClient) {
   const auto target{addTarget({createApp("app-01")})};
   {
     auto lite_cli = createLiteClient();
-    AkliteClient client(lite_cli);
+    AkliteClientExt client(lite_cli);
     EXPECT_CALL(*lite_cli, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
     EXPECT_CALL(*lite_cli, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")))
         .Times(1);
