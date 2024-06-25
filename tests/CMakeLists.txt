@@ -294,3 +294,17 @@ set_tests_properties(test_nospace PROPERTIES LABELS "aklite:nospace")
 aktualizr_source_file_checks(nospace_test.cc)
 
 add_library(fstatvfs-mock SHARED fixtures/fstatvfs-mock.cc)
+
+add_aktualizr_test(NAME daemon
+  SOURCES daemon_test.cc
+  PROJECT_WORKING_DIRECTORY
+  ARGS
+  ${PROJECT_SOURCE_DIR}/tests/device-gateway_fake.py
+  ${PROJECT_SOURCE_DIR}/tests/make_sys_rootfs.sh
+)
+aktualizr_source_file_checks(daemon_test.cc)
+target_compile_definitions(t_daemon PRIVATE ${TEST_DEFS})
+target_include_directories(t_daemon PRIVATE ${TEST_INCS} ${AKLITE_DIR}/include ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
+target_link_libraries(t_daemon ${MAIN_TARGET_LIB} ${TEST_LIBS} uptane_generator_lib testutilities)
+add_dependencies(t_daemon make_ostree_sysroot)
+set_tests_properties(test_daemon PROPERTIES LABELS "aklite:daemon")
