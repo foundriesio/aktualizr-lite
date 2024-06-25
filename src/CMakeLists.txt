@@ -23,6 +23,7 @@ set(SRC helpers.cc
         tuf/akhttpsreposource.cc
         tuf/localreposource.cc
         tuf/akrepo.cc
+        daemon.cc
         aklitereportqueue.cc)
 
 set(HEADERS helpers.h
@@ -51,6 +52,7 @@ set(HEADERS helpers.h
         ../include/aktualizr-lite/api.h
         ../include/aktualizr-lite/aklite_client_ext.h
         ../include/aktualizr-lite/tuf/tuf.h
+        daemon.h
         aklitereportqueue.h)
 
 if(USE_COMPOSEAPP_ENGINE)
