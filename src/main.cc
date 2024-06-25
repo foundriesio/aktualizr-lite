@@ -117,7 +117,13 @@ int daemon_main_(LiteClient& client, uint64_t interval, bool return_on_sleep) {
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClientExt akclient{client_ptr, false, true};
-  akclient.CompleteInstallation();
+  if (akclient.IsInstallationInProgress()) {
+    auto finalize_result = akclient.CompleteInstallation();
+    if (finalize_result.status == InstallResult::Status::NeedsCompletion) {
+      LOG_ERROR << "A system reboot is required to finalize the pending installation.";
+      return EXIT_FAILURE;
+    }
+  }
 
   Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
 
