@@ -16,6 +16,7 @@
 #include "aktualizr-lite/api.h"
 #include "aktualizr-lite/cli/cli.h"
 #include "crypto/keymanager.h"
+#include "daemon.h"
 #include "helpers.h"
 #include "http/httpclient.h"
 #include "libaktualizr/config.h"
@@ -105,59 +106,6 @@ static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
-int daemon_main_(LiteClient& client, uint64_t interval, bool return_on_sleep) {
-  if (client.config.uptane.repo_server.empty()) {
-    LOG_ERROR << "[uptane]/repo_server is not configured";
-    return EXIT_FAILURE;
-  }
-  if (access(client.config.bootloader.reboot_command.c_str(), X_OK) != 0) {
-    LOG_ERROR << "reboot command: " << client.config.bootloader.reboot_command << " is not executable";
-    return EXIT_FAILURE;
-  }
-
-  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClientExt akclient{client_ptr, false, true};
-  if (akclient.IsInstallationInProgress()) {
-    auto finalize_result = akclient.CompleteInstallation();
-    if (finalize_result.status == InstallResult::Status::NeedsCompletion) {
-      LOG_ERROR << "A system reboot is required to finalize the pending installation.";
-      return EXIT_FAILURE;
-    }
-  }
-
-  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
-
-  while (true) {
-    auto current = akclient.GetCurrent();
-    LOG_INFO << "Active Target: " << current.Name() << ", sha256: " << current.Sha256Hash();
-    LOG_INFO << "Checking for a new Target...";
-    auto cir = akclient.GetTargetToInstall();
-    if (!cir.selected_target.IsUnknown()) {
-      LOG_INFO << "Going to install " << cir.selected_target.Name() << ". Reason: " << cir.reason;
-      // A target is supposed to be installed
-      auto install_result = akclient.PullAndInstall(cir.selected_target, cir.reason);
-      if (akclient.RebootIfRequired()) {
-        // no point to continue running TUF cycle (check for update, download, install)
-        // since reboot is required to apply/finalize the currently installed update (aka pending update)
-        // If a reboot command is set in configuration, and is executed successfully, we will not get to this point
-        break;
-      }
-      if (install_result) {
-        // After a successful install, do not sleep, go directly to the next iteration
-        continue;
-      }
-    }
-
-    if (return_on_sleep) {
-      break;
-    }
-
-    std::this_thread::sleep_for(std::chrono::seconds(interval));
-  }  // while true
-
-  return EXIT_SUCCESS;
-}
-
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
   uint64_t interval = client.config.uptane.polling_sec;
   if (variables_map.count("interval") > 0) {
@@ -166,7 +114,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
   bool return_on_sleep = std::getenv("AKLITE_TEST_RETURN_ON_SLEEP") != nullptr;
 
-  return daemon_main_(client, interval, return_on_sleep);
+  return run_daemon(client, interval, return_on_sleep, true);
 }
 
 static int cli_install(LiteClient& client, const bpo::variables_map& params) {
