@@ -9,7 +9,7 @@
 #include "liteclient.h"
 #include "logging/logging.h"
 
-int run_daemon(LiteClient& client, uint64_t interval, bool return_on_sleep) {
+int run_daemon(LiteClient& client, uint64_t interval, bool return_on_sleep, bool acquire_lock) {
   if (client.config.uptane.repo_server.empty()) {
     LOG_ERROR << "[uptane]/repo_server is not configured";
     return EXIT_FAILURE;
@@ -20,7 +20,7 @@ int run_daemon(LiteClient& client, uint64_t interval, bool return_on_sleep) {
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClientExt akclient{client_ptr, false, true};
+  AkliteClientExt akclient{client_ptr, false, acquire_lock};
   if (akclient.IsInstallationInProgress()) {
     auto finalize_result = akclient.CompleteInstallation();
     if (finalize_result.status == InstallResult::Status::NeedsCompletion) {

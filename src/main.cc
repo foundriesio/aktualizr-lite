@@ -114,7 +114,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
 
   bool return_on_sleep = std::getenv("AKLITE_TEST_RETURN_ON_SLEEP") != nullptr;
 
-  return run_daemon(client, interval, return_on_sleep);
+  return run_daemon(client, interval, return_on_sleep, true);
 }
 
 static int cli_install(LiteClient& client, const bpo::variables_map& params) {
