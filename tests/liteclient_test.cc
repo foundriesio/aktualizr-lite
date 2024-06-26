@@ -29,54 +29,19 @@ extern void UnsetFreeBlockNumb();
 using ::testing::NiceMock;
 using ::testing::Return;
 
-/**
- * Class MockAppEngine
- *
- */
-class MockAppEngine : public AppEngine {
- public:
-  MockAppEngine(bool default_behaviour = true) {
-    if (!default_behaviour) return;
-
-    ON_CALL(*this, fetch).WillByDefault(Return(true));
-    ON_CALL(*this, verify).WillByDefault(Return(true));
-    ON_CALL(*this, install).WillByDefault(Return(true));
-    ON_CALL(*this, run).WillByDefault(Return(true));
-    ON_CALL(*this, isFetched).WillByDefault(Return(true));
-    ON_CALL(*this, isRunning).WillByDefault(Return(true));
-    ON_CALL(*this, getRunningAppsInfo)
-        .WillByDefault(
-            Return(Utils::parseJSON("{\"app-07\": {\"services\": {\"nginx-07\": {\"hash\": "
-                                    "\"16e36b4ab48cb19c7100a22686f85ffcbdce5694c936bda03cb12a2cce88efcf\"}}}}")));
-  }
-
- public:
-  MOCK_METHOD(AppEngine::Result, fetch, (const App& app), (override));
-  MOCK_METHOD(AppEngine::Result, verify, (const App& app), (override));
-  MOCK_METHOD(AppEngine::Result, install, (const App& app), (override));
-  MOCK_METHOD(AppEngine::Result, run, (const App& app), (override));
-  MOCK_METHOD(void, stop, (const App& app), (override));
-  MOCK_METHOD(void, remove, (const App& app), (override));
-  MOCK_METHOD(bool, isFetched, (const App& app), (const, override));
-  MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
-  MOCK_METHOD(AppEngine::Apps, getInstalledApps, (), (const, override));
-  MOCK_METHOD(Json::Value, getRunningAppsInfo, (), (const, override));
-  MOCK_METHOD(void, prune, (const Apps& app), (override));
-};
-
 class LiteClientTest : public fixtures::ClientTest {
  protected:
   std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                bool finalize = true) override {
-    app_engine_mock_ = std::make_shared<NiceMock<MockAppEngine>>();
+    app_engine_mock_ = std::make_shared<NiceMock<fixtures::MockAppEngine>>();
     return ClientTest::createLiteClient(app_engine_mock_, initial_version, apps, "", boost::none, true, finalize);
   }
 
-  std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
+  std::shared_ptr<NiceMock<fixtures::MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
 
  private:
-  std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
+  std::shared_ptr<NiceMock<fixtures::MockAppEngine>> app_engine_mock_;
 };
 
 class LiteClientTestMultiPacman : public LiteClientTest, public ::testing::WithParamInterface<std::string> {

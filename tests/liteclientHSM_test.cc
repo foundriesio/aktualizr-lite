@@ -26,56 +26,20 @@
 #include "fixtures/liteclienthsmtest.cc"
 
 using ::testing::NiceMock;
-using ::testing::Return;
-
-/**
- * Class MockAppEngine
- *
- */
-class MockAppEngine : public AppEngine {
- public:
-  MockAppEngine(bool default_behaviour = true) {
-    if (!default_behaviour) return;
-
-    ON_CALL(*this, fetch).WillByDefault(Return(true));
-    ON_CALL(*this, verify).WillByDefault(Return(true));
-    ON_CALL(*this, install).WillByDefault(Return(true));
-    ON_CALL(*this, run).WillByDefault(Return(true));
-    ON_CALL(*this, isFetched).WillByDefault(Return(true));
-    ON_CALL(*this, isRunning).WillByDefault(Return(true));
-    ON_CALL(*this, getRunningAppsInfo)
-        .WillByDefault(
-            Return(Utils::parseJSON("{\"app-07\": {\"services\": {\"test-factory\": {\"hash\": "
-                                    "\"7ca42b1567ca068dfd6a5392432a5a36700a4aa3e321922e91d974f832a2f243\"}}}}")));
-  }
-
- public:
-  MOCK_METHOD(AppEngine::Result, fetch, (const App& app), (override));
-  MOCK_METHOD(AppEngine::Result, verify, (const App& app), (override));
-  MOCK_METHOD(AppEngine::Result, install, (const App& app), (override));
-  MOCK_METHOD(AppEngine::Result, run, (const App& app), (override));
-  MOCK_METHOD(void, stop, (const App& app), (override));
-  MOCK_METHOD(void, remove, (const App& app), (override));
-  MOCK_METHOD(bool, isFetched, (const App& app), (const, override));
-  MOCK_METHOD(bool, isRunning, (const App& app), (const, override));
-  MOCK_METHOD(AppEngine::Apps, getInstalledApps, (), (const, override));
-  MOCK_METHOD(Json::Value, getRunningAppsInfo, (), (const, override));
-  MOCK_METHOD(void, prune, (const Apps& app), (override));
-};
 
 class LiteClientHSMTest : public fixtures::ClientHSMTest {
  protected:
   std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                bool finalize = true) override {
-    app_engine_mock_ = std::make_shared<NiceMock<MockAppEngine>>();
+    app_engine_mock_ = std::make_shared<NiceMock<fixtures::MockAppEngine>>();
     return ClientHSMTest::createLiteClient(app_engine_mock_, initial_version, apps);
   }
 
-  std::shared_ptr<NiceMock<MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
+  std::shared_ptr<NiceMock<fixtures::MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
 
  private:
-  std::shared_ptr<NiceMock<MockAppEngine>> app_engine_mock_;
+  std::shared_ptr<NiceMock<fixtures::MockAppEngine>> app_engine_mock_;
 };
 
 /*----------------------------------------------------------------------------*/

@@ -22,6 +22,7 @@ namespace fixtures {
 #include "liteclient/tufrepomock.cc"
 #include "liteclient/devicegatewaymock.cc"
 #include "liteclient/boot_flag_mgr.cc"
+#include "liteclient/mockappengine.cc"
 
 
 class ClientTest :virtual public ::testing::Test {
