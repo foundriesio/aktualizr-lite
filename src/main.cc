@@ -157,6 +157,7 @@ static int cli_complete_install(LiteClient& client, const bpo::variables_map& pa
   return static_cast<int>(aklite::cli::CompleteInstall(akclient));
 }
 
+// clang-format off
 static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
     {"daemon", daemon_main},
     {"update", cli_update},
@@ -165,7 +166,10 @@ static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::var
     {"list", list_main},
     {"check", list_main},
     {"status", status_main},
-    {"finalize", cli_complete_install}};
+    {"finalize", cli_complete_install},
+    {"run", cli_complete_install},
+};
+// clang-format on
 
 void check_info_options(const bpo::options_description& description, const bpo::variables_map& vm) {
   if (vm.count("help") != 0 || (vm.count("command") == 0 && vm.count("version") == 0)) {

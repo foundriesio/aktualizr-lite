@@ -119,6 +119,7 @@ EOF
 
 ## Check that we can do the info command
 $valgrind $aklite -h | grep "finalize"
+$valgrind $aklite -h | grep "run"
 $valgrind $aklite -h | grep "status"
 $valgrind $aklite -h | grep "list"
 $valgrind $aklite -h | grep "check"
