@@ -67,43 +67,11 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
 
 static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
-  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  AkliteClient akclient(client_ptr, false, true);
 
-  LOG_INFO << "Refreshing Targets metadata";
-  const auto rc = client.updateImageMeta();
-  if (!std::get<0>(rc)) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
-    if (!client.checkImageMetaOffline()) {
-      LOG_ERROR << "Unable to use local copy of TUF data";
-      return 1;
-    }
-  }
-
-  boost::container::flat_map<int, Uptane::Target> sorted_targets;
-  for (const auto& t : client.allTargets()) {
-    int ver = 0;
-    try {
-      ver = std::stoi(t.custom_version(), nullptr, 0);
-    } catch (const std::invalid_argument& exc) {
-      LOG_ERROR << "Invalid version number format: " << t.custom_version();
-      ver = -1;
-    }
-    if (!target_has_tags(t, client.tags)) {
-      continue;
-    }
-    for (const auto& it : t.hardwareIds()) {
-      if (it == hwid) {
-        sorted_targets.emplace(ver, t);
-        break;
-      }
-    }
-  }
-
-  LOG_INFO << "Updates available to " << hwid << ":";
-  for (auto& pair : sorted_targets) {
-    client.logTarget("", pair.second);
-  }
-  return 0;
+  auto status = aklite::cli::CheckIn(akclient, nullptr);
+  return aklite::cli::IsSuccessCode(status) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
