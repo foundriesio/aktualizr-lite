@@ -133,6 +133,7 @@ static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::var
     {"daemon", daemon_main},
     {"update", cli_install},
     {"list", list_main},
+    {"check", list_main},
     {"status", status_main},
     {"finalize", cli_complete_install}};
 

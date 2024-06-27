@@ -121,6 +121,7 @@ EOF
 $valgrind $aklite -h | grep "finalize"
 $valgrind $aklite -h | grep "status"
 $valgrind $aklite -h | grep "list"
+$valgrind $aklite -h | grep "check"
 $valgrind $aklite -h | grep "update"
 $valgrind $aklite -h | grep "daemon"
 
