@@ -1095,6 +1095,8 @@ InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus
   return InstallResult{InstallResult::Status::Ok, ""};
 }
 
+boost::optional<std::vector<std::string>> AkliteClient::GetAppShortlist() const { return client_->getAppShortlist(); }
+
 static Json::Value checkAndGetRootMeta(const std::shared_ptr<aklite::tuf::Repo>& device_tuf_repo,
                                        const boost::filesystem::path& bundle_tuf_repo_path) {
   auto latest_root{device_tuf_repo->GetRoot(-1)};

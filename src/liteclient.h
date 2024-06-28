@@ -88,6 +88,7 @@ class LiteClient {
   bool isBootFwUpdateInProgress() const;
   bool wasTargetInstalled(const Uptane::Target& target) const;
   Type type() const { return type_; }
+  boost::optional<std::vector<std::string>> getAppShortlist() const;
 
  private:
   FRIEND_TEST(helpers, locking);

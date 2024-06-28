@@ -848,3 +848,7 @@ LiteClient::Type LiteClient::getClientType(const KeyManager& key_manager) {
   }
   return res;
 }
+
+boost::optional<std::vector<std::string>> LiteClient::getAppShortlist() const {
+  return config.pacman.type == ComposeAppManager::Name ? ComposeAppManager::Config(config.pacman).apps : boost::none;
+}
