@@ -875,7 +875,7 @@ class LocalLiteInstall : public LiteInstall {
       reason = "Update to " + target_->filename();
     }
 
-    client_->logTarget("Downloading: ", *target_);
+    client_->logTarget("Copying: ", *target_);
 
     auto downloader = createOfflineDownloader();
     client_->notifyDownloadStarted(*target_, reason);
