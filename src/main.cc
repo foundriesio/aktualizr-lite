@@ -218,6 +218,8 @@ bpo::variables_map parse_options(int argc, char** argv) {
   // consider the first positional argument as the aktualizr run mode
   bpo::positional_options_description pos;
   pos.add("command", 1);
+  // consider the second positional argument as the target name / version
+  pos.add("update-name", 1);
 
   bpo::variables_map vm;
   std::vector<std::string> unregistered_options;
