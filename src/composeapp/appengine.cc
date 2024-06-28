@@ -189,7 +189,7 @@ bool AppEngine::isAppInstalled(const App& app) const {
 void AppEngine::installAppAndImages(const App& app) {
   exec(boost::format{"%s --store %s --compose %s --host %s install %s"} % composectl_cmd_ % storeRoot() %
            installRoot() % dockerHost() % app.uri,
-       "failed to installl compose app");
+       "failed to install compose app");
 }
 
 static bool checkAppStatus(const AppEngine::App& app, const Json::Value& status) {
