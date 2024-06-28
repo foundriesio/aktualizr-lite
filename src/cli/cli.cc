@@ -85,18 +85,27 @@ StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_s
   }
   if (cr) {
     if (cr.Targets().empty()) {
-      std::cout << "\nNo Targets found" << std::endl;
+      std::cout << "\nNo Targets found"
+                << "\n";
     } else {
-      std::cout << "\nFound Targets: " << std::endl;
+      std::cout << "\nFound Targets: "
+                << "\n";
     }
-    for (const auto &t : cr.Targets()) {
-      std::cout << "\tName: " << t.Name() << std::endl;
-      std::cout << "\tOSTree hash: " << t.Sha256Hash() << std::endl;
-      std::cout << "\tApps:" << std::endl;
-      for (const auto &a : TufTarget::Apps(t)) {
-        std::cout << "\t\t" << a.name << " -> " << a.uri << std::endl;
+    auto app_shortlist = client.GetAppShortlist();
+    for (const auto &target : cr.Targets()) {
+      std::cout << target.Name() << "\n";
+      std::cout << "\tostree: " << target.Sha256Hash() << "\n";
+      std::cout << "\tapps:"
+                << "\n";
+      for (const auto &app : TufTarget::Apps(target)) {
+        std::string app_status = (!app_shortlist || std::find(app_shortlist->begin(), app_shortlist->end(), app.name) !=
+                                                        app_shortlist->end())
+                                     ? "on"
+                                     : "off";
+
+        std::cout << "\t\t(" << app_status << ") " << app.name << " -> " << app.uri << "\n";
       }
-      std::cout << std::endl;
+      std::cout << "\n";
     }
   }
   return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
