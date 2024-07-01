@@ -93,7 +93,7 @@ static void get_target_id(const bpo::variables_map& params, int& version, std::s
     try {
       version = std::stoi(version_str);
     } catch (const std::invalid_argument& exc) {
-      LOG_INFO << "Failed to convert the input target version to integer, consider it as a name of Target: "
+      LOG_DEBUG << "Failed to convert the input target version to integer, consider it as a name of Target: "
                << exc.what();
       name = version_str;
     }
