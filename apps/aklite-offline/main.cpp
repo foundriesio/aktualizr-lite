@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
   })};
 
   if (cmds.end() == find_it) {
-    LOG_ERROR << "Unsuported command: " << cmd_name << "\n";
+    LOG_ERROR << "Unsupported command: " << cmd_name << "\n";
     print_usage();
     exit(EXIT_FAILURE);
   }

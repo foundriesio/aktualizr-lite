@@ -405,8 +405,8 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
 
   } else {
-    LOG_INFO << "Apps' containers will be re-created and started just after succesfull boot on the new ostree version";
-    res.description += "\n# Fecthed Apps' containers will be created and started after reboot\n";
+    LOG_INFO << "Apps' containers will be re-created and started just after successful boot on the new ostree version";
+    res.description += "\n# Fetched Apps' containers will be created and started after reboot\n";
     // don't prune Compose Apps' images because new images are not used by any containers and can be removed as a
     // result of pruning.
     prune_images = false;
