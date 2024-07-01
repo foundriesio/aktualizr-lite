@@ -119,19 +119,23 @@ EOF
 
 ## Check that we can do the info command
 $valgrind $aklite -h | grep "finalize"
+$valgrind $aklite -h | grep "run"
 $valgrind $aklite -h | grep "status"
 $valgrind $aklite -h | grep "list"
+$valgrind $aklite -h | grep "check"
 $valgrind $aklite -h | grep "update"
+$valgrind $aklite -h | grep "pull"
+$valgrind $aklite -h | grep "install"
 $valgrind $aklite -h | grep "daemon"
 
 
 ## Check that we can do the list command
 out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml list)
-if [[ ! "$out" =~ "1000" ]] ; then
+if [[ ! "$out" =~ "foo1" ]] ; then
     echo "ERROR: foo1 update missing"
     exit 1
 fi
-if [[ ! "$out" =~ "1001" ]] ; then
+if [[ ! "$out" =~ "foo2" ]] ; then
     echo "ERROR: foo2 update missing"
     exit 1
 fi

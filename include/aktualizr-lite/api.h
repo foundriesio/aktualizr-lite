@@ -352,6 +352,11 @@ class AkliteClient {
   InstallResult SetSecondaries(const std::vector<SecondaryEcu> &ecus);
 
   /**
+   * Returns the applications list configured for the device
+   */
+  boost::optional<std::vector<std::string>> GetAppShortlist() const;
+
+  /**
    * Default files/paths to search for sota toml when configuration client.
    */
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;

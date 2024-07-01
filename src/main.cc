@@ -67,43 +67,11 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
 
 static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
-  Uptane::HardwareIdentifier hwid(client.config.provision.primary_ecu_hardware_id);
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  AkliteClient akclient(client_ptr, false, true);
 
-  LOG_INFO << "Refreshing Targets metadata";
-  const auto rc = client.updateImageMeta();
-  if (!std::get<0>(rc)) {
-    LOG_WARNING << "Unable to update latest metadata, using local copy: " << std::get<1>(rc);
-    if (!client.checkImageMetaOffline()) {
-      LOG_ERROR << "Unable to use local copy of TUF data";
-      return 1;
-    }
-  }
-
-  boost::container::flat_map<int, Uptane::Target> sorted_targets;
-  for (const auto& t : client.allTargets()) {
-    int ver = 0;
-    try {
-      ver = std::stoi(t.custom_version(), nullptr, 0);
-    } catch (const std::invalid_argument& exc) {
-      LOG_ERROR << "Invalid version number format: " << t.custom_version();
-      ver = -1;
-    }
-    if (!target_has_tags(t, client.tags)) {
-      continue;
-    }
-    for (const auto& it : t.hardwareIds()) {
-      if (it == hwid) {
-        sorted_targets.emplace(ver, t);
-        break;
-      }
-    }
-  }
-
-  LOG_INFO << "Updates available to " << hwid << ":";
-  for (auto& pair : sorted_targets) {
-    client.logTarget("", pair.second);
-  }
-  return 0;
+  auto status = aklite::cli::CheckIn(akclient, nullptr);
+  return aklite::cli::IsSuccessCode(status) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
@@ -117,20 +85,26 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
   return run_daemon(client, interval, return_on_sleep, true);
 }
 
-static int cli_install(LiteClient& client, const bpo::variables_map& params) {
-  // Make sure no other update instances are running, i.e. neither the daemon or other CLI update/finalize
-  std::string target_name;
-  int version = -1;
+static void get_target_id(const bpo::variables_map& params, int& version, std::string& name) {
+  name = "";
+  version = -1;
   if (params.count("update-name") > 0) {
     const auto version_str = params["update-name"].as<std::string>();
     try {
       version = std::stoi(version_str);
     } catch (const std::invalid_argument& exc) {
-      LOG_INFO << "Failed to convert the input target version to integer, consider it as a name of Target: "
+      LOG_DEBUG << "Failed to convert the input target version to integer, consider it as a name of Target: "
                << exc.what();
-      target_name = version_str;
+      name = version_str;
     }
   }
+}
+
+static int install(LiteClient& client, const bpo::variables_map& params, aklite::cli::PullMode pull_mode) {
+  int version;
+  std::string target_name;
+  get_target_id(params, version, target_name);
+
   std::string install_mode;
   if (params.count("install-mode") > 0) {
     install_mode = params.at("install-mode").as<std::string>();
@@ -148,7 +122,29 @@ static int cli_install(LiteClient& client, const bpo::variables_map& params) {
       mode = str2Mode.at(install_mode);
     }
   }
-  return static_cast<int>(aklite::cli::Install(akclient, version, target_name, mode));
+  return static_cast<int>(aklite::cli::Install(akclient, version, target_name, mode, true, nullptr, pull_mode));
+}
+
+// Pull and Install
+static int cli_update(LiteClient& client, const bpo::variables_map& params) {
+  return install(client, params, aklite::cli::PullMode::All);
+}
+
+// Install Only (requires a previous Pull operation)
+static int cli_install(LiteClient& client, const bpo::variables_map& params) {
+  return install(client, params, aklite::cli::PullMode::None);
+}
+
+// Pull Only (no install performed)
+static int cli_pull(LiteClient& client, const bpo::variables_map& params) {
+  int version;
+  std::string target_name;
+  get_target_id(params, version, target_name);
+
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  AkliteClientExt akclient{client_ptr, false, true};
+
+  return static_cast<int>(aklite::cli::Pull(akclient, version, target_name, true, nullptr));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
@@ -161,12 +157,19 @@ static int cli_complete_install(LiteClient& client, const bpo::variables_map& pa
   return static_cast<int>(aklite::cli::CompleteInstall(akclient));
 }
 
+// clang-format off
 static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
     {"daemon", daemon_main},
-    {"update", cli_install},
+    {"update", cli_update},
+    {"pull", cli_pull},
+    {"install", cli_install},
     {"list", list_main},
+    {"check", list_main},
     {"status", status_main},
-    {"finalize", cli_complete_install}};
+    {"finalize", cli_complete_install},
+    {"run", cli_complete_install},
+};
+// clang-format on
 
 void check_info_options(const bpo::options_description& description, const bpo::variables_map& vm) {
   if (vm.count("help") != 0 || (vm.count("command") == 0 && vm.count("version") == 0)) {
@@ -215,6 +218,8 @@ bpo::variables_map parse_options(int argc, char** argv) {
   // consider the first positional argument as the aktualizr run mode
   bpo::positional_options_description pos;
   pos.add("command", 1);
+  // consider the second positional argument as the target name / version
+  pos.add("update-name", 1);
 
   bpo::variables_map vm;
   std::vector<std::string> unregistered_options;
