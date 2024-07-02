@@ -55,7 +55,7 @@ enum class PullMode {
   None,
 };
 
-StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source);
+StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source = nullptr);
 
 StatusCode Pull(AkliteClientExt &client, int version = -1, const std::string &target_name = "",
                 bool force_downgrade = true, const LocalUpdateSource *local_update_source = nullptr);
