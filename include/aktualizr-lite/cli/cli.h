@@ -55,14 +55,30 @@ enum class PullMode {
   None,
 };
 
+/**
+ * The TUF check mode to be used.
+ */
+enum class CheckMode {
+  /**
+   * Default mode, do update TUF metadata from remote of local source.
+   */
+  Update = 0,
+  /**
+   * Do not update TUF roles: use currently stored metadata.
+   */
+  Current,
+};
+
 StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source = nullptr);
 
 StatusCode Pull(AkliteClientExt &client, int version = -1, const std::string &target_name = "",
-                bool force_downgrade = true, const LocalUpdateSource *local_update_source = nullptr);
+                bool force_downgrade = true, const LocalUpdateSource *local_update_source = nullptr,
+                CheckMode check_mode = CheckMode::Update);
 
 StatusCode Install(AkliteClientExt &client, int version = -1, const std::string &target_name = "",
                    InstallMode install_mode = InstallMode::All, bool force_downgrade = true,
-                   const LocalUpdateSource *local_update_source = nullptr, PullMode pull_mode = PullMode::All);
+                   const LocalUpdateSource *local_update_source = nullptr, PullMode pull_mode = PullMode::All,
+                   CheckMode check_mode = CheckMode::Update);
 
 StatusCode CompleteInstall(AkliteClient &client);
 

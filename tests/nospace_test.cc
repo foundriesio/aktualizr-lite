@@ -546,7 +546,8 @@ TEST_F(NoSpaceTest, ExtApiOstreeUpdateNoSpaceBeforeUpdate) {
     // 50% reserved, 49% free -> 0% available
     SetFreeBlockNumb(49, 100);
     AkliteClientExt client(liteclient);
-    auto result = client.GetTargetToInstall();
+    auto ci_res = client.CheckIn();
+    auto result = client.GetTargetToInstall(ci_res);
     ASSERT_FALSE(result.selected_target.IsUnknown());
     ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
 
@@ -573,7 +574,8 @@ TEST_P(AkliteNoSpaceTest, ExtApiNotEnoughSpaceForApps) {
     SetFreeBlockNumb(20, 100);
 
     AkliteClientExt akclient(client);
-    auto result = akclient.GetTargetToInstall();
+    auto ci_res = akclient.CheckIn();
+    auto result = akclient.GetTargetToInstall(ci_res);
     ASSERT_FALSE(result.selected_target.IsUnknown());
     ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
 

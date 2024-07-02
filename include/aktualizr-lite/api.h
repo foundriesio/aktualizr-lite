@@ -284,6 +284,8 @@ class AkliteClient {
    */
   CheckInResult CheckInLocal(const LocalUpdateSource *local_update_source) const;
 
+  CheckInResult CheckInCurrent(const LocalUpdateSource *local_update_source = nullptr) const;
+
   /**
    * Return the active aktualizr-lite configuration.
    */
@@ -362,7 +364,8 @@ class AkliteClient {
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  protected:
-  bool usingUpdateClientApi{false};
+  /* check-for-update-post success callback may be called at the end of CheckIn, or the end of GetTargetToInstall */
+  bool invoke_post_cb_at_checkin_{true};
   bool is_booted_env{true};
   std::shared_ptr<LiteClient> client_;
 
