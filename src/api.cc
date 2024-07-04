@@ -346,19 +346,18 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
   const std::string search_msg{just_latest ? "a target" : "all targets"};
   LOG_INFO << "Searching for " << search_msg << " starting from " << allowed_targets.begin()->filename()
            << " that match content provided in the source directory\n"
-           << "\tpacman type: \t" << pconfig.type << "\n\t apps dir: \t" << src.AppsDir << "\n\t ostree dir: \t"
+           << "\t pacman type: \t" << pconfig.type << "\n\t apps dir: \t" << src.AppsDir << "\n\t ostree dir: \t"
            << src.OstreeRepoDir;
   for (const auto& t : allowed_targets) {
-    LOG_INFO << "Checking " << t.filename();
     if (!repo.hasCommit(t.sha256Hash())) {
-      LOG_INFO << "\tmissing ostree commit: " << t.sha256Hash();
+      LOG_DEBUG << "\t" << t.filename() << " - missing ostree commit: " << t.sha256Hash();
       continue;
     }
     if (pconfig.type != ComposeAppManager::Name) {
       auto custom_data{t.custom_data()};
       custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
       found_targets.emplace_back(Target::updateCustom(t, custom_data));
-      LOG_INFO << "\tall target content have been found";
+      LOG_INFO << "\t" << t.filename() << " - all target content has been found";
       if (!just_latest) {
         continue;
       }
@@ -374,7 +373,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
       custom_data.removeMember("docker_compose_apps");
       found_targets.emplace_back(Target::updateCustom(t, custom_data));
-      LOG_INFO << "\tall target content have been found";
+      LOG_INFO << "\t" << t.filename() << " - all target content has been found";
       if (!just_latest) {
         continue;
       }
@@ -394,10 +393,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       }
     }
     if (!missing_apps.empty()) {
-      LOG_INFO << "\tmissing apps:";
-      for (const auto& app : missing_apps) {
-        LOG_INFO << "\t\t" << app;
-      }
+      LOG_INFO << "\t" << t.filename() << " - missing apps: " << boost::algorithm::join(missing_apps, ", ");
       continue;
     }
     auto custom_data{t.custom_data()};
@@ -421,7 +417,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
     custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
     custom_data[LocalSrcDirKey]["apps"] = src.AppsDir.string();
     found_targets.emplace_back(Target::updateCustom(t, custom_data));
-    LOG_INFO << "\tall target content have been found";
+    LOG_INFO << "\t" << t.filename() << " - all target content has been found";
     if (just_latest) {
       break;
     }
