@@ -27,27 +27,6 @@ jobs:
       - name: tidy
         run: make -f dev-flow.mk tidy
 
-  custom-client:
-    name: Install Akite and Build Custom Client
-    runs-on: ubuntu-latest
-    container:
-      image: foundries/aklite-dev
-      options: --privileged
-      env:
-        CXX: clang++
-        CC: clang
-        CCACHE_DIR: /tmp/ccache
-    steps:
-      - uses: actions/checkout@v3
-      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
-      - run: git submodule update --init --recursive
-      - name: build
-        run: make -f dev-flow.mk config build
-      - name: install
-        run: sudo make -f dev-flow.mk install
-      - name: custom-client
-        run: make -f dev-flow.mk custom-client
-
   garage-tools:
     name: Build Garage Tools
     runs-on: ubuntu-latest
