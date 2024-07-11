@@ -563,7 +563,8 @@ TEST_F(ApiClientTest, ExtApiRollback) {
   update(*liteclient, getInitialTarget(), new_target);
 
   AkliteClientExt client(liteclient);
-  auto result = client.GetTargetToInstall();
+  auto ci_res = client.CheckIn();
+  auto result = client.GetTargetToInstall(ci_res);
   ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
   ASSERT_FALSE(result.selected_target.IsUnknown());
   ASSERT_FALSE(client.IsRollback(result.selected_target));
@@ -580,7 +581,8 @@ TEST_F(ApiClientTest, ExtApiRollback) {
   ASSERT_EQ(rebooted_client.GetCurrent().Sha256Hash(), getInitialTarget().sha256Hash());
 
   // Verify that GetTargetToInstall returns no target, because the latest one was already tried, and rolled back
-  result = client.GetTargetToInstall();
+  ci_res = rebooted_client.CheckIn();
+  result = rebooted_client.GetTargetToInstall(ci_res);
   ASSERT_TRUE(result.selected_target.IsUnknown());
   ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
 
@@ -599,7 +601,8 @@ TEST_F(ApiClientTest, ExtApiInstallationInProgress) {
   auto target2 = createTarget();
   AkliteClientExt client(liteclient);
   client.CompleteInstallation();
-  auto result = client.GetTargetToInstall();
+  auto ci_res = client.CheckIn();
+  auto result = client.GetTargetToInstall(ci_res);
   ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
   ASSERT_FALSE(result.selected_target.IsUnknown());
   ASSERT_EQ(target2.filename(), result.selected_target.Name());
@@ -622,7 +625,8 @@ TEST_F(ApiClientTest, ExtApiInstallationInProgress) {
 
   auto current = rebooted_client.GetCurrent();
   ASSERT_EQ(current.Sha256Hash(), target2.sha256Hash());
-  result = rebooted_client.GetTargetToInstall();
+  ci_res = rebooted_client.CheckIn();
+  result = rebooted_client.GetTargetToInstall(ci_res);
   ASSERT_TRUE(result.selected_target.IsUnknown());
   ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
 }
@@ -639,7 +643,8 @@ TEST_F(ApiClientTest, ExtApiSeparatePullAndInstall) {
   auto target2 = createTarget();
   AkliteClientExt client(liteclient);
   client.CompleteInstallation();
-  auto result = client.GetTargetToInstall();
+  auto ci_res = client.CheckIn();
+  auto result = client.GetTargetToInstall(ci_res);
   ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
   ASSERT_FALSE(result.selected_target.IsUnknown());
   ASSERT_EQ(target2.filename(), result.selected_target.Name());
@@ -669,7 +674,8 @@ TEST_F(ApiClientTest, ExtApiSeparatePullAndInstall) {
 
   auto current = rebooted_client.GetCurrent();
   ASSERT_EQ(current.Sha256Hash(), target2.sha256Hash());
-  result = rebooted_client.GetTargetToInstall();
+  ci_res = rebooted_client.CheckIn();
+  result = rebooted_client.GetTargetToInstall(ci_res);
   ASSERT_TRUE(result.selected_target.IsUnknown());
   ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
 }

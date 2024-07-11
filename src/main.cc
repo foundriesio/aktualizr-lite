@@ -1,4 +1,5 @@
 #include <sys/file.h>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -20,6 +21,7 @@
 #include "helpers.h"
 #include "http/httpclient.h"
 #include "libaktualizr/config.h"
+#include "logging/logging.h"
 #include "storage/invstorage.h"
 #include "target.h"
 #include "utilities/aktualizr_version.h"
@@ -94,13 +96,14 @@ static void get_target_id(const bpo::variables_map& params, int& version, std::s
       version = std::stoi(version_str);
     } catch (const std::invalid_argument& exc) {
       LOG_DEBUG << "Failed to convert the input target version to integer, consider it as a name of Target: "
-               << exc.what();
+                << exc.what();
       name = version_str;
     }
   }
 }
 
-static int install(LiteClient& client, const bpo::variables_map& params, aklite::cli::PullMode pull_mode) {
+static int install(LiteClient& client, const bpo::variables_map& params, aklite::cli::PullMode pull_mode,
+                   aklite::cli::CheckMode check_mode) {
   int version;
   std::string target_name;
   get_target_id(params, version, target_name);
@@ -122,17 +125,18 @@ static int install(LiteClient& client, const bpo::variables_map& params, aklite:
       mode = str2Mode.at(install_mode);
     }
   }
-  return static_cast<int>(aklite::cli::Install(akclient, version, target_name, mode, true, nullptr, pull_mode));
+  return static_cast<int>(
+      aklite::cli::Install(akclient, version, target_name, mode, true, nullptr, pull_mode, check_mode));
 }
 
-// Pull and Install
+// CheckIn, Pull and Install
 static int cli_update(LiteClient& client, const bpo::variables_map& params) {
-  return install(client, params, aklite::cli::PullMode::All);
+  return install(client, params, aklite::cli::PullMode::All, aklite::cli::CheckMode::Update);
 }
 
 // Install Only (requires a previous Pull operation)
 static int cli_install(LiteClient& client, const bpo::variables_map& params) {
-  return install(client, params, aklite::cli::PullMode::None);
+  return install(client, params, aklite::cli::PullMode::None, aklite::cli::CheckMode::Current);
 }
 
 // Pull Only (no install performed)
@@ -144,7 +148,8 @@ static int cli_pull(LiteClient& client, const bpo::variables_map& params) {
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClientExt akclient{client_ptr, false, true};
 
-  return static_cast<int>(aklite::cli::Pull(akclient, version, target_name, true, nullptr));
+  return static_cast<int>(
+      aklite::cli::Pull(akclient, version, target_name, true, nullptr, aklite::cli::CheckMode::Current));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {

@@ -292,7 +292,7 @@ CheckInResult AkliteClient::CheckIn() const {
   }
   LOG_INFO << "Latest targets metadata contains " << matchingTargets.size() << " entries for tag=\""
            << boost::algorithm::join(client_->tags, ",") << "\" and hardware id=\"" << hw_id_ << "\"";
-  if (!usingUpdateClientApi) {
+  if (invoke_post_cb_at_checkin_) {
     client_->notifyTufUpdateFinished();
   }
   return CheckInResult(CheckInResult::Status::Ok, hw_id_, matchingTargets);
@@ -346,19 +346,18 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
   const std::string search_msg{just_latest ? "a target" : "all targets"};
   LOG_INFO << "Searching for " << search_msg << " starting from " << allowed_targets.begin()->filename()
            << " that match content provided in the source directory\n"
-           << "\tpacman type: \t" << pconfig.type << "\n\t apps dir: \t" << src.AppsDir << "\n\t ostree dir: \t"
+           << "\t pacman type: \t" << pconfig.type << "\n\t apps dir: \t" << src.AppsDir << "\n\t ostree dir: \t"
            << src.OstreeRepoDir;
   for (const auto& t : allowed_targets) {
-    LOG_INFO << "Checking " << t.filename();
     if (!repo.hasCommit(t.sha256Hash())) {
-      LOG_INFO << "\tmissing ostree commit: " << t.sha256Hash();
+      LOG_DEBUG << "\t" << t.filename() << " - missing ostree commit: " << t.sha256Hash();
       continue;
     }
     if (pconfig.type != ComposeAppManager::Name) {
       auto custom_data{t.custom_data()};
       custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
       found_targets.emplace_back(Target::updateCustom(t, custom_data));
-      LOG_INFO << "\tall target content have been found";
+      LOG_INFO << "\t" << t.filename() << " - all target components have been found";
       if (!just_latest) {
         continue;
       }
@@ -374,7 +373,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
       custom_data.removeMember("docker_compose_apps");
       found_targets.emplace_back(Target::updateCustom(t, custom_data));
-      LOG_INFO << "\tall target content have been found";
+      LOG_INFO << "\t" << t.filename() << " - all target components have been found";
       if (!just_latest) {
         continue;
       }
@@ -394,10 +393,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       }
     }
     if (!missing_apps.empty()) {
-      LOG_INFO << "\tmissing apps:";
-      for (const auto& app : missing_apps) {
-        LOG_INFO << "\t\t" << app;
-      }
+      LOG_INFO << "\t" << t.filename() << " - missing apps: " << boost::algorithm::join(missing_apps, ", ");
       continue;
     }
     auto custom_data{t.custom_data()};
@@ -421,7 +417,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
     custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
     custom_data[LocalSrcDirKey]["apps"] = src.AppsDir.string();
     found_targets.emplace_back(Target::updateCustom(t, custom_data));
-    LOG_INFO << "\tall target content have been found";
+    LOG_INFO << "\t" << t.filename() << " - all target components have been found";
     if (just_latest) {
       break;
     }
@@ -573,10 +569,59 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
   }
 
-  if (!usingUpdateClientApi) {
+  if (invoke_post_cb_at_checkin_) {
     client_->notifyTufUpdateFinished();
   }
   return CheckInResult(check_status, hw_id_, toTufTargets(available_targets));
+}
+
+CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update_source) const {
+  std::string err_msg;
+  LOG_INFO << "Checking the stored TUF metadata...";
+  try {
+    tuf_repo_->CheckMeta();
+    LOG_INFO << "The stored TUF metadata is valid";
+  } catch (const std::exception& exc) {
+    err_msg = std::string("Stored TUF metadata is invalid: ") + exc.what();
+    LOG_WARNING << err_msg;
+    return CheckInResult{CheckInResult::Status::SecurityError, hw_id_, {}};
+  }
+
+  LOG_INFO << "Searching for matching TUF Targets...";
+  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
+  if (matchingTargets.empty()) {
+    // TODO: consider reporting about it to the backend to make it easier to figure out
+    // why specific devices are not picking up a new Target
+    err_msg = boost::str(boost::format("No Target found for the device; hw ID: %s; tags: %s") % hw_id_ %
+                         boost::algorithm::join(client_->tags, ","));
+    LOG_ERROR << err_msg;
+    return CheckInResult{CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
+  }
+  LOG_INFO << "Latest targets metadata contains " << matchingTargets.size() << " entries for tag=\""
+           << boost::algorithm::join(client_->tags, ",") << "\" and hardware id=\"" << hw_id_ << "\"";
+
+  if (local_update_source != nullptr) {
+    LOG_INFO << "Looking for update content for each matching Target...";
+    UpdateSrc src{
+        .TufDir = local_update_source->tuf_repo,
+        .OstreeRepoDir = local_update_source->ostree_repo,
+        .AppsDir = local_update_source->app_store,
+    };
+    std::vector<Uptane::Target> available_targets =
+        getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src,
+                            false /* get all available targets, not just latest */);
+    if (available_targets.empty()) {
+      err_msg = "No update content found in ostree dir  " + src.OstreeRepoDir.string() + " and app dir " +
+                src.AppsDir.string();
+      LOG_ERROR << err_msg;
+      client_->notifyTufUpdateFinished(err_msg);
+      return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
+    }
+    return CheckInResult(CheckInResult::Status::OkCached, hw_id_, toTufTargets(available_targets));
+
+  } else {
+    return CheckInResult(CheckInResult::Status::OkCached, hw_id_, matchingTargets);
+  }
 }
 
 boost::property_tree::ptree AkliteClient::GetConfig() const {
