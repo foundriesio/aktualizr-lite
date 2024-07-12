@@ -614,7 +614,6 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
       err_msg = "No update content found in ostree dir  " + src.OstreeRepoDir.string() + " and app dir " +
                 src.AppsDir.string();
       LOG_ERROR << err_msg;
-      client_->notifyTufUpdateFinished(err_msg);
       return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
     }
     return CheckInResult(CheckInResult::Status::OkCached, hw_id_, toTufTargets(available_targets));
