@@ -22,7 +22,7 @@ class AkliteTest : public fixtures::ClientTest,
     }
   }
 
-  std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
+  std::shared_ptr<fixtures::LiteClientMock> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                bool finalize = true) override {
     const auto app_engine_type{GetParam()};

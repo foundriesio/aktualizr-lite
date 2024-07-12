@@ -148,7 +148,7 @@ class ClientHSMTest : public ClientTest {
   ClientHSMTest() : ClientTest(hsm_->path_) {
   }
 
-  std::shared_ptr<LiteClient> createLiteClient(const std::shared_ptr<AppEngine>& app_engine,
+  std::shared_ptr<fixtures::LiteClientMock> createLiteClient(const std::shared_ptr<AppEngine>& app_engine,
                                                InitialVersion version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                const std::string& compose_apps_root = "") {
@@ -173,7 +173,7 @@ class ClientHSMTest : public ClientTest {
       addTarget(conf, version);
     }
 
-    auto lite_client = std::make_shared<LiteClient>(conf, app_engine, p11_);
+    auto lite_client = std::make_shared<fixtures::LiteClientMock>(conf, app_engine, p11_);
     lite_client->importRootMetaIfNeededAndPresent();
     lite_client->finalizeInstall();
     return lite_client;
