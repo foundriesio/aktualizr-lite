@@ -249,10 +249,10 @@ void RootfsTreeManager::setRemote(const std::string& name, const std::string& ur
 
 data::InstallationResult RootfsTreeManager::verifyBootloaderUpdate(const Uptane::Target& target) const {
   if (cfg_.UpdateBlock && boot_fw_update_status_->isUpdateInProgress()) {
-    LOG_WARNING << "Bootlader update is in progress."
+    LOG_WARNING << "Bootloader update is in progress."
                    " A device must be rebooted to confirm and finalize the boot fw update"
                    " before installation of a new Target with ostree/rootfs change";
-    return data::InstallationResult(data::ResultCode::Numeric::kNeedCompletion, "bootlader update is in progress");
+    return data::InstallationResult(data::ResultCode::Numeric::kNeedCompletion, "bootloader update is in progress");
   }
 
   if (!boot_fw_update_status_->isRollbackProtectionEnabled()) {
