@@ -562,6 +562,30 @@ TEST_F(ApiClientTest, InstallTargetWithHackedApps) {
   ASSERT_EQ(nullptr, installer);
 }
 
+TEST_F(ApiClientTest, CheckInCurrent) {
+  auto lite_client = createLiteClient(InitialVersion::kOn);
+  AkliteClient client(lite_client);
+  auto result = client.CheckIn();
+
+  auto events = getDeviceGateway().getEvents();
+  ASSERT_EQ(2, events.size());
+  auto val = getDeviceGateway().readSotaToml();
+  ASSERT_NE(std::string::npos, val.find("[pacman]"));
+
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(1, result.Targets().size());
+
+  ASSERT_TRUE(getDeviceGateway().resetSotaToml());
+  ASSERT_TRUE(resetEvents());
+
+  // No events should be generated, and no callback invoked
+  EXPECT_CALL(*lite_client, callback(testing::_, testing::_, testing::_)).Times(0);
+  result = client.CheckInCurrent();
+  ASSERT_EQ(1, result.Targets().size());
+  events = getDeviceGateway().getEvents();
+  ASSERT_EQ(0, events.size());
+}
+
 // Tests using Extended Aklite Client methods:
 TEST_F(ApiClientTest, ExtApiRollback) {
   auto liteclient = createLiteClient();
