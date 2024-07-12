@@ -40,10 +40,6 @@ install:
 	cmake --build ${BUILD_DIR} --target $@
 	cp -r aktualizr/third_party/jsoncpp/include/json /usr/include
 
-custom-client:
-	cmake -S examples/custom-client-cxx -B ${BUILD_DIR}-custom -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-I $(CURDIR)/include -I $(CURDIR)/aktualizr/third_party/jsoncpp/include/ -L "$(CURDIR)/${BUILD_DIR}/aktualizr/src/libaktualizr/" -L $(CURDIR)/${BUILD_DIR}/src"
-	cmake --build ${BUILD_DIR}-custom --target all
-
 garage-tools:
 	cmake -S . -B ${BUILD_DIR}-garage -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON -DBUILD_SOTA_TOOLS=ON -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations" -DPKCS11_ENGINE_PATH=${PKCS11_ENGINE_PATH}
 	cmake --build ${BUILD_DIR}-garage --target all

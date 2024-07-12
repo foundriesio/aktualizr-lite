@@ -10,7 +10,7 @@ GTEST_FILTER ?= "*"
 PKCS11_ENGINE_PATH ?= "/usr/lib/x86_64-linux-gnu/engines-3/pkcs11.so"
 
 
-TASKS = config build format tidy garage-tools custom-client test-uptane-vectors
+TASKS = config build format tidy garage-tools test-uptane-vectors
 .PHONY: $(TASKS) test
 
 
