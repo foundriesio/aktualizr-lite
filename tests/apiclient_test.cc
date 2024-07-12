@@ -23,6 +23,9 @@
 
 #include "fixtures/liteclienttest.cc"
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 using ::testing::NiceMock;
 
 class ApiClientTest : public fixtures::ClientTest {
@@ -80,7 +83,10 @@ TEST_F(ApiClientTest, GetDevice) {
 }
 
 TEST_F(ApiClientTest, CheckIn) {
-  AkliteClient client(createLiteClient(InitialVersion::kOn));
+  auto lite_client = createLiteClient(InitialVersion::kOn);
+  AkliteClient client(lite_client);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")));
 
   auto result = client.CheckIn();
 
@@ -96,6 +102,9 @@ TEST_F(ApiClientTest, CheckIn) {
   ASSERT_TRUE(resetEvents());
 
   auto new_target = createTarget();
+
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")));
   result = client.CheckIn();
   ASSERT_EQ(0, getDeviceGateway().getEvents().size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());
