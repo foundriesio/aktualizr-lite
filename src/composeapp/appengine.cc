@@ -40,12 +40,12 @@ AppEngine::Result AppEngine::fetch(const App& app) {
 
 void AppEngine::remove(const App& app) {
   try {
-    // Remove app from the store. Skip blob pruning because unused blobs will be pruned in the `prune` call
-    // after all non-target apps are removed.
-    exec(boost::format{"%s --store %s --compose %s rm %s --prune=false --quiet"} % composectl_cmd_ % storeRoot() %
-             installRoot() % app.name,
-         "failed to remove app");
-    // Make sure app is stopped before trying to uninstall it
+    // "App removal" in this context refers to deleting app images from the Docker store
+    // and removing the app compose project (app uninstall).
+    // Unused app blobs will be removed from the blob store via the prune() method,
+    // provided they are not utilized by any other app(s).
+    // Note: Ensure the app is stopped before attempting to uninstall it.
+
     exec(boost::format{"%s --store %s --compose %s stop %s"} % composectl_cmd_ % storeRoot() % installRoot() % app.name,
          "failed to stop app");
     // Uninstall app, it only removes the app compose/project directory, docker store pruning is in the `prune` call
