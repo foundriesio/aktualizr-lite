@@ -675,7 +675,14 @@ ComposeAppManager::AppsContainer ComposeAppManager::getRequiredApps(const Config
   }
 
   if (!!cfg.reset_apps) {
-    cfg_apps_union.insert((*cfg.reset_apps).begin(), (*cfg.reset_apps).end());
+    const auto& reset_apps{*cfg.reset_apps};
+    if (reset_apps.size() == 1 && reset_apps[0] == "*") {
+      // if `reset_apps="*"`, then all target apps should be fetched and stored
+      std::for_each(target_apps.begin(), target_apps.end(),
+                    [&cfg_apps_union](const Target::Apps::AppDesc& val) { cfg_apps_union.insert(val.name); });
+    } else {
+      cfg_apps_union.insert(reset_apps.begin(), reset_apps.end());
+    }
   }
 
   for (const auto& app_name : cfg_apps_union) {
