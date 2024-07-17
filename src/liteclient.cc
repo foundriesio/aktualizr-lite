@@ -354,6 +354,11 @@ bool LiteClient::importRootMeta(const boost::filesystem::path& src, Uptane::Vers
 }
 
 void LiteClient::importRootMetaIfNeededAndPresent() {
+#ifdef AKLITE_USE_TUF_AGENT
+  LOG_WARNING << "Skipping importRootMetaIfNeededAndPresent";
+  return;
+#endif
+
   const auto import{isRootMetaImportNeeded()};
   if (!std::get<0>(import)) {
     return;

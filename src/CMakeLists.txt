@@ -23,6 +23,7 @@ set(SRC helpers.cc
         tuf/akhttpsreposource.cc
         tuf/localreposource.cc
         tuf/akrepo.cc
+        tuf/httprepo.cc
         daemon.cc
         aklitereportqueue.cc)
 
@@ -49,11 +50,15 @@ set(HEADERS helpers.h
         tuf/akhttpsreposource.h
         tuf/localreposource.h
         tuf/akrepo.h
+        tuf/httprepo.h
         ../include/aktualizr-lite/api.h
         ../include/aktualizr-lite/aklite_client_ext.h
         ../include/aktualizr-lite/tuf/tuf.h
         daemon.h
         aklitereportqueue.h)
+
+# Use experimental standalone tuf agent
+add_definitions(-DAKLITE_USE_TUF_AGENT)
 
 if(USE_COMPOSEAPP_ENGINE)
   set(SRC ${SRC} composeapp/appengine.cc)

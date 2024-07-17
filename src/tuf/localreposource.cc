@@ -29,4 +29,6 @@ std::string LocalRepoSource::FetchSnapshot() { return fetchFile(src_dir_ / "snap
 
 std::string LocalRepoSource::FetchTargets() { return fetchFile(src_dir_ / "targets.json"); }
 
+std::string LocalRepoSource::SourceDir() { return src_dir_.string(); }
+
 }  // namespace aklite::tuf
