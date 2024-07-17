@@ -17,6 +17,8 @@ class LocalRepoSource : public RepoSource {
   std::string FetchSnapshot() override;
   std::string FetchTargets() override;
 
+  std::string SourceDir();
+
  private:
   static std::string fetchFile(const boost::filesystem::path &meta_file_path);
 

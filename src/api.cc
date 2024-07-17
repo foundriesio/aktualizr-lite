@@ -22,6 +22,7 @@
 #include "ostree/repo.h"
 #include "tuf/akhttpsreposource.h"
 #include "tuf/akrepo.h"
+#include "tuf/httprepo.h"
 #include "tuf/localreposource.h"
 #include "uptane/exceptions.h"
 
@@ -158,7 +159,11 @@ void AkliteClient::Init(Config& config, bool finalize, bool apply_lock) {
     }
   }
 
+#ifdef AKLITE_USE_TUF_AGENT
+  tuf_repo_ = std::make_unique<aklite::tuf::HttpRepo>(client_->config);
+#else
   tuf_repo_ = std::make_unique<aklite::tuf::AkRepo>(client_->config);
+#endif
   hw_id_ = client_->primary_ecu.second.ToString();
 }
 
