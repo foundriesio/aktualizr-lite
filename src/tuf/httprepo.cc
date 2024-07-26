@@ -5,10 +5,12 @@
 
 #include "tuf/localreposource.h"
 #include "uptane/exceptions.h"
+#include "utilities/utils.h"
 
 #include <curl/curl.h>
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <string>
 
@@ -111,6 +113,31 @@ std::vector<TufTarget> HttpRepo::GetTargets() {
   }
 }
 
+/*
+ * Convert a hex string in a bytes array.
+ */
+static int hex_to_bin(const char* s, uint8_t* dst, size_t len) {
+  size_t i, j, k;
+
+  memset(dst, 0, len);
+  for (i = 0; i < len * 2; i++, s++) {
+    if (*s >= '0' && *s <= '9')
+      j = *s - '0';
+    else if (*s >= 'A' && *s <= 'F')
+      j = *s - '7';
+    else if (*s >= 'a' && *s <= 'f')
+      j = *s - 'W';
+    else
+      return -1;
+
+    k = ((i & 1) != 0) ? j : j << 4;
+
+    dst[i >> 1] = (uint8_t)(dst[i >> 1] | k);
+  }
+
+  return 0;
+}
+
 std::string HttpRepo::GetRoot(int version) {
   if (version != -1) {
     LOG_WARNING << "Fetching specific Root version is not supported. Retrieving the last one.";
@@ -118,6 +145,23 @@ std::string HttpRepo::GetRoot(int version) {
 
   const auto* url = "root";
   auto root_raw = curl_request(url, false);
+  LOG_INFO << "Root:\n" << root_raw << "\n";
+
+  auto root_json = Utils::parseJSON(root_raw);
+  auto sig_string = root_json["signatures"][0]["sig"].asString();
+  LOG_INFO << "Sig (hex)" << sig_string << "\n";
+  if (sig_string.size() == 128) {
+    // sig string is a hex string. Convert to base64
+
+    char sig_bytes[64];
+    hex_to_bin(sig_string.c_str(), (uint8_t*)sig_bytes, 64);
+    auto sig_base64 = Utils::toBase64(std::string(sig_bytes));
+    LOG_INFO << "Sig (b64)" << sig_base64 << "\n";
+    root_json["signatures"][0]["sig"] = sig_base64;
+    root_raw = Utils::jsonToStr(root_json);
+    LOG_INFO << "Root New:\n" << root_raw << "\n";
+  }
+
   return root_raw;
 }
 
