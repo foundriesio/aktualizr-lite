@@ -1,3 +1,6 @@
+#ifndef AKTUALIZR_LITE_AK_HTTP_REPO_SOURCE_H_
+#define AKTUALIZR_LITE_AK_HTTP_REPO_SOURCE_H_
+
 #include "uptane/fetcher.h"
 
 #include "aktualizr-lite/tuf/tuf.h"
@@ -25,3 +28,4 @@ class AkHttpsRepoSource : public RepoSource {
 };
 
 }  // namespace aklite::tuf
+#endif

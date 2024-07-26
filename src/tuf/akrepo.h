@@ -1,3 +1,6 @@
+#ifndef AKTUALIZR_LITE_REPO_H_
+#define AKTUALIZR_LITE_REPO_H_
+
 #include "libaktualizr/config.h"
 #include "storage/invstorage.h"
 #include "uptane/fetcher.h"
@@ -41,3 +44,5 @@ class AkRepo : public Repo {
 };
 
 }  // namespace aklite::tuf
+
+#endif
