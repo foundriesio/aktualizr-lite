@@ -1,3 +1,6 @@
+#ifndef AKTUALIZR_LITE_AK_LOCAL_REPO_SOURCE_H_
+#define AKTUALIZR_LITE_AK_LOCAL_REPO_SOURCE_H_
+
 #include "boost/filesystem.hpp"
 
 #include "aktualizr-lite/tuf/tuf.h"
@@ -22,3 +25,5 @@ class LocalRepoSource : public RepoSource {
 };
 
 }  // namespace aklite::tuf
+
+#endif
