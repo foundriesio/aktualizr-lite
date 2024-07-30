@@ -77,13 +77,21 @@ bool IsSuccessCode(StatusCode status) {
           status == StatusCode::InstallNeedsReboot || status == StatusCode::InstallAppsNeedFinalization);
 }
 
-StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_update_source) {
-  CheckInResult cr{CheckInResult::Status::Failed, "", std::vector<TufTarget>{}};
-  if (local_update_source == nullptr) {
-    cr = client.CheckIn();
+static CheckInResult checkIn(AkliteClientExt &client, CheckMode check_mode,
+                             const LocalUpdateSource *local_update_source) {
+  if (check_mode == CheckMode::Update) {
+    if (local_update_source == nullptr) {
+      return client.CheckIn();
+    } else {
+      return client.CheckInLocal(local_update_source);
+    }
   } else {
-    cr = client.CheckInLocal(local_update_source);
+    return client.CheckInCurrent(local_update_source);
   }
+}
+
+StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_update_source, CheckMode check_mode) {
+  auto cr = checkIn(client, check_mode, local_update_source);
   if (cr) {
     if (cr.Targets().empty()) {
       std::cout << "\nNo Targets found"
@@ -119,19 +127,6 @@ StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_updat
     return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
   } else {
     return res2StatusCode<GetTargetToInstallResult::Status>(t2s, gti_res.status);
-  }
-}
-
-static CheckInResult checkIn(AkliteClientExt &client, CheckMode check_mode,
-                             const LocalUpdateSource *local_update_source) {
-  if (check_mode == CheckMode::Update) {
-    if (local_update_source == nullptr) {
-      return client.CheckIn();
-    } else {
-      return client.CheckInLocal(local_update_source);
-    }
-  } else {
-    return client.CheckInCurrent(local_update_source);
   }
 }
 

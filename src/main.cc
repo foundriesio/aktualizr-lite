@@ -67,13 +67,22 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
-static int list_main(LiteClient& client, const bpo::variables_map& unused) {
-  (void)unused;
+static int checkin(LiteClient& client, aklite::cli::CheckMode check_mode) {
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClientExt akclient(client_ptr, false, true);
 
-  auto status = aklite::cli::CheckIn(akclient, nullptr);
+  auto status = aklite::cli::CheckIn(akclient, nullptr, check_mode);
   return static_cast<int>(status);
+}
+
+static int cli_list(LiteClient& client, const bpo::variables_map& unused) {
+  (void)unused;
+  return checkin(client, aklite::cli::CheckMode::Current);
+}
+
+static int cli_check(LiteClient& client, const bpo::variables_map& unused) {
+  (void)unused;
+  return checkin(client, aklite::cli::CheckMode::Update);
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
@@ -168,8 +177,8 @@ static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::var
     {"update", cli_update},
     {"pull", cli_pull},
     {"install", cli_install},
-    {"list", list_main},
-    {"check", list_main},
+    {"list", cli_list},
+    {"check", cli_check},
     {"status", status_main},
     {"finalize", cli_complete_install},
     {"run", cli_complete_install},
