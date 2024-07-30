@@ -32,19 +32,19 @@ static const std::unordered_map<CheckInResult::Status, StatusCode> c2s = {
 };
 
 static const std::unordered_map<GetTargetToInstallResult::Status, StatusCode> t2s = {
-    {GetTargetToInstallResult::Status::Ok, StatusCode::Ok},
-    {GetTargetToInstallResult::Status::OkCached, StatusCode::CheckinOkCached},
-    {GetTargetToInstallResult::Status::Failed, StatusCode::CheckinFailure},
-    {GetTargetToInstallResult::Status::NoMatchingTargets, StatusCode::CheckinNoMatchingTargets},
-    {GetTargetToInstallResult::Status::NoTargetContent, StatusCode::CheckinNoTargetContent},
-    {GetTargetToInstallResult::Status::SecurityError, StatusCode::CheckinSecurityError},
-    {GetTargetToInstallResult::Status::ExpiredMetadata, StatusCode::CheckinExpiredMetadata},
-    {GetTargetToInstallResult::Status::MetadataFetchFailure, StatusCode::CheckinMetadataFetchFailure},
-    {GetTargetToInstallResult::Status::MetadataNotFound, StatusCode::CheckinMetadataNotFound},
-    {GetTargetToInstallResult::Status::BundleMetadataError, StatusCode::CheckinInvalidBundleMetadata},
     {GetTargetToInstallResult::Status::TufTargetNotFound, StatusCode::TufTargetNotFound},
     {GetTargetToInstallResult::Status::TargetAlreadyInstalled, StatusCode::InstallAlreadyInstalled},
     {GetTargetToInstallResult::Status::RollbackTargetNotFound, StatusCode::RollbackTargetNotFound},
+
+    // Internal Issues
+    {GetTargetToInstallResult::Status::RollbackTargetNotFound, StatusCode::UnknownError},
+    {GetTargetToInstallResult::Status::BadCheckinStatus, StatusCode::UnknownError},
+
+    // Success results
+    {GetTargetToInstallResult::Status::NoUpdate, StatusCode::Ok},
+    {GetTargetToInstallResult::Status::UpdateNewVersion, StatusCode::CheckinUpdateNewVersion},
+    {GetTargetToInstallResult::Status::UpdateSyncApps, StatusCode::CheckinUpdateSyncApps},
+    {GetTargetToInstallResult::Status::UpdateRollback, StatusCode::CheckinUpdateRollback},
 };
 
 static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {
@@ -72,8 +72,9 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
 
 bool IsSuccessCode(StatusCode status) {
   return (status == StatusCode::Ok || status == StatusCode::CheckinOkCached ||
-          status == StatusCode::OkNeedsRebootForBootFw || status == StatusCode::InstallNeedsReboot ||
-          status == StatusCode::InstallAppsNeedFinalization);
+          status == StatusCode::CheckinUpdateNewVersion || status == StatusCode::CheckinUpdateSyncApps ||
+          status == StatusCode::CheckinUpdateRollback || status == StatusCode::OkNeedsRebootForBootFw ||
+          status == StatusCode::InstallNeedsReboot || status == StatusCode::InstallAppsNeedFinalization);
 }
 
 StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source) {
@@ -144,7 +145,7 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
 
   //
   if (gti_res.selected_target.IsUnknown()) {
-    if (gti_res.status == GetTargetToInstallResult::Status::NoMatchingTargets) {
+    if (gti_res.status == GetTargetToInstallResult::Status::TufTargetNotFound) {
       std::string target_string;
       if (version == -1 && target_name.empty()) {
         target_string = " version: latest,";

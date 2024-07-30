@@ -549,7 +549,7 @@ TEST_F(NoSpaceTest, ExtApiOstreeUpdateNoSpaceBeforeUpdate) {
     auto ci_res = client.CheckIn();
     auto result = client.GetTargetToInstall(ci_res);
     ASSERT_FALSE(result.selected_target.IsUnknown());
-    ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+    ASSERT_EQ(result.status, GetTargetToInstallResult::Status::UpdateNewVersion);
 
     auto install_result = client.PullAndInstall(result.selected_target, result.reason);
     ASSERT_EQ(install_result.status, InstallResult::Status::DownloadFailed_NoSpace);
@@ -577,7 +577,7 @@ TEST_P(AkliteNoSpaceTest, ExtApiNotEnoughSpaceForApps) {
     auto ci_res = akclient.CheckIn();
     auto result = akclient.GetTargetToInstall(ci_res);
     ASSERT_FALSE(result.selected_target.IsUnknown());
-    ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+    ASSERT_EQ(result.status, GetTargetToInstallResult::Status::UpdateNewVersion);
 
     // First try: there is not enough space
     auto install_result = akclient.PullAndInstall(result.selected_target, result.reason);

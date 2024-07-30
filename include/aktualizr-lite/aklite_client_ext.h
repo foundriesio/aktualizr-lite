@@ -14,22 +14,20 @@ class GetTargetToInstallResult {
  public:
   //
   enum class Status {
-    // First block must match CheckInResult::Status
-    Ok = static_cast<int>(CheckInResult::Status::Ok),  // check-in was good
-    OkCached,                                          // check-in failed, but locally cached meta-data is still valid
-    Failed,                                            // check-in failed and there's no valid local meta-data
-    NoMatchingTargets,
-    NoTargetContent,
-    SecurityError,
-    ExpiredMetadata,
-    MetadataFetchFailure,
-    MetadataNotFound,
-    BundleMetadataError,
-
-    // Additional values, specific for GetTargetToInstallResult
+    // Regular error situations
     TufTargetNotFound = 100,
     TargetAlreadyInstalled,
     RollbackTargetNotFound,
+
+    // Internal errors
+    BadRollbackTarget = 110,
+    BadCheckinStatus,
+
+    // Success results
+    NoUpdate = 120,
+    UpdateNewVersion,
+    UpdateSyncApps,
+    UpdateRollback,
   };
 
   explicit GetTargetToInstallResult(const CheckInResult &checkin_res)
@@ -40,7 +38,10 @@ class GetTargetToInstallResult {
   Status status;
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
-  operator bool() const { return status == Status::Ok || status == Status::OkCached; }
+  operator bool() const {
+    return status == Status::NoUpdate || status == Status::UpdateNewVersion || status == Status::UpdateSyncApps ||
+           status == Status::UpdateRollback;
+  }
 
   TufTarget selected_target;
   std::string reason;
