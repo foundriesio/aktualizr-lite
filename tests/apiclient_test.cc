@@ -23,13 +23,16 @@
 
 #include "fixtures/liteclienttest.cc"
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 using ::testing::NiceMock;
 
 class ApiClientTest : public fixtures::ClientTest {
  protected:
-  std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
-                                               boost::optional<std::vector<std::string>> apps = boost::none,
-                                               bool finalize = true) override {
+  std::shared_ptr<fixtures::LiteClientMock> createLiteClient(
+      InitialVersion initial_version = InitialVersion::kOn,
+      boost::optional<std::vector<std::string>> apps = boost::none, bool finalize = true) override {
     app_engine_mock_ = std::make_shared<NiceMock<fixtures::MockAppEngine>>();
     lite_client_ = ClientTest::createLiteClient(app_engine_mock_, initial_version, apps);
     return lite_client_;
@@ -54,7 +57,7 @@ class ApiClientTest : public fixtures::ClientTest {
 
  private:
   std::shared_ptr<NiceMock<fixtures::MockAppEngine>> app_engine_mock_;
-  std::shared_ptr<LiteClient> lite_client_;
+  std::shared_ptr<fixtures::LiteClientMock> lite_client_;
   std::string pacman_type_;
 };
 
@@ -80,7 +83,10 @@ TEST_F(ApiClientTest, GetDevice) {
 }
 
 TEST_F(ApiClientTest, CheckIn) {
-  AkliteClient client(createLiteClient(InitialVersion::kOn));
+  auto lite_client = createLiteClient(InitialVersion::kOn);
+  AkliteClient client(lite_client);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")));
 
   auto result = client.CheckIn();
 
@@ -96,6 +102,9 @@ TEST_F(ApiClientTest, CheckIn) {
   ASSERT_TRUE(resetEvents());
 
   auto new_target = createTarget();
+
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")));
   result = client.CheckIn();
   ASSERT_EQ(0, getDeviceGateway().getEvents().size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());
@@ -551,6 +560,30 @@ TEST_F(ApiClientTest, InstallTargetWithHackedApps) {
   ASSERT_EQ(latest.Name(), malicious_target.Name());
   auto installer = client.Installer(malicious_target, "", "", InstallMode::OstreeOnly);
   ASSERT_EQ(nullptr, installer);
+}
+
+TEST_F(ApiClientTest, CheckInCurrent) {
+  auto lite_client = createLiteClient(InitialVersion::kOn);
+  AkliteClient client(lite_client);
+  auto result = client.CheckIn();
+
+  auto events = getDeviceGateway().getEvents();
+  ASSERT_EQ(2, events.size());
+  auto val = getDeviceGateway().readSotaToml();
+  ASSERT_NE(std::string::npos, val.find("[pacman]"));
+
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(1, result.Targets().size());
+
+  ASSERT_TRUE(getDeviceGateway().resetSotaToml());
+  ASSERT_TRUE(resetEvents());
+
+  // No events should be generated, and no callback invoked
+  EXPECT_CALL(*lite_client, callback(testing::_, testing::_, testing::_)).Times(0);
+  result = client.CheckInCurrent();
+  ASSERT_EQ(1, result.Targets().size());
+  events = getDeviceGateway().getEvents();
+  ASSERT_EQ(0, events.size());
 }
 
 // Tests using Extended Aklite Client methods:

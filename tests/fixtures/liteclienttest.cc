@@ -25,6 +25,15 @@ namespace fixtures {
 #include "liteclient/mockappengine.cc"
 
 
+class LiteClientMock : public LiteClient {
+ public:
+  LiteClientMock(Config& config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr, const std::shared_ptr<P11EngineGuard>& p11 = nullptr)
+      : LiteClient(config_in, app_engine, p11) {}
+
+  MOCK_METHOD(void, callback, (const char* msg, const Uptane::Target& install_target, const std::string& result),
+              (override));
+};
+
 class ClientTest :virtual public ::testing::Test {
  public:
   static std::string SysRootSrc;
@@ -46,7 +55,7 @@ class ClientTest :virtual public ::testing::Test {
   enum class UpdateType { kOstree, kApp, kDownloadFailed, kOstreeApply, kFailed, kFinalized };
 
 
-  virtual std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
+  virtual std::shared_ptr<fixtures::LiteClientMock> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
                                                        boost::optional<std::vector<std::string>> apps = boost::none,
                                                        bool finalize = true) = 0;
   virtual void tweakConf(Config& conf) {};
@@ -54,7 +63,7 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method createLiteClient
    */
-  std::shared_ptr<LiteClient> createLiteClient(const std::shared_ptr<AppEngine>& app_engine,
+  std::shared_ptr<fixtures::LiteClientMock> createLiteClient(const std::shared_ptr<AppEngine>& app_engine,
                                                InitialVersion initial_version = InitialVersion::kOn,
                                                boost::optional<std::vector<std::string>> apps = boost::none,
                                                const std::string& compose_apps_root = "",
@@ -178,7 +187,7 @@ class ClientTest :virtual public ::testing::Test {
 
     tweakConf(conf);
 
-    auto client = std::make_shared<LiteClient>(conf, app_engine);
+    auto client = std::make_shared<testing::NiceMock<LiteClientMock>>(conf, app_engine);
     // Recreate the report queue with the configuration needed for tests, specifically:
     // - make the worker thread not to wait before reading from DB and sending to DG the next set of events;
     // - make the report queue include just one event in a single request to DG.
@@ -324,7 +333,7 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * mehod update
    */
-  void update(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
+  void update(fixtures::LiteClientMock& client, const Uptane::Target& from, const Uptane::Target& to,
               data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kNeedCompletion,
               DownloadResult expected_download_result = {DownloadResult::Status::Ok, ""}, const std::string& expected_install_err_msg = "", bool expect_boot_firmware = true) {
     device_gateway_.resetEvents(client.http_client);
@@ -359,7 +368,7 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method updateApps
    */
-  void updateApps(LiteClient& client, const Uptane::Target& from, const Uptane::Target& to,
+  void updateApps(fixtures::LiteClientMock& client, const Uptane::Target& from, const Uptane::Target& to,
                   DownloadResult::Status expected_download_code = DownloadResult::Status::Ok,
                   const std::string& download_err_msg = "",
                   data::ResultCode::Numeric expected_install_code = data::ResultCode::Numeric::kOk,
@@ -444,7 +453,7 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method reboot
    */
-  void reboot(std::shared_ptr<LiteClient>& client, boost::optional<std::vector<std::string>> new_app_list = boost::none, bool reset_bootupgrade_available = true) {
+  void reboot(std::shared_ptr<fixtures::LiteClientMock>& client, boost::optional<std::vector<std::string>> new_app_list = boost::none, bool reset_bootupgrade_available = true) {
     boost::filesystem::remove(test_dir_.Path() / "need_reboot");
     // make sure we tear down an existing instance of a client before a new one is created
     // otherwise we hit race condition with sending events by the report queue thread, the same event is sent twice
@@ -462,12 +471,12 @@ class ClientTest :virtual public ::testing::Test {
   /**
    * method restart
    */
-  void restart(std::shared_ptr<LiteClient>& client) { client = createLiteClient(InitialVersion::kOff); }
+  void restart(std::shared_ptr<fixtures::LiteClientMock>& client) { client = createLiteClient(InitialVersion::kOff); }
 
   /**
    * method checkHeaders
    */
-  void checkHeaders(LiteClient& client, const Uptane::Target& target) {
+  void checkHeaders(fixtures::LiteClientMock& client, const Uptane::Target& target) {
     // check for a new Target in order to send requests with headers we are interested in
     ASSERT_TRUE(client.checkForUpdatesBegin());
     if (target.MatchTarget(Uptane::Target::Unknown())) return;
@@ -478,7 +487,7 @@ class ClientTest :virtual public ::testing::Test {
     ASSERT_EQ(req_headers.get("x-ats-dockerapps", ""), Target::appsStr(target, app_shortlist_));
   }
 
-  void checkEvents(LiteClient& client, const Uptane::Target& target, UpdateType update_type, const std::string& download_failure_err_msg = "", const std::string& install_failure_err_msg = "") {
+  void checkEvents(fixtures::LiteClientMock& client, const Uptane::Target& target, UpdateType update_type, const std::string& download_failure_err_msg = "", const std::string& install_failure_err_msg = "") {
     const std::unordered_map<UpdateType, std::vector<std::string>> updateToevents = {
         { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},
         { UpdateType::kApp, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},

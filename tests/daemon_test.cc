@@ -22,9 +22,9 @@ using ::testing::NiceMock;
 
 class DaemonTest : public fixtures::ClientTest {
  protected:
-  std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
-                                               boost::optional<std::vector<std::string>> apps = boost::none,
-                                               bool finalize = true) override {
+  std::shared_ptr<fixtures::LiteClientMock> createLiteClient(
+      InitialVersion initial_version = InitialVersion::kOn,
+      boost::optional<std::vector<std::string>> apps = boost::none, bool finalize = true) override {
     app_engine_mock_ = std::make_shared<NiceMock<fixtures::MockAppEngine>>();
     lite_client_ = ClientTest::createLiteClient(app_engine_mock_, initial_version, apps);
     return lite_client_;
@@ -32,7 +32,7 @@ class DaemonTest : public fixtures::ClientTest {
 
  private:
   std::shared_ptr<NiceMock<fixtures::MockAppEngine>> app_engine_mock_;
-  std::shared_ptr<LiteClient> lite_client_;
+  std::shared_ptr<fixtures::LiteClientMock> lite_client_;
   std::string pacman_type_;
 };
 

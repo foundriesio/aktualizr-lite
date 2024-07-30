@@ -31,9 +31,9 @@ using ::testing::Return;
 
 class LiteClientTest : public fixtures::ClientTest {
  protected:
-  std::shared_ptr<LiteClient> createLiteClient(InitialVersion initial_version = InitialVersion::kOn,
-                                               boost::optional<std::vector<std::string>> apps = boost::none,
-                                               bool finalize = true) override {
+  std::shared_ptr<fixtures::LiteClientMock> createLiteClient(
+      InitialVersion initial_version = InitialVersion::kOn,
+      boost::optional<std::vector<std::string>> apps = boost::none, bool finalize = true) override {
     app_engine_mock_ = std::make_shared<NiceMock<fixtures::MockAppEngine>>();
     return ClientTest::createLiteClient(app_engine_mock_, initial_version, apps, "", boost::none, true, finalize);
   }
