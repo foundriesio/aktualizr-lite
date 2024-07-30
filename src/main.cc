@@ -70,10 +70,10 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
 static int list_main(LiteClient& client, const bpo::variables_map& unused) {
   (void)unused;
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClient akclient(client_ptr, false, true);
+  AkliteClientExt akclient(client_ptr, false, true);
 
   auto status = aklite::cli::CheckIn(akclient, nullptr);
-  return aklite::cli::IsSuccessCode(status) ? EXIT_SUCCESS : EXIT_FAILURE;
+  return static_cast<int>(status);
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {

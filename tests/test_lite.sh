@@ -130,7 +130,7 @@ $valgrind $aklite -h | grep "daemon"
 
 
 ## Check that we can do the list command
-out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml list)
+out=$($valgrind $aklite --loglevel 1 -c $sota_dir/sota.toml check) || test $? -eq 16
 if [[ ! "$out" =~ "foo1" ]] ; then
     echo "ERROR: foo1 update missing"
     exit 1

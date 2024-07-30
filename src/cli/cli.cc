@@ -77,7 +77,7 @@ bool IsSuccessCode(StatusCode status) {
           status == StatusCode::InstallNeedsReboot || status == StatusCode::InstallAppsNeedFinalization);
 }
 
-StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source) {
+StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_update_source) {
   CheckInResult cr{CheckInResult::Status::Failed, "", std::vector<TufTarget>{}};
   if (local_update_source == nullptr) {
     cr = client.CheckIn();
@@ -109,7 +109,17 @@ StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_s
       std::cout << "\n";
     }
   }
-  return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
+  if (!cr) {
+    return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
+  }
+
+  auto gti_res = client.GetTargetToInstall(cr);
+  if (gti_res && gti_res.selected_target.IsUnknown()) {
+    // Keep Ok vs OkCached differentiation in case of success and there is no target to install
+    return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
+  } else {
+    return res2StatusCode<GetTargetToInstallResult::Status>(t2s, gti_res.status);
+  }
 }
 
 static CheckInResult checkIn(AkliteClientExt &client, CheckMode check_mode,
