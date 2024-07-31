@@ -72,6 +72,71 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::UnknownError, SC::UnknownError},
 };
 
+using SC = StatusCode;
+static const std::unordered_map<SC, std::string> status2string = {
+    {SC::Ok, "Operation succeeded"},
+
+    // Return codes for CheckIn, Pull and Install
+    {SC::CheckinOkCached, "Unable to fetch updated TUF metadata, but stored metadata is valid"},
+    {SC::CheckinFailure, "Failed to update TUF metadata"},
+    {SC::CheckinNoMatchingTargets,
+     "There is no target in the device TUF repo that matches a device tag and/or hardware ID"},
+    {SC::CheckinNoTargetContent,
+     "Failed to find the ostree commit and/or all Apps of the Target to be installed in the provided source bundle "
+     "(offline mode only)"},
+    {SC::CheckinSecurityError, "Invalid TUF metadata"},
+    {SC::CheckinExpiredMetadata, "TUF metadata is expired"},
+    {SC::CheckinMetadataFetchFailure, "Unable to fetch TUF metadata"},
+    {SC::CheckinMetadataNotFound, "TUF metadata not found in the provided path (offline mode only)"},
+    {SC::CheckinInvalidBundleMetadata,
+     "The bundle metadata is invalid (offline mode only)."
+     "There are a few reasons why the metadata might be invalid:\n"
+     "        1. One or more bundle signatures is/are invalid.\n"
+     "        2. The bundle targets' type, whether CI or production, differs from the device's type.\n"
+     "        3. The bundle targets' tag differs from the device's tag."},
+    {SC::TufTargetNotFound, "Selected target not found"},
+    {SC::CheckinUpdateNewVersion, "Update required: new version"},
+    {SC::CheckinUpdateSyncApps, "Update required: apps synchronization"},
+    {SC::CheckinUpdateRollback, "Update required: rollback"},
+
+    // Return codes for Pull and Install
+    {SC::RollbackTargetNotFound,
+     "Unable to find target to rollback to after a failure to start Apps at boot on a new version of sysroot"},
+    {SC::InstallationInProgress, "Unable to pull/install: there is an installation that needs completion"},
+    {SC::DownloadFailure, "Unable to download target"},
+    {SC::DownloadFailureNoSpace, "There is no enough free space to download the target"},
+    {SC::DownloadFailureVerificationFailed,
+     "The pulled target content is invalid, specifically App compose file is invalid"},
+    {SC::InstallAlreadyInstalled, "Selected target is already installed"},
+    {SC::InstallDowngradeAttempt, "Attempted to install a previous version"},
+
+    // Return codes for Install
+    {SC::InstallAppsNeedFinalization, "Execute the `run` subcommand to finalize installation"},
+    {SC::InstallAppPullFailure, "Unable read target data, make sure it was pulled"},
+    {SC::InstallNeedsRebootForBootFw,
+     "Reboot is required to complete the previous boot firmware update. After reboot the update attempt must be "
+     "repeated from the beginning"},
+
+    // Return codes for Install and CompleteInstall
+    {SC::InstallNeedsReboot, "Reboot to finalize installation"},
+    {SC::OkNeedsRebootForBootFw, "Reboot to finalize bootloader installation"},
+    {SC::InstallRollbackNeedsReboot, "Installation failed, rollback initiated but requires reboot to finalize"},
+
+    // Return codes for CompleteInstall
+    {SC::NoPendingInstallation, "No pending installation to run"},
+    {SC::InstallOfflineRollbackOk, "Offline installation failed, rollback performed"},
+    {SC::InstallRollbackOk, "Online installation failed, rollback performed"},
+    {SC::InstallRollbackFailed, "Installation failed and rollback operation was not successful"},
+    {SC::UnknownError, "Unknown error"},
+};
+
+std::string StatusCodeDescription(StatusCode status) {
+  if (status2string.count(status) == 1) {
+    return status2string.at(status);
+  }
+  return "Invalid StatusCode value: " + std::to_string(static_cast<int>(status));
+}
+
 bool IsSuccessCode(StatusCode status) {
   return (status == SC::Ok || status == SC::CheckinOkCached || status == SC::CheckinUpdateNewVersion ||
           status == SC::CheckinUpdateSyncApps || status == SC::CheckinUpdateRollback ||

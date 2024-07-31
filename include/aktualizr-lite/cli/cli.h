@@ -88,6 +88,8 @@ StatusCode CompleteInstall(AkliteClient &client);
 
 bool IsSuccessCode(StatusCode status);
 
+std::string StatusCodeDescription(StatusCode status);
+
 }  // namespace aklite::cli
 
 #endif  // AKTUALIZR_LITE_CLI_H_
