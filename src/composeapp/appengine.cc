@@ -71,21 +71,6 @@ bool AppEngine::isRunning(const App& app) const {
   return res;
 }
 
-Json::Value AppEngine::getRunningAppsInfo() const {
-  Json::Value app_statuses;
-  try {
-    std::future<std::string> output;
-    exec(boost::format{"%s --store %s ps --format json"} % composectl_cmd_ % storeRoot(), "",
-         boost::process::std_out > output);
-    const auto output_str{output.get()};
-    app_statuses = Utils::parseJSON(output_str);
-  } catch (const std::exception& exc) {
-    LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
-  }
-
-  return app_statuses;
-}
-
 void AppEngine::prune(const Apps& app_shortlist) {
   try {
     // Remove apps that are not in the shortlist
