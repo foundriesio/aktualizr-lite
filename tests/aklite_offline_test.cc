@@ -450,10 +450,10 @@ TEST_F(AkliteOffline, OfflineClientCheckinSecurityError) {
   const auto available_targets{check()};
   ASSERT_EQ(2, available_targets.size());
 
-  // Now try to do checkin against the outdated TUF repo
-  AkliteClient client(createLiteClient());
+  // Now try to do checkin against the outdated TUF repo. A new version is detected from the previously stored metadata
+  AkliteClientExt client(createLiteClient());
   LocalUpdateSource outdated_src = {outdated_repo_path.string(), src()->ostree_repo, src()->app_store};
-  ASSERT_EQ(aklite::cli::StatusCode::CheckinOkCached, aklite::cli::CheckIn(client, &outdated_src));
+  ASSERT_EQ(aklite::cli::StatusCode::CheckinUpdateNewVersion, aklite::cli::CheckIn(client, &outdated_src));
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinMetadataNotFound) {
@@ -462,7 +462,7 @@ TEST_F(AkliteOffline, OfflineClientCheckinMetadataNotFound) {
   const auto invalid_repo_path{test_dir_ / "invalid_tuf_repo"};
 
   // Now try to do checkin against an invalid TUF repo path
-  AkliteClient client(createLiteClient());
+  AkliteClientExt client(createLiteClient());
   LocalUpdateSource invalid_src = {invalid_repo_path.string(), src()->ostree_repo, src()->app_store};
   ASSERT_EQ(aklite::cli::StatusCode::CheckinMetadataNotFound, aklite::cli::CheckIn(client, &invalid_src));
 }
@@ -473,12 +473,12 @@ TEST_F(AkliteOffline, OfflineClientCheckinExpiredMetadata) {
   const auto prev_target{addTarget(expired_repo, {createApp("app-01")})};
   const auto target{addTarget(expired_repo, {createApp("app-01")})};
 
-  AkliteClient client(createLiteClient());
+  AkliteClientExt client(createLiteClient());
   ASSERT_EQ(aklite::cli::StatusCode::CheckinExpiredMetadata, aklite::cli::CheckIn(client, src()));
 }
 
 TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoMatchingTargets) {
-  AkliteClient client(createLiteClient());
+  AkliteClientExt client(createLiteClient());
 
   setTargetHwId("some-other-hw-id");
   const auto prev_target{addTarget({createApp("app-01")})};
@@ -492,7 +492,7 @@ TEST_F(AkliteOffline, OfflineClientCheckinCheckinNoTargetContent) {
   const auto target{addTarget({createApp("app-01")})};
 
   boost::filesystem::remove_all(app_store_.appsDir() / "app-01");
-  AkliteClient client(createLiteClient());
+  AkliteClientExt client(createLiteClient());
   ASSERT_EQ(aklite::cli::StatusCode::CheckinNoTargetContent, aklite::cli::CheckIn(client, src()));
 }
 

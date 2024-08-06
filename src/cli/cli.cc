@@ -32,19 +32,19 @@ static const std::unordered_map<CheckInResult::Status, StatusCode> c2s = {
 };
 
 static const std::unordered_map<GetTargetToInstallResult::Status, StatusCode> t2s = {
-    {GetTargetToInstallResult::Status::Ok, StatusCode::Ok},
-    {GetTargetToInstallResult::Status::OkCached, StatusCode::CheckinOkCached},
-    {GetTargetToInstallResult::Status::Failed, StatusCode::CheckinFailure},
-    {GetTargetToInstallResult::Status::NoMatchingTargets, StatusCode::CheckinNoMatchingTargets},
-    {GetTargetToInstallResult::Status::NoTargetContent, StatusCode::CheckinNoTargetContent},
-    {GetTargetToInstallResult::Status::SecurityError, StatusCode::CheckinSecurityError},
-    {GetTargetToInstallResult::Status::ExpiredMetadata, StatusCode::CheckinExpiredMetadata},
-    {GetTargetToInstallResult::Status::MetadataFetchFailure, StatusCode::CheckinMetadataFetchFailure},
-    {GetTargetToInstallResult::Status::MetadataNotFound, StatusCode::CheckinMetadataNotFound},
-    {GetTargetToInstallResult::Status::BundleMetadataError, StatusCode::CheckinInvalidBundleMetadata},
     {GetTargetToInstallResult::Status::TufTargetNotFound, StatusCode::TufTargetNotFound},
     {GetTargetToInstallResult::Status::TargetAlreadyInstalled, StatusCode::InstallAlreadyInstalled},
     {GetTargetToInstallResult::Status::RollbackTargetNotFound, StatusCode::RollbackTargetNotFound},
+
+    // Internal Issues
+    {GetTargetToInstallResult::Status::RollbackTargetNotFound, StatusCode::UnknownError},
+    {GetTargetToInstallResult::Status::BadCheckinStatus, StatusCode::UnknownError},
+
+    // Success results
+    {GetTargetToInstallResult::Status::NoUpdate, StatusCode::Ok},
+    {GetTargetToInstallResult::Status::UpdateNewVersion, StatusCode::CheckinUpdateNewVersion},
+    {GetTargetToInstallResult::Status::UpdateSyncApps, StatusCode::CheckinUpdateSyncApps},
+    {GetTargetToInstallResult::Status::UpdateRollback, StatusCode::CheckinUpdateRollback},
 };
 
 static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {
@@ -72,17 +72,26 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
 
 bool IsSuccessCode(StatusCode status) {
   return (status == StatusCode::Ok || status == StatusCode::CheckinOkCached ||
-          status == StatusCode::OkNeedsRebootForBootFw || status == StatusCode::InstallNeedsReboot ||
-          status == StatusCode::InstallAppsNeedFinalization);
+          status == StatusCode::CheckinUpdateNewVersion || status == StatusCode::CheckinUpdateSyncApps ||
+          status == StatusCode::CheckinUpdateRollback || status == StatusCode::OkNeedsRebootForBootFw ||
+          status == StatusCode::InstallNeedsReboot || status == StatusCode::InstallAppsNeedFinalization);
 }
 
-StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source) {
-  CheckInResult cr{CheckInResult::Status::Failed, "", std::vector<TufTarget>{}};
-  if (local_update_source == nullptr) {
-    cr = client.CheckIn();
+static CheckInResult checkIn(AkliteClientExt &client, CheckMode check_mode,
+                             const LocalUpdateSource *local_update_source) {
+  if (check_mode == CheckMode::Update) {
+    if (local_update_source == nullptr) {
+      return client.CheckIn();
+    } else {
+      return client.CheckInLocal(local_update_source);
+    }
   } else {
-    cr = client.CheckInLocal(local_update_source);
+    return client.CheckInCurrent(local_update_source);
   }
+}
+
+StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_update_source, CheckMode check_mode) {
+  auto cr = checkIn(client, check_mode, local_update_source);
   if (cr) {
     if (cr.Targets().empty()) {
       std::cout << "\nNo Targets found"
@@ -108,19 +117,16 @@ StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_s
       std::cout << "\n";
     }
   }
-  return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
-}
+  if (!cr) {
+    return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
+  }
 
-static CheckInResult checkIn(AkliteClientExt &client, CheckMode check_mode,
-                             const LocalUpdateSource *local_update_source) {
-  if (check_mode == CheckMode::Update) {
-    if (local_update_source == nullptr) {
-      return client.CheckIn();
-    } else {
-      return client.CheckInLocal(local_update_source);
-    }
+  auto gti_res = client.GetTargetToInstall(cr);
+  if (gti_res && gti_res.selected_target.IsUnknown()) {
+    // Keep Ok vs OkCached differentiation in case of success and there is no target to install
+    return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
   } else {
-    return client.CheckInCurrent(local_update_source);
+    return res2StatusCode<GetTargetToInstallResult::Status>(t2s, gti_res.status);
   }
 }
 
@@ -144,7 +150,7 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
 
   //
   if (gti_res.selected_target.IsUnknown()) {
-    if (gti_res.status == GetTargetToInstallResult::Status::NoMatchingTargets) {
+    if (gti_res.status == GetTargetToInstallResult::Status::TufTargetNotFound) {
       std::string target_string;
       if (version == -1 && target_name.empty()) {
         target_string = " version: latest,";

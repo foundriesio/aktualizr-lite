@@ -598,7 +598,7 @@ TEST_F(ApiClientTest, ExtApiRollback) {
   AkliteClientExt client(liteclient);
   auto ci_res = client.CheckIn();
   auto result = client.GetTargetToInstall(ci_res);
-  ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
+  ASSERT_EQ(GetTargetToInstallResult::Status::UpdateNewVersion, result.status);
   ASSERT_FALSE(result.selected_target.IsUnknown());
   ASSERT_FALSE(client.IsRollback(result.selected_target));
 
@@ -617,7 +617,7 @@ TEST_F(ApiClientTest, ExtApiRollback) {
   ci_res = rebooted_client.CheckIn();
   result = rebooted_client.GetTargetToInstall(ci_res);
   ASSERT_TRUE(result.selected_target.IsUnknown());
-  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::NoUpdate);
 
   ASSERT_EQ(result.reason.find(new_target.filename() + " is a failing Target"), std::string::npos) << result.reason;
 }
@@ -636,7 +636,7 @@ TEST_F(ApiClientTest, ExtApiInstallationInProgress) {
   client.CompleteInstallation();
   auto ci_res = client.CheckIn();
   auto result = client.GetTargetToInstall(ci_res);
-  ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
+  ASSERT_EQ(GetTargetToInstallResult::Status::UpdateNewVersion, result.status);
   ASSERT_FALSE(result.selected_target.IsUnknown());
   ASSERT_EQ(target2.filename(), result.selected_target.Name());
   ASSERT_FALSE(client.IsRollback(result.selected_target));
@@ -661,7 +661,7 @@ TEST_F(ApiClientTest, ExtApiInstallationInProgress) {
   ci_res = rebooted_client.CheckIn();
   result = rebooted_client.GetTargetToInstall(ci_res);
   ASSERT_TRUE(result.selected_target.IsUnknown());
-  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::NoUpdate);
 }
 
 TEST_F(ApiClientTest, ExtApiSeparatePullAndInstall) {
@@ -678,7 +678,7 @@ TEST_F(ApiClientTest, ExtApiSeparatePullAndInstall) {
   client.CompleteInstallation();
   auto ci_res = client.CheckIn();
   auto result = client.GetTargetToInstall(ci_res);
-  ASSERT_EQ(GetTargetToInstallResult::Status::Ok, result.status);
+  ASSERT_EQ(GetTargetToInstallResult::Status::UpdateNewVersion, result.status);
   ASSERT_FALSE(result.selected_target.IsUnknown());
   ASSERT_EQ(target2.filename(), result.selected_target.Name());
   ASSERT_FALSE(client.IsRollback(result.selected_target));
@@ -710,7 +710,7 @@ TEST_F(ApiClientTest, ExtApiSeparatePullAndInstall) {
   ci_res = rebooted_client.CheckIn();
   result = rebooted_client.GetTargetToInstall(ci_res);
   ASSERT_TRUE(result.selected_target.IsUnknown());
-  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::Ok);
+  ASSERT_EQ(result.status, GetTargetToInstallResult::Status::NoUpdate);
 }
 
 int main(int argc, char** argv) {

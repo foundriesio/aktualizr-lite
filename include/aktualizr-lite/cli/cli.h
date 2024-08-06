@@ -23,6 +23,9 @@ enum class StatusCode {
   CheckinMetadataFetchFailure = 13,
   CheckinMetadataNotFound = 14,
   CheckinInvalidBundleMetadata = 15,
+  CheckinUpdateNewVersion = 16,
+  CheckinUpdateSyncApps = 17,
+  CheckinUpdateRollback = 18,
   TufTargetNotFound = 20,
   RollbackTargetNotFound = 21,
   InstallationInProgress = 30,
@@ -69,7 +72,8 @@ enum class CheckMode {
   Current,
 };
 
-StatusCode CheckIn(AkliteClient &client, const LocalUpdateSource *local_update_source = nullptr);
+StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_update_source = nullptr,
+                   CheckMode check_mode = CheckMode::Update);
 
 StatusCode Pull(AkliteClientExt &client, int version = -1, const std::string &target_name = "",
                 bool force_downgrade = true, const LocalUpdateSource *local_update_source = nullptr,

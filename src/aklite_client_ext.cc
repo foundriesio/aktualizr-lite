@@ -39,7 +39,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     if (!invoke_post_cb_at_checkin_) {
       client_->notifyTufUpdateFinished(err);
     }
-    return {GetTargetToInstallResult::Status::Failed, TufTarget(), err};
+    return {GetTargetToInstallResult::Status::BadCheckinStatus, TufTarget(), err};
   }
 
   bool rollback_operation = false;
@@ -92,10 +92,10 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     if (!invoke_post_cb_at_checkin_) {
       client_->notifyTufUpdateFinished(err);
     }
-    return {GetTargetToInstallResult::Status::Failed, TufTarget(), err};
+    return {GetTargetToInstallResult::Status::BadRollbackTarget, TufTarget(), err};
   }
 
-  auto res = GetTargetToInstallResult(GetTargetToInstallResult::Status::Ok, candidate_target, "");
+  auto res = GetTargetToInstallResult(GetTargetToInstallResult::Status::NoUpdate, candidate_target, "");
   if (candidate_target.Name() != current.Name() && (!is_bad_target || allow_bad_target)) {
     if (!rollback_operation && !is_bad_target) {
       LOG_INFO << "Found new and valid Target to update to: " << candidate_target.Name()
@@ -108,6 +108,8 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
                << " target is marked for causing a rollback, but installation will be forced ";
     }
     // We should install this target:
+    res.status = rollback_operation ? GetTargetToInstallResult::Status::UpdateRollback
+                                    : GetTargetToInstallResult::Status::UpdateNewVersion;
     res.selected_target = candidate_target;
     res.reason = std::string(rollback_operation ? "Rolling back" : "Updating") + " from " + current.Name() + " to " +
                  res.selected_target.Name();
@@ -125,6 +127,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
           << "The specified Target is already installed, enforcing installation to make sure it's synced and running:"
           << res.selected_target.Name();
 
+      res.status = GetTargetToInstallResult::Status::UpdateSyncApps;
       res.reason = "Syncing Active Target Apps";
     } else {
       // No targets to install
