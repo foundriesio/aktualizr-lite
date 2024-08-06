@@ -25,8 +25,6 @@ class AppEngine : public Docker::RestorableAppEngine {
 
   Result fetch(const App& app) override;
   void remove(const App& app) override;
-  bool isRunning(const App& app) const override;
-  Json::Value getRunningAppsInfo() const override;
   void prune(const Apps& app_shortlist) override;
 
  private:

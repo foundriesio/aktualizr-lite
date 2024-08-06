@@ -9,8 +9,6 @@
 namespace composeapp {
 enum class ExitCode { ExitCodeInsufficientSpace = 100 };
 
-static bool checkAppStatus(const AppEngine::App& app, const Json::Value& status);
-
 AppEngine::Result AppEngine::fetch(const App& app) {
   Result res{false};
   try {
@@ -55,35 +53,6 @@ void AppEngine::remove(const App& app) {
   } catch (const std::exception& exc) {
     LOG_WARNING << "App: " << app.name << ", failed to remove: " << exc.what();
   }
-}
-
-bool AppEngine::isRunning(const App& app) const {
-  bool res{false};
-  try {
-    std::future<std::string> output;
-    exec(boost::format{"%s --store %s ps %s --format json"} % composectl_cmd_ % storeRoot() % app.uri, "",
-         boost::process::std_out > output);
-    const auto app_status{Utils::parseJSON(output.get())};
-    res = checkAppStatus(app, app_status);
-  } catch (const std::exception& exc) {
-    LOG_ERROR << "failed to verify whether app is running; app: " << app.name << ", err: " << exc.what();
-  }
-  return res;
-}
-
-Json::Value AppEngine::getRunningAppsInfo() const {
-  Json::Value app_statuses;
-  try {
-    std::future<std::string> output;
-    exec(boost::format{"%s --store %s ps --format json"} % composectl_cmd_ % storeRoot(), "",
-         boost::process::std_out > output);
-    const auto output_str{output.get()};
-    app_statuses = Utils::parseJSON(output_str);
-  } catch (const std::exception& exc) {
-    LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
-  }
-
-  return app_statuses;
 }
 
 void AppEngine::prune(const Apps& app_shortlist) {
@@ -190,31 +159,6 @@ void AppEngine::installAppAndImages(const App& app) {
   exec(boost::format{"%s --store %s --compose %s --host %s install %s"} % composectl_cmd_ % storeRoot() %
            installRoot() % dockerHost() % app.uri,
        "failed to installl compose app");
-}
-
-static bool checkAppStatus(const AppEngine::App& app, const Json::Value& status) {
-  if (!status.isMember(app.uri)) {
-    LOG_ERROR << "could not get app status; uri: " << app.uri;
-    return false;
-  }
-  if (!status[app.uri].isMember("services") || status[app.uri]["services"].isNull()) {
-    LOG_INFO << app.name << " is not running; uri: " << app.uri;
-    return false;
-  }
-
-  bool is_running{true};
-  const std::set<std::string> broken_states{"created", "missing", "unknown"};
-  for (const auto& s : status[app.uri]["services"]) {
-    if (broken_states.count(s["state"].asString()) > 0) {
-      is_running = false;
-      break;
-    }
-  }
-  if (!is_running) {
-    LOG_INFO << app.name << " is not running; uri: " << app.uri;
-    LOG_INFO << status[app.uri];
-  }
-  return is_running;
 }
 
 }  // namespace composeapp
