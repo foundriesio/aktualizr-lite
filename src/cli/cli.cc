@@ -10,71 +10,73 @@
 
 namespace aklite::cli {
 
+using SC = StatusCode;
+
 template <typename T>
 static StatusCode res2StatusCode(const std::unordered_map<T, StatusCode> code_map, T rc) {
   if (code_map.count(rc) == 1) {
     return code_map.at(rc);
   }
-  return StatusCode::UnknownError;
+  return SC::UnknownError;
 }
 
 static const std::unordered_map<CheckInResult::Status, StatusCode> c2s = {
-    {CheckInResult::Status::Ok, StatusCode::Ok},
-    {CheckInResult::Status::OkCached, StatusCode::CheckinOkCached},
-    {CheckInResult::Status::Failed, StatusCode::CheckinFailure},
-    {CheckInResult::Status::NoMatchingTargets, StatusCode::CheckinNoMatchingTargets},
-    {CheckInResult::Status::NoTargetContent, StatusCode::CheckinNoTargetContent},
-    {CheckInResult::Status::SecurityError, StatusCode::CheckinSecurityError},
-    {CheckInResult::Status::ExpiredMetadata, StatusCode::CheckinExpiredMetadata},
-    {CheckInResult::Status::MetadataFetchFailure, StatusCode::CheckinMetadataFetchFailure},
-    {CheckInResult::Status::MetadataNotFound, StatusCode::CheckinMetadataNotFound},
-    {CheckInResult::Status::BundleMetadataError, StatusCode::CheckinInvalidBundleMetadata},
+    {CheckInResult::Status::Ok, SC::Ok},
+    {CheckInResult::Status::OkCached, SC::CheckinOkCached},
+    {CheckInResult::Status::Failed, SC::CheckinFailure},
+    {CheckInResult::Status::NoMatchingTargets, SC::CheckinNoMatchingTargets},
+    {CheckInResult::Status::NoTargetContent, SC::CheckinNoTargetContent},
+    {CheckInResult::Status::SecurityError, SC::CheckinSecurityError},
+    {CheckInResult::Status::ExpiredMetadata, SC::CheckinExpiredMetadata},
+    {CheckInResult::Status::MetadataFetchFailure, SC::CheckinMetadataFetchFailure},
+    {CheckInResult::Status::MetadataNotFound, SC::CheckinMetadataNotFound},
+    {CheckInResult::Status::BundleMetadataError, SC::CheckinInvalidBundleMetadata},
 };
 
 static const std::unordered_map<GetTargetToInstallResult::Status, StatusCode> t2s = {
-    {GetTargetToInstallResult::Status::TufTargetNotFound, StatusCode::TufTargetNotFound},
-    {GetTargetToInstallResult::Status::TargetAlreadyInstalled, StatusCode::InstallAlreadyInstalled},
-    {GetTargetToInstallResult::Status::RollbackTargetNotFound, StatusCode::RollbackTargetNotFound},
+    {GetTargetToInstallResult::Status::TufTargetNotFound, SC::TufTargetNotFound},
+    {GetTargetToInstallResult::Status::TargetAlreadyInstalled, SC::InstallAlreadyInstalled},
+    {GetTargetToInstallResult::Status::RollbackTargetNotFound, SC::RollbackTargetNotFound},
 
     // Internal Issues
-    {GetTargetToInstallResult::Status::RollbackTargetNotFound, StatusCode::UnknownError},
-    {GetTargetToInstallResult::Status::BadCheckinStatus, StatusCode::UnknownError},
+    {GetTargetToInstallResult::Status::RollbackTargetNotFound, SC::UnknownError},
+    {GetTargetToInstallResult::Status::BadCheckinStatus, SC::UnknownError},
 
     // Success results
-    {GetTargetToInstallResult::Status::NoUpdate, StatusCode::Ok},
-    {GetTargetToInstallResult::Status::UpdateNewVersion, StatusCode::CheckinUpdateNewVersion},
-    {GetTargetToInstallResult::Status::UpdateSyncApps, StatusCode::CheckinUpdateSyncApps},
-    {GetTargetToInstallResult::Status::UpdateRollback, StatusCode::CheckinUpdateRollback},
+    {GetTargetToInstallResult::Status::NoUpdate, SC::Ok},
+    {GetTargetToInstallResult::Status::UpdateNewVersion, SC::CheckinUpdateNewVersion},
+    {GetTargetToInstallResult::Status::UpdateSyncApps, SC::CheckinUpdateSyncApps},
+    {GetTargetToInstallResult::Status::UpdateRollback, SC::CheckinUpdateRollback},
 };
 
 static const std::unordered_map<DownloadResult::Status, StatusCode> d2s = {
-    {DownloadResult::Status::Ok, StatusCode::Ok},
-    {DownloadResult::Status::DownloadFailed, StatusCode::DownloadFailure},
-    {DownloadResult::Status::VerificationFailed, StatusCode::DownloadFailureVerificationFailed},
-    {DownloadResult::Status::DownloadFailed_NoSpace, StatusCode::DownloadFailureNoSpace},
+    {DownloadResult::Status::Ok, SC::Ok},
+    {DownloadResult::Status::DownloadFailed, SC::DownloadFailure},
+    {DownloadResult::Status::VerificationFailed, SC::DownloadFailureVerificationFailed},
+    {DownloadResult::Status::DownloadFailed_NoSpace, SC::DownloadFailureNoSpace},
 };
 
 static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
-    {InstallResult::Status::Ok, StatusCode::Ok},
-    {InstallResult::Status::OkBootFwNeedsCompletion, StatusCode::OkNeedsRebootForBootFw},
-    {InstallResult::Status::NeedsCompletion, StatusCode::InstallNeedsReboot},
-    {InstallResult::Status::AppsNeedCompletion, StatusCode::InstallAppsNeedFinalization},
-    {InstallResult::Status::BootFwNeedsCompletion, StatusCode::InstallNeedsRebootForBootFw},
-    {InstallResult::Status::DownloadFailed, StatusCode::InstallAppPullFailure},
-    {InstallResult::Status::DownloadOstreeFailed, StatusCode::DownloadFailure},
-    {InstallResult::Status::VerificationFailed, StatusCode::DownloadFailureVerificationFailed},
-    {InstallResult::Status::DownloadFailed_NoSpace, StatusCode::DownloadFailureNoSpace},
-    {InstallResult::Status::InstallationInProgress, StatusCode::InstallationInProgress},
-    {InstallResult::Status::InstallRollbackFailed, StatusCode::InstallRollbackFailed},
-    {InstallResult::Status::InstallRollbackOk, StatusCode::InstallRollbackOk},
-    {InstallResult::Status::UnknownError, StatusCode::UnknownError},
+    {InstallResult::Status::Ok, SC::Ok},
+    {InstallResult::Status::OkBootFwNeedsCompletion, SC::OkNeedsRebootForBootFw},
+    {InstallResult::Status::NeedsCompletion, SC::InstallNeedsReboot},
+    {InstallResult::Status::AppsNeedCompletion, SC::InstallAppsNeedFinalization},
+    {InstallResult::Status::BootFwNeedsCompletion, SC::InstallNeedsRebootForBootFw},
+    {InstallResult::Status::DownloadFailed, SC::InstallAppPullFailure},
+    {InstallResult::Status::DownloadOstreeFailed, SC::DownloadFailure},
+    {InstallResult::Status::VerificationFailed, SC::DownloadFailureVerificationFailed},
+    {InstallResult::Status::DownloadFailed_NoSpace, SC::DownloadFailureNoSpace},
+    {InstallResult::Status::InstallationInProgress, SC::InstallationInProgress},
+    {InstallResult::Status::InstallRollbackFailed, SC::InstallRollbackFailed},
+    {InstallResult::Status::InstallRollbackOk, SC::InstallRollbackOk},
+    {InstallResult::Status::UnknownError, SC::UnknownError},
 };
 
 bool IsSuccessCode(StatusCode status) {
-  return (status == StatusCode::Ok || status == StatusCode::CheckinOkCached ||
-          status == StatusCode::CheckinUpdateNewVersion || status == StatusCode::CheckinUpdateSyncApps ||
-          status == StatusCode::CheckinUpdateRollback || status == StatusCode::OkNeedsRebootForBootFw ||
-          status == StatusCode::InstallNeedsReboot || status == StatusCode::InstallAppsNeedFinalization);
+  return (status == SC::Ok || status == SC::CheckinOkCached || status == SC::CheckinUpdateNewVersion ||
+          status == SC::CheckinUpdateSyncApps || status == SC::CheckinUpdateRollback ||
+          status == SC::OkNeedsRebootForBootFw || status == SC::InstallNeedsReboot ||
+          status == SC::InstallAppsNeedFinalization);
 }
 
 static CheckInResult checkIn(AkliteClientExt &client, CheckMode check_mode,
@@ -138,7 +140,7 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
   if (client.IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
               << client.GetPendingTarget().Name();
-    return StatusCode::InstallationInProgress;
+    return SC::InstallationInProgress;
   }
 
   const auto ci_res = checkIn(client, check_mode, local_update_source);
@@ -179,7 +181,7 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
 
     if (!force_downgrade) {
       LOG_ERROR << "Downgrade is not allowed by default, re-run the command with `--force` option to force downgrade";
-      return StatusCode::InstallDowngradeAttempt;
+      return SC::InstallDowngradeAttempt;
     }
     LOG_WARNING << "Downgrading from " << current.Version() << " to  " << gti_res.selected_target.Version() << "...";
   }
@@ -205,7 +207,7 @@ StatusCode Install(AkliteClientExt &client, int version, const std::string &targ
 StatusCode CompleteInstall(AkliteClient &client) {
   if (!client.IsInstallationInProgress()) {
     LOG_ERROR << "There is no pending installation to complete";
-    return StatusCode::NoPendingInstallation;
+    return SC::NoPendingInstallation;
   }
   const auto pending{client.GetPendingTarget()};  // returns Target that the device was supposed to boot on
   const auto ir = client.CompleteInstallation();
@@ -223,16 +225,16 @@ StatusCode CompleteInstall(AkliteClient &client) {
         // ostree rollback and no need to sync Apps since the rollback target eithe doesn't have Apps or
         // its Apps were not updated hence are already running.
         LOG_INFO << "No Apps to sync, rollback to " << current.Name() << " completed";
-        return StatusCode::InstallRollbackOk;
+        return SC::InstallRollbackOk;
       }
       const auto rir = ri->Install();
       if (rir.status == InstallResult::Status::Ok) {
         LOG_INFO << "Apps have been synced, rollback to " << current.Name() << " completed";
-        return StatusCode::InstallRollbackOk;
+        return SC::InstallRollbackOk;
       } else {
         LOG_ERROR << "Failed to sync Apps, rollback to " << current.Name() << " failed";
         LOG_ERROR << "Try to install the current Target again: " << current.Name();
-        return StatusCode::InstallRollbackFailed;
+        return SC::InstallRollbackFailed;
       }
     } else {
       LOG_INFO << "Installation has failed, device was successfully booted on the updated rootfs but failed to start "
@@ -241,22 +243,22 @@ StatusCode CompleteInstall(AkliteClient &client) {
       const auto rollback_target = client.GetRollbackTarget();
       if (rollback_target.IsUnknown()) {
         LOG_ERROR << "Failed to find the Target to rollback to, try to install another Target";
-        return StatusCode::InstallRollbackFailed;
+        return SC::InstallRollbackFailed;
       }
       LOG_INFO << "Rolling back to " << rollback_target.Name() << "...";
       auto ri = client.Installer(rollback_target);
       if (ri == nullptr) {
         LOG_ERROR
             << "Unexpected error: installer couldn't find the rollback Target in the DB; try to install another Target";
-        return StatusCode::UnknownError;
+        return SC::UnknownError;
       }
       const auto rir = ri->Install();
       if (rir.status == InstallResult::Status::NeedsCompletion) {
         LOG_INFO << "Successfully installed the rollback Target, reboot is required to complete it";
-        return StatusCode::InstallRollbackNeedsReboot;
+        return SC::InstallRollbackNeedsReboot;
       }
       LOG_ERROR << "Failed to rollback to " << rollback_target.Name() << " try to install another Target";
-      return StatusCode::InstallRollbackFailed;
+      return SC::InstallRollbackFailed;
     }
   } else if (ir.status == InstallResult::Status::OkBootFwNeedsCompletion) {
     LOG_INFO << "Finalization was successful, reboot is required to confirm boot fw update";
