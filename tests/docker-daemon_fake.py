@@ -48,23 +48,6 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(dockerd_response).encode())
-        elif self.path.find('/containers/json') != -1:
-            dockerd_response = []
-            try:
-                with open(os.path.join(self.server.root_dir, "containers.json"), "r") as f:
-                    dockerd_response = json.load(f)
-            except FileNotFoundError:
-                pass
-            except Exception as exc:
-                logger.error(exc)
-
-            logger.info(">>> sending response  %s" % json.dumps(dockerd_response))
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            data_to_send = json.dumps(dockerd_response).encode()
-            self.send_header('Content-Length', len(data_to_send))
-            self.end_headers()
-            self.wfile.write(json.dumps(dockerd_response).encode())
         else:
             self.send_response(200)
             self.send_header('Api-Version:', API_VERSION)
