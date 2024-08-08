@@ -217,9 +217,6 @@ bpo::variables_map parse_options(int argc, char** argv) {
       ("version,v", "Current aktualizr version")
       ("config,c", bpo::value<std::vector<boost::filesystem::path> >()->composing(), "configuration file or directory")
       ("loglevel", bpo::value<int>(), "set log level 0-5 (trace, debug, info, warning, error, fatal)")
-      ("repo-server", bpo::value<std::string>(), "URL of the Uptane repo repository")
-      ("ostree-server", bpo::value<std::string>(), "URL of the Ostree repository")
-      ("primary-ecu-hardware-id", bpo::value<std::string>(), "hardware ID of primary ecu")
       ("update-name", bpo::value<std::string>(), "optional name of the update when running \"update\". default=latest")
       ("install-mode", bpo::value<std::string>(), "Optional install mode. Supported modes: [delay-app-install]. By default both ostree and apps are installed before reboot")
 #ifdef ALLOW_MANUAL_ROLLBACK
