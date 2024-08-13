@@ -67,22 +67,25 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
-static int checkin(LiteClient& client, aklite::cli::CheckMode check_mode) {
+static int checkin(LiteClient& client, aklite::cli::CheckMode check_mode, const bpo::variables_map& params) {
+  bool json_output = false;
+  if (params.count("json") > 0) {
+    json_output = params.at("json").as<bool>();
+  }
+
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClientExt akclient(client_ptr, false, true);
 
-  auto status = aklite::cli::CheckIn(akclient, nullptr, check_mode);
+  auto status = aklite::cli::CheckIn(akclient, nullptr, check_mode, json_output);
   return static_cast<int>(status);
 }
 
-static int cli_list(LiteClient& client, const bpo::variables_map& unused) {
-  (void)unused;
-  return checkin(client, aklite::cli::CheckMode::Current);
+static int cli_list(LiteClient& client, const bpo::variables_map& params) {
+  return checkin(client, aklite::cli::CheckMode::Current, params);
 }
 
-static int cli_check(LiteClient& client, const bpo::variables_map& unused) {
-  (void)unused;
-  return checkin(client, aklite::cli::CheckMode::Update);
+static int cli_check(LiteClient& client, const bpo::variables_map& params) {
+  return checkin(client, aklite::cli::CheckMode::Update, params);
 }
 
 static int daemon_main(LiteClient& client, const bpo::variables_map& variables_map) {
@@ -223,6 +226,7 @@ bpo::variables_map parse_options(int argc, char** argv) {
       ("clear-installed-versions", "DANGER - clear the history of installed updates before applying the given update. This is handy when doing test/debug and you need to rollback to an old version manually.")
 #endif
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for update when in daemon mode.")
+      ("json", bpo::value<bool>(), "Output targets information as json ('check' and 'list' commands only)")
       ("command", bpo::value<std::string>(), subs.c_str());
   // clang-format on
 
