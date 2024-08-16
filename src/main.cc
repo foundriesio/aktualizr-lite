@@ -1,5 +1,6 @@
 #include <sys/file.h>
 #include <boost/log/trivial.hpp>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -68,16 +69,33 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
   return 0;
 }
 
+static void fillUpdateSource(LocalUpdateSource& local_update_source, const std::string& src_dir) {
+  const boost::filesystem::path src_dir_path(src_dir);
+  local_update_source.tuf_repo = (src_dir_path / "tuf").string();
+  local_update_source.ostree_repo = (src_dir_path / "ostree_repo").string();
+  local_update_source.app_store = (src_dir_path / "apps").string();
+}
+
 static int checkin(LiteClient& client, aklite::cli::CheckMode check_mode, const bpo::variables_map& params) {
   bool json_output = false;
   if (params.count("json") > 0) {
     json_output = params.at("json").as<bool>();
   }
 
+  std::string src_dir;
+  if (params.count("src-dir") > 0) {
+    src_dir = params.at("src-dir").as<std::string>();
+  }
+
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClientExt akclient(client_ptr, false, true);
 
-  auto status = aklite::cli::CheckIn(akclient, nullptr, check_mode, json_output);
+  LocalUpdateSource local_update_source;
+  if (!src_dir.empty()) {
+    fillUpdateSource(local_update_source, src_dir);
+  }
+  auto status =
+      aklite::cli::CheckIn(akclient, src_dir.empty() ? nullptr : &local_update_source, check_mode, json_output);
   return static_cast<int>(status);
 }
 
@@ -126,6 +144,15 @@ static int install(LiteClient& client, const bpo::variables_map& params, aklite:
     install_mode = params.at("install-mode").as<std::string>();
   }
 
+  LocalUpdateSource local_update_source;
+  std::string src_dir;
+  if (params.count("src-dir") > 0) {
+    src_dir = params.at("src-dir").as<std::string>();
+  }
+  if (!src_dir.empty()) {
+    fillUpdateSource(local_update_source, src_dir);
+  }
+
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClientExt akclient{client_ptr, false, true};
 
@@ -138,8 +165,9 @@ static int install(LiteClient& client, const bpo::variables_map& params, aklite:
       mode = str2Mode.at(install_mode);
     }
   }
-  return static_cast<int>(
-      aklite::cli::Install(akclient, version, target_name, mode, true, nullptr, pull_mode, check_mode));
+  return static_cast<int>(aklite::cli::Install(akclient, version, target_name, mode, true,
+                                               src_dir.empty() ? nullptr : &local_update_source, pull_mode,
+                                               check_mode));
 }
 
 // CheckIn, Pull and Install
@@ -158,11 +186,21 @@ static int cli_pull(LiteClient& client, const bpo::variables_map& params) {
   std::string target_name;
   get_target_id(params, version, target_name);
 
+  LocalUpdateSource local_update_source;
+  std::string src_dir;
+  if (params.count("src-dir") > 0) {
+    src_dir = params.at("src-dir").as<std::string>();
+  }
+  if (!src_dir.empty()) {
+    fillUpdateSource(local_update_source, src_dir);
+  }
+
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
   AkliteClientExt akclient{client_ptr, false, true};
 
-  return static_cast<int>(
-      aklite::cli::Pull(akclient, version, target_name, true, nullptr, aklite::cli::CheckMode::Current));
+  return static_cast<int>(aklite::cli::Pull(akclient, version, target_name, true,
+                                            src_dir.empty() ? nullptr : &local_update_source,
+                                            aklite::cli::CheckMode::Current));
 }
 
 static int cli_complete_install(LiteClient& client, const bpo::variables_map& params) {
@@ -228,6 +266,7 @@ bpo::variables_map parse_options(int argc, char** argv) {
 #endif
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for update when in daemon mode.")
       ("json", bpo::value<bool>(), "Output targets information as json ('check' and 'list' commands only)")
+      ("src-dir", bpo::value<std::string>(), "Directory that contains an offline update. Enables offline mode for `check`, `pull`, `install` and `update` commands.")
       ("command", bpo::value<std::string>(), subs.c_str());
   // clang-format on
 
