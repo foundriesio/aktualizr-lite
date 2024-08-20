@@ -506,6 +506,28 @@ static Json::Value getBundleMeta(const std::shared_ptr<LiteClient>& client_,
   return bundle_meta;
 }
 
+static std::vector<TufTarget> getTrustedTargets(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo_, Json::Value bundle_meta) {
+  auto trusted_targets{tuf_repo_->GetTargets()};
+  if (!bundle_meta.empty()) {
+    LOG_INFO << "Getting and checking the bundle metadata...";
+    std::vector<TufTarget> bundle_targets{getTrustedBundleTargets(trusted_targets, bundle_meta)};
+    if (bundle_targets.empty()) {
+      return {};
+    }
+
+    if (bundle_targets.size() == bundle_meta["signed"]["x-fio-offline-bundle"]["targets"].size()) {
+      LOG_INFO << "Any of the bundle targets is allowed to be installed";
+    } else {
+      LOG_INFO << "The following bundle targets are allowed to be installed: ";
+      for (const auto& t : bundle_targets) {
+        LOG_INFO << "\t" << t.Name();
+      }
+    }
+    trusted_targets = bundle_targets;
+  }
+  return trusted_targets;
+}
+
 CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
   client_->notifyTufUpdateStarted();
 
@@ -531,25 +553,11 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     return checkInFailure(client_, hw_id_, check_status, err_msg);
   }
 
-  auto trusted_targets{tuf_repo_->GetTargets()};
-  if (!bundle_meta.empty()) {
-    LOG_INFO << "Getting and checking the bundle metadata...";
-    std::vector<TufTarget> bundle_targets{getTrustedBundleTargets(trusted_targets, bundle_meta)};
-    if (bundle_targets.empty()) {
-      return checkInFailure(
-          client_, hw_id_, CheckInResult::Status::NoMatchingTargets,
-          std::string("None of the bundle targets are listed among the TUF targets allowed for the device"));
-    }
-
-    if (bundle_targets.size() == bundle_meta["signed"]["x-fio-offline-bundle"]["targets"].size()) {
-      LOG_INFO << "Any of the bundle targets is allowed to be installed";
-    } else {
-      LOG_INFO << "The following bundle targets are allowed to be installed: ";
-      for (const auto& t : bundle_targets) {
-        LOG_INFO << "\t" << t.Name();
-      }
-    }
-    trusted_targets = bundle_targets;
+  auto trusted_targets = getTrustedTargets(tuf_repo_, bundle_meta);
+  if (trusted_targets.empty()) {
+    return checkInFailure(client_, hw_id_,
+        CheckInResult::Status::NoMatchingTargets,
+        std::string("None of the bundle targets are listed among the TUF targets allowed for the device"));
   }
 
   LOG_INFO << "Searching for TUF Targets matching a device's hardware ID and tag; hw-id: " + hw_id_ +
