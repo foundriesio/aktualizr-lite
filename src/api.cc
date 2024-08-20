@@ -222,7 +222,7 @@ static CheckInResult checkInFailure(const std::shared_ptr<LiteClient>& client_, 
                                     CheckInResult::Status check_status, std::string err_msg) {
   LOG_ERROR << err_msg;
   client_->notifyTufUpdateFinished(err_msg);
-  return CheckInResult{check_status, hw_id_, {}};
+  return {check_status, hw_id_, {}};
 }
 
 static std::shared_ptr<aklite::tuf::RepoSource> getRepoSource(const std::shared_ptr<LiteClient>& client_,
@@ -338,7 +338,7 @@ CheckInResult AkliteClient::CheckIn() const {
   if (invoke_post_cb_at_checkin_) {
     client_->notifyTufUpdateFinished();
   }
-  return CheckInResult(CheckInResult::Status::Ok, hw_id_, matchingTargets);
+  return {CheckInResult::Status::Ok, hw_id_, matchingTargets};
 }
 
 static bool compareTargets(const Uptane::Target& t1, const Uptane::Target& t2) {
@@ -506,7 +506,8 @@ static Json::Value getBundleMeta(const std::shared_ptr<LiteClient>& client_,
   return bundle_meta;
 }
 
-static std::vector<TufTarget> getTrustedTargets(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo_, Json::Value bundle_meta) {
+static std::vector<TufTarget> getTrustedTargets(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo_,
+                                                Json::Value bundle_meta) {
   auto trusted_targets{tuf_repo_->GetTargets()};
   if (!bundle_meta.empty()) {
     LOG_INFO << "Getting and checking the bundle metadata...";
@@ -549,14 +550,14 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
   }
 
   std::tie(check_status, err_msg) = updateMeta(client_, tuf_repo_, local_update_source);
-  if (!(check_status == CheckInResult::Status::Ok || check_status == CheckInResult::Status::OkCached)) {
+  if (check_status != CheckInResult::Status::Ok && check_status != CheckInResult::Status::OkCached) {
     return checkInFailure(client_, hw_id_, check_status, err_msg);
   }
 
   auto trusted_targets = getTrustedTargets(tuf_repo_, bundle_meta);
   if (trusted_targets.empty()) {
-    return checkInFailure(client_, hw_id_,
-        CheckInResult::Status::NoMatchingTargets,
+    return checkInFailure(
+        client_, hw_id_, CheckInResult::Status::NoMatchingTargets,
         std::string("None of the bundle targets are listed among the TUF targets allowed for the device"));
   }
 
@@ -589,7 +590,7 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
   if (invoke_post_cb_at_checkin_) {
     client_->notifyTufUpdateFinished();
   }
-  return CheckInResult(check_status, hw_id_, toTufTargets(available_targets));
+  return {check_status, hw_id_, toTufTargets(available_targets)};
 }
 
 CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update_source) const {
@@ -601,7 +602,7 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
   } catch (const std::exception& exc) {
     err_msg = std::string("Stored TUF metadata is invalid: ") + exc.what();
     LOG_WARNING << err_msg;
-    return CheckInResult{CheckInResult::Status::SecurityError, hw_id_, {}};
+    return {CheckInResult::Status::SecurityError, hw_id_, {}};
   }
 
   LOG_INFO << "Searching for matching TUF Targets...";
@@ -612,7 +613,7 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
     err_msg = boost::str(boost::format("No Target found for the device; hw ID: %s; tags: %s") % hw_id_ %
                          boost::algorithm::join(client_->tags, ","));
     LOG_ERROR << err_msg;
-    return CheckInResult{CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
+    return {CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
   }
   LOG_INFO << "Latest targets metadata contains " << matchingTargets.size() << " entries for tag=\""
            << boost::algorithm::join(client_->tags, ",") << "\" and hardware id=\"" << hw_id_ << "\"";
@@ -631,12 +632,12 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
       err_msg = "No update content found in ostree dir  " + src.OstreeRepoDir.string() + " and app dir " +
                 src.AppsDir.string();
       LOG_ERROR << err_msg;
-      return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
+      return {CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{}};
     }
-    return CheckInResult(CheckInResult::Status::OkCached, hw_id_, toTufTargets(available_targets));
+    return {CheckInResult::Status::OkCached, hw_id_, toTufTargets(available_targets)};
 
   } else {
-    return CheckInResult(CheckInResult::Status::OkCached, hw_id_, matchingTargets);
+    return {CheckInResult::Status::OkCached, hw_id_, matchingTargets};
   }
 }
 
