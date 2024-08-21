@@ -48,10 +48,6 @@ int run_daemon(LiteClient& client, uint64_t interval, bool return_on_sleep, bool
           // If a reboot command is set in configuration, and is executed successfully, we will not get to this point
           break;
         }
-        if (install_result) {
-          // After a successful install, do not sleep, go directly to the next iteration
-          continue;
-        }
       }
     }
 
