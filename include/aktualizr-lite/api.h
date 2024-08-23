@@ -188,7 +188,7 @@ struct LocalUpdateSource {
   std::string ostree_repo;
   std::string app_store;
   // needed for unit testing or if a custom container engine is used
-  void *docker_client_ptr;
+  void *docker_client_ptr = nullptr;
 };
 
 /**
