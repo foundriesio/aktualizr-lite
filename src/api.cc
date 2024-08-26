@@ -369,7 +369,7 @@ static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set
 
 static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pconfig,
                                                        const std::vector<Uptane::Target>& allowed_targets,
-                                                       const UpdateSrc& src, bool just_latest = true) {
+                                                       const UpdateSrc& src) {
   if (allowed_targets.empty()) {
     LOG_ERROR << "No targets are available for a given device; check a hardware ID and/or a tag";
     return std::vector<Uptane::Target>{};
@@ -386,8 +386,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
   const OSTree::Repo repo{src.OstreeRepoDir.string()};
   Uptane::Target found_target(Uptane::Target::Unknown());
 
-  const std::string search_msg{just_latest ? "a target" : "all targets"};
-  LOG_INFO << "Searching for " << search_msg << " starting from " << allowed_targets.begin()->filename()
+  LOG_INFO << "Searching for all targets starting from " << allowed_targets.begin()->filename()
            << " that match content provided in the source directory\n"
            << "\t pacman type: \t" << pconfig.type << "\n\t apps dir: \t" << src.AppsDir << "\n\t ostree dir: \t"
            << src.OstreeRepoDir;
@@ -401,10 +400,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
       found_targets.emplace_back(Target::updateCustom(t, custom_data));
       LOG_INFO << "\t" << t.filename() << " - all target components have been found";
-      if (!just_latest) {
-        continue;
-      }
-      break;
+      continue;
     }
 
     OfflineUpdateAppsShortlistType offline_app_shortlist_type;
@@ -417,10 +413,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       custom_data.removeMember("docker_compose_apps");
       found_targets.emplace_back(Target::updateCustom(t, custom_data));
       LOG_INFO << "\t" << t.filename() << " - all target components have been found";
-      if (!just_latest) {
-        continue;
-      }
-      break;
+      continue;
     }
 
     const ComposeAppManager::AppsContainer required_apps{
@@ -461,9 +454,6 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
     custom_data[LocalSrcDirKey]["apps"] = src.AppsDir.string();
     found_targets.emplace_back(Target::updateCustom(t, custom_data));
     LOG_INFO << "\t" << t.filename() << " - all target components have been found";
-    if (just_latest) {
-      break;
-    }
   }
   return found_targets;
 }
@@ -579,8 +569,7 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
       .AppsDir = local_update_source->app_store,
   };
   std::vector<Uptane::Target> available_targets =
-      getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src,
-                          false /* get all available targets, not just latest */);
+      getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src);
   if (available_targets.empty()) {
     err_msg =
         "No update content found in ostree dir  " + src.OstreeRepoDir.string() + " and app dir " + src.AppsDir.string();
@@ -626,8 +615,7 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
         .AppsDir = local_update_source->app_store,
     };
     std::vector<Uptane::Target> available_targets =
-        getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src,
-                            false /* get all available targets, not just latest */);
+        getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src);
     if (available_targets.empty()) {
       err_msg = "No update content found in ostree dir  " + src.OstreeRepoDir.string() + " and app dir " +
                 src.AppsDir.string();
