@@ -361,7 +361,7 @@ class AkliteOffline : public ::testing::Test {
     // emulate registration of images located in `/var/lib/docker/image/overlay2/repositories.json
     const boost::filesystem::path repositories_file{daemon_.dir() / "/image/overlay2/repositories.json"};
     Json::Value repositories;
-    Json::Value images{Utils::parseJSONFile(daemon_.dir() / "images.json")};
+    Json::Value images;
     if (boost::filesystem::exists(repositories_file)) {
       repositories = Utils::parseJSONFile(repositories_file.string());
     } else {
@@ -821,7 +821,6 @@ TEST_F(AkliteOffline, RollbackToInitialTarget) {
   // at a device initial startup, so we just check if name and ostree hash of targets match.
   ASSERT_EQ(initial_target_.Name(), getCurrent().Name());
   ASSERT_EQ(initial_target_.Sha256Hash(), getCurrent().Sha256Hash());
-  ASSERT_TRUE(Target::isInitial(Target::fromTufTarget(getCurrent())));
 }
 
 TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
@@ -838,30 +837,31 @@ TEST_F(AkliteOffline, RollbackToInitialTargetIfAppDrivenRolllback) {
   ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
   ASSERT_EQ(initial_target_.Name(), getCurrent().Name());
   ASSERT_EQ(initial_target_.Sha256Hash(), getCurrent().Sha256Hash());
-  ASSERT_TRUE(Target::isInitial(Target::fromTufTarget(getCurrent())));
 }
 
 TEST_F(AkliteOffline, RollbackToUnknown) {
-  // make the initial Target "unknown"
-  cfg_.pacman.extra["x-fio-test-no-init-target"] = true;
   const auto app01{createApp("app-01")};
   preloadApps({app01}, {}, false);
   // remove the current target app from the store/install source dir
   boost::filesystem::remove_all(app_store_.appsDir());
   const auto new_target{addTarget({createApp("app-01")})};
 
+  // make the initial Target setting fail, so the current Target is "unknown"
+  const Docker::Uri uri{Docker::Uri::parseUri(app01.uri)};
+  const auto app_dir{test_dir_.Path() / "reset-apps" / "apps" / uri.app / uri.digest.hash()};
+  Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("broken json"));
+
   ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
   reboot();
   // emulate "normal" rollback - boot on the previous target, which is "unknown"
   sys_repo_.deploy(initial_target_.Sha256Hash());
   ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackOk, run());
+  ASSERT_EQ(initial_target_, getCurrent());
+  ASSERT_TRUE(Target::isInitial(Target::fromTufTarget(getCurrent())));
   ASSERT_EQ(initial_target_.Sha256Hash(), getCurrent().Sha256Hash());
-  ASSERT_FALSE(Target::isInitial(Target::fromTufTarget(getCurrent())));
 }
 
 TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
-  // make the initial Target "unknown"
-  cfg_.pacman.extra["x-fio-test-no-init-target"] = true;
   const auto app01{createApp("app-01")};
   preloadApps({app01}, {}, false);
 
@@ -869,12 +869,15 @@ TEST_F(AkliteOffline, RollbackToUnknownIfAppDrivenRolllback) {
   boost::filesystem::remove_all(app_store_.appsDir());
   const auto new_target{addTarget({createApp("app-01", "compose-start-failure")})};
 
+  // make the initial Target setting fail, so the current Target is "unknown"
+  const Docker::Uri uri{Docker::Uri::parseUri(app01.uri)};
+  const auto app_dir{test_dir_.Path() / "reset-apps" / "apps" / uri.app / uri.digest.hash()};
+  Utils::writeFile(app_dir / Docker::Manifest::Filename, std::string("broken json"));
   ASSERT_EQ(aklite::cli::StatusCode::InstallNeedsReboot, install());
   reboot();
   ASSERT_EQ(aklite::cli::StatusCode::InstallRollbackFailed, run());
   // Cannot perform rollback to unknown, so still booted on a new target's hash
   ASSERT_EQ(new_target.Sha256Hash(), getCurrent().Sha256Hash());
-  ASSERT_FALSE(Target::isInitial(Target::fromTufTarget(getCurrent())));
 }
 
 TEST_F(AkliteOffline, InvalidTargetInstallOstree) {
