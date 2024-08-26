@@ -279,11 +279,11 @@ int main(int argc, char* argv[]) {
 
   int ret_val = EXIT_FAILURE;
   try {
+    Config config(commandline_map);
+
     if (geteuid() != 0) {
       LOG_WARNING << "\033[31mRunning as non-root and may not work as expected!\033[0m\n";
     }
-
-    Config config(commandline_map);
 
     config.telemetry.report_network = !config.tls.server.empty();
     config.telemetry.report_config = !config.tls.server.empty();
