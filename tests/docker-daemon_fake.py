@@ -29,25 +29,6 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header('Content-type', 'text/plain; charset=utf-8')
             self.send_header('Api-Version:', API_VERSION)
             self.end_headers()
-        elif self.path.find('/images/json') != -1:
-            dockerd_response = []
-            try:
-                with open(os.path.join(self.server.root_dir, "images.json"), "r") as f:
-                    images = json.load(f)
-                    for image in images:
-                        dockerd_response.append({
-                            "RepoDigests": [image]
-                        })
-            except FileNotFoundError:
-                pass
-            except Exception as exc:
-                logger.error(exc)
-
-            logger.info(">>> sending response  %s" % json.dumps(dockerd_response))
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(dockerd_response).encode())
         else:
             self.send_response(200)
             self.send_header('Api-Version:', API_VERSION)

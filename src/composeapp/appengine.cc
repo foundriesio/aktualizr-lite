@@ -131,30 +131,6 @@ bool AppEngine::isAppFetched(const App& app) const {
   return res;
 }
 
-bool AppEngine::isAppInstalled(const App& app) const {
-  bool res{false};
-  try {
-    std::future<std::string> output;
-    exec(boost::format{"%s --store %s check %s --local --install --format json"} % composectl_cmd_ % storeRoot() %
-             app.uri,
-         "", boost::process::std_out > output);
-    const std::string output_str{output.get()};
-    const auto app_fetch_status{Utils::parseJSON(output_str)};
-    if (app_fetch_status.isMember("install_check") && app_fetch_status["install_check"].isMember(app.uri) &&
-        app_fetch_status["install_check"][app.uri].isMember("missing_images") &&
-        (app_fetch_status["install_check"][app.uri]["missing_images"].isNull() ||
-         app_fetch_status["install_check"][app.uri]["missing_images"].empty())) {
-      res = true;
-    }
-  } catch (const ExecError& exc) {
-    LOG_DEBUG << "app is not fully fetched or installed; app: " << app.name << ", status: " << exc.what();
-  } catch (const std::exception& exc) {
-    LOG_ERROR << "failed to verify whether app is installed; app: " << app.name << ", err: " << exc.what();
-    throw;
-  }
-  return res;
-}
-
 void AppEngine::installAppAndImages(const App& app) {
   exec(boost::format{"%s --store %s --compose %s --host %s install %s"} % composectl_cmd_ % storeRoot() %
            installRoot() % dockerHost() % app.uri,
