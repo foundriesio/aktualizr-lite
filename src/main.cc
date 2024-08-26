@@ -1,4 +1,5 @@
 #include <sys/file.h>
+#include <boost/log/trivial.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -279,6 +280,13 @@ int main(int argc, char* argv[]) {
 
   int ret_val = EXIT_FAILURE;
   try {
+    // When enabling json output mode, hide log messages by default
+    if (commandline_map.count("json") > 0 && commandline_map.at("json").as<bool>() &&
+        commandline_map.count("loglevel") == 0) {
+      commandline_map.insert(std::pair<std::string, boost::program_options::variable_value>(
+          "loglevel", boost::program_options::variable_value(static_cast<int>(boost::log::trivial::fatal), false)));
+    }
+
     Config config(commandline_map);
 
     if (geteuid() != 0) {
