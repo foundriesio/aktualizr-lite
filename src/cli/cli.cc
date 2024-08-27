@@ -1,11 +1,14 @@
 #include "aktualizr-lite/cli/cli.h"
 
+#include <algorithm>
 #include <iostream>
 #include <unordered_map>
 
 #include "aktualizr-lite/api.h"
 
 #include "aktualizr-lite/aklite_client_ext.h"
+#include "json/reader.h"
+#include "json/value.h"
 #include "logging/logging.h"
 
 namespace aklite::cli {
@@ -157,9 +160,59 @@ static CheckInResult checkIn(AkliteClientExt &client, CheckMode check_mode,
   }
 }
 
-StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_update_source, CheckMode check_mode) {
+static Json::Value getCheckInResultJson(AkliteClientExt &client, const CheckInResult &ci_res,
+                                        const GetTargetToInstallResult &gti_res) {
+  const auto current = client.GetCurrent();
+
+  Json::Value json_root;
+
+  auto app_shortlist = client.GetAppShortlist();
+  for (const auto &target : ci_res.Targets()) {
+    Json::Value json_target;
+    json_target["name"] = target.Name();
+    json_target["version"] = target.Version();
+    if (!gti_res.selected_target.IsUnknown() && gti_res.selected_target.Name() == target.Name()) {
+      json_target["selected"] = true;
+      json_target["reason"] = gti_res.reason;
+    }
+    if (client.IsRollback(target)) {
+      json_target["failed"] = true;
+    }
+    if (current.Version() == target.Version()) {
+      json_target["current"] = true;
+    } else if (current.Version() < target.Version()) {
+      json_target["newer"] = true;
+    }
+
+    Json::Value json_apps;
+    for (const auto &app : TufTarget::Apps(target)) {
+      Json::Value json_app;
+      json_app["name"] = app.name;
+      json_app["uri"] = app.uri;
+      json_app["on"] =
+          (!app_shortlist || std::find(app_shortlist->begin(), app_shortlist->end(), app.name) != app_shortlist->end());
+      json_apps.append(json_app);
+    }
+    json_target["apps"] = json_apps;
+
+    json_root.append(json_target);
+  }
+
+  return json_root;
+}
+
+StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_update_source, CheckMode check_mode,
+                   bool json_output) {
   auto cr = checkIn(client, check_mode, local_update_source);
-  if (cr) {
+  if (!cr) {
+    return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
+  }
+
+  auto gti_res = client.GetTargetToInstall(cr);
+
+  if (json_output) {
+    std::cout << getCheckInResultJson(client, cr, gti_res) << "\n";
+  } else {
     if (cr.Targets().empty()) {
       std::cout << "\nNo Targets found"
                 << "\n";
@@ -184,11 +237,7 @@ StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_updat
       std::cout << "\n";
     }
   }
-  if (!cr) {
-    return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
-  }
 
-  auto gti_res = client.GetTargetToInstall(cr);
   if (gti_res && gti_res.selected_target.IsUnknown()) {
     // Keep Ok vs OkCached differentiation in case of success and there is no target to install
     return res2StatusCode<CheckInResult::Status>(c2s, cr.status);
