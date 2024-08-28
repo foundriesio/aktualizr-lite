@@ -120,7 +120,8 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
                << " Skipping its installation.";
     }
 
-    if (force_apps_sync || !client_->appsInSync(Target::fromTufTarget(current))) {
+    auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(current));
+    if (force_apps_sync || !apps_to_update.empty()) {
       // Force installation of apps
       res.selected_target = current;
       LOG_INFO
@@ -128,7 +129,10 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
           << res.selected_target.Name();
 
       res.status = GetTargetToInstallResult::Status::UpdateSyncApps;
-      res.reason = "Syncing Active Target Apps";
+      res.reason = "Syncing Active Target Apps\n";
+      for (const auto& app_to_update : apps_to_update) {
+        res.reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
+      }
     } else {
       // No targets to install
       res.selected_target = TufTarget();

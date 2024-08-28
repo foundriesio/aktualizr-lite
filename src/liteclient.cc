@@ -771,22 +771,24 @@ bool LiteClient::isTargetActive(const Uptane::Target& target) const {
   return target.filename() == current.filename() && target.sha256Hash() == current.sha256Hash();
 }
 
-bool LiteClient::appsInSync(const Uptane::Target& target) const {
+bool LiteClient::appsInSync(const Uptane::Target& target) const { return appsToUpdate(target).empty(); }
+
+ComposeAppManager::AppsSyncReason LiteClient::appsToUpdate(const Uptane::Target& target) const {
   if (package_manager_->name() == ComposeAppManager::Name) {
     auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
     if (compose_pacman == nullptr) {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
-      return false;
+      return {};
     }
     LOG_INFO << "Checking status of Active Target (" << target.filename() << ")";
-    auto no_any_app_to_update = compose_pacman->checkForAppsToUpdate(target);
-    if (no_any_app_to_update) {
+    auto apps_to_update = compose_pacman->checkForAppsToUpdate(target);
+    if (apps_to_update.empty()) {
       compose_pacman->handleRemovedApps(getCurrent());
     }
 
-    return no_any_app_to_update;
+    return apps_to_update;
   }
-  return true;
+  return {};
 }
 
 void LiteClient::setAppsNotChecked() {

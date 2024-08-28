@@ -1,6 +1,7 @@
 #ifndef AKTUALIZR_LITE_CLIENT_H_
 #define AKTUALIZR_LITE_CLIENT_H_
 
+#include "composeappmanager.h"
 #include "downloader.h"
 #include "gtest/gtest_prod.h"
 #include "libaktualizr/config.h"
@@ -68,6 +69,7 @@ class LiteClient {
   void reportAppsState();
   bool isTargetActive(const Uptane::Target& target) const;
   bool appsInSync(const Uptane::Target& target) const;
+  ComposeAppManager::AppsSyncReason appsToUpdate(const Uptane::Target& target) const;
   void setAppsNotChecked();
   std::string getDeviceID() const;
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,

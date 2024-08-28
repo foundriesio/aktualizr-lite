@@ -39,6 +39,7 @@ class ComposeAppManager : public RootfsTreeManager {
   };
 
   using AppsContainer = std::unordered_map<std::string, std::string>;
+  using AppsSyncReason = std::unordered_map<std::string, std::string>;
 
   ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
@@ -58,8 +59,8 @@ class ComposeAppManager : public RootfsTreeManager {
   // Returns an intersection of Target's Apps and Apps listed in the config (sota.toml:compose_apps)
   // If Apps are not specified in the config then all Target's Apps are returned
   AppsContainer getApps(const Uptane::Target& t) const;
-  AppsContainer getAppsToUpdate(const Uptane::Target& t) const;
-  bool checkForAppsToUpdate(const Uptane::Target& target);
+  AppsContainer getAppsToUpdate(const Uptane::Target& t, AppsSyncReason& apps_and_reasons) const;
+  AppsSyncReason checkForAppsToUpdate(const Uptane::Target& target);
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
   Json::Value getAppsState() const;

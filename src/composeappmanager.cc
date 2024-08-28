@@ -193,7 +193,8 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
   return apps;
 }
 
-ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t) const {
+ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t,
+                                                                    AppsSyncReason& apps_and_reasons) const {
   AppsContainer apps_to_update;
 
   auto currently_installed_target_apps = Target::appsJson(OstreeManager::getCurrent());
@@ -206,6 +207,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
     if (app_data.empty()) {
       // new app in Target
       apps_to_update.insert(app_pair);
+      apps_and_reasons[app_pair.first] = "new app in target";
       LOG_INFO << app_name << " will be installed";
       continue;
     }
@@ -213,6 +215,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
     if (app_pair.second != app_data["uri"].asString()) {
       // an existing App update
       apps_to_update.insert(app_pair);
+      apps_and_reasons[app_pair.first] = "new version in target";
       LOG_INFO << app_name << " will be updated";
       continue;
     }
@@ -221,15 +224,24 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
         !boost::filesystem::exists(cfg_.apps_root / app_name / Docker::ComposeAppEngine::ComposeFile)) {
       // an App that is supposed to be installed has been removed somehow, let's install it again
       apps_to_update.insert(app_pair);
+      apps_and_reasons[app_pair.first] = "missing installation, to be re-installed";
       LOG_INFO << app_name << " will be re-installed";
       continue;
     }
 
     LOG_DEBUG << app_name << " performing full status check";
-    if (!app_engine_->isFetched({app_name, app_pair.second}) || !app_engine_->isRunning({app_name, app_pair.second})) {
-      // an App that is supposed to be installed and running is not fully installed or running
+    if (!app_engine_->isFetched({app_name, app_pair.second})) {
+      // an App that is supposed to be installed is not fully installed
       apps_to_update.insert(app_pair);
-      LOG_INFO << app_name << " update will be re-installed or completed";
+      apps_and_reasons[app_pair.first] = "not fetched";
+      LOG_INFO << app_name << " is not fully fetched; missing blobs will be fetched";
+      continue;
+    }
+    if (!app_engine_->isRunning({app_name, app_pair.second})) {
+      // an App that is supposed to running is not running
+      apps_to_update.insert(app_pair);
+      apps_and_reasons[app_pair.first] = "not running";
+      LOG_INFO << app_name << " is not installed or not running; will be installed and started";
       continue;
     }
   }
@@ -237,13 +249,19 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
   return apps_to_update;
 }
 
-bool ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
-  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target);
+ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
+  AppsSyncReason apps_and_reasons;
+  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, apps_and_reasons);
   if (!!cfg_.reset_apps) {
     cur_apps_to_fetch_ = getAppsToFetch(target);
   }
   are_apps_checked_ = true;
-  return cur_apps_to_fetch_and_update_.empty() && cur_apps_to_fetch_.empty();
+  for (const auto& app : cur_apps_to_fetch_) {
+    if (apps_and_reasons.count(app.first) == 0) {
+      apps_and_reasons[app.first] = "not fetched (reset apps)";
+    }
+  }
+  return apps_and_reasons;
 }
 
 DownloadResult ComposeAppManager::Download(const TufTarget& target) {
