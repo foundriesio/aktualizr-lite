@@ -368,7 +368,7 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFails) {
   // specifically its creation is successful but it fails to start after reboot caused by the ostree update
   auto app01_updated = registry.addApp(
       fixtures::ComposeApp::create("app-01", "service-01", "image-02", fixtures::ComposeApp::ServiceTemplate,
-                                   Docker::ComposeAppEngine::ComposeFile, "compose-start-failure"));
+                                   Docker::ComposeAppEngine::ComposeFile, "compose-start-failure-long-log"));
   std::vector<AppEngine::App> apps_updated{app01_updated};
   auto target_02 = createTarget(&apps_updated);
 
@@ -396,7 +396,8 @@ TEST_P(AkliteTest, OstreeAndAppRollbackIfAppsStartFails) {
 
     ASSERT_FALSE(client->finalizeInstall());
     // make sure that report events have been sent and EcuInstallationCompleted contains the error message
-    checkEvents(*client, target_01, UpdateType::kFinalized, "", "failed to bring Compose App up");
+    checkEvents(*client, target_01, UpdateType::kFinalized, "", "Failed to start container: " + app01_updated.name,
+                true);
 
     // for some reason ostreemanager::getCurrent() is driven by currently booted ostree hash,
     // so it thinks that current version is target_02

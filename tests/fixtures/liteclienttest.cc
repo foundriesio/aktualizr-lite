@@ -487,7 +487,8 @@ class ClientTest :virtual public ::testing::Test {
     ASSERT_EQ(req_headers.get("x-ats-dockerapps", ""), Target::appsStr(target, app_shortlist_));
   }
 
-  void checkEvents(fixtures::LiteClientMock& client, const Uptane::Target& target, UpdateType update_type, const std::string& download_failure_err_msg = "", const std::string& install_failure_err_msg = "") {
+  void checkEvents(fixtures::LiteClientMock& client, const Uptane::Target& target, UpdateType update_type, const std::string& download_failure_err_msg = "", const std::string& install_failure_err_msg = "",
+                   bool truncated = false) {
     const std::unordered_map<UpdateType, std::vector<std::string>> updateToevents = {
         { UpdateType::kOstree, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationApplied", "EcuInstallationCompleted" }},
         { UpdateType::kApp, { "EcuDownloadStarted", "EcuDownloadCompleted", "EcuInstallationStarted", "EcuInstallationCompleted" }},
@@ -521,6 +522,9 @@ class ClientTest :virtual public ::testing::Test {
       if (event_type == "EcuDownloadCompleted") {
         const auto event_details = rec_event_json["event"]["details"].asString();
         ASSERT_TRUE(event_details.find(download_failure_err_msg) != std::string::npos) << event_details;
+        if (truncated) {
+          ASSERT_TRUE(event_details.find("[TRUNCATED]") != std::string::npos) << event_details;
+        }
       }
     }
   }
