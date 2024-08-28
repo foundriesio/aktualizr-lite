@@ -300,7 +300,7 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
     LOG_WARNING << "Downgrading from " << current.Version() << " to  " << gti_res.selected_target.Version() << "...";
   }
 
-  auto pi_res = client.PullAndInstall(gti_res.selected_target, "", "", install_mode, local_update_source,
+  auto pi_res = client.PullAndInstall(gti_res.selected_target, gti_res.reason, "", install_mode, local_update_source,
                                       pull_mode == PullMode::All, do_install);
   return res2StatusCode<InstallResult::Status>(i2s, pi_res.status);
 }
