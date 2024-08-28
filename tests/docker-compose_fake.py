@@ -44,6 +44,12 @@ def up(out_dir, app_name, compose, flags):
         logger.info("Failed to start container: {}".format(app_name))
         exit(1)
 
+    if compose["x-fault-injection"]["failure-type"] == "compose-start-failure-long-log" and "-d" in flags:
+        for ii in range (0, 2000):
+            logger.info("Starting container...ok")
+        logger.info("Failed to start container: {}".format(app_name))
+        exit(1)
+
     try:
         with open(os.path.join(out_dir, "images.json"), "r") as f:
             images = json.load(f)

@@ -20,6 +20,8 @@
 #include "uptane/exceptions.h"
 #include "uptane/fetcher.h"
 
+static const size_t MaxDetailsSize{2048};
+
 class OfflineMetaFetcher : public Uptane::IMetadataFetcher {
  public:
   explicit OfflineMetaFetcher(boost::filesystem::path tuf_repo_path, Uptane::Version max_root_ver = Uptane::Version())
@@ -304,10 +306,10 @@ void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> ev
     event->custom["targetName"] = t.filename();
     event->custom["version"] = t.custom_version();
     if (event->custom.isMember("details")) {
-      static const size_t max_details_size{2048};
       const auto detail_str{event->custom["details"].asString()};
-      if (detail_str.size() > max_details_size) {
-        event->custom["details"] = detail_str.substr(0, max_details_size);
+      if (detail_str.size() > MaxDetailsSize) {
+        static const std::string truncated{"[TRUNCATED]"};
+        event->custom["details"] = detail_str.substr(0, MaxDetailsSize - truncated.size()) + truncated;
       }
     }
     report_queue->enqueue(std::move(event));
@@ -468,7 +470,17 @@ class DetailedInstallCompletedReport : public EcuInstallationCompletedReport {
   DetailedInstallCompletedReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, bool success,
                                  const std::string& details)
       : EcuInstallationCompletedReport(ecu, correlation_id, success) {
-    custom["details"] = details;
+    if (!success && details.size() > MaxDetailsSize) {
+      static const std::size_t err_tail_size{1024};
+      static const std::string truncated{"\n[TRUNCATED]\n"};
+
+      std::size_t head_size{MaxDetailsSize - err_tail_size - truncated.size()};
+
+      custom["details"] =
+          details.substr(0, head_size) + truncated + details.substr(details.size() - err_tail_size, err_tail_size);
+    } else {
+      custom["details"] = details;
+    }
   }
 };
 
