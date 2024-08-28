@@ -308,7 +308,8 @@ void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> ev
     if (event->custom.isMember("details")) {
       const auto detail_str{event->custom["details"].asString()};
       if (detail_str.size() > MaxDetailsSize) {
-        event->custom["details"] = detail_str.substr(0, MaxDetailsSize);
+        static const std::string truncated{"[TRUNCATED]"};
+        event->custom["details"] = detail_str.substr(0, MaxDetailsSize - truncated.size()) + truncated;
       }
     }
     report_queue->enqueue(std::move(event));
