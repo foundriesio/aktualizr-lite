@@ -254,7 +254,6 @@ bpo::variables_map parse_options(int argc, char** argv) {
   // Try to keep these options in the same order as Config::updateFromCommandLine().
   // The first three are commandline only.
   description.add_options()
-      ("update-lockfile", bpo::value<boost::filesystem::path>(), "If provided, an flock(2) is applied to this file before performing an update in daemon mode")
       ("help,h", "print usage")
       ("version,v", "Current aktualizr version")
       ("config,c", bpo::value<std::vector<boost::filesystem::path> >()->composing(), "configuration file or directory")
