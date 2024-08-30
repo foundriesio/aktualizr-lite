@@ -254,19 +254,18 @@ bpo::variables_map parse_options(int argc, char** argv) {
   // Try to keep these options in the same order as Config::updateFromCommandLine().
   // The first three are commandline only.
   description.add_options()
-      ("update-lockfile", bpo::value<boost::filesystem::path>(), "If provided, an flock(2) is applied to this file before performing an update in daemon mode")
-      ("help,h", "print usage")
-      ("version,v", "Current aktualizr version")
-      ("config,c", bpo::value<std::vector<boost::filesystem::path> >()->composing(), "configuration file or directory")
-      ("loglevel", bpo::value<int>(), "set log level 0-5 (trace, debug, info, warning, error, fatal)")
-      ("update-name", bpo::value<std::string>(), "optional name of the update when running \"update\". default=latest")
+      ("help,h", "Print usage")
+      ("version,v", "Prints current aktualizr-lite version")
+      ("config,c", bpo::value<std::vector<boost::filesystem::path> >()->composing(), "Configuration file or directory path")
+      ("loglevel", bpo::value<int>(), "Set log level 0-5 (trace, debug, info, warning, error, fatal)")
+      ("update-name", bpo::value<std::string>(), "Name or version of the target to be used in pull, install, and update commands. default=latest")
       ("install-mode", bpo::value<std::string>(), "Optional install mode. Supported modes: [delay-app-install]. By default both ostree and apps are installed before reboot")
 #ifdef ALLOW_MANUAL_ROLLBACK
-      ("clear-installed-versions", "DANGER - clear the history of installed updates before applying the given update. This is handy when doing test/debug and you need to rollback to an old version manually.")
+      ("clear-installed-versions", "DANGER - clear the history of installed updates before applying the given update. This is handy when doing test/debug and you need to rollback to an old version manually")
 #endif
-      ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for update when in daemon mode.")
-      ("json", bpo::value<bool>(), "Output targets information as json ('check' and 'list' commands only)")
-      ("src-dir", bpo::value<std::string>(), "Directory that contains an offline update. Enables offline mode for `check`, `pull`, `install` and `update` commands.")
+      ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for updates when in daemon mode")
+      ("json", bpo::value<bool>(), "Output targets information as json when running check and list commands")
+      ("src-dir", bpo::value<std::string>(), "Directory that contains an offline update bundle. Enables offline mode for check, pull, install, and update commands")
       ("command", bpo::value<std::string>(), subs.c_str());
   // clang-format on
 
