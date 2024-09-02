@@ -7,6 +7,9 @@
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <cstddef>
+#include <memory>
+#include <tuple>
 
 #include "http/httpclient.h"
 #include "libaktualizr/config.h"
@@ -215,6 +218,94 @@ static std::vector<TufTarget> filterTargets(const std::vector<TufTarget>& allTar
   return targets;
 }
 
+static CheckInResult checkInFailure(const std::shared_ptr<LiteClient>& client_, const std::string& hw_id_,
+                                    CheckInResult::Status check_status, std::string err_msg) {
+  LOG_ERROR << err_msg;
+  client_->notifyTufUpdateFinished(err_msg);
+  return {check_status, hw_id_, {}};
+}
+
+static std::shared_ptr<aklite::tuf::RepoSource> getRepoSource(const std::shared_ptr<LiteClient>& client_,
+                                                              const LocalUpdateSource* local_update_source) {
+  if (local_update_source == nullptr) {
+    boost::property_tree::ptree pt;
+    pt.put<std::string>("tag", client_->tags.empty() ? "" : client_->tags.at(0));
+    auto current = client_->getCurrent();
+    pt.put<std::string>("dockerapps", Target::appsStr(current, ComposeAppManager::Config(client_->config.pacman).apps));
+    pt.put<std::string>("target", current.filename());
+    pt.put<std::string>("ostreehash", current.sha256Hash());
+
+    LOG_INFO << "Updating the local TUF repo with metadata located in " << client_->config.uptane.repo_server << "...";
+    return std::make_shared<aklite::tuf::AkHttpsRepoSource>("temp-remote-repo-source", pt, client_->config);
+  } else {
+    LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
+    return std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
+  }
+}
+
+static std::tuple<CheckInResult::Status, std::string> updateMeta(const std::shared_ptr<LiteClient>& client_,
+                                                                 const std::shared_ptr<aklite::tuf::Repo>& tuf_repo_,
+                                                                 const LocalUpdateSource* local_update_source) {
+  bool is_offline = local_update_source != nullptr;
+  const auto repo_src = getRepoSource(client_, local_update_source);
+  CheckInResult::Status check_status{CheckInResult::Status::Failed};
+  std::string err_msg;
+  bool fallback_to_current = !is_offline;
+
+  try {
+    tuf_repo_->UpdateMeta(repo_src);
+    check_status = CheckInResult::Status::Ok;
+    LOG_INFO << "The local TUF repo has been successfully updated";
+  } catch (const Uptane::SecurityException& exc) {
+    const std::string err{exc.what()};
+    if (is_offline && std::string::npos != err.find("Rollback attempt")) {
+      LOG_WARNING << "TUF metadata provided in the offline bundle is older than the device's TUF metadata";
+      // Only situation where we allow falling back to current TUF metadata on offline mode:
+      // a newer version of the TUF metadata is already stored in the device
+      fallback_to_current = true;
+    }
+    err_msg = "Failed to update the local TUF repo; TUF metadata check failure: " + err;
+    check_status = CheckInResult::Status::SecurityError;
+  } catch (const Uptane::ExpiredMetadata& exc) {
+    const std::string err{exc.what()};
+    err_msg = "Failed to update the local TUF repo; TUF metadata is expired: " + err;
+    check_status = CheckInResult::Status::ExpiredMetadata;
+  } catch (const Uptane::MetadataFetchFailure& exc) {
+    const std::string err{exc.what()};
+    err_msg = "Failed to update the local TUF repo; TUF metadata ";
+    err_msg += (is_offline ? "not found" : "fetch failure");
+    err_msg += ": ";
+    err_msg += err;
+    if (!is_offline && err.find("Failed to fetch role timestamp") != std::string::npos) {
+      err_msg += "Check the device tag or verify the existence of a wave for the device";
+    }
+    check_status = CheckInResult::Status::MetadataFetchFailure;
+  } catch (const aklite::tuf::MetadataNotFoundException& exc) {
+    const std::string err{exc.what()};
+    err_msg = "Failed to update the local TUF repo; TUF metadata not found: " + err;
+    check_status = CheckInResult::Status::MetadataNotFound;
+  } catch (const std::exception& exc) {
+    const std::string err{exc.what()};
+    err_msg = "Failed to update the local TUF repo: " + err;
+    check_status = CheckInResult::Status::Failed;
+  }
+  if (check_status != CheckInResult::Status::Ok && fallback_to_current) {
+    LOG_INFO << "Checking the local TUF repo...";
+    try {
+      tuf_repo_->CheckMeta();
+      check_status = CheckInResult::Status::OkCached;
+      LOG_INFO << "The local TUF is valid";
+    } catch (const std::exception& exc) {
+      err_msg = std::string("Local TUF repo is invalid: ") + exc.what();
+    }
+  }
+  if (!err_msg.empty() && check_status == CheckInResult::Status::OkCached) {
+    // In case of errors statuses, the error message will be logged later
+    LOG_ERROR << err_msg;
+  }
+  return {check_status, err_msg};
+}
+
 CheckInResult AkliteClient::CheckIn() const {
   client_->notifyTufUpdateStarted();
   if (!configUploaded_) {
@@ -225,58 +316,12 @@ CheckInResult AkliteClient::CheckIn() const {
   client_->reportHwInfo();
   client_->reportAppsState();
 
-  boost::property_tree::ptree pt;
-  pt.put<std::string>("tag", client_->tags.empty() ? "" : client_->tags.at(0));
-  auto current = client_->getCurrent();
-  pt.put<std::string>("dockerapps", Target::appsStr(current, ComposeAppManager::Config(client_->config.pacman).apps));
-  pt.put<std::string>("target", current.filename());
-  pt.put<std::string>("ostreehash", current.sha256Hash());
-
-  LOG_INFO << "Updating the local TUF repo with metadata located in " << client_->config.uptane.repo_server << "...";
-  auto repo_src = std::make_shared<aklite::tuf::AkHttpsRepoSource>("temp-remote-repo-source", pt, client_->config);
   CheckInResult::Status check_status{CheckInResult::Status::Failed};
   std::string err_msg;
-  try {
-    tuf_repo_->UpdateMeta(repo_src);
-    check_status = CheckInResult::Status::Ok;
-    LOG_INFO << "The local TUF repo has been successfully updated";
-  } catch (const Uptane::SecurityException& exc) {
-    const std::string err{exc.what()};
-    err_msg = "Failed to update the local TUF repo; TUF metadata check failure: " + err;
-    check_status = CheckInResult::Status::SecurityError;
-  } catch (const Uptane::ExpiredMetadata& exc) {
-    const std::string err{exc.what()};
-    err_msg = "Failed to update the local TUF repo; TUF metadata is expired: " + err;
-    check_status = CheckInResult::Status::ExpiredMetadata;
-  } catch (const Uptane::MetadataFetchFailure& exc) {
-    const std::string err{exc.what()};
-    err_msg = "Failed to update the local TUF repo; TUF metadata fetch failure: " + err;
-    if (err.find("Failed to fetch role timestamp") != std::string::npos) {
-      err_msg += "Check the device tag or verify the existence of a wave for the device";
-    }
-    check_status = CheckInResult::Status::MetadataFetchFailure;
-  } catch (const std::exception& exc) {
-    const std::string err{exc.what()};
-    err_msg = "Failed to update the local TUF repo: " + err;
-    check_status = CheckInResult::Status::Failed;
-  }
-  if (check_status != CheckInResult::Status::Ok) {
-    LOG_INFO << "Checking the local TUF repo...";
-    try {
-      tuf_repo_->CheckMeta();
-      check_status = CheckInResult::Status::OkCached;
-      LOG_INFO << "The local TUF is valid";
-    } catch (const std::exception& exc) {
-      err_msg = std::string("Local TUF repo is invalid: ") + exc.what();
-    }
-  }
-  if (!err_msg.empty()) {
-    LOG_ERROR << err_msg;
-  }
 
+  std::tie(check_status, err_msg) = updateMeta(client_, tuf_repo_, nullptr);
   if (check_status != CheckInResult::Status::Ok && check_status != CheckInResult::Status::OkCached) {
-    client_->notifyTufUpdateFinished(err_msg);
-    return CheckInResult{check_status, "", {}};
+    return checkInFailure(client_, hw_id_, check_status, err_msg);
   }
 
   LOG_INFO << "Searching for matching TUF Targets...";
@@ -286,16 +331,14 @@ CheckInResult AkliteClient::CheckIn() const {
     // why specific devices are not picking up a new Target
     err_msg = boost::str(boost::format("No Target found for the device; hw ID: %s; tags: %s") % hw_id_ %
                          boost::algorithm::join(client_->tags, ","));
-    LOG_ERROR << err_msg;
-    client_->notifyTufUpdateFinished(err_msg);
-    return CheckInResult{CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
+    return checkInFailure(client_, hw_id_, CheckInResult::Status::NoMatchingTargets, err_msg);
   }
   LOG_INFO << "Latest targets metadata contains " << matchingTargets.size() << " entries for tag=\""
            << boost::algorithm::join(client_->tags, ",") << "\" and hardware id=\"" << hw_id_ << "\"";
   if (invoke_post_cb_at_checkin_) {
     client_->notifyTufUpdateFinished();
   }
-  return CheckInResult(CheckInResult::Status::Ok, hw_id_, matchingTargets);
+  return {CheckInResult::Status::Ok, hw_id_, matchingTargets};
 }
 
 static bool compareTargets(const Uptane::Target& t1, const Uptane::Target& t2) {
@@ -326,7 +369,7 @@ static void parseUpdateContent(const boost::filesystem::path& apps_dir, std::set
 
 static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pconfig,
                                                        const std::vector<Uptane::Target>& allowed_targets,
-                                                       const UpdateSrc& src, bool just_latest = true) {
+                                                       const UpdateSrc& src) {
   if (allowed_targets.empty()) {
     LOG_ERROR << "No targets are available for a given device; check a hardware ID and/or a tag";
     return std::vector<Uptane::Target>{};
@@ -343,8 +386,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
   const OSTree::Repo repo{src.OstreeRepoDir.string()};
   Uptane::Target found_target(Uptane::Target::Unknown());
 
-  const std::string search_msg{just_latest ? "a target" : "all targets"};
-  LOG_INFO << "Searching for " << search_msg << " starting from " << allowed_targets.begin()->filename()
+  LOG_INFO << "Searching for all targets starting from " << allowed_targets.begin()->filename()
            << " that match content provided in the source directory\n"
            << "\t pacman type: \t" << pconfig.type << "\n\t apps dir: \t" << src.AppsDir << "\n\t ostree dir: \t"
            << src.OstreeRepoDir;
@@ -358,10 +400,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       custom_data[LocalSrcDirKey]["ostree"] = src.OstreeRepoDir.string();
       found_targets.emplace_back(Target::updateCustom(t, custom_data));
       LOG_INFO << "\t" << t.filename() << " - all target components have been found";
-      if (!just_latest) {
-        continue;
-      }
-      break;
+      continue;
     }
 
     OfflineUpdateAppsShortlistType offline_app_shortlist_type;
@@ -374,10 +413,7 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
       custom_data.removeMember("docker_compose_apps");
       found_targets.emplace_back(Target::updateCustom(t, custom_data));
       LOG_INFO << "\t" << t.filename() << " - all target components have been found";
-      if (!just_latest) {
-        continue;
-      }
-      break;
+      continue;
     }
 
     const ComposeAppManager::AppsContainer required_apps{
@@ -418,9 +454,6 @@ static std::vector<Uptane::Target> getAvailableTargets(const PackageConfig& pcon
     custom_data[LocalSrcDirKey]["apps"] = src.AppsDir.string();
     found_targets.emplace_back(Target::updateCustom(t, custom_data));
     LOG_INFO << "\t" << t.filename() << " - all target components have been found";
-    if (just_latest) {
-      break;
-    }
   }
   return found_targets;
 }
@@ -443,90 +476,34 @@ std::vector<TufTarget> toTufTargets(const std::vector<Uptane::Target>& targets) 
   return ret;
 }
 
-CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
-  client_->notifyTufUpdateStarted();
-  auto repo_src =
-      std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
-
-  std::string err_msg;
-  CheckInResult::Status check_status{CheckInResult::Status::Ok};
+// Throws BundleMetaError
+static Json::Value getBundleMeta(const std::shared_ptr<LiteClient>& client_,
+                                 const std::shared_ptr<aklite::tuf::Repo>& tuf_repo_,
+                                 const LocalUpdateSource* local_update_source) {
   Json::Value bundle_meta;
-
-  try {
-    const auto bundle_path{boost::filesystem::path(local_update_source->tuf_repo) / "bundle-targets.json"};
-    if (!boost::filesystem::exists(bundle_path)) {
-      LOG_WARNING << "Failed to find the bundle metadata; " << bundle_path << " is missing!";
-      LOG_WARNING << "Please update `fioctl` to version >= v0.42 and re-run `fioctl targets offline-update`"
-                     " to generate a bundle with metadata";
-    } else {
-      LOG_INFO << "Checking metadata of the bundle located in " << local_update_source->tuf_repo << "...";
-      bundle_meta = checkAndGetBundleMeta(tuf_repo_, local_update_source->tuf_repo);
-      printBundleMeta(bundle_meta);
-      checkBundleType(bundle_meta, client_->type());
-      checkBundleTag(bundle_meta, client_->tags);
-    }
-
-    LOG_INFO << "Updating the local TUF repo with metadata located in " << local_update_source->tuf_repo << "...";
-    auto repo_src =
-        std::make_shared<aklite::tuf::LocalRepoSource>("temp-local-repo-source", local_update_source->tuf_repo);
-    tuf_repo_->UpdateMeta(repo_src);
-    LOG_INFO << "The local TUF repo has been successfully updated";
-  } catch (const Uptane::SecurityException& exc) {
-    const std::string err{exc.what()};
-    if (std::string::npos != err.find("Rollback attempt")) {
-      LOG_WARNING << "TUF metadata provided in the offline bundle is older than the device's TUF metadata";
-      LOG_INFO << "Checking the device's TUF metadata...";
-      try {
-        tuf_repo_->CheckMeta();
-        LOG_INFO << "The device's TUF metadata is valid, using it for the offline update";
-        check_status = CheckInResult::Status::OkCached;
-      } catch (const std::exception& exc) {
-        err_msg = "The device's TUF repo/metadata is invalid: " + err;
-        check_status = CheckInResult::Status::SecurityError;
-      }
-    } else {
-      err_msg = "Failed to update the local TUF repo; TUF metadata check failure: " + err;
-      check_status = CheckInResult::Status::SecurityError;
-    }
-  } catch (const Uptane::ExpiredMetadata& exc) {
-    const std::string err{exc.what()};
-    err_msg = "Failed to update the local TUF repo; TUF metadata is expired: " + err;
-    check_status = CheckInResult::Status::ExpiredMetadata;
-  } catch (const aklite::tuf::MetadataNotFoundException& exc) {
-    const std::string err{exc.what()};
-    err_msg = "Failed to update the local TUF repo; TUF metadata not found: " + err;
-    check_status = CheckInResult::Status::MetadataNotFound;
-  } catch (const BundleMetaError& exc) {
-    const std::string err{exc.what()};
-    err_msg = "The bundle metadata check failed: " + err;
-    if (exc.type == BundleMetaError::Type::Expired) {
-      check_status = CheckInResult::Status::ExpiredMetadata;
-    } else if (exc.type == BundleMetaError::Type::NotFound || exc.type == BundleMetaError::Type::RootMetaNotFound) {
-      check_status = CheckInResult::Status::MetadataNotFound;
-    } else {
-      check_status = CheckInResult::Status::BundleMetadataError;
-    }
-  } catch (const std::exception& exc) {
-    const std::string err{exc.what()};
-    err_msg = "Failed to update the local TUF repo: " + err;
-    check_status = CheckInResult::Status::Failed;
+  const auto bundle_path{boost::filesystem::path(local_update_source->tuf_repo) / "bundle-targets.json"};
+  if (!boost::filesystem::exists(bundle_path)) {
+    LOG_WARNING << "Failed to find the bundle metadata; " << bundle_path << " is missing!";
+    LOG_WARNING << "Please update `fioctl` to version >= v0.42 and re-run `fioctl targets offline-update`"
+                   " to generate a bundle with metadata";
+  } else {
+    LOG_INFO << "Checking metadata of the bundle located in " << local_update_source->tuf_repo << "...";
+    bundle_meta = checkAndGetBundleMeta(tuf_repo_, local_update_source->tuf_repo);
+    printBundleMeta(bundle_meta);
+    checkBundleType(bundle_meta, client_->type());
+    checkBundleTag(bundle_meta, client_->tags);
   }
+  return bundle_meta;
+}
 
-  if (!(check_status == CheckInResult::Status::Ok || check_status == CheckInResult::Status::OkCached)) {
-    LOG_ERROR << err_msg;
-    client_->notifyTufUpdateFinished(err_msg);
-    return CheckInResult{check_status, "", {}};
-  }
-
+static std::vector<TufTarget> getTrustedTargets(const std::shared_ptr<aklite::tuf::Repo>& tuf_repo_,
+                                                Json::Value bundle_meta) {
   auto trusted_targets{tuf_repo_->GetTargets()};
   if (!bundle_meta.empty()) {
     LOG_INFO << "Getting and checking the bundle metadata...";
     std::vector<TufTarget> bundle_targets{getTrustedBundleTargets(trusted_targets, bundle_meta)};
     if (bundle_targets.empty()) {
-      const std::string err{"None of the bundle targets are listed among the TUF targets allowed for the device"};
-      check_status = CheckInResult::Status::Failed;
-      client_->notifyTufUpdateFinished(err);
-      return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
+      return {};
     }
 
     if (bundle_targets.size() == bundle_meta["signed"]["x-fio-offline-bundle"]["targets"].size()) {
@@ -539,6 +516,40 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     }
     trusted_targets = bundle_targets;
   }
+  return trusted_targets;
+}
+
+CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_source) const {
+  client_->notifyTufUpdateStarted();
+
+  Json::Value bundle_meta;
+  std::string err_msg;
+  CheckInResult::Status check_status{CheckInResult::Status::Ok};
+  try {
+    bundle_meta = getBundleMeta(client_, tuf_repo_, local_update_source);
+  } catch (const BundleMetaError& exc) {
+    if (exc.type == BundleMetaError::Type::Expired) {
+      check_status = CheckInResult::Status::ExpiredMetadata;
+    } else if (exc.type == BundleMetaError::Type::NotFound || exc.type == BundleMetaError::Type::RootMetaNotFound) {
+      check_status = CheckInResult::Status::MetadataNotFound;
+    } else {
+      check_status = CheckInResult::Status::BundleMetadataError;
+    }
+    return checkInFailure(client_, hw_id_, check_status,
+                          "The bundle metadata check failed: " + std::string(exc.what()));
+  }
+
+  std::tie(check_status, err_msg) = updateMeta(client_, tuf_repo_, local_update_source);
+  if (check_status != CheckInResult::Status::Ok && check_status != CheckInResult::Status::OkCached) {
+    return checkInFailure(client_, hw_id_, check_status, err_msg);
+  }
+
+  auto trusted_targets = getTrustedTargets(tuf_repo_, bundle_meta);
+  if (trusted_targets.empty()) {
+    return checkInFailure(
+        client_, hw_id_, CheckInResult::Status::NoMatchingTargets,
+        std::string("None of the bundle targets are listed among the TUF targets allowed for the device"));
+  }
 
   LOG_INFO << "Searching for TUF Targets matching a device's hardware ID and tag; hw-id: " + hw_id_ +
                   ", tag: " + (client_->tags.empty() ? "<not set>" : boost::algorithm::join(client_->tags, ","));
@@ -547,8 +558,7 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
     err_msg =
         "Couldn't find Targets matching the device's hardware ID; check a tag or a hardware ID of the device and the "
         "bundle's tag";
-    LOG_ERROR << err_msg;
-    return CheckInResult{CheckInResult::Status::NoMatchingTargets, "", {}};
+    return checkInFailure(client_, hw_id_, CheckInResult::Status::NoMatchingTargets, err_msg);
   }
   LOG_INFO << "Found " << matchingTargets.size() << " matching TUF Targets";
 
@@ -559,20 +569,17 @@ CheckInResult AkliteClient::CheckInLocal(const LocalUpdateSource* local_update_s
       .AppsDir = local_update_source->app_store,
   };
   std::vector<Uptane::Target> available_targets =
-      getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src,
-                          false /* get all available targets, not just latest */);
+      getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src);
   if (available_targets.empty()) {
     err_msg =
         "No update content found in ostree dir  " + src.OstreeRepoDir.string() + " and app dir " + src.AppsDir.string();
-    LOG_ERROR << err_msg;
-    client_->notifyTufUpdateFinished(err_msg);
-    return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
+    return checkInFailure(client_, hw_id_, CheckInResult::Status::NoTargetContent, err_msg);
   }
 
   if (invoke_post_cb_at_checkin_) {
     client_->notifyTufUpdateFinished();
   }
-  return CheckInResult(check_status, hw_id_, toTufTargets(available_targets));
+  return {check_status, hw_id_, toTufTargets(available_targets)};
 }
 
 CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update_source) const {
@@ -584,7 +591,7 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
   } catch (const std::exception& exc) {
     err_msg = std::string("Stored TUF metadata is invalid: ") + exc.what();
     LOG_WARNING << err_msg;
-    return CheckInResult{CheckInResult::Status::SecurityError, hw_id_, {}};
+    return {CheckInResult::Status::SecurityError, hw_id_, {}};
   }
 
   LOG_INFO << "Searching for matching TUF Targets...";
@@ -595,7 +602,7 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
     err_msg = boost::str(boost::format("No Target found for the device; hw ID: %s; tags: %s") % hw_id_ %
                          boost::algorithm::join(client_->tags, ","));
     LOG_ERROR << err_msg;
-    return CheckInResult{CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
+    return {CheckInResult::Status::NoMatchingTargets, hw_id_, {}};
   }
   LOG_INFO << "Latest targets metadata contains " << matchingTargets.size() << " entries for tag=\""
            << boost::algorithm::join(client_->tags, ",") << "\" and hardware id=\"" << hw_id_ << "\"";
@@ -608,18 +615,17 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
         .AppsDir = local_update_source->app_store,
     };
     std::vector<Uptane::Target> available_targets =
-        getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src,
-                            false /* get all available targets, not just latest */);
+        getAvailableTargets(client_->config.pacman, fromTufTargets(matchingTargets), src);
     if (available_targets.empty()) {
       err_msg = "No update content found in ostree dir  " + src.OstreeRepoDir.string() + " and app dir " +
                 src.AppsDir.string();
       LOG_ERROR << err_msg;
-      return CheckInResult(CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{});
+      return {CheckInResult::Status::NoTargetContent, hw_id_, std::vector<TufTarget>{}};
     }
-    return CheckInResult(CheckInResult::Status::OkCached, hw_id_, toTufTargets(available_targets));
+    return {CheckInResult::Status::OkCached, hw_id_, toTufTargets(available_targets)};
 
   } else {
-    return CheckInResult(CheckInResult::Status::OkCached, hw_id_, matchingTargets);
+    return {CheckInResult::Status::OkCached, hw_id_, matchingTargets};
   }
 }
 
