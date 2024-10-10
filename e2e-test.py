@@ -60,7 +60,7 @@ single_step = True
 prune = True
 
 factory_name = "detsch-aklite-test"
-base_target_version = 54
+base_target_version = 89
 
 def get_target_version(offset):
     return base_target_version + offset
@@ -138,6 +138,7 @@ device_name = get_device_name()
 # os.getenv("DEVICE_NAME", "aklite-test-device")
 
 def verify_events(target_version, expected_events = None, second_to_last_corr_id = False):
+    logger.info(f"Verifying events for version {target_version}")
     headers = {'OSF-TOKEN': osf_token}
     r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/', headers=headers)
     d = json.loads(r.text)
@@ -175,6 +176,7 @@ def clear_callbacks_log():
 
 # TODO: verify additional callback variables
 def verify_callback(expected_calls):
+    logger.info(f"Verifying callbacks")
     calls = []
     if os.path.isfile(callback_log_path):
         with open(callback_log_path) as f:
@@ -547,8 +549,7 @@ def run_test_sequence_update_to_latest():
     check_running_apps(apps)
 
 
-# @pytest.mark.parametrize('offline_', [False, True])
-@pytest.mark.parametrize('offline_', [False])
+@pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
 def test_incremental_updates(offline_, single_step_):
     global offline, single_step
@@ -556,7 +557,7 @@ def test_incremental_updates(offline_, single_step_):
     single_step = single_step_
     run_test_sequence_incremental()
 
-@pytest.mark.parametrize('offline_', [False])
+@pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
 def test_update_to_latest(offline_, single_step_):
     global offline, single_step
