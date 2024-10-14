@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  dockerd:
+    image: ghcr.io/foundriesio/moby:25.0.3_fio
+    command: ["dockerd", "-H", "unix:///var/run/docker/docker.sock"]
+    volumes:
+      - ${DOCKER_DATA_ROOT}:/var/lib/docker
+      - docker-runtime:/var/run/docker
+      - ${SOTA_DIR}:/var/sota
+    privileged: true
+
+  aklite-e2e-test:
+      build:
+        context: ${AKLITE_E2E_TEST_DOCKER_DIR}
+        args:
+          AKLITE_VER: master
+        dockerfile: Dockerfile
+
+      image: aklite-e2e-test
+      volumes:
+        - "${PWD}:${PWD}"
+        - ${SYSROOT}:/sysroot
+        - ${SYSROOT}/ostree:/ostree
+        - ${BOOTDIR}:/boot
+        - ${SOTA_DIR}:/var/sota
+        - ${USR_SOTA_DIR}:/usr/lib/sota/conf.d
+        - ${ETC_SOTA_DIR}:/etc/sota/conf.d
+        - ${DOCKER_DATA_ROOT}:/var/lib/docker
+        - docker-runtime:/var/run/docker
+      working_dir: "${PWD}"
+      hostname: device
+      user: "root"
+      environment:
+        - FACTORY=${FACTORY}
+        - AUTH_TOKEN=${AUTH_TOKEN}
+        - DEVICE_TAG=${DEVICE_TAG}
+        - DOCKER_HOST=unix:///var/run/docker/docker.sock
+        - DOCKER_CONFIG=/usr/lib/docker
+        - CXX=clang++
+        - CC=clang
+      depends_on:
+      - dockerd
+
+volumes:
+  docker-runtime:
