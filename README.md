@@ -39,14 +39,6 @@ The make environment variables are:
 If `-f dev-flow.mk` is specified, then the `make` command is executed on a host, otherwise the `foundries/aklite-dev` container is used.
 A user can specify their own container to run the commands in by overriding `CONTAINER` environment variable.
 
-#### Build Custom Client Example
-
-[The example of the custom client](./examples/custom-client-cxx/main.cc) depends on the `libaktualizr` and `libaktualizr_lite` libraries,
-therefore they should be built prior to building of the example. Then, run:
-```
-make [-f dev-flow.mk] custom-client
-```
-
 ### Test
 
 ```
@@ -63,18 +55,7 @@ The make environment variables are:
 
 [Run aktualizr-lite locally against your Factory](./how-to-run-locally.md)
 
-#### Run Custom Client Example
+### Custom Client Example
 
-Prior to running of the custom client example, a user should execute all steps listed in [the how to run locally guide](./how-to-run-locally.md).
-Then, the following command will start the custom client:
-```
-LD_LIBRARY_PATH="$LD_LIBRARY_PATH:./build/aktualizr/src/libaktualizr/:./build/src"  \
-            AKLITE_CONFIG_DIR=<device config dir | sota.toml> ./build-custom/custom-sota-client
-```
-or in the dev container:
-
-```
-docker run --rm -v $PWD:$PWD -w $PWD \
-    -e LD_LIBRARY_PATH="$LD_LIBRARY_PATH:./build-cont/aktualizr/src/libaktualizr/:./build-cont/src" \
-    -e AKLITE_CONFIG_DIR="<device config dir | sota.toml>"  foundries/aklite-dev ./build-cont-custom/custom-sota-client
-```
+Aktualizr-lite provides an API that can be used for creating a custom update client.
+An example of such client is available at https://github.com/foundriesio/sotactl
