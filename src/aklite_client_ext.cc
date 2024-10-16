@@ -123,7 +123,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(current));
     if (force_apps_sync || !apps_to_update.empty()) {
       // Force installation of apps
-      res.selected_target = current;
+      res.selected_target = checkin_res.SelectTarget(current.Version());
       LOG_INFO
           << "The specified Target is already installed, enforcing installation to make sure it's synced and running:"
           << res.selected_target.Name();
