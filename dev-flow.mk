@@ -2,7 +2,7 @@
 
 CCACHE_DIR = $(shell pwd)/.ccache
 BUILD_DIR ?= build
-TARGET ?= aklite-tests
+TARGET ?= aklite-tests aktualizr-get
 TEST_LABEL ?= aklite
 CTEST_ARGS ?= --output-on-failure
 CXX ?= clang++
