@@ -84,3 +84,4 @@ jobs:
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
           BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.E2E_TEST_TAG}}

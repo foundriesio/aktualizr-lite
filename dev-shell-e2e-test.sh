@@ -14,4 +14,4 @@ down() {
 trap down EXIT
 
 mkdir -p $PWD/.device/sysroot
-docker compose --env-file=${docker_path}/.env.dev -f ${docker_path}/docker-compose.yml run -e DEV_USER=$(id -u) -e DEV_GROUP=$(id -g) -e BASE_TARGET_VERSION=${BASE_TARGET_VERSION} -e USER_TOKEN=${USER_TOKEN} aklite-e2e-test "$@"
+docker compose --env-file=${docker_path}/.env.dev -f ${docker_path}/docker-compose.yml run -e DEV_USER=$(id -u) -e DEV_GROUP=$(id -g) -e BASE_TARGET_VERSION=${BASE_TARGET_VERSION} -e USER_TOKEN=${USER_TOKEN} -e TAG=${TAG} aklite-e2e-test "$@"

@@ -59,6 +59,11 @@ if not base_target_version:
     logger.error("BASE_TARGET_VERSION environment variable not set")
     sys.exit()
 
+tag = os.getenv("TAG")
+if not tag:
+    logger.error("TAG environment variable not set")
+    sys.exit()
+
 base_target_version = int(base_target_version)
 logger.info(f"Base target version: {base_target_version}")
 
@@ -118,7 +123,7 @@ all_targets = {
 def register_if_required():
     if not os.path.exists("/var/sota/client.pem"):
         user_token = os.getenv("USER_TOKEN")
-        cmd = f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" --start-daemon 0 --tags main'
+        cmd = f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" --start-daemon 0 --tags {tag}'
         logger.info(f"Registering device...")
         output = os.popen(cmd).read().strip()
         logger.info(output)
@@ -224,7 +229,7 @@ echo { \\"MESSAGE\\": \\"$MESSAGE\\", \\"CURRENT_TARGET\\": \\"$CURRENT_TARGET\\
     content = \
 f"""
 [pacman]
-tags = "main"
+tags = "{tag}"
 """
     if apps is not None:
         apps_str = ",".join(apps)
