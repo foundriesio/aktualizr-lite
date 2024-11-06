@@ -230,7 +230,6 @@ tags = "main"
         apps_str = ",".join(apps)
         content += f"""
 compose_apps = "{apps_str}"
-docker_apps = "{apps_str}"
 """
     # callback_program = "/var/sota/callback.sh"
 
