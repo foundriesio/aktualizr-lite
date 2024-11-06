@@ -50,7 +50,7 @@ if not user_token:
     sys.exit()
 
 factory_name = os.getenv("FACTORY")
-if not user_token:
+if not factory_name:
     logger.error("FACTORY environment variable not set")
     sys.exit()
 
