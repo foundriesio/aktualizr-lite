@@ -99,12 +99,12 @@ class Targets:
     def __str__(self):
         return f"VersionOffset={self.version_offset} InstallRollback={self.install_rollback}, RunRollback={self.run_rollback}, BuildError={self.build_error}, OSTreeImageVersion={self.ostree_image_version}"
 
-all_apps = ["shellhttpd", "shellhttpd2", "shellhttpd_base_port_30000"]
+all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
 all_targets = {
     Targets.First: Targets(Targets.First, False, False, False, 1, []),
     Targets.BrokenOstree: Targets(Targets.BrokenOstree, True, False, False, 2, []),
     Targets.WorkingOstree: Targets(Targets.WorkingOstree, False, False, False, 3, []),
-    Targets.AddFirstApp: Targets(Targets.AddFirstApp, False, False, False, 3, ["shellhttpd"]),
+    Targets.AddFirstApp: Targets(Targets.AddFirstApp, False, False, False, 3, ["shellhttpd_base_10000"]),
     Targets.AddMoreApps: Targets(Targets.AddMoreApps, False, False, False, 3, all_apps),
     Targets.BreakApp: Targets(Targets.BreakApp, False, True, False, 3, all_apps),
     Targets.UpdateBrokenApp: Targets(Targets.UpdateBrokenApp, False, True, False, 3, all_apps),
@@ -557,7 +557,7 @@ def run_test_sequence_apps_selection():
     check_running_apps(apps)
     prev_ostree_image_version = target.version_offset
 
-    apps = ["shellhttpd"]
+    apps = ["shellhttpd_base_10000"]
     write_settings(apps, prune)
     logger.info(f"Forcing apps sync for target {version} {target}. {single_step=} {offline=}")
     cp = invoke_aklite(['update', str(version)])
