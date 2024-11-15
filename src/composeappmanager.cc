@@ -355,16 +355,19 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   // the subsequent "sync target" process will restart the apps (excluding those removed from the configuration).
   stopDisabledComposeApps(target);
 
-  // Stopping the Apps that is about to be updated so they are not started automatically by dockerd just after reboot.
-  // If ostree is not updated then the updated Apps will be started in this context.
-  // If ostree is updated and a device is suddenly rebooted before Apps installation, then
-  // it ensures that the previous version Apps are not automatically started on boot.
-  // If an installation failure happens, then the following "sync target" process will re-start
-  //  the stopped Apps (app only rollback).
-  for (const auto& pair : cur_apps_to_fetch_and_update_) {
-    LOG_INFO << "Stopping App before updating it; " << pair.first << " -> " << pair.second;
-    auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
-    non_const_app_engine->stop({pair.first, pair.second});
+  if (getCurrent().sha256Hash() != target.sha256Hash()) {
+    // If this ostree + apps update, then stop the Apps that is about to be updated
+    // so they are not started automatically by dockerd just after reboot.
+    // If ostree is not updated then the updated Apps will be started in this context.
+    // If ostree is updated and a device is suddenly rebooted before Apps installation, then
+    // it ensures that the previous version Apps are not automatically started on boot.
+    // If an installation failure happens, then the following "sync target" process will re-start
+    // the stopped Apps (app only rollback).
+    for (const auto& pair : cur_apps_to_fetch_and_update_) {
+      LOG_INFO << "Stopping App before updating it; " << pair.first << " -> " << pair.second;
+      auto& non_const_app_engine = (const_cast<ComposeAppManager*>(this))->app_engine_;
+      non_const_app_engine->stop({pair.first, pair.second});
+    }
   }
 
   data::InstallationResult res{RootfsTreeManager::install(target)};
