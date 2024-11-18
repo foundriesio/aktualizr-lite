@@ -51,7 +51,7 @@ The make environment variables are:
 *  `CTEST_ARGS` - additional `ctest` parameters, by default is set to `--output-on-failure`.
 *  `GTEST_FILTER` - a regexp to filter tests within gtest suits, e.g. `GTEST_FILTER="*OstreeUpdateNoSpaceRetry*" TEST_LABEL="aklite:liteclient" make`.
 
-### Development Test Environment
+### Development And Testing in Containerized Environment
 
 aktualizr-lite can be executed inside a development container that contains all the required library and tools.
 It works in conjunction with a container running dockerd,
@@ -110,6 +110,57 @@ After the initial update, you can continue developing and debugging aktualizr-li
 
 ###### Emulating device reboot
 To emulate a device reboot in the development container, remove the `/var/run/aktualizr-session/need_reboot` file if it exists.
+
+#### Running Automated Tests Against FoundriesFactory
+
+The `docker-e2e-test/e2e-test.py` script contains a sequence of aktualizr-lite operations that rely on pre-created Targets.
+It verifies several aspects of aktualizr-lite execution, such as return codes, generated events, invoked callbacks, etc,
+in both online and offline modes.
+
+The `docker-e2e-test/e2e-test-create-target.py` script creates the targets that match the ones expected by `e2e-test.py` in x86-64 factories.
+The script updates the factory's git repositories (`ci-script` and `containers`),
+so usage of production factories is not recommended.
+Python library requirements are listed in `requirements.txt`,
+and it also depends on `fioctl`, `fiopush`, `ostree` and `git` commands.
+
+Execution requires some environment variables must be set:
+
+```bash
+export FACTORY=<factory_name>
+export TAG=<tag>
+export USER_TOKEN=<fio_user_token>
+
+python docker-e2e-test/e2e-test-create-targets.py
+```
+
+Once the targets are created, the script outputs instructions on how to run the end-to-end tests,
+which are copied bellow.
+Notice that before running the end-to-end tests sequence,
+the offline bundles have to be fetched in order to allow the test script to verify the offline updates feature.
+This requires the setting of an additional `BASE_TARGET_VERSION` environment variable, shown at the end of `e2e-test-create-targets.py` execution.
+
+```bash
+# Required environment variables for e2e tests:
+export FACTORY=<factory>
+export TAG=<tag>
+export USER_TOKEN=<fio_user_token>
+export BASE_TARGET_VERSION=<version>
+
+# Create offline bundles:
+mkdir -p offline-bundles
+for version_offset in 0 1 2 3 4 5 6 8 9 10 11; do
+version=$[ $version_offset + $BASE_TARGET_VERSION ];
+echo $version;
+fioctl targets offline-update \
+--ostree-repo-source=./e2e-test-targets/small-ostree/repo \
+--allow-multiple-targets intel-corei7-64-lmp-$version \
+-f ${FACTORY} offline-bundles/unified  \
+--tag ${TAG} || break;
+done
+
+# Run tests:
+./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py
+```
 
 ### Usage on Local Environment
 
