@@ -170,3 +170,18 @@ done
 
 Aktualizr-lite provides an API that can be used for creating a custom update client.
 An example of such client is available at https://github.com/foundriesio/sotactl
+
+### Testing Changes on Device
+
+The easiest way to build an `aktualizr-lite` executable that is compatible with the LmP environment used in a device
+is to use `bitbake` in conjunction with the Yocto layers from the device's Factory.
+In order to use a local source tree during build, a custom `bitbake` workflow can be employed, as described in
+https://foundries.io/insights/blog/yocto-hack-for-everyone/.
+
+When dealing with hardware independent logic,
+the recommended way of testing is using the [containerized development environment](#development-and-testing-in-containerized-environment).
+Alternatively, a Qemu environment can also be used.
+The specific instructions on use of Qemu as a FoundriesFactory device varies according to the architecture in use:
+- [X86-64](https://docs.foundries.io/94/user-guide/qemu/x86_64.html)
+- [ARM64](https://docs.foundries.io/94/user-guide/qemu/arm64.html)
+- [ARM](https://docs.foundries.io/94/user-guide/qemu/arm.html)
