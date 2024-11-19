@@ -50,13 +50,18 @@ if not user_token:
     sys.exit()
 
 factory_name = os.getenv("FACTORY")
-if not user_token:
+if not factory_name:
     logger.error("FACTORY environment variable not set")
     sys.exit()
 
 base_target_version = os.getenv("BASE_TARGET_VERSION")
 if not base_target_version:
     logger.error("BASE_TARGET_VERSION environment variable not set")
+    sys.exit()
+
+tag = os.getenv("TAG")
+if not tag:
+    logger.error("TAG environment variable not set")
     sys.exit()
 
 base_target_version = int(base_target_version)
@@ -99,12 +104,12 @@ class Targets:
     def __str__(self):
         return f"VersionOffset={self.version_offset} InstallRollback={self.install_rollback}, RunRollback={self.run_rollback}, BuildError={self.build_error}, OSTreeImageVersion={self.ostree_image_version}"
 
-all_apps = ["shellhttpd", "shellhttpd2", "shellhttpd_base_port_30000"]
+all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
 all_targets = {
     Targets.First: Targets(Targets.First, False, False, False, 1, []),
     Targets.BrokenOstree: Targets(Targets.BrokenOstree, True, False, False, 2, []),
     Targets.WorkingOstree: Targets(Targets.WorkingOstree, False, False, False, 3, []),
-    Targets.AddFirstApp: Targets(Targets.AddFirstApp, False, False, False, 3, ["shellhttpd"]),
+    Targets.AddFirstApp: Targets(Targets.AddFirstApp, False, False, False, 3, ["shellhttpd_base_10000"]),
     Targets.AddMoreApps: Targets(Targets.AddMoreApps, False, False, False, 3, all_apps),
     Targets.BreakApp: Targets(Targets.BreakApp, False, True, False, 3, all_apps),
     Targets.UpdateBrokenApp: Targets(Targets.UpdateBrokenApp, False, True, False, 3, all_apps),
@@ -118,7 +123,7 @@ all_targets = {
 def register_if_required():
     if not os.path.exists("/var/sota/client.pem"):
         user_token = os.getenv("USER_TOKEN")
-        cmd = f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" --start-daemon 0 --tags main'
+        cmd = f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" --start-daemon 0 --tags {tag}'
         logger.info(f"Registering device...")
         output = os.popen(cmd).read().strip()
         logger.info(output)
@@ -224,13 +229,12 @@ echo { \\"MESSAGE\\": \\"$MESSAGE\\", \\"CURRENT_TARGET\\": \\"$CURRENT_TARGET\\
     content = \
 f"""
 [pacman]
-tags = "main"
+tags = "{tag}"
 """
     if apps is not None:
         apps_str = ",".join(apps)
         content += f"""
 compose_apps = "{apps_str}"
-docker_apps = "{apps_str}"
 """
     # callback_program = "/var/sota/callback.sh"
 
@@ -558,7 +562,7 @@ def run_test_sequence_apps_selection():
     check_running_apps(apps)
     prev_ostree_image_version = target.version_offset
 
-    apps = ["shellhttpd"]
+    apps = ["shellhttpd_base_10000"]
     write_settings(apps, prune)
     logger.info(f"Forcing apps sync for target {version} {target}. {single_step=} {offline=}")
     cp = invoke_aklite(['update', str(version)])

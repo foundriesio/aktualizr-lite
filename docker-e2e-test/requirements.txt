@@ -1,0 +1,4 @@
+# requirements for e2e-test-create-targets.py
+PyYAML==6.0.2
+Requests==2.32.3
+
