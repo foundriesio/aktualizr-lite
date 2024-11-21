@@ -181,7 +181,9 @@ AppEngine::Result RestorableAppEngine::installAndCreateOrRunContainers(const App
   try {
     const auto app_install_root{install_root_ / app.name};
     const std::string flags{run ? "--remove-orphans -d" : "--remove-orphans --no-start"};
+    LOG_INFO << "Starting " << app.name << " -> " << app.uri;
     startComposeApp(compose_cmd_, app_install_root, flags);
+    LOG_INFO << app.name << " has been successfully started";
     res = true;
   } catch (const std::exception& exc) {
     return {false, exc.what()};
