@@ -42,7 +42,7 @@ check:
 	${BIN} check
 
 update:
-	${BIN} check
+	${BIN} check || true
 	@ostree config set core.mode bare-user
 	${BIN} pull
 	@ostree config set core.mode bare-user-only
