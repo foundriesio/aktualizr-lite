@@ -242,8 +242,7 @@ bool RestorableAppEngine::isRunning(const App& app) const {
   bool res{false};
 
   try {
-    res = isAppFetched(app) && isAppInstalled(app) &&
-          isRunning(app, (install_root_ / app.name / ComposeFile).string(), docker_client_);
+    res = isAppInstalled(app) && isRunning(app, (install_root_ / app.name / ComposeFile).string(), docker_client_);
   } catch (const std::exception& exc) {
     LOG_WARNING << "App: " << app.name << ", cannot check whether App is running: " << exc.what();
   }
