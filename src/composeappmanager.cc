@@ -194,7 +194,8 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
 }
 
 ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t,
-                                                                    AppsSyncReason& apps_and_reasons) const {
+                                                                    AppsSyncReason& apps_and_reasons,
+                                                                    std::set<std::string>& fetched_apps) const {
   AppsContainer apps_to_update;
 
   auto currently_installed_target_apps = Target::appsJson(OstreeManager::getCurrent());
@@ -244,6 +245,7 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
       LOG_INFO << app_name << " is not fully fetched; missing blobs will be fetched";
       continue;
     }
+    fetched_apps.insert(app_name);
   }
 
   return apps_to_update;
@@ -251,9 +253,10 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
 
 ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
   AppsSyncReason apps_and_reasons;
-  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, apps_and_reasons);
+  std::set<std::string> fetched_apps;
+  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, apps_and_reasons, fetched_apps);
   if (!!cfg_.reset_apps) {
-    cur_apps_to_fetch_ = getAppsToFetch(target);
+    cur_apps_to_fetch_ = getAppsToFetch(target, true, &cur_apps_to_fetch_and_update_, &fetched_apps);
   }
   are_apps_checked_ = true;
   for (const auto& app : cur_apps_to_fetch_) {
@@ -718,8 +721,9 @@ ComposeAppManager::AppsContainer ComposeAppManager::getRequiredApps(const Config
   return apps;
 }
 
-ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target,
-                                                                   bool check_store) const {
+ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane::Target& target, bool check_store,
+                                                                   const AppsContainer* checked_apps,
+                                                                   const std::set<std::string>* fetched_apps) const {
   auto enabled_apps{getRequiredApps(cfg_, target)};
   if (!check_store) {
     return enabled_apps;
@@ -727,6 +731,16 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane:
 
   AppsContainer apps_to_be_fetched;
   for (const auto& app : enabled_apps) {
+    if (checked_apps != nullptr && checked_apps->count(app.first) > 0) {
+      // no reason to check whether app is fetched since app is checked and marked for update because
+      // it is either not installed or not running;
+      continue;
+    }
+    if (fetched_apps != nullptr && fetched_apps->count(app.first) > 0) {
+      // no reason to check whether app is fetched since this check was already done before because this
+      // app is enabled for running.
+      continue;
+    }
     if (!app_engine_->isFetched({app.first, app.second})) {
       apps_to_be_fetched.insert(app);
     }

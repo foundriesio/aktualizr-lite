@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <memory>
+#include <set>
 #include <unordered_map>
 
 #include "docker/composeappengine.h"
@@ -59,7 +60,8 @@ class ComposeAppManager : public RootfsTreeManager {
   // Returns an intersection of Target's Apps and Apps listed in the config (sota.toml:compose_apps)
   // If Apps are not specified in the config then all Target's Apps are returned
   AppsContainer getApps(const Uptane::Target& t) const;
-  AppsContainer getAppsToUpdate(const Uptane::Target& t, AppsSyncReason& apps_and_reasons) const;
+  AppsContainer getAppsToUpdate(const Uptane::Target& t, AppsSyncReason& apps_and_reasons,
+                                std::set<std::string>& fetched_apps) const;
   AppsSyncReason checkForAppsToUpdate(const Uptane::Target& target);
   void setAppsNotChecked() { are_apps_checked_ = false; }
   void handleRemovedApps(const Uptane::Target& target) const;
@@ -72,7 +74,9 @@ class ComposeAppManager : public RootfsTreeManager {
   Json::Value getRunningAppsInfo() const;
   std::string getRunningAppsInfoForReport() const;
 
-  AppsContainer getAppsToFetch(const Uptane::Target& target, bool check_store = true) const;
+  AppsContainer getAppsToFetch(const Uptane::Target& target, bool check_store = true,
+                               const AppsContainer* checked_apps = nullptr,
+                               const std::set<std::string>* fetched_apps = nullptr) const;
   void stopDisabledComposeApps(const Uptane::Target& target) const;
   void removeDisabledComposeApps(const Uptane::Target& target) const;
   void forEachRemovedApp(const Uptane::Target& target,
