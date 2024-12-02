@@ -5,6 +5,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/process.hpp>
+#include "logging/logging.h"
 
 struct ExecError : std::runtime_error {
   ExecError(const std::string& msg_prefix, const std::string& cmd, const std::string& err_msg, int exit_code)
@@ -23,6 +24,7 @@ static void exec(const std::string& cmd, const std::string& err_msg_prefix, Args
   boost::asio::io_service io_service;
 
   try {
+    LOG_DEBUG << "Running: `" << cmd << "`";
     boost::process::child child_process(cmd, boost::process::std_err > err_output,
                                         boost::process::on_exit = child_process_exit_code, io_service,
                                         std::forward<Args>(args)...);
@@ -39,6 +41,7 @@ static void exec(const std::string& cmd, const std::string& err_msg_prefix, Args
   }
 
   const auto exit_code{child_process_exit_code.get()};
+  LOG_DEBUG << "Command exited with code " << exit_code;
 
   if (exit_code != EXIT_SUCCESS) {
     const auto err_msg{err_output.get()};
