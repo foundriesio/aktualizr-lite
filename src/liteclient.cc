@@ -773,7 +773,8 @@ bool LiteClient::isTargetActive(const Uptane::Target& target) const {
 
 bool LiteClient::appsInSync(const Uptane::Target& target) const { return appsToUpdate(target).empty(); }
 
-ComposeAppManager::AppsSyncReason LiteClient::appsToUpdate(const Uptane::Target& target) const {
+ComposeAppManager::AppsSyncReason LiteClient::appsToUpdate(const Uptane::Target& target,
+                                                           bool cleanup_removed_apps) const {
   if (package_manager_->name() == ComposeAppManager::Name) {
     auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
     if (compose_pacman == nullptr) {
@@ -782,7 +783,7 @@ ComposeAppManager::AppsSyncReason LiteClient::appsToUpdate(const Uptane::Target&
     }
     LOG_INFO << "Checking status of Active Target (" << target.filename() << ")";
     auto apps_to_update = compose_pacman->checkForAppsToUpdate(target);
-    if (apps_to_update.empty()) {
+    if (cleanup_removed_apps && apps_to_update.empty()) {
       compose_pacman->handleRemovedApps(getCurrent());
     }
 
