@@ -259,6 +259,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
     std::string cor_id;
     storage::Volume::UsageInfo stat;
   } state_when_download_failed{Hash{"", ""}, "", {.err = "undefined"}};
+  bool cleanup_removed_apps = true;
 
   while (true) {
     LOG_INFO << "Active Target: " << current.filename() << ", sha256: " << current.sha256Hash();
@@ -399,7 +400,7 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
                    << " Skipping its installation.";
         }
         data::ResultCode::Numeric rc{data::ResultCode::Numeric::kOk};
-        if (!client.appsInSync(current)) {
+        if (!client.appsInSync(current, cleanup_removed_apps)) {
           client.checkForUpdatesEnd(target_to_install);
           rc = do_app_sync(client);
           if (rc == data::ResultCode::Numeric::kOk) {
@@ -411,6 +412,8 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
           LOG_INFO << "Device is up-to-date";
           client.checkForUpdatesEnd(Uptane::Target::Unknown());
         }
+        // Automatically cleanup during check only once. A cleanup will also occur after a new target is installed
+        cleanup_removed_apps = false;
       }
 
     } catch (const std::exception& exc) {
