@@ -67,7 +67,7 @@ class LiteClient {
   void reportHwInfo();
   void reportAppsState();
   bool isTargetActive(const Uptane::Target& target) const;
-  bool appsInSync(const Uptane::Target& target) const;
+  bool appsInSync(const Uptane::Target& target, bool cleanup_removed_apps = true) const;
   void setAppsNotChecked();
   std::string getDeviceID() const;
   static void update_request_headers(std::shared_ptr<HttpClient>& http_client, const Uptane::Target& target,
