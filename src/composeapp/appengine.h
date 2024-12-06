@@ -34,6 +34,7 @@ class AppEngine : public Docker::RestorableAppEngine {
   const std::string composectl_cmd_;
   const int storage_watermark_;
   const std::string local_source_path_;
+  mutable std::set<std::string> fetched_apps_;
 };
 
 }  // namespace composeapp
