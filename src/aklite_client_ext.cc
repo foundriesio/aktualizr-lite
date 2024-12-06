@@ -120,7 +120,9 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
                << " Skipping its installation.";
     }
 
-    auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(current));
+    auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(current), cleanup_removed_apps_);
+    // Automatically cleanup during check only once. A cleanup will also occur after a new target is installed
+    cleanup_removed_apps_ = false;
     if (force_apps_sync || !apps_to_update.empty()) {
       // Force installation of apps
       res.selected_target = checkin_res.SelectTarget(current.Version());

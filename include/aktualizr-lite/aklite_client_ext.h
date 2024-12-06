@@ -86,6 +86,9 @@ class AkliteClientExt : public AkliteClient {
                                bool do_install = true);
 
   bool RebootIfRequired();
+
+ private:
+  bool cleanup_removed_apps_{true};
 };
 
 #endif
