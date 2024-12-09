@@ -14,6 +14,9 @@ static bool checkAppStatus(const AppEngine::App& app, const Json::Value& status)
 AppEngine::Result AppEngine::fetch(const App& app) {
   Result res{false};
   try {
+    // If a given app was fetched before, then don't consider it as a fetched app if a caller tries to fetch it again
+    // for one reason or another - hence remove it from the set of fetched apps.
+    fetched_apps_.erase(app.uri);
     if (local_source_path_.empty()) {
       exec(boost::format{"%s --store %s pull -p %s --storage-usage-watermark %d"} % composectl_cmd_ % storeRoot() %
                app.uri % storage_watermark_,
@@ -24,6 +27,7 @@ AppEngine::Result AppEngine::fetch(const App& app) {
            "failed to pull compose app");
     }
     res = true;
+    fetched_apps_.insert(app.uri);
   } catch (const ExecError& exc) {
     if (exc.ExitCode == static_cast<int>(ExitCode::ExitCodeInsufficientSpace)) {
       const auto usage_stat{Utils::parseJSON(exc.StdErr)};
@@ -40,6 +44,7 @@ AppEngine::Result AppEngine::fetch(const App& app) {
 
 void AppEngine::remove(const App& app) {
   try {
+    fetched_apps_.erase(app.uri);
     // "App removal" in this context refers to deleting app images from the Docker store
     // and removing the app compose project (app uninstall).
     // Unused app blobs will be removed from the blob store via the prune() method,
@@ -114,6 +119,7 @@ void AppEngine::prune(const Apps& app_shortlist) {
       }
     }
     for (const auto& app : apps_to_prune) {
+      fetched_apps_.erase(app.uri);
       exec(boost::format{"%s --store %s rm %s --prune=false --quiet"} % composectl_cmd_ % storeRoot() % app.uri,
            "failed to remove app");
     }
@@ -143,6 +149,9 @@ void AppEngine::prune(const Apps& app_shortlist) {
 
 bool AppEngine::isAppFetched(const App& app) const {
   bool res{false};
+  if (fetched_apps_.count(app.uri) > 0) {
+    return true;
+  }
   try {
     std::future<std::string> output;
     exec(boost::format{"%s --store %s check %s --local --format json"} % composectl_cmd_ % storeRoot() % app.uri, "",
@@ -152,6 +161,7 @@ bool AppEngine::isAppFetched(const App& app) const {
     if (app_fetch_status.isMember("fetch_check") && app_fetch_status["fetch_check"].isMember("missing_blobs") &&
         app_fetch_status["fetch_check"]["missing_blobs"].empty()) {
       res = true;
+      fetched_apps_.insert(app.uri);
     }
   } catch (const ExecError& exc) {
     LOG_DEBUG << "app is not fully fetched; app: " << app.name << ", status: " << exc.what();
