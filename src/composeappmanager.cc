@@ -221,25 +221,16 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
       continue;
     }
 
-    if (!boost::filesystem::exists(cfg_.apps_root / app_name) ||
-        !boost::filesystem::exists(cfg_.apps_root / app_name / Docker::ComposeAppEngine::ComposeFile)) {
-      // an App that is supposed to be installed has been removed somehow, let's install it again
-      apps_to_update.insert(app_pair);
-      apps_and_reasons[app_pair.first] = "missing installation, to be re-installed";
-      LOG_INFO << app_name << " will be re-installed";
-      continue;
-    }
-
     LOG_DEBUG << app_name << " performing full status check";
     if (!app_engine_->isRunning({app_name, app_pair.second})) {
-      // an App that is supposed to running is not running
+      // an App that is supposed to be running is not running or is not fully installed
       apps_to_update.insert(app_pair);
       apps_and_reasons[app_pair.first] = "not running";
       LOG_INFO << app_name << " is not installed or not running; will be installed and started";
       continue;
     }
     if (!app_engine_->isFetched({app_name, app_pair.second})) {
-      // an App that is supposed to be installed is not fully installed
+      // an App that is supposed to be installed is not fully fetched
       apps_to_update.insert(app_pair);
       apps_and_reasons[app_pair.first] = "not fetched";
       LOG_INFO << app_name << " is not fully fetched; missing blobs will be fetched";
