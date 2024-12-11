@@ -10,6 +10,8 @@ namespace composeapp {
 enum class ExitCode { ExitCodeInsufficientSpace = 100 };
 
 static bool checkAppStatus(const AppEngine::App& app, const Json::Value& status);
+static bool checkAppInstallationStatus(const AppEngine::App& app, const Json::Value& status);
+static bool isNullOrEmptyOrUnset(const Json::Value& val, const std::string& field);
 
 AppEngine::Result AppEngine::fetch(const App& app) {
   Result res{false};
@@ -66,10 +68,16 @@ bool AppEngine::isRunning(const App& app) const {
   bool res{false};
   try {
     std::future<std::string> output;
-    exec(boost::format{"%s --store %s ps %s --format json"} % composectl_cmd_ % storeRoot() % app.uri, "",
-         boost::process::std_out > output);
+    exec(boost::format{"%s --store %s --compose %s ps %s --format json"} % composectl_cmd_ % storeRoot() %
+             installRoot() % app.uri,
+         "", boost::process::std_out > output);
     const auto app_status{Utils::parseJSON(output.get())};
-    res = checkAppStatus(app, app_status);
+    // Make sure app images and bundle are properly installed
+    res = checkAppInstallationStatus(app, app_status);
+    if (res) {
+      // Make sure app is running
+      res = checkAppStatus(app, app_status);
+    }
   } catch (const std::exception& exc) {
     LOG_ERROR << "failed to verify whether app is running; app: " << app.name << ", err: " << exc.what();
   }
@@ -225,6 +233,33 @@ static bool checkAppStatus(const AppEngine::App& app, const Json::Value& status)
     LOG_INFO << status[app.uri];
   }
   return is_running;
+}
+
+static bool checkAppInstallationStatus(const AppEngine::App& app, const Json::Value& status) {
+  const auto& app_status{status.get(app.uri, Json::Value())};
+  if (!app_status.isObject()) {
+    LOG_ERROR << "could not get app status; uri: " << app.uri;
+    return false;
+  }
+  if (!isNullOrEmptyOrUnset(app_status, "missing_images")) {
+    LOG_INFO << app.name << " is not fully installed; missing images:\n" << app_status["missing_images"];
+    return false;
+  }
+  if (!isNullOrEmptyOrUnset(app_status, "bundle_errors")) {
+    LOG_INFO << app.name << " is not fully installed; invalid bundle installation:\n" << app_status["bundle_errors"];
+    return false;
+  }
+  return true;
+}
+
+static bool isNullOrEmptyOrUnset(const Json::Value& val, const std::string& field) {
+  bool res{false};
+  if (val.isMember(field)) {
+    res = val[field].isNull() || val[field].empty();
+  } else {
+    res = true;
+  }
+  return res;
 }
 
 }  // namespace composeapp
