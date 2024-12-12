@@ -36,6 +36,7 @@ class ComposeAppManager : public RootfsTreeManager {
     std::string docker_images_reload_cmd{"systemctl reload docker"};
     std::string hub_auth_creds_endpoint{Docker::RegistryClient::DefAuthCredsEndpoint};
     bool create_containers_before_reboot{true};
+    bool stop_apps_before_update{true};
     int storage_watermark{80};
   };
 
