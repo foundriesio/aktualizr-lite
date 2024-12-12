@@ -83,6 +83,10 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
     create_containers_before_reboot = boost::lexical_cast<bool>(raw.at("create_containers_before_reboot"));
   }
 
+  if (raw.count("stop_apps_before_update") > 0) {
+    stop_apps_before_update = boost::lexical_cast<bool>(raw.at("stop_apps_before_update"));
+  }
+
   if (raw.count("storage_watermark") > 0) {
     const std::string storage_watermark_str{raw.at("storage_watermark")};
 
@@ -355,9 +359,12 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   // the subsequent "sync target" process will restart the apps (excluding those removed from the configuration).
   stopDisabledComposeApps(target);
 
-  if (getCurrent().sha256Hash() != target.sha256Hash()) {
-    // If this ostree + apps update, then stop the Apps that is about to be updated
-    // so they are not started automatically by dockerd just after reboot.
+  if (getCurrent().sha256Hash() != target.sha256Hash() || cfg_.stop_apps_before_update) {
+    // If this is "ostree + apps" update or the `stop_apps_before_update` configuration variable is set to `true`,
+    // then stop the Apps that is about to be updated
+    // so they are not started automatically by dockerd just after reboot
+    // or it is required by the app use case to force stopping of all app services/containers if
+    // at least one of its container images is updated (`docker compose up` restarts only updated containers).
     // If ostree is not updated then the updated Apps will be started in this context.
     // If ostree is updated and a device is suddenly rebooted before Apps installation, then
     // it ensures that the previous version Apps are not automatically started on boot.
