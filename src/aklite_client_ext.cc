@@ -8,6 +8,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include "aktualizr-lite/api.h"
 #include "http/httpclient.h"
 #include "libaktualizr/config.h"
 #include "liteclient.h"
@@ -281,4 +282,50 @@ bool AkliteClientExt::RebootIfRequired() {
   }
 
   return false;
+}
+
+InstallResult AkliteClientExt::Rollback(const LocalUpdateSource* local_update_source) {
+  const auto current = GetCurrent();
+  // Getting Uptane::Target instance in order to use correlation_id, which is not available in TufTarget class
+  auto pending_target = client_->getPendingTarget();
+  auto installation_in_progress = pending_target.IsValid();
+  const auto& bad_target = installation_in_progress ? Target::toTufTarget(pending_target) : current;
+
+  LOG_DEBUG << "User initiated rollback. Current Target is " << current.Name();
+  if (installation_in_progress) {
+    LOG_DEBUG << "Target installation is in progress:  " << pending_target.filename();
+  }
+
+  auto storage = INvStorage::newStorage(client_->config.storage, false);
+  LOG_INFO << "Marking target " << bad_target.Name() << " as a failing target";
+  storage->saveInstalledVersion("", Target::fromTufTarget(bad_target), InstalledVersionUpdateMode::kBadTarget);
+
+  // Get rollback target
+  auto rollback_target = GetRollbackTarget(true, installation_in_progress);
+  if (rollback_target.IsUnknown()) {
+    LOG_ERROR << "Failed to find Target to rollback to";
+    return {InstallResult::Status::Failed};
+  }
+
+  if (installation_in_progress) {
+    // Previous installation was not finalized
+    LOG_INFO << "Creating new installation log entry for " << pending_target.filename()
+             << ", as we try to rollback to it";
+    storage->saveInstalledVersion("", pending_target, InstalledVersionUpdateMode::kNone);
+  }
+
+  std::string reason = "User initiated rollback. Marked " + bad_target.Name() +
+                       " as a failing target, and rolling back to " + rollback_target.Name();
+  LOG_INFO << reason;
+
+  if (installation_in_progress) {
+    LOG_INFO << "Generating installation failed event / callback for Target " << pending_target.filename();
+    data::InstallationResult result(data::ResultCode::Numeric::kInstallFailed, reason);
+    client_->notifyInstallFinished(pending_target, result);
+  }
+
+  // If there is an installation in progress, do not perform download, and don't require target to be in TUF targets
+  auto ret = PullAndInstall(rollback_target, reason, "", InstallMode::All, local_update_source,
+                            !installation_in_progress, true, !installation_in_progress);
+  return ret;
 }
