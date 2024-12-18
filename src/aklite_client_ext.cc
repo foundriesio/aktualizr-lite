@@ -8,6 +8,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include "aktualizr-lite/api.h"
 #include "http/httpclient.h"
 #include "libaktualizr/config.h"
 #include "liteclient.h"
@@ -275,4 +276,52 @@ bool AkliteClientExt::RebootIfRequired() {
   }
 
   return false;
+}
+
+InstallResult AkliteClientExt::Rollback(const LocalUpdateSource* local_update_source, int version,
+                                        const std::string& target_name) {
+  auto pending_target = Target::toTufTarget(client_->getPendingTarget());
+  auto current = GetCurrent();
+
+  auto storage = INvStorage::newStorage(client_->config.storage, false);
+  auto update_mode =
+      pending_target.IsUnknown() ? InstalledVersionUpdateMode::kBadTarget : InstalledVersionUpdateMode::kNone;
+
+  // Set current target as failing
+  storage->saveInstalledVersion("", Target::fromTufTarget(current), update_mode);
+
+  // Get rollback target
+  TufTarget rollback_target;
+  if (version == -1 && target_name.empty()) {
+    rollback_target = Target::toTufTarget(client_->getRollbackTarget(true));
+    if (rollback_target.IsUnknown() || rollback_target.Name() == current.Name()) {
+      LOG_ERROR << "Failed to find Target to rollback to";
+      return {InstallResult::Status::Failed};
+    }
+  } else {
+    auto checkin_result = CheckInCurrent(local_update_source);
+    if (!checkin_result) {
+      LOG_ERROR << "Unable to get current available targets";
+      return {InstallResult::Status::Failed};
+    }
+    rollback_target = checkin_result.SelectTarget(version, target_name);
+    if (rollback_target.IsUnknown()) {
+      if (version != -1) {
+        LOG_ERROR << "Unable find target with version " << version;
+      } else {
+        LOG_ERROR << "Unable find target with name " << target_name;
+      }
+      return {InstallResult::Status::Failed};
+    }
+
+    if (rollback_target.Name() == current.Name()) {
+      LOG_ERROR << "Can't rollback to current version";
+      return {InstallResult::Status::Failed};
+    }
+  }
+
+  std::string reason = "User initiated rollback. Marked " + current.Name() +
+                       " as a failing target, and rolling back to " + rollback_target.Name();
+  LOG_INFO << reason;
+  return PullAndInstall(rollback_target, reason, "", InstallMode::All, nullptr, true, true);
 }
