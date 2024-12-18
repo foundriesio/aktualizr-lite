@@ -213,6 +213,23 @@ static int cli_complete_install(LiteClient& client, const bpo::variables_map& pa
   return static_cast<int>(aklite::cli::CompleteInstall(akclient));
 }
 
+static int cli_rollback(LiteClient& client, const bpo::variables_map& params) {
+  LocalUpdateSource local_update_source;
+  std::string src_dir;
+  if (params.count("src-dir") > 0) {
+    src_dir = params.at("src-dir").as<std::string>();
+  }
+  if (!src_dir.empty()) {
+    fillUpdateSource(local_update_source, src_dir);
+  }
+
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  // Setting apply_lock parameter to false, since we already took the FileLock above
+  AkliteClientExt akclient{client_ptr, false, true};
+
+  return static_cast<int>(aklite::cli::Rollback(akclient, src_dir.empty() ? nullptr : &local_update_source));
+}
+
 // clang-format off
 static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
     {"daemon", daemon_main},
@@ -224,6 +241,7 @@ static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::var
     {"status", status_main},
     {"finalize", cli_complete_install},
     {"run", cli_complete_install},
+    {"rollback", cli_rollback},
 };
 // clang-format on
 
