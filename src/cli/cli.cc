@@ -383,4 +383,10 @@ StatusCode CompleteInstall(AkliteClient &client) {
   return res2StatusCode<InstallResult::Status>(i2s, ir.status);
 }
 
+StatusCode Rollback(AkliteClientExt &client, const LocalUpdateSource *local_update_source, int version,
+                    const std::string &target_name) {
+  auto install_result = client.Rollback(local_update_source, version, target_name);
+  return res2StatusCode<InstallResult::Status>(i2s, install_result.status);
+}
+
 }  // namespace aklite::cli
