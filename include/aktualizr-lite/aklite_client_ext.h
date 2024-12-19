@@ -85,6 +85,9 @@ class AkliteClientExt : public AkliteClient {
                                const LocalUpdateSource *local_update_source = nullptr, bool do_download = true,
                                bool do_install = true);
 
+  InstallResult Rollback(const LocalUpdateSource *local_update_source, int version = -1,
+                         const std::string &target_name = "");
+
   bool RebootIfRequired();
 
  private:
