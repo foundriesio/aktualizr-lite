@@ -167,7 +167,7 @@ static const std::unordered_map<DownloadResult::Status, InstallResult::Status> d
 InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std::string& reason,
                                               const std::string& correlation_id, const InstallMode install_mode,
                                               const LocalUpdateSource* local_update_source, const bool do_download,
-                                              const bool do_install) {
+                                              const bool do_install, bool require_target_in_tuf) {
   // Check if the device is in a correct state to start a new update
   if (IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
@@ -203,7 +203,8 @@ InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std
   }
   state_when_download_failed = {"", "", {.err = "undefined"}};
 
-  const auto installer = Installer(target, reason, correlation_id, install_mode, local_update_source);
+  const auto installer =
+      Installer(target, reason, correlation_id, install_mode, local_update_source, require_target_in_tuf);
   if (installer == nullptr) {
     LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
     return InstallResult{InstallResult::Status::UnknownError};

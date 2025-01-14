@@ -83,7 +83,7 @@ class AkliteClientExt : public AkliteClient {
   InstallResult PullAndInstall(const TufTarget &target, const std::string &reason = "",
                                const std::string &correlation_id = "", InstallMode install_mode = InstallMode::All,
                                const LocalUpdateSource *local_update_source = nullptr, bool do_download = true,
-                               bool do_install = true);
+                               bool do_install = true, bool require_target_in_tuf = true);
 
   bool RebootIfRequired();
 

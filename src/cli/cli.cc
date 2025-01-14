@@ -301,7 +301,8 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
   }
 
   auto pi_res = client.PullAndInstall(gti_res.selected_target, gti_res.reason, "", install_mode, local_update_source,
-                                      pull_mode == PullMode::All, do_install);
+                                      pull_mode == PullMode::All, do_install,
+                                      gti_res.status == GetTargetToInstallResult::Status::UpdateNewVersion);
   return res2StatusCode<InstallResult::Status>(i2s, pi_res.status);
 }
 
