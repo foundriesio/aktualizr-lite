@@ -126,6 +126,11 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     if (force_apps_sync || !apps_to_update.empty()) {
       // Force installation of apps
       res.selected_target = checkin_res.SelectTarget(current.Version());
+      if (res.selected_target.IsUnknown()) {
+        LOG_DEBUG << "Unable to find current version " << current.Version()
+                  << " in TUF targets list. Using current target from DB instead";
+        res.selected_target = current;
+      }
       LOG_INFO
           << "The specified Target is already installed, enforcing installation to make sure it's synced and running:"
           << res.selected_target.Name();
