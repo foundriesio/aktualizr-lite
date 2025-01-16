@@ -1038,7 +1038,8 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
 
 std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason,
                                                         std::string correlation_id, InstallMode install_mode,
-                                                        const LocalUpdateSource* local_update_source) const {
+                                                        const LocalUpdateSource* local_update_source,
+                                                        bool require_target_in_tuf) const {
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
@@ -1061,10 +1062,10 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   }
   if (target == nullptr) {
     const auto uptane_target{Target::fromTufTarget(t)};
-    if (Target::isInitial(uptane_target) && client_->wasTargetInstalled(uptane_target)) {
-      // if it's "initial target" that is not found in the TUF DB, then check if it's not a fake initial target by
-      // verifying that this target has been installed on a device before (the initial target that device is booted on
-      // and not installed_versions)
+    if ((!require_target_in_tuf || Target::isInitial(uptane_target)) && client_->wasTargetInstalled(uptane_target)) {
+      // If the target is not required to be in TUF DB, then check if it's not a fake target by verifying that this
+      // target has been installed on a device before.
+      // The initial target, on which the device was first booted from, is not expected to be in TUF DB.
       target = std::make_unique<Uptane::Target>(uptane_target);
     } else {
       LOG_ERROR << "The specified Target is not found among trusted TUF targets:\n"
