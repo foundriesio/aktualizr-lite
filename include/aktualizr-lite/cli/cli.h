@@ -86,6 +86,8 @@ StatusCode Install(AkliteClientExt &client, int version = -1, const std::string 
 
 StatusCode CompleteInstall(AkliteClient &client);
 
+StatusCode Rollback(AkliteClientExt &client, const LocalUpdateSource *local_update_source);
+
 bool IsSuccessCode(StatusCode status);
 
 std::string StatusCodeDescription(StatusCode status);
