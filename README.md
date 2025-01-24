@@ -1,3 +1,4 @@
+# Remove me after test
 # aktualizr-lite
 
 C++ implementation of [TUF](https://theupdateframework.io/) OTA update client based on [aktualizr](https://github.com/advancedtelematic/aktualizr)
