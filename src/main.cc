@@ -332,7 +332,13 @@ static int daemon_main(LiteClient& client, const bpo::variables_map& variables_m
       // installed, if so then skip an update to the such version/Target
       bool is_rollback_target = client.isRollback(target_to_install);
 
-      if (!is_rollback_target && !client.isTargetActive(target_to_install)) {
+      const bool is_downgrade{Target::Version(target_to_install.custom_version()) <
+                              Target::Version(current.custom_version())};
+      if (is_downgrade) {
+        LOG_WARNING << "Downgrade detected; from " << current.custom_version() << " to "
+                    << target_to_install.custom_version() << ", keep running " << current.custom_version();
+      }
+      if (!is_rollback_target && !client.isTargetActive(target_to_install) && !is_downgrade) {
         if (!rollback) {
           LOG_INFO << "Found new and valid Target to update to: " << target_to_install.filename()
                    << ", sha256: " << target_to_install.sha256Hash();
