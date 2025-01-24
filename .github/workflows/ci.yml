@@ -5,6 +5,12 @@ on:
     branches:
       - main
 
+permissions:
+  checks: write
+  pull-requests: write
+  contents: read
+  packages: read
+
 jobs:
   clang:
     name: Clang Format And Tidy
