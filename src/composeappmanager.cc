@@ -263,12 +263,13 @@ ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const 
 }
 
 DownloadResult ComposeAppManager::Download(const TufTarget& target) {
-  auto ostree_download_res{RootfsTreeManager::Download(target)};
-  if (!ostree_download_res) {
-    return ostree_download_res;
-  }
+  // auto ostree_download_res{RootfsTreeManager::Download(target)};
+  // if (!ostree_download_res) {
+  //   return ostree_download_res;
+  // }
 
-  DownloadResult res{ostree_download_res};
+  // DownloadResult res{ostree_download_res};
+  DownloadResult res{DownloadResult::Status::Ok};
   const Uptane::Target uptane_target{Target::fromTufTarget(target)};
 
   if (cfg_.force_update) {
@@ -333,10 +334,7 @@ bool ComposeAppManager::fetchTarget(const Uptane::Target& target, Uptane::Fetche
 }
 
 TargetStatus ComposeAppManager::verifyTarget(const Uptane::Target& target) const {
-  const auto ostree_target_status{RootfsTreeManager::verifyTarget(target)};
-  if (TargetStatus::kGood != ostree_target_status) {
-    return ostree_target_status;
-  }
+  const auto ostree_target_status{TargetStatus::kGood};
 
   AppsContainer all_apps_to_fetch;
   all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
@@ -389,12 +387,14 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
     }
   }
 
-  data::InstallationResult res{RootfsTreeManager::install(target)};
-  if (res.result_code.num_code == data::ResultCode::Numeric::kInstallFailed) {
-    LOG_ERROR << "OSTree target installation has failed, skipping Docker Compose Apps";
-    res.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
-    return res;
-  }
+  // data::InstallationResult res{RootfsTreeManager::install(target)};
+  // if (res.result_code.num_code == data::ResultCode::Numeric::kInstallFailed) {
+  //   LOG_ERROR << "OSTree target installation has failed, skipping Docker Compose Apps";
+  //   res.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
+  //   return res;
+  // }
+
+  data::InstallationResult res{data::ResultCode::Numeric::kOk, ""};
 
   bool prune_images{cfg_.docker_prune};
   const bool just_install = res.result_code == data::ResultCode::Numeric::kNeedCompletion;  // system update
