@@ -47,6 +47,14 @@ class GetTargetToInstallResult {
   std::string reason;
 };
 
+/* Should aklite target selection mechanism by default accept a version lower than the current as a valid update */
+#ifdef AUTO_DOWNGRADE
+#warning Allowing automatic downgrade in aktualizr-lite daemon
+#define AKLITE_AUTO_DOWNGRADE_DEFAULT true
+#else
+#define AKLITE_AUTO_DOWNGRADE_DEFAULT false
+#endif
+
 /**
  * @brief contains additional methods that consolidate functionality
  * making it reusable between the main aklite daemon and other tools.
@@ -79,7 +87,8 @@ class AkliteClientExt : public AkliteClient {
 
   GetTargetToInstallResult GetTargetToInstall(const CheckInResult &checkin_res, int version = -1,
                                               const std::string &target_name = "", bool allow_bad_target = false,
-                                              bool force_apps_sync = false, bool offline_mode = false);
+                                              bool force_apps_sync = false, bool offline_mode = false,
+                                              bool auto_downgrade = AKLITE_AUTO_DOWNGRADE_DEFAULT);
   InstallResult PullAndInstall(const TufTarget &target, const std::string &reason = "",
                                const std::string &correlation_id = "", InstallMode install_mode = InstallMode::All,
                                const LocalUpdateSource *local_update_source = nullptr, bool do_download = true,
