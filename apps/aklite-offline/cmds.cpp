@@ -23,8 +23,9 @@ int InstallCmd::installUpdate(const po::variables_map& vm, const boost::filesyst
   const LocalUpdateSource local_update_source{.tuf_repo = (src_dir / "tuf").string(),
                                               .ostree_repo = (src_dir / "ostree_repo").string(),
                                               .app_store = (src_dir / "apps").string()};
-  auto ret_code{
-      aklite::cli::Install(client, -1, target_name, InstallMode::OstreeOnly, force_downgrade, &local_update_source)};
+  auto ret_code{aklite::cli::Install(client, -1, target_name, InstallMode::OstreeOnly, force_downgrade,
+                                     &local_update_source, aklite::cli::PullMode::All, aklite::cli::CheckMode::Update,
+                                     true)};
   switch (ret_code) {
     case aklite::cli::StatusCode::InstallAppsNeedFinalization: {
       std::cout << "Please run `aklite-offline run` command to start the updated Apps\n";

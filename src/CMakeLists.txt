@@ -72,6 +72,10 @@ if(BUILD_P11)
   add_definitions(-DBUILD_P11)
 endif(BUILD_P11)
 
+if(AUTO_DOWNGRADE)
+  add_definitions(-DAUTO_DOWNGRADE)
+endif(AUTO_DOWNGRADE)
+
 target_compile_definitions(${TARGET_EXE} PRIVATE BOOST_LOG_DYN_LINK)
 
 set(INCS
