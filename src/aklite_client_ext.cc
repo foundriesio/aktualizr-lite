@@ -30,7 +30,8 @@
 // apps
 GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult& checkin_res, int version,
                                                              const std::string& target_name, bool allow_bad_target,
-                                                             bool force_apps_sync, bool is_offline_mode) {
+                                                             bool force_apps_sync, bool is_offline_mode,
+                                                             bool auto_downgrade) {
   client_->setAppsNotChecked();
 
   std::string err;
@@ -55,6 +56,18 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
   }
 
   const auto current = GetCurrent();
+  // It may occur that the TUF targets list only has versions lower than the current one.
+  // The `auto_downgrade` parameter controls what to do in such situation: Should a version lower than the current
+  //  one be accepted as a valid selected target for installation or not
+  if (!auto_downgrade && version == -1 && target_name.empty() && candidate_target.Version() < current.Version()) {
+    if (!invoke_post_cb_at_checkin_) {
+      client_->notifyTufUpdateFinished(err);
+    }
+    LOG_INFO << "Rejecting latest target in TUF metadata to prevent downgrade. Current: " << current.Version()
+             << " candidate: " << candidate_target.Version();
+    return {GetTargetToInstallResult::Status::NoUpdate, TufTarget(), ""};
+  }
+
   if (IsRollback(current) && current.Name() == candidate_target.Name()) {
     // Handle the case when Apps failed to start on boot just after an update.
     // This is only possible with `pacman.create_containers_before_reboot = 0`.

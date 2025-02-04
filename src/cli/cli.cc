@@ -249,7 +249,7 @@ StatusCode CheckIn(AkliteClientExt &client, const LocalUpdateSource *local_updat
 static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std::string &target_name,
                                  InstallMode install_mode, bool force_downgrade,
                                  const LocalUpdateSource *local_update_source, PullMode pull_mode, bool do_install,
-                                 CheckMode check_mode) {
+                                 CheckMode check_mode, bool auto_downgrade) {
   // Check if the device is in a correct state to start a new update
   if (client.IsInstallationInProgress()) {
     LOG_ERROR << "Cannot start Target installation since there is ongoing installation; target: "
@@ -262,7 +262,8 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
     return res2StatusCode<CheckInResult::Status>(c2s, ci_res.status);
   }
 
-  auto gti_res = client.GetTargetToInstall(ci_res, version, target_name, true, true, local_update_source != nullptr);
+  auto gti_res = client.GetTargetToInstall(ci_res, version, target_name, true, true, local_update_source != nullptr,
+                                           auto_downgrade);
 
   //
   if (gti_res.selected_target.IsUnknown()) {
@@ -293,6 +294,7 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
     LOG_WARNING << "Found TUF Target is lower version than the current on; "
                 << "current: " << current.Version() << ", found Target: " << gti_res.selected_target.Version();
 
+    // force_downgrade = false is only used by aklite-offline tool
     if (!force_downgrade) {
       LOG_ERROR << "Downgrade is not allowed by default, re-run the command with `--force` option to force downgrade";
       return SC::InstallDowngradeAttempt;
@@ -307,16 +309,16 @@ static StatusCode pullAndInstall(AkliteClientExt &client, int version, const std
 }
 
 StatusCode Pull(AkliteClientExt &client, int version, const std::string &target_name, bool force_downgrade,
-                const LocalUpdateSource *local_update_source, CheckMode check_mode) {
+                const LocalUpdateSource *local_update_source, CheckMode check_mode, bool auto_downgrade) {
   return pullAndInstall(client, version, target_name, InstallMode::All, force_downgrade, local_update_source,
-                        PullMode::All, false, check_mode);
+                        PullMode::All, false, check_mode, auto_downgrade);
 }
 
 StatusCode Install(AkliteClientExt &client, int version, const std::string &target_name, InstallMode install_mode,
                    bool force_downgrade, const LocalUpdateSource *local_update_source, PullMode pull_mode,
-                   CheckMode check_mode) {
+                   CheckMode check_mode, bool auto_downgrade) {
   return pullAndInstall(client, version, target_name, install_mode, force_downgrade, local_update_source, pull_mode,
-                        true, check_mode);
+                        true, check_mode, auto_downgrade);
 }
 
 StatusCode CompleteInstall(AkliteClient &client) {
