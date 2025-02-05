@@ -17,11 +17,18 @@ static std::vector<apps::aklite_offline::Cmd::Ptr> cmds{
 };
 
 static void print_usage() {
-  std::cout << "Usage:\n\t aklite-offline <cmd> [options]\nSupported commands: ";
+  std::cout << "Usage:\n  aklite-offline <cmd> [flags]\n\nSupported commands: ";
   for (const auto& cmd : cmds) {
-    std::cout << cmd->name() << " ";
+    auto name = cmd->name();
+    std::cout << "\n  " << name.append(12 - name.length(), ' ') << " " << cmd->description();
   }
-  std::cout << "\n";
+  std::cout << "\n\n";
+}
+
+static void print_usage_cmd(const apps::aklite_offline::Cmd& cmd) {
+  std::cout << cmd.description() << "\n\nUsage:\n  aklite-offline " << cmd.name() << " [flags]\n\nFlags: \n";
+  std::cout << cmd.options();
+  std::cout << "\n\n";
 }
 
 int main(int argc, char** argv) {
@@ -37,7 +44,9 @@ int main(int argc, char** argv) {
   })};
 
   if (cmds.end() == find_it) {
-    LOG_ERROR << "Unsupported command: " << cmd_name << "\n";
+    if (cmd_name != "--help") {
+      LOG_ERROR << "Unsupported command: " << cmd_name << "\n";
+    }
     print_usage();
     exit(EXIT_FAILURE);
   }
@@ -50,21 +59,20 @@ int main(int argc, char** argv) {
   po::options_description arg_opts;
   arg_opts.add_options()("cmd", po::value<std::string>());
   arg_opts.add(cmd_opts);
-  auto print_usage = [](const std::string& cmd, const po::options_description& opts) {
-    std::cout << "aklite-offline " << cmd << " [options]\n" << opts;
-  };
 
   try {
     po::store(po::command_line_parser(argc, argv).options(arg_opts).positional(run_pos).run(), vm);
     po::notify(vm);
   } catch (const std::exception& exc) {
-    LOG_ERROR << exc.what() << "\n";
-    print_usage(cmd_name, cmd_opts);
+    if (vm.count("help") < 1) {
+      LOG_ERROR << exc.what() << "\n";
+    }
+    print_usage_cmd(cmd);
     exit(EXIT_FAILURE);
   }
 
   if (vm.count("help") == 1) {
-    print_usage(vm["cmd"].as<std::string>(), cmd_opts);
+    print_usage_cmd(cmd);
     exit(EXIT_SUCCESS);
   }
 
