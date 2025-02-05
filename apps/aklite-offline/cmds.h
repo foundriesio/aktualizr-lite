@@ -18,21 +18,28 @@ class Cmd {
  public:
   using Ptr = std::shared_ptr<Cmd>;
   const std::string& name() const { return _name; }
+  const std::string& description() const { return _description; }
   const po::options_description& options() const { return _options; }
 
   virtual int operator()(const po::variables_map& vm) const = 0;
 
  protected:
-  Cmd(std::string name, const po::options_description& options) : _name{std::move(name)}, _options{options} {}
+  Cmd(std::string name, std::string description, const po::options_description& options)
+      : _name{std::move(name)}, _description{std::move(description)}, _options{options} {}
 
  private:
   const std::string _name;
+  const std::string _description;
   const po::options_description& _options;
 };
 
 class CheckCmd : public Cmd {
  public:
-  CheckCmd() : Cmd("check", _options) {
+  CheckCmd()
+      : Cmd("check",
+            "Update the device TUF metadata by fetching and validating the offline bundle's metadata. The list of "
+            "available targets is printed",
+            _options) {
     _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
                                                     "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
         "config,c", po::value<std::vector<boost::filesystem::path>>()->composing(), "Configuration file or directory")(
@@ -57,7 +64,11 @@ class CheckCmd : public Cmd {
 
 class InstallCmd : public Cmd {
  public:
-  InstallCmd() : Cmd("install", _options) {
+  InstallCmd()
+      : Cmd("install",
+            "Install the selected target. If no target name is specified, the highest version in the bundle will "
+            "be used",
+            _options) {
     _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
                                                     "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
         "config,c", po::value<std::vector<boost::filesystem::path>>()->composing(), "Configuration file or directory")(
@@ -88,7 +99,7 @@ class InstallCmd : public Cmd {
 
 class RunCmd : public Cmd {
  public:
-  RunCmd() : Cmd("run", _options) {
+  RunCmd() : Cmd("run", "Finalize the installation of a target, starting the updated apps", _options) {
     _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
                                                     "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
         "config,c", po::value<std::vector<boost::filesystem::path>>()->composing(), "Configuration file or directory");
@@ -112,7 +123,7 @@ class RunCmd : public Cmd {
 
 class CurrentCmd : public Cmd {
  public:
-  CurrentCmd() : Cmd("current", _options) {
+  CurrentCmd() : Cmd("current", "Show information about the currently running target", _options) {
     _options.add_options()("help,h", "print usage")("log-level", po::value<int>()->default_value(2),
                                                     "set log level 0-5 (trace, debug, info, warning, error, fatal)")(
         "config,c", po::value<std::vector<boost::filesystem::path>>()->composing(), "Configuration file or directory");
