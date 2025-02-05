@@ -22,6 +22,7 @@ option(BUILD_TUFCTL "Set to ON to build sample tuf control application" OFF)
 option(BUILD_P11 "Support for key storage in a HSM via PKCS#11" ON)
 option(USE_COMPOSEAPP_ENGINE "Set to ON to build the app engine based on the composeapp utility" ON)
 option(BUILD_WITH_CODE_COVERAGE_AKLITE "Enable gcov code coverage" OFF)
+option(AUTO_DOWNGRADE "By default, should a version lower than the current one be accepted as a valid update" OFF)
 
 # If we build the sota tools we don't need aklite (???) and vice versa
 # if we build aklite we don't need the sota tools
@@ -86,3 +87,4 @@ message(STATUS "BUILD_AKLITE_OFFLINE: ${BUILD_AKLITE_OFFLINE}")
 message(STATUS "BUILD_TUFCTL: ${BUILD_TUFCTL}")
 message(STATUS "BUILD_P11: ${BUILD_P11}")
 message(STATUS "USE_COMPOSEAPP_ENGINE: ${USE_COMPOSEAPP_ENGINE}")
+message(STATUS "AUTO_DOWNGRADE: ${AUTO_DOWNGRADE}")
