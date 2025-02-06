@@ -76,10 +76,11 @@ offline = False
 single_step = True
 prune = True
 
-def get_target_version(offset):
+def get_actual_version(offset):
     return base_target_version + offset
 
-class Targets:
+
+class Target:
     First = 0
     BrokenOstree = 1
     WorkingOstree = 2
@@ -100,25 +101,34 @@ class Targets:
         self.build_error = build_error
         self.ostree_image_version = ostree_image_version
         self.apps = apps
+        self.actual_version = get_actual_version(version_offset)
 
     def __str__(self):
-        return f"VersionOffset={self.version_offset} InstallRollback={self.install_rollback}, RunRollback={self.run_rollback}, BuildError={self.build_error}, OSTreeImageVersion={self.ostree_image_version}"
+        return f"VersionOffset={self.version_offset} InstallRollback={self.install_rollback}, RunRollback={self.run_rollback}, BuildError={self.build_error}, OSTreeImageVersion={self.ostree_image_version}, ActualVersion={self.actual_version}"
 
 all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
 all_targets = {
-    Targets.First: Targets(Targets.First, False, False, False, 1, []),
-    Targets.BrokenOstree: Targets(Targets.BrokenOstree, True, False, False, 2, []),
-    Targets.WorkingOstree: Targets(Targets.WorkingOstree, False, False, False, 3, []),
-    Targets.AddFirstApp: Targets(Targets.AddFirstApp, False, False, False, 3, ["shellhttpd_base_10000"]),
-    Targets.AddMoreApps: Targets(Targets.AddMoreApps, False, False, False, 3, all_apps),
-    Targets.BreakApp: Targets(Targets.BreakApp, False, True, False, 3, all_apps),
-    Targets.UpdateBrokenApp: Targets(Targets.UpdateBrokenApp, False, True, False, 3, all_apps),
-    Targets.BrokenBuild: Targets(Targets.BrokenBuild, False, False, True, 3, all_apps),
-    Targets.FixApp: Targets(Targets.FixApp, False, False, False, 3, all_apps),
-    Targets.UpdateWorkingApp: Targets(Targets.UpdateWorkingApp, False, False, False, 3, all_apps),
-    Targets.UpdateOstreeWithApps: Targets(Targets.UpdateOstreeWithApps, False, False, False, 4, all_apps),
-    Targets.BrokenOstreeWithApps: Targets(Targets.BrokenOstreeWithApps, True, False, False, 5, all_apps),
+    Target.First: Target(Target.First, False, False, False, 1, []),
+    Target.BrokenOstree: Target(Target.BrokenOstree, True, False, False, 2, []),
+    Target.WorkingOstree: Target(Target.WorkingOstree, False, False, False, 3, []),
+    Target.AddFirstApp: Target(Target.AddFirstApp, False, False, False, 3, ["shellhttpd_base_10000"]),
+    Target.AddMoreApps: Target(Target.AddMoreApps, False, False, False, 3, all_apps),
+    Target.BreakApp: Target(Target.BreakApp, False, True, False, 3, all_apps),
+    Target.UpdateBrokenApp: Target(Target.UpdateBrokenApp, False, True, False, 3, all_apps),
+    Target.BrokenBuild: Target(Target.BrokenBuild, False, False, True, 3, all_apps),
+    Target.FixApp: Target(Target.FixApp, False, False, False, 3, all_apps),
+    Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 3, all_apps),
+    Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 4, all_apps),
+    Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 5, all_apps),
 }
+
+
+def get_version_offset(actual_version):
+    assert actual_version >= base_target_version
+    return actual_version - base_target_version
+
+def get_target_for_actual_version(actual_version):
+    return all_targets[get_version_offset(actual_version)]
 
 def register_if_required():
     if not os.path.exists("/var/sota/client.pem"):
@@ -284,29 +294,30 @@ def cleanup_tuf_metadata():
 def cleanup_installed_data():
     os.system("""sqlite3 /var/sota/sql.db  "delete from installed_versions;" ".exit" """)
 
-def install_with_separate_steps(version, requires_reboot=False, install_rollback=False, run_rollback=False, explicit_version=True, do_reboot=True, do_finalize=True):
+def install_with_separate_steps(target: Target, explicit_version=True, do_reboot=True, do_finalize=True):
     cp = invoke_aklite(['check', '--json', '1'])
     assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion
     verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
-    previous_version = aklite_current_version()
-    if install_rollback or run_rollback:
-        final_version = previous_version
+    previous_target = get_target_for_actual_version(aklite_current_version())
+    if target.install_rollback or target.run_rollback:
+        final_target = previous_target
     else:
-        final_version = version
+        final_target = target
+    requires_reboot = previous_target.ostree_image_version != final_target.ostree_image_version
 
     if explicit_version:
-        cp = invoke_aklite(['pull', str(version)])
+        cp = invoke_aklite(['pull', str(target.actual_version)])
     else:
         cp = invoke_aklite(['pull'])
     assert cp.returncode == ReturnCodes.Ok
     verify_callback([("download-pre", ""), ("download-post", "OK")])
-    verify_events(version, {
+    verify_events(target.actual_version, {
             ('EcuDownloadStarted', None),
             ('EcuDownloadCompleted', True),
         })
 
-    # cp = invoke_aklite(['install', str(get_target_version(Targets.BrokenBuild))]) # not existing target
+    # cp = invoke_aklite(['install', str(get_target_version(Target.BrokenBuild))]) # not existing target
     # assert cp.returncode == ReturnCodes.TufTargetNotFound
     # verify_callback([])
 
@@ -316,17 +327,17 @@ def install_with_separate_steps(version, requires_reboot=False, install_rollback
     # verify_callback([])
 
     if explicit_version:
-        cp = invoke_aklite(['install', str(version)]) # OK
+        cp = invoke_aklite(['install', str(target.actual_version)]) # OK
     else:
         cp = invoke_aklite(['install']) # OK
-    if install_rollback:
+    if target.install_rollback:
         assert cp.returncode == ReturnCodes.InstallRollbackOk
         verify_callback([("install-pre", ""), ("install-post", "FAILED"), ("install-pre", ""), ("install-post", "OK")])
-        verify_events(version, {
+        verify_events(target.actual_version, {
             ('EcuInstallationStarted', None),
             ('EcuInstallationCompleted', False),
         }, True)
-        verify_events(final_version, {
+        verify_events(final_target.actual_version, {
             ('EcuInstallationStarted', None),
             ('EcuInstallationCompleted', True),
         }, False)
@@ -334,7 +345,7 @@ def install_with_separate_steps(version, requires_reboot=False, install_rollback
     elif requires_reboot:
         assert cp.returncode == ReturnCodes.InstallNeedsReboot
         verify_callback([("install-pre", ""), ("install-post", "NEEDS_COMPLETION")])
-        verify_events(version, {
+        verify_events(target.actual_version, {
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationApplied', None),
             })
@@ -344,24 +355,24 @@ def install_with_separate_steps(version, requires_reboot=False, install_rollback
         if do_finalize:
             cp = invoke_aklite(['run'])
             verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-            verify_events(version, {
+            verify_events(target.actual_version, {
                     ('EcuInstallationStarted', None),
                     ('EcuInstallationApplied', None),
                     ('EcuInstallationCompleted', True),
                 })
     else:
-        if run_rollback:
+        if target.run_rollback:
             assert cp.returncode == ReturnCodes.InstallRollbackOk
             verify_callback([
                 ("install-pre", ""), ("install-post", "FAILED"),
                 ("install-pre", ""), ("install-post", "OK")
                 ])
-            verify_events(version, {
+            verify_events(target.actual_version, {
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', False),
             }, True)
 
-            verify_events(final_version, {
+            verify_events(final_target.actual_version, {
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', True),
             }, False)
@@ -369,15 +380,15 @@ def install_with_separate_steps(version, requires_reboot=False, install_rollback
         else:
             assert cp.returncode == ReturnCodes.Ok
             verify_callback([("install-pre", ""), ("install-post", "OK")])
-            verify_events(version, {
+            verify_events(target.actual_version, {
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', True),
             })
 
     if (requires_reboot and not do_reboot):
-        assert aklite_current_version() == previous_version, cp.stdout.decode("utf-8")
+        assert aklite_current_version() == previous_target.actual_version, cp.stdout.decode("utf-8")
     else:
-        assert aklite_current_version() == final_version, cp.stdout.decode("utf-8")
+        assert aklite_current_version() == final_target.actual_version, cp.stdout.decode("utf-8")
 
     if not explicit_version:
         # Make sure we would not try a new install, after trying to install the latest one
@@ -385,32 +396,33 @@ def install_with_separate_steps(version, requires_reboot=False, install_rollback
         assert cp.returncode == ReturnCodes.Ok
         verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
-def install_with_single_step(version, requires_reboot=False, install_rollback=False, run_rollback=False, explicit_version=True, do_reboot=True, do_finalize=True):
-    previous_version = aklite_current_version()
-    if install_rollback or run_rollback:
-        final_version = previous_version
+def install_with_single_step(target: Target, explicit_version=True, do_reboot=True, do_finalize=True):
+    previous_target = get_target_for_actual_version(aklite_current_version())
+    if target.install_rollback or target.run_rollback:
+        final_target = previous_target
     else:
-        final_version = version
+        final_target = target
+    requires_reboot = previous_target.ostree_image_version != final_target.ostree_image_version
 
     if explicit_version:
-        cp = invoke_aklite(['update', str(version)])
+        cp = invoke_aklite(['update', str(target.actual_version)])
     else:
         cp = invoke_aklite(['update'])
 
-    if install_rollback:
+    if target.install_rollback:
         assert cp.returncode == ReturnCodes.InstallRollbackOk
         verify_callback([
             ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
             ("download-pre", ""), ("download-post", "OK"),
             ("install-pre", ""), ("install-post", "FAILED"),
             ("install-pre", ""), ("install-post", "OK")])
-        verify_events(version, {
+        verify_events(target.actual_version, {
             ('EcuDownloadStarted', None),
             ('EcuDownloadCompleted', True),
             ('EcuInstallationStarted', None),
             ('EcuInstallationCompleted', False),
         }, True)
-        verify_events(final_version, {
+        verify_events(final_target.actual_version, {
             ('EcuInstallationStarted', None),
             ('EcuInstallationCompleted', True),
         }, False)
@@ -422,7 +434,7 @@ def install_with_single_step(version, requires_reboot=False, install_rollback=Fa
                 ("download-pre", ""), ("download-post", "OK"),
                 ("install-pre", ""), ("install-post", "NEEDS_COMPLETION"),
                 ])
-        verify_events(version, {
+        verify_events(target.actual_version, {
                 ('EcuDownloadStarted', None),
                 ('EcuDownloadCompleted', True),
                 ('EcuInstallationStarted', None),
@@ -434,7 +446,7 @@ def install_with_single_step(version, requires_reboot=False, install_rollback=Fa
             cp = invoke_aklite(['run'])
             # TODO: handle run_rollback
             verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-            verify_events(version, {
+            verify_events(target.actual_version, {
                     ('EcuDownloadStarted', None),
                     ('EcuDownloadCompleted', True),
                     ('EcuInstallationStarted', None),
@@ -442,7 +454,7 @@ def install_with_single_step(version, requires_reboot=False, install_rollback=Fa
                     ('EcuInstallationCompleted', True),
                 })
     else:
-        if run_rollback:
+        if target.run_rollback:
             assert cp.returncode == ReturnCodes.InstallRollbackOk
             verify_callback([
                 ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
@@ -450,14 +462,14 @@ def install_with_single_step(version, requires_reboot=False, install_rollback=Fa
                 ("install-pre", ""), ("install-post", "FAILED"),
                 ("install-pre", ""), ("install-post", "OK")
                 ])
-            verify_events(version, {
+            verify_events(target.actual_version, {
                 ('EcuDownloadStarted', None),
                 ('EcuDownloadCompleted', True),
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', False),
             }, True)
 
-            verify_events(final_version, {
+            verify_events(final_target.actual_version, {
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', True),
             }, False)
@@ -469,16 +481,16 @@ def install_with_single_step(version, requires_reboot=False, install_rollback=Fa
                 ("download-pre", ""), ("download-post", "OK"),
                 ("install-pre", ""), ("install-post", "OK")
                 ])
-            verify_events(version, {
+            verify_events(target.actual_version, {
                 ('EcuDownloadStarted', None),
                 ('EcuDownloadCompleted', True),
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', True),
             })
     if (requires_reboot and not do_reboot):
-        assert aklite_current_version() == previous_version, cp.stdout.decode("utf-8")
+        assert aklite_current_version() == previous_target.actual_version, cp.stdout.decode("utf-8")
     else:
-        assert aklite_current_version() == final_version, cp.stdout.decode("utf-8")
+        assert aklite_current_version() == final_target.actual_version, cp.stdout.decode("utf-8")
 
     if not explicit_version:
         # Make sure we would not try a new install, after trying to install the latest one
@@ -486,20 +498,20 @@ def install_with_single_step(version, requires_reboot=False, install_rollback=Fa
         assert cp.returncode == ReturnCodes.Ok
         verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
-def install_version(version, requires_reboot=False, install_rollback=False, run_rollback=False, explicit_version=True, do_reboot=True, do_finalize=True):
+def install_target(target: Target, explicit_version: bool=True, do_reboot: bool=True, do_finalize: bool=True):
     if single_step:
-        install_with_single_step(version, requires_reboot, install_rollback, run_rollback, explicit_version, do_reboot, do_finalize)
+        install_with_single_step(target, explicit_version, do_reboot, do_finalize)
     else:
-        install_with_separate_steps(version, requires_reboot, install_rollback, run_rollback, explicit_version, do_reboot, do_finalize)
+        install_with_separate_steps(target, explicit_version, do_reboot, do_finalize)
 
 
-def do_rollback(version, requires_reboot, installation_in_progress):
+def do_rollback(target: Target, requires_reboot: bool, installation_in_progress: bool):
     cp = invoke_aklite(['rollback'])
 
     # TODO: Check events for previous version when `requires_reboot and installation_in_progress`
     if requires_reboot:
         # allowing ReturnCodes.InstallAppsNeedFinalization to workaround an test environment limitation related to getCurrent target
-        assert cp.returncode in [ReturnCodes.InstallNeedsReboot, ReturnCodes.InstallAppsNeedFinalization] , cp.stdout.decode("utf-8")
+        assert cp.returncode in [ReturnCodes.InstallNeedsReboot] , cp.stdout.decode("utf-8")
         if installation_in_progress:
             verify_callback([
                     ("install-post", "FAILED"),
@@ -514,12 +526,12 @@ def do_rollback(version, requires_reboot, installation_in_progress):
 
         sys_reboot()
         if installation_in_progress:
-            verify_events(version, {
+            verify_events(target.actual_version, {
                     ('EcuInstallationStarted', None),
                     ('EcuInstallationApplied', None),
                 })
         else:
-            verify_events(version, {
+            verify_events(target.actual_version, {
                     ('EcuDownloadStarted', None),
                     ('EcuDownloadCompleted', True),
                     ('EcuInstallationStarted', None),
@@ -530,13 +542,13 @@ def do_rollback(version, requires_reboot, installation_in_progress):
         verify_callback([("install-final-pre", ""), ("install-post", "OK")])
 
         if installation_in_progress:
-            verify_events(version, {
+            verify_events(target.actual_version, {
                     ('EcuInstallationStarted', None),
                     ('EcuInstallationApplied', None),
                     ('EcuInstallationCompleted', True),
                 })
         else:
-            verify_events(version, {
+            verify_events(target.actual_version, {
                     ('EcuDownloadStarted', None),
                     ('EcuDownloadCompleted', True),
                     ('EcuInstallationStarted', None),
@@ -550,7 +562,7 @@ def do_rollback(version, requires_reboot, installation_in_progress):
                 ("install-post", "FAILED"),
                 ("install-pre", ""), ("install-post", "OK")
                 ])
-            verify_events(version, {
+            verify_events(target.actual_version, {
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', True),
             })
@@ -560,13 +572,13 @@ def do_rollback(version, requires_reboot, installation_in_progress):
                 ("download-pre", ""), ("download-post", "OK"),
                 ("install-pre", ""), ("install-post", "OK")
                 ])
-            verify_events(version, {
+            verify_events(target.actual_version, {
                 ('EcuDownloadStarted', None),
                 ('EcuDownloadCompleted', True),
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', True),
             })
-    assert aklite_current_version() == version, cp.stdout.decode("utf-8")
+    assert aklite_current_version() == target.actual_version, cp.stdout.decode("utf-8")
 
 def restore_system_state():
     # Get to the starting point
@@ -574,7 +586,7 @@ def restore_system_state():
     write_settings()
     sys_reboot()
     cp = invoke_aklite(['run'])
-    version = get_target_version(Targets.First)
+    version = get_actual_version(Target.First)
     cleanup_installed_data()
     cp = invoke_aklite(['update', str(version)])
     print(cp.stdout)
@@ -590,84 +602,69 @@ def restore_system_state():
 
 # Incremental install order
 install_sequence_incremental = [
-    Targets.BrokenOstree,
-    Targets.WorkingOstree,
-    Targets.AddFirstApp,
-    Targets.AddMoreApps,
-    Targets.BreakApp,
-    Targets.UpdateBrokenApp,
-    Targets.BrokenBuild,
-    Targets.FixApp,
-    Targets.UpdateWorkingApp,
-    Targets.UpdateOstreeWithApps,
-    Targets.BrokenOstreeWithApps,
+    Target.BrokenOstree,
+    Target.WorkingOstree,
+    Target.AddFirstApp,
+    Target.AddMoreApps,
+    Target.BreakApp,
+    Target.UpdateBrokenApp,
+    Target.BrokenBuild,
+    Target.FixApp,
+    Target.UpdateWorkingApp,
+    Target.UpdateOstreeWithApps,
+    Target.BrokenOstreeWithApps,
 ]
 
 def run_test_sequence_incremental():
     restore_system_state()
     apps = None # All apps, for now
-    prev_ostree_image_version = 1
     for target_version in install_sequence_incremental:
         target = all_targets[target_version]
         if target.build_error: # skip this one for now
             continue
 
-        version = get_target_version(target.version_offset)
-        logger.info(f"Updating to {version} {target}. SingleStep={single_step}, Offline={offline}")
-        requires_reboot = target.ostree_image_version != prev_ostree_image_version
+        logger.info(f"Updating to {target.actual_version} {target}. SingleStep={single_step}, Offline={offline}")
         write_settings(apps, prune)
-        install_version(version, requires_reboot, target.install_rollback, target.run_rollback)
+        install_target(target)
         check_running_apps(apps)
-        if not target.install_rollback and not target.run_rollback:
-            prev_ostree_image_version = target.ostree_image_version
 
 def run_test_sequence_update_to_latest():
     restore_system_state()
     apps = None # All apps, for now
-    prev_ostree_image_version = 1
 
-    last_target = all_targets[Targets.BrokenOstreeWithApps]
+    last_target = all_targets[Target.BrokenOstreeWithApps]
     target = last_target
 
     # Try to install latest version, which will lead to a rollback
     write_settings(apps, prune)
-    version = get_target_version(target.version_offset)
-    requires_reboot = target.ostree_image_version != prev_ostree_image_version
-    logger.info(f"Updating to latest target {version} {target} {single_step=} {offline=}")
-    install_version(version, requires_reboot, target.install_rollback, target.run_rollback, False)
+    logger.info(f"Updating to latest target {target.actual_version} {target} {single_step=} {offline=}")
+    install_target(target, False)
     check_running_apps(apps)
 
 def run_test_sequence_apps_selection():
     restore_system_state()
     apps = None # All apps, for now
-    prev_ostree_image_version = 1
-    target_version = Targets.AddMoreApps
+    target_version = Target.AddMoreApps
     target = all_targets[target_version]
 
-    version = get_target_version(target.version_offset)
-    logger.info(f"Updating to target {version} {target}. {single_step=} {offline=}")
-    requires_reboot = target.ostree_image_version != prev_ostree_image_version
+    logger.info(f"Updating to target {target.actual_version} {target}. {single_step=} {offline=}")
     write_settings(apps, prune)
-    install_version(version, requires_reboot, target.install_rollback, target.run_rollback)
+    install_target(target)
     check_running_apps(apps)
-    prev_ostree_image_version = target.version_offset
 
     apps = ["shellhttpd_base_10000"]
     write_settings(apps, prune)
-    logger.info(f"Forcing apps sync for target {version} {target}. {single_step=} {offline=}")
-    cp = invoke_aklite(['update', str(version)])
+    logger.info(f"Forcing apps sync for target {target.actual_version} {target}. {single_step=} {offline=}")
+    cp = invoke_aklite(['update', str(target.actual_version)])
     assert cp.returncode == ReturnCodes.Ok
     check_running_apps(apps)
 
     apps = all_apps
     write_settings(apps, prune)
-    logger.info(f"Forcing apps sync for target {version} {target}. {single_step=} {offline=}")
-    cp = invoke_aklite(['update', str(version)])
+    logger.info(f"Forcing apps sync for target {target.actual_version} {target}. {single_step=} {offline=}")
+    cp = invoke_aklite(['update', str(target.actual_version)])
     assert cp.returncode == ReturnCodes.Ok
     check_running_apps(apps)
-
-    if not target.install_rollback and not target.run_rollback:
-        prev_ostree_image_version = target.ostree_image_version
 
 def test_apps_selection():
     run_test_sequence_apps_selection()
@@ -695,24 +692,24 @@ def run_test_rollback(do_reboot, do_finalize):
 
     # Install
     logger.info("Installing base target for rollback operations")
-    target = all_targets[Targets.WorkingOstree]
-    install_version(get_target_version(target.version_offset), True, target.install_rollback, target.run_rollback)
+    target = all_targets[Target.WorkingOstree]
+    install_target(target)
 
     # Test a rollback that does *not* require a reboot
     logger.info("Testing rollback not requiring reboot")
-    target = all_targets[Targets.AddFirstApp]
-    install_version(get_target_version(target.version_offset), False, target.install_rollback, target.run_rollback, True, do_reboot, do_finalize)
-    do_rollback(get_target_version(Targets.WorkingOstree), False, False)
+    target = all_targets[Target.AddFirstApp]
+    install_target(target, True, do_reboot, do_finalize)
+    do_rollback(all_targets[Target.WorkingOstree], False, False)
 
     # Test a rollback that *does* require a reboot
     logger.info("Testing rollback requiring reboot")
-    target = all_targets[Targets.UpdateOstreeWithApps]
-    install_version(get_target_version(target.version_offset), True, target.install_rollback, target.run_rollback, True, do_reboot, do_finalize)
-    do_rollback(get_target_version(Targets.WorkingOstree), do_reboot, not do_reboot or not do_finalize)
+    target = all_targets[Target.UpdateOstreeWithApps]
+    install_target(target, True, do_reboot, do_finalize)
+    do_rollback(all_targets[Target.WorkingOstree], do_reboot, not do_reboot or not do_finalize)
 
     # Do a new rollback, go back to "First" target, from the original system stare
     logger.info("Performing additional rollback operation, on already rolled back environment")
-    do_rollback(get_target_version(Targets.First), True, False)
+    do_rollback(all_targets[Target.First], True, False)
 
 @pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
