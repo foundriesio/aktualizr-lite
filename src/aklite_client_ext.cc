@@ -250,7 +250,8 @@ InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std
     LOG_ERROR << "Failed to install Target; target: " << target.Name() << ", err: " << ir;
     if (ir.status == InstallResult::Status::Failed) {
       LOG_INFO << "Rolling back to the previous target: " << current.Name() << "...";
-      const auto installer = Installer(current);
+      const auto installer =
+          Installer(current, ir.description, correlation_id, InstallMode::All, local_update_source, false);
       if (installer == nullptr) {
         LOG_ERROR << "Failed to find the previous target in the TUF Targets DB";
         return InstallResult{InstallResult::Status::InstallRollbackFailed, ir.description};
