@@ -54,18 +54,38 @@ if not factory_name:
     logger.error("FACTORY environment variable not set")
     sys.exit()
 
-base_target_version = os.getenv("BASE_TARGET_VERSION")
-if not base_target_version:
-    logger.error("BASE_TARGET_VERSION environment variable not set")
-    sys.exit()
 
-tag = os.getenv("TAG")
-if not tag:
+primary_tag = os.getenv("TAG")
+if not primary_tag:
     logger.error("TAG environment variable not set")
     sys.exit()
 
-base_target_version = int(base_target_version)
-logger.info(f"Base target version: {base_target_version}")
+
+base_version = {}
+base_version[primary_tag] = os.getenv("BASE_TARGET_VERSION")
+if not base_version[primary_tag]:
+    logger.error("BASE_TARGET_VERSION environment variable not set")
+    sys.exit()
+base_version[primary_tag] = int(base_version[primary_tag])
+
+# secondary tag used for tests that involve tags switching
+secondary_tag = os.getenv("SECONDARY_TAG")
+if secondary_tag:
+    base_version[secondary_tag] = os.getenv("SECONDARY_BASE_TARGET_VERSION")
+    if base_version[secondary_tag]:
+        base_version[secondary_tag] = int(base_version[secondary_tag])
+
+def secondary_tag_is_set():
+    if not secondary_tag:
+        logger.error("SECONDARY_TAG environment variable not set")
+        return False
+
+    if not base_version[secondary_tag]:
+        logger.error("SECONDARY_BASE_TARGET_VERSION environment variable not set")
+        return False
+    return True
+
+logger.info(f"Base target version: {base_version[primary_tag]}")
 
 aklite_path = "./build/src/aktualizr-lite"
 composectl_path = "/usr/bin/composectl"
@@ -75,9 +95,6 @@ callback_log_path = "/var/sota/callback_log.txt"
 offline = False
 single_step = True
 prune = True
-
-def get_actual_version(offset):
-    return base_target_version + offset
 
 
 class Target:
@@ -94,46 +111,63 @@ class Target:
     UpdateOstreeWithApps = 10
     BrokenOstreeWithApps = 11
 
-    def __init__(self, version_offset, install_rollback, run_rollback, build_error, ostree_image_version, apps = []):
+    def __init__(self, version_offset, install_rollback, run_rollback, build_error, ostree_image_version, tag, apps = []):
         self.version_offset = version_offset
         self.install_rollback = install_rollback
         self.run_rollback = run_rollback
         self.build_error = build_error
         self.ostree_image_version = ostree_image_version
         self.apps = apps
-        self.actual_version = get_actual_version(version_offset)
+        self.tag = tag
+        self.actual_version = base_version[self.tag] + self.version_offset
 
     def __str__(self):
         return f"VersionOffset={self.version_offset} InstallRollback={self.install_rollback}, RunRollback={self.run_rollback}, BuildError={self.build_error}, OSTreeImageVersion={self.ostree_image_version}, ActualVersion={self.actual_version}"
 
 all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
-all_targets = {
-    Target.First: Target(Target.First, False, False, False, 1, []),
-    Target.BrokenOstree: Target(Target.BrokenOstree, True, False, False, 2, []),
-    Target.WorkingOstree: Target(Target.WorkingOstree, False, False, False, 3, []),
-    Target.AddFirstApp: Target(Target.AddFirstApp, False, False, False, 3, ["shellhttpd_base_10000"]),
-    Target.AddMoreApps: Target(Target.AddMoreApps, False, False, False, 3, all_apps),
-    Target.BreakApp: Target(Target.BreakApp, False, True, False, 3, all_apps),
-    Target.UpdateBrokenApp: Target(Target.UpdateBrokenApp, False, True, False, 3, all_apps),
-    Target.BrokenBuild: Target(Target.BrokenBuild, False, False, True, 3, all_apps),
-    Target.FixApp: Target(Target.FixApp, False, False, False, 3, all_apps),
-    Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 3, all_apps),
-    Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 4, all_apps),
-    Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 5, all_apps),
+all_primary_tag_targets = {
+    Target.First: Target(Target.First, False, False, False, 1, primary_tag, []),
+    Target.BrokenOstree: Target(Target.BrokenOstree, True, False, False, 2, primary_tag, []),
+    Target.WorkingOstree: Target(Target.WorkingOstree, False, False, False, 3, primary_tag, []),
+    Target.AddFirstApp: Target(Target.AddFirstApp, False, False, False, 3, primary_tag, ["shellhttpd_base_10000"]),
+    Target.AddMoreApps: Target(Target.AddMoreApps, False, False, False, 3, primary_tag, all_apps),
+    Target.BreakApp: Target(Target.BreakApp, False, True, False, 3, primary_tag, all_apps),
+    Target.UpdateBrokenApp: Target(Target.UpdateBrokenApp, False, True, False, 3, primary_tag, all_apps),
+    Target.BrokenBuild: Target(Target.BrokenBuild, False, False, True, 3, primary_tag, all_apps),
+    Target.FixApp: Target(Target.FixApp, False, False, False, 3, primary_tag, all_apps),
+    Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 3, primary_tag, all_apps),
+    Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 4, primary_tag, all_apps),
+    Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 5, primary_tag, all_apps),
 }
 
-
-def get_version_offset(actual_version):
-    assert actual_version >= base_target_version
-    return actual_version - base_target_version
+if secondary_tag:
+    all_secondary_tag_targets = {
+        Target.First: Target(Target.First, False, False, False, 11, secondary_tag, []),
+        Target.BrokenOstree: Target(Target.BrokenOstree, True, False, False, 12, secondary_tag, []),
+        Target.WorkingOstree: Target(Target.WorkingOstree, False, False, False, 13, secondary_tag, []),
+        Target.AddFirstApp: Target(Target.AddFirstApp, False, False, False, 13, secondary_tag, ["shellhttpd_base_10000"]),
+        Target.AddMoreApps: Target(Target.AddMoreApps, False, False, False, 13, secondary_tag, all_apps),
+        Target.BreakApp: Target(Target.BreakApp, False, True, False, 13, secondary_tag, all_apps),
+        Target.UpdateBrokenApp: Target(Target.UpdateBrokenApp, False, True, False, 13, secondary_tag, all_apps),
+        Target.BrokenBuild: Target(Target.BrokenBuild, False, False, True, 13, secondary_tag, all_apps),
+        Target.FixApp: Target(Target.FixApp, False, False, False, 13, secondary_tag, all_apps),
+        Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 13, secondary_tag, all_apps),
+        Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 14, secondary_tag, all_apps),
+        Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 15, secondary_tag, all_apps),
+    }
+else:
+    all_secondary_tag_targets = {}
 
 def get_target_for_actual_version(actual_version):
-    return all_targets[get_version_offset(actual_version)]
+    for target in list(all_primary_tag_targets.values()) + list(all_secondary_tag_targets.values()):
+        if target.actual_version == actual_version:
+            return target
+    assert False, f"Unable to find target with version {actual_version}"
 
 def register_if_required():
     if not os.path.exists("/var/sota/client.pem"):
         user_token = os.getenv("USER_TOKEN")
-        cmd = f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" --start-daemon 0 --tags {tag}'
+        cmd = f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" --start-daemon 0 --tags {primary_tag}'
         logger.info(f"Registering device...")
         output = os.popen(cmd).read().strip()
         logger.info(output)
@@ -223,7 +257,7 @@ def invoke_aklite(options):
     logger.info("Running `" + " ".join([aklite_path] + options) + "`")
     return subprocess.run([aklite_path] + options, capture_output=True)
 
-def write_settings(apps=None, prune=True):
+def write_settings(apps=None, prune=True, tag=None):
     logger.info(f"Updating settings. {apps=}")
     callback_file = "/var/sota/callback.sh"
 
@@ -236,6 +270,8 @@ echo { \\"MESSAGE\\": \\"$MESSAGE\\", \\"CURRENT_TARGET\\": \\"$CURRENT_TARGET\\
     st = os.stat(callback_file)
     os.chmod(callback_file, st.st_mode | stat.S_IEXEC)
 
+    if not tag:
+        tag = primary_tag
     content = \
 f"""
 [pacman]
@@ -331,7 +367,7 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
     else:
         cp = invoke_aklite(['install']) # OK
     if target.install_rollback:
-        assert cp.returncode == ReturnCodes.InstallRollbackOk
+        assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
         verify_callback([("install-pre", ""), ("install-post", "FAILED"), ("install-pre", ""), ("install-post", "OK")])
         verify_events(target.actual_version, {
             ('EcuInstallationStarted', None),
@@ -362,7 +398,7 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
                 })
     else:
         if target.run_rollback:
-            assert cp.returncode == ReturnCodes.InstallRollbackOk
+            assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
             verify_callback([
                 ("install-pre", ""), ("install-post", "FAILED"),
                 ("install-pre", ""), ("install-post", "OK")
@@ -410,7 +446,7 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
         cp = invoke_aklite(['update'])
 
     if target.install_rollback:
-        assert cp.returncode == ReturnCodes.InstallRollbackOk
+        assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
         verify_callback([
             ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
             ("download-pre", ""), ("download-post", "OK"),
@@ -455,7 +491,7 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
                 })
     else:
         if target.run_rollback:
-            assert cp.returncode == ReturnCodes.InstallRollbackOk
+            assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
             verify_callback([
                 ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
                 ("download-pre", ""), ("download-post", "OK"),
@@ -586,7 +622,7 @@ def restore_system_state():
     write_settings()
     sys_reboot()
     cp = invoke_aklite(['run'])
-    version = get_actual_version(Target.First)
+    version = all_primary_tag_targets[Target.First].actual_version
     cleanup_installed_data()
     cp = invoke_aklite(['update', str(version)])
     print(cp.stdout)
@@ -619,7 +655,7 @@ def run_test_sequence_incremental():
     restore_system_state()
     apps = None # All apps, for now
     for target_version in install_sequence_incremental:
-        target = all_targets[target_version]
+        target = all_primary_tag_targets[target_version]
         if target.build_error: # skip this one for now
             continue
 
@@ -632,8 +668,7 @@ def run_test_sequence_update_to_latest():
     restore_system_state()
     apps = None # All apps, for now
 
-    last_target = all_targets[Target.BrokenOstreeWithApps]
-    target = last_target
+    target = all_primary_tag_targets[Target.BrokenOstreeWithApps]
 
     # Try to install latest version, which will lead to a rollback
     write_settings(apps, prune)
@@ -645,7 +680,7 @@ def run_test_sequence_apps_selection():
     restore_system_state()
     apps = None # All apps, for now
     target_version = Target.AddMoreApps
-    target = all_targets[target_version]
+    target = all_primary_tag_targets[target_version]
 
     logger.info(f"Updating to target {target.actual_version} {target}. {single_step=} {offline=}")
     write_settings(apps, prune)
@@ -685,6 +720,75 @@ def test_update_to_latest(offline_, single_step_):
     single_step = single_step_
     run_test_sequence_update_to_latest()
 
+def run_test_switch_tag():
+    assert secondary_tag_is_set()
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+
+    install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
+    install_target(all_primary_tag_targets[Target.BrokenOstreeWithApps], False)
+
+    write_settings(apps, prune, secondary_tag)
+    # Make sure we will rollback to previous target
+    install_target(all_secondary_tag_targets[Target.BrokenOstreeWithApps], False)
+
+    install_target(all_secondary_tag_targets[Target.UpdateOstreeWithApps])
+
+def run_test_auto_downgrade():
+    assert secondary_tag_is_set()
+    auto_downgrade_enabled = True
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune, secondary_tag)
+    install_target(all_secondary_tag_targets[Target.UpdateOstreeWithApps])
+
+    write_settings(apps, prune)
+    cp = invoke_aklite(['check', '--json', '1'])
+    if auto_downgrade_enabled:
+        assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion
+    else:
+        assert cp.returncode == ReturnCodes.Ok
+    verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
+
+    install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
+
+def run_test_deamon_auto_downgrade():
+    assert secondary_tag_is_set()
+    auto_downgrade_enabled = False
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune, secondary_tag)
+    install_target(all_secondary_tag_targets[Target.UpdateOstreeWithApps])
+
+    write_settings(apps, prune)
+    os.environ["AKLITE_TEST_RETURN_ON_SLEEP"] = "1"
+    cp = invoke_aklite(['daemon'])
+    assert cp.returncode == ReturnCodes.Ok
+    expected_callbacks = [("check-for-update-pre", ""), ("check-for-update-post", "OK")]
+    if auto_downgrade_enabled:
+        expected_callbacks += [("download-pre", ""), ("download-post", "OK"), ("install-pre", ""), ("install-post", "FAILED"), ("install-pre", ""), ("install-post", "OK")]
+    verify_callback(expected_callbacks)
+
+@pytest.mark.parametrize('offline_', [True, False])
+@pytest.mark.parametrize('single_step_', [True, False])
+def test_tag_switch(offline_, single_step_):
+    global offline, single_step
+    offline = offline_
+    single_step = single_step_
+    run_test_switch_tag()
+
+@pytest.mark.parametrize('offline_', [True, False])
+@pytest.mark.parametrize('single_step_', [True, False])
+def test_auto_downgrade(offline_, single_step_):
+    global offline, single_step
+    offline = offline_
+    single_step = single_step_
+    run_test_auto_downgrade()
+
+def test_auto_downgrade_daemon():
+    run_test_deamon_auto_downgrade()
+
 def run_test_rollback(do_reboot, do_finalize):
     restore_system_state()
     apps = None # All apps, for now
@@ -692,24 +796,24 @@ def run_test_rollback(do_reboot, do_finalize):
 
     # Install
     logger.info("Installing base target for rollback operations")
-    target = all_targets[Target.WorkingOstree]
+    target = all_primary_tag_targets[Target.WorkingOstree]
     install_target(target)
 
     # Test a rollback that does *not* require a reboot
     logger.info("Testing rollback not requiring reboot")
-    target = all_targets[Target.AddFirstApp]
+    target = all_primary_tag_targets[Target.AddFirstApp]
     install_target(target, True, do_reboot, do_finalize)
-    do_rollback(all_targets[Target.WorkingOstree], False, False)
+    do_rollback(all_primary_tag_targets[Target.WorkingOstree], False, False)
 
     # Test a rollback that *does* require a reboot
     logger.info("Testing rollback requiring reboot")
-    target = all_targets[Target.UpdateOstreeWithApps]
+    target = all_primary_tag_targets[Target.UpdateOstreeWithApps]
     install_target(target, True, do_reboot, do_finalize)
-    do_rollback(all_targets[Target.WorkingOstree], do_reboot, not do_reboot or not do_finalize)
+    do_rollback(all_primary_tag_targets[Target.WorkingOstree], do_reboot, not do_reboot or not do_finalize)
 
     # Do a new rollback, go back to "First" target, from the original system stare
     logger.info("Performing additional rollback operation, on already rolled back environment")
-    do_rollback(all_targets[Target.First], True, False)
+    do_rollback(all_primary_tag_targets[Target.First], True, False)
 
 @pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
