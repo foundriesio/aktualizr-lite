@@ -14,6 +14,7 @@
 #include <boost/format.hpp>
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/program_options.hpp>
+#include <vector>
 
 #include "aktualizr-lite/aklite_client_ext.h"
 #include "aktualizr-lite/api.h"
@@ -213,19 +214,34 @@ static int cli_complete_install(LiteClient& client, const bpo::variables_map& pa
   return static_cast<int>(aklite::cli::CompleteInstall(akclient));
 }
 
-// clang-format off
-static const std::unordered_map<std::string, int (*)(LiteClient&, const bpo::variables_map&)> commands = {
-    {"daemon", daemon_main},
-    {"update", cli_update},
-    {"pull", cli_pull},
-    {"install", cli_install},
-    {"list", cli_list},
-    {"check", cli_check},
-    {"status", status_main},
-    {"finalize", cli_complete_install},
-    {"run", cli_complete_install},
+struct Cmd {
+  const std::string name;
+  const std::string description;
+  int (*func)(LiteClient&, const bpo::variables_map&);
 };
+
+// clang-format off
+static const std::array<Cmd, 10> commands = {{
+    {"daemon", "Start the update agent daemon", daemon_main},
+    {"update", "Update TUF metadata, download and install the selected target", cli_update},
+    {"pull", "Download the selected target data to the device, to allow a install operation to be performed", cli_pull},
+    {"install", "Install a previously pulled target", cli_install},
+    {"list", "List the available targets, using current TUF metadata information. No TUF update is performed", cli_list},
+    {"check", "Update the device TUF metadata, and list the available targets", cli_check},
+    {"status", "Show information of the target currently running on the device", status_main},
+    {"finalize", "Finalize installation by starting the updated apps", cli_complete_install},
+    {"run", "Alias for the finalize command", cli_complete_install},
+}};
 // clang-format on
+std::string get_cmds_list() {
+  std::string ret;
+  ret += "Commands:\n";
+  for (const auto& cmd : commands) {
+    auto name = cmd.name;
+    ret += "  " + name.append(12 - name.length(), ' ') + cmd.description + "\n";
+  }
+  return ret;
+}
 
 void check_info_options(const bpo::options_description& description, const bpo::variables_map& vm) {
   if (vm.count("help") != 0 || (vm.count("command") == 0 && vm.count("version") == 0)) {
@@ -238,17 +254,32 @@ void check_info_options(const bpo::options_description& description, const bpo::
   }
 }
 
-bpo::variables_map parse_options(int argc, char** argv) {
-  std::string subs("Command to execute: ");
-  for (const auto& cmd : commands) {
-    static int indx = 0;
-    if (indx != 0) {
-      subs += ", ";
-    }
-    subs += cmd.first;
-    ++indx;
+int run_command(const Cmd& cmd, const bpo::variables_map& commandline_map) {
+  Config config(commandline_map);
+
+  if (geteuid() != 0) {
+    LOG_WARNING << "\033[31mRunning as non-root and may not work as expected!\033[0m\n";
   }
-  bpo::options_description description("aktualizr-lite command line options");
+
+  LOG_DEBUG << "Current directory: " << boost::filesystem::current_path().string();
+  config.telemetry.report_network = !config.tls.server.empty();
+  config.telemetry.report_config = !config.tls.server.empty();
+  LOG_DEBUG << "Running " << cmd.name;
+  LiteClient client(config, nullptr);
+  return cmd.func(client, commandline_map);
+}
+
+int run_command_by_name(const std::string& cmd_name, const bpo::variables_map& commandline_map) {
+  for (const auto& cmd : commands) {
+    if (cmd.name == cmd_name) {
+      return run_command(cmd, commandline_map);
+    }
+  }
+  throw bpo::invalid_option_value("Unsupported command: " + cmd_name);
+}
+
+bpo::variables_map parse_options(int argc, char** argv) {
+  bpo::options_description description("Usage:\n  aktualizr-lite [command] [flags]\n\n" + get_cmds_list() + "\nFlags");
 
   // clang-format off
   // Try to keep these options in the same order as Config::updateFromCommandLine().
@@ -266,7 +297,7 @@ bpo::variables_map parse_options(int argc, char** argv) {
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for updates when in daemon mode")
       ("json", bpo::value<bool>(), "Output targets information as json when running check and list commands")
       ("src-dir", bpo::value<std::string>(), "Directory that contains an offline update bundle. Enables offline mode for check, pull, install, and update commands")
-      ("command", bpo::value<std::string>(), subs.c_str());
+      ("command", bpo::value<std::string>(), "Command to be executed");
   // clang-format on
 
   // consider the first positional argument as the aktualizr run mode
@@ -325,29 +356,8 @@ int main(int argc, char* argv[]) {
           "loglevel", boost::program_options::variable_value(static_cast<int>(boost::log::trivial::fatal), false)));
     }
 
-    Config config(commandline_map);
-
-    if (geteuid() != 0) {
-      LOG_WARNING << "\033[31mRunning as non-root and may not work as expected!\033[0m\n";
-    }
-
-    config.telemetry.report_network = !config.tls.server.empty();
-    config.telemetry.report_config = !config.tls.server.empty();
-
-    LOG_DEBUG << "Current directory: " << boost::filesystem::current_path().string();
-
-    std::string cmd = commandline_map["command"].as<std::string>();
-    auto cmd_to_run = commands.find(cmd);
-    if (cmd_to_run == commands.end()) {
-      throw bpo::invalid_option_value("Unsupported command: " + cmd);
-    }
-
-    {
-      LOG_DEBUG << "Running " << (*cmd_to_run).first;
-      LiteClient client(config, nullptr);
-      ret_val = (*cmd_to_run).second(client, commandline_map);
-    }
-
+    std::string cmd_name = commandline_map["command"].as<std::string>();
+    ret_val = run_command_by_name(cmd_name, commandline_map);
   } catch (const std::exception& ex) {
     LOG_ERROR << ex.what();
     ret_val = EXIT_FAILURE;
