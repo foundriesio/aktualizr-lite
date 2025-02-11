@@ -42,7 +42,7 @@ int run_daemon(LiteClient& client, uint64_t interval, bool return_on_sleep, bool
         LOG_INFO << "Going to install " << gti_res.selected_target.Name() << ". Reason: " << gti_res.reason;
         // A target is supposed to be installed
         auto install_result =
-            akclient.PullAndInstall(gti_res.selected_target, gti_res.reason, "", InstallMode::All, nullptr, true,
+            akclient.PullAndInstall(gti_res.selected_target, gti_res.reason, "", InstallMode::All, nullptr, true, true,
                                     gti_res.status == GetTargetToInstallResult::Status::UpdateNewVersion);
         if (akclient.RebootIfRequired()) {
           // no point to continue running TUF cycle (check for update, download, install)
