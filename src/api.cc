@@ -677,6 +677,19 @@ class LiteInstall : public InstallContext {
       return InstallResult{InstallResult::Status::DownloadFailed, ""};
     }
 
+    // Update the target's custom data with a list of apps considered for an update taking into account
+    // the target's app list and the current .toml configuration.
+    auto custom{target_->custom_data()};
+    Json::Value app_list_json;
+    for (const auto& app :
+         ComposeAppManager::getRequiredApps(ComposeAppManager::Config(client_->config.pacman), *target_)) {
+      app_list_json[app.first] = app.second;
+    }
+    if (!app_list_json.empty()) {
+      custom["install-context"]["apps"] = app_list_json;
+    }
+    target_->updateCustom(custom);
+
     auto rc = client_->install(*target_, mode_);
     auto status = InstallResult::Status::Failed;
     if (rc == data::ResultCode::Numeric::kNeedCompletion) {

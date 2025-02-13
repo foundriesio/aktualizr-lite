@@ -28,17 +28,53 @@
 
 using ::testing::NiceMock;
 
+class FakeAppEngine {
+ public:
+  using Ptr = std::shared_ptr<FakeAppEngine>;
+
+  AppEngine::Result fetch(const AppEngine::App& app) {
+    fetched_apps.insert(app.name);
+    return true;
+  }
+  bool isFetched(const AppEngine::App& app) const { return fetched_apps.count(app.name) > 0; }
+  AppEngine::Result run(const AppEngine::App& app) {
+    running_apps.insert(app.name);
+    return true;
+  }
+  bool isRunning(const AppEngine::App& app) const { return running_apps.count(app.name) > 0; }
+
+ private:
+  std::set<std::string> fetched_apps;
+  std::set<std::string> running_apps;
+};
+
+class MockApiAppEngine : public fixtures::MockAppEngine {
+ public:
+  MockApiAppEngine(FakeAppEngine::Ptr fake_app_engine) : fixtures::MockAppEngine(), fake_app_engine_{fake_app_engine} {
+    if (fake_app_engine_) {
+      ON_CALL(*this, fetch).WillByDefault([this](const App& app) { return fake_app_engine_->fetch(app); });
+      ON_CALL(*this, isFetched).WillByDefault([this](const App& app) { return fake_app_engine_->isFetched(app); });
+      ON_CALL(*this, run).WillByDefault([this](const App& app) { return fake_app_engine_->run(app); });
+      ON_CALL(*this, isRunning).WillByDefault([this](const App& app) { return fake_app_engine_->isRunning(app); });
+    }
+  }
+
+ private:
+  FakeAppEngine::Ptr fake_app_engine_;
+};
+
 class ApiClientTest : public fixtures::ClientTest {
  protected:
   std::shared_ptr<fixtures::LiteClientMock> createLiteClient(
       InitialVersion initial_version = InitialVersion::kOn,
       boost::optional<std::vector<std::string>> apps = boost::none, bool finalize = true) override {
-    app_engine_mock_ = std::make_shared<NiceMock<fixtures::MockAppEngine>>();
+    app_engine_mock_ = std::make_shared<NiceMock<MockApiAppEngine>>(fake_app_engine_);
     lite_client_ = ClientTest::createLiteClient(app_engine_mock_, initial_version, apps);
     return lite_client_;
   }
 
-  std::shared_ptr<NiceMock<fixtures::MockAppEngine>>& getAppEngine() { return app_engine_mock_; }
+  std::shared_ptr<NiceMock<MockApiAppEngine>>& getAppEngine() { return app_engine_mock_; }
+  void setFakeAppEngine(FakeAppEngine::Ptr fake_app_engine) { fake_app_engine_ = fake_app_engine; }
   bool resetEvents() { return getDeviceGateway().resetEvents(lite_client_->http_client); }
   void tweakConf(Config& conf) override {
     if (!pacman_type_.empty()) {
@@ -56,7 +92,8 @@ class ApiClientTest : public fixtures::ClientTest {
   }
 
  private:
-  std::shared_ptr<NiceMock<fixtures::MockAppEngine>> app_engine_mock_;
+  std::shared_ptr<NiceMock<MockApiAppEngine>> app_engine_mock_;
+  FakeAppEngine::Ptr fake_app_engine_;
   std::shared_ptr<fixtures::LiteClientMock> lite_client_;
   std::string pacman_type_;
 };
@@ -711,6 +748,76 @@ TEST_F(ApiClientTest, ExtApiSeparatePullAndInstall) {
   result = rebooted_client.GetTargetToInstall(ci_res);
   ASSERT_TRUE(result.selected_target.IsUnknown());
   ASSERT_EQ(result.status, GetTargetToInstallResult::Status::NoUpdate);
+}
+
+TEST_F(ApiClientTest, InstallIfNewAppInUpdatedConfig) {
+  auto fake_app_engine{std::make_shared<FakeAppEngine>()};
+  setFakeAppEngine(fake_app_engine);
+
+  std::vector<std::string> app_shortlist{"app-01"};
+  setAppShortlist(app_shortlist);
+  auto liteclient = createLiteClient(InitialVersion::kOff, app_shortlist);
+  ASSERT_TRUE(targetsMatch(liteclient->getCurrent(), getInitialTarget()));
+  std::vector<AppEngine::App> apps{{"app-01", "app-01-URI"}, {"app-02", "app-02-URI"}};
+
+  {
+    auto new_target = createTarget(&apps);
+    AkliteClient client(liteclient);
+
+    EXPECT_CALL(*getAppEngine(), fetch).Times(1);
+    EXPECT_CALL(*getAppEngine(), install).Times(1);
+
+    auto result = client.CheckIn();
+    ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+
+    auto latest = result.GetLatest();
+    auto installer = client.Installer(latest, "", "", InstallMode::All);
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::NeedsCompletion, iresult.status);
+
+    // Make sure that only "app-01" is fetched
+    EXPECT_TRUE(fake_app_engine->isFetched(apps[0]));
+    EXPECT_FALSE(fake_app_engine->isFetched(apps[1]));
+    EXPECT_FALSE(fake_app_engine->isRunning(apps[0]));
+    EXPECT_FALSE(fake_app_engine->isRunning(apps[1]));
+  }
+
+  // Add "app-02" to the `compose_apps` list before device booting on a new ostree version
+  setAppShortlist({"app-01", "app-02"});
+  reboot(liteclient);
+
+  {
+    AkliteClient client(liteclient);
+    // Complete installation (aka finalize) and make sure it is successful
+    auto ciresult = client.CompleteInstallation();
+    ASSERT_EQ(InstallResult::Status::Ok, ciresult.status);
+
+    // Make sure only "app-01" is installed and running
+    EXPECT_TRUE(fake_app_engine->isFetched(apps[0]));
+    EXPECT_FALSE(fake_app_engine->isFetched(apps[1]));
+    EXPECT_TRUE(fake_app_engine->isRunning(apps[0]));
+    EXPECT_FALSE(fake_app_engine->isRunning(apps[1]));
+
+    // Now, check if target is in sync, it should not since the new app (app-02)
+    // was added to the app list. So, get the installer to sync/update the new app,
+    // do update and make sure it is successful
+    auto installer{client.CheckAppsInSync()};
+    ASSERT_NE(nullptr, installer);
+    auto dresult = installer->Download();
+    ASSERT_EQ(DownloadResult::Status::Ok, dresult.status);
+    auto iresult = installer->Install();
+    ASSERT_EQ(InstallResult::Status::Ok, iresult.status);
+
+    // Make sure both apps are fetched and running
+    EXPECT_TRUE(fake_app_engine->isFetched(apps[0]));
+    EXPECT_TRUE(fake_app_engine->isFetched(apps[1]));
+    EXPECT_TRUE(fake_app_engine->isRunning(apps[0]));
+    EXPECT_TRUE(fake_app_engine->isRunning(apps[1]));
+  }
 }
 
 int main(int argc, char** argv) {
