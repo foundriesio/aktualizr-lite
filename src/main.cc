@@ -12,6 +12,7 @@
 #include <boost/program_options.hpp>
 
 #include "aktualizr-lite/cli/cli.h"
+#include "composeappmanager.h"
 #include "crypto/keymanager.h"
 #include "helpers.h"
 #include "http/httpclient.h"
@@ -205,6 +206,18 @@ static std::tuple<data::ResultCode::Numeric, DownloadResultWithStat, std::string
     LOG_ERROR << "Downloaded target is invalid";
     return {res.result_code.num_code, download_res, target.correlation_id()};
   }
+
+  // Update the target's custom data with a list of apps considered for an update taking into account
+  // the target's app list and the current .toml configuration.
+  auto custom{target.custom_data()};
+  Json::Value app_list_json;
+  for (const auto& app : ComposeAppManager::getRequiredApps(ComposeAppManager::Config(client.config.pacman), target)) {
+    app_list_json[app.first] = app.second;
+  }
+  if (!app_list_json.empty()) {
+    custom["install-context"]["apps"] = app_list_json;
+  }
+  target.updateCustom(custom);
 
   return {client.install(target), download_res, target.correlation_id()};
 }

@@ -461,8 +461,26 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
     } else {
       LOG_INFO << "Installing and starting Apps...";
     }
+
+    const auto install_context{target.custom_data().get("install-context", Json::nullValue)};
+    std::string newly_enabled_apps_msg;
     // "finalize" (run) Apps that were pulled and created before reboot
     for (const auto& app_pair : getApps(target)) {
+      if (!install_context.empty() && install_context.isMember("apps")) {
+        if (!(install_context["apps"].isMember(app_pair.first) &&
+              install_context["apps"][app_pair.first] == app_pair.second)) {
+          LOG_INFO << app_pair.first
+                   << " was enabled after the update reboot; skipping its start during finalization."
+                      " Re-run the update to fetch and install the newly enabled apps.";
+          if (!newly_enabled_apps_msg.empty()) {
+            newly_enabled_apps_msg += ", " + app_pair.first;
+          } else {
+            newly_enabled_apps_msg = "\n# Newly enabled apps are detected: " + app_pair.first;
+          }
+          continue;
+        }
+      }
+
       const AppEngine::Result run_res = app_engine_->run({app_pair.first, app_pair.second});
       if (!run_res) {
         const std::string err_desc{boost::str(
@@ -473,6 +491,7 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
         // Do we need to set some flag for the uboot and trigger a system reboot in order to boot on a previous
         // ostree version, hence a proper/full rollback happens???
         ir.description += ", however " + err_desc;
+        ir.description += newly_enabled_apps_msg;
         ir.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
         // this is a hack to distinguish between ostree install (rollback) and App start failures.
         // data::ResultCode::Numeric::kInstallFailed - boot on a new ostree version failed (rollback at boot)
@@ -493,6 +512,9 @@ data::InstallationResult ComposeAppManager::finalizeInstall(const Uptane::Target
                     });
 
       app_engine_->prune(app_shortlist);
+    }
+    if (!newly_enabled_apps_msg.empty()) {
+      ir.description += newly_enabled_apps_msg;
     }
   }
 
