@@ -49,7 +49,7 @@ class LiteClient {
   void checkForUpdatesEnd(const Uptane::Target& target);
   void checkForUpdatesEndWithFailure(const std::string& err);
   bool finalizeInstall(data::InstallationResult* ir = nullptr);
-  Uptane::Target getRollbackTarget(bool ignore_ostree_hash = false, bool allow_current = true);
+  Uptane::Target getRollbackTarget();
   DownloadResult download(const Uptane::Target& target, const std::string& reason);
   data::ResultCode::Numeric install(const Uptane::Target& target, InstallMode install_mode = InstallMode::All);
   void notifyInstallFinished(const Uptane::Target& t, data::InstallationResult& ir);

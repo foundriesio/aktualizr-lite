@@ -301,7 +301,7 @@ class AkliteClient {
    * able to start it's Apps after rebooting from an ostree change. This
    * situation is only possible when `pacman.create_containers_before_reboot = 0`.
    */
-  TufTarget GetRollbackTarget(bool ignore_ostree_hash = false, bool allow_current = true) const;
+  TufTarget GetRollbackTarget() const;
 
   /**
    * Check in with device-gateway to get server managed information about

@@ -94,8 +94,6 @@ class AkliteClientExt : public AkliteClient {
                                const LocalUpdateSource *local_update_source = nullptr, bool do_download = true,
                                bool do_install = true, bool require_target_in_tuf = true);
 
-  InstallResult Rollback(const LocalUpdateSource *local_update_source);
-
   bool RebootIfRequired();
 
  private:

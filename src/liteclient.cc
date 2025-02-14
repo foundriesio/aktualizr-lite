@@ -243,19 +243,18 @@ bool LiteClient::finalizeInstall(data::InstallationResult* ir) {
   return ret.result_code.num_code == data::ResultCode::Numeric::kOk;
 }
 
-Uptane::Target LiteClient::getRollbackTarget(bool ignore_ostree_hash, bool allow_current) {
-  const auto rollback_hash{ignore_ostree_hash ? ""
-                                              : sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kRollback)};
+Uptane::Target LiteClient::getRollbackTarget() {
+  const auto rollback_hash{sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kRollback)};
 
   Uptane::Target rollback_target{Uptane::Target::Unknown()};
   {
     std::vector<Uptane::Target> installed_versions;
-    storage->loadPrimaryInstallationLog(
-        &installed_versions, true /* make sure that Target has been successfully installed */, allow_current);
+    storage->loadPrimaryInstallationLog(&installed_versions,
+                                        true /* make sure that Target has been successfully installed */);
 
     std::vector<Uptane::Target>::reverse_iterator it;
     for (it = installed_versions.rbegin(); it != installed_versions.rend(); it++) {
-      if (ignore_ostree_hash || it->sha256Hash() == rollback_hash) {
+      if (it->sha256Hash() == rollback_hash) {
         rollback_target = *it;
         break;
       }

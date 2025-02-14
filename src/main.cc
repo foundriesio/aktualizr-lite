@@ -214,23 +214,6 @@ static int cli_complete_install(LiteClient& client, const bpo::variables_map& pa
   return static_cast<int>(aklite::cli::CompleteInstall(akclient));
 }
 
-static int cli_rollback(LiteClient& client, const bpo::variables_map& params) {
-  LocalUpdateSource local_update_source;
-  std::string src_dir;
-  if (params.count("src-dir") > 0) {
-    src_dir = params.at("src-dir").as<std::string>();
-  }
-  if (!src_dir.empty()) {
-    fillUpdateSource(local_update_source, src_dir);
-  }
-
-  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  // Setting apply_lock parameter to false, since we already took the FileLock above
-  AkliteClientExt akclient{client_ptr, false, true};
-
-  return static_cast<int>(aklite::cli::Rollback(akclient, src_dir.empty() ? nullptr : &local_update_source));
-}
-
 struct Cmd {
   const std::string name;
   const std::string description;
@@ -248,8 +231,8 @@ static const std::array<Cmd, 10> commands = {{
     {"status", "Show information of the target currently running on the device", status_main},
     {"finalize", "Finalize installation by starting the updated apps", cli_complete_install},
     {"run", "Alias for the finalize command", cli_complete_install},
-    {"rollback", "Rollback to the previous successfully installed target", cli_rollback},
 }};
+
 // clang-format on
 std::string get_cmds_list() {
   std::string ret;

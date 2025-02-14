@@ -1126,9 +1126,7 @@ InstallResult AkliteClient::CompleteInstallation() {
   return complete_install_res;
 }
 
-TufTarget AkliteClient::GetRollbackTarget(bool ignore_ostree_hash, bool allow_current) const {
-  return Target::toTufTarget(client_->getRollbackTarget(ignore_ostree_hash, allow_current));
-}
+TufTarget AkliteClient::GetRollbackTarget() const { return Target::toTufTarget(client_->getRollbackTarget()); }
 
 bool AkliteClient::IsRollback(const TufTarget& t) const {
   Json::Value target_json;
