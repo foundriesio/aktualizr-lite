@@ -248,7 +248,7 @@ static const std::array<Cmd, 10> commands = {{
     {"status", "Show information of the target currently running on the device", status_main},
     {"finalize", "Finalize installation by starting the updated apps", cli_complete_install},
     {"run", "Alias for the finalize command", cli_complete_install},
-    {"rollback", "Rollback to the previous successfully installed target", cli_rollback},
+    {"rollback", "Rollback to the previous successfully installed target [experimental]", cli_rollback},
 }};
 // clang-format on
 std::string get_cmds_list() {
