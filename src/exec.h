@@ -1,7 +1,7 @@
 #ifndef AKTUALIZR_LITE_EXEC_H_
 #define AKTUALIZR_LITE_EXEC_H_
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/process.hpp>
@@ -21,15 +21,15 @@ static void exec(const std::string& cmd, const std::string& err_msg_prefix, Args
   // Implementation is based on test_utils.cc:Process::spawn that has been proven over time
   std::future<std::string> err_output;
   std::future<int> child_process_exit_code;
-  boost::asio::io_service io_service;
+  boost::asio::io_context io_context;
 
   try {
     LOG_DEBUG << "Running: `" << cmd << "`";
     boost::process::child child_process(cmd, boost::process::std_err > err_output,
-                                        boost::process::on_exit = child_process_exit_code, io_service,
+                                        boost::process::on_exit = child_process_exit_code, io_context,
                                         std::forward<Args>(args)...);
 
-    io_service.run();
+    io_context.run();
 
     bool wait_successfull = child_process.wait_for(std::chrono::seconds(900));
     if (!wait_successfull) {
