@@ -315,7 +315,7 @@ InstallResult AkliteClientExt::Rollback(const LocalUpdateSource* local_update_so
   storage->saveInstalledVersion("", Target::fromTufTarget(bad_target), InstalledVersionUpdateMode::kBadTarget);
 
   // Get rollback target
-  auto rollback_target = GetRollbackTarget(true, installation_in_progress);
+  auto rollback_target = GetRollbackTarget(installation_in_progress);
   if (rollback_target.IsUnknown()) {
     LOG_ERROR << "Failed to find Target to rollback to";
     return {InstallResult::Status::Failed};
