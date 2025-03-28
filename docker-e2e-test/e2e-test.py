@@ -249,7 +249,7 @@ compose_apps = "{apps_str}"
         sota_toml_content = f.read()
 
     if not "callback_program" in sota_toml_content:
-        sota_toml_content = sota_toml_content.replace("[pacman]", '[pacman]\ncallback_program = "/var/sota/callback.sh"')
+        sota_toml_content = sota_toml_content.replace("[pacman]", '[pacman]\ncallback_program = "/var/sota/callback.sh"\nstorage_watermark = "95"')
         with open("/var/sota/sota.toml", "w") as f:
             f.write(sota_toml_content)
 
