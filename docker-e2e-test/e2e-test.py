@@ -94,6 +94,7 @@ callback_log_path = "/var/sota/callback_log.txt"
 # Test modes
 offline = False
 single_step = True
+delay_app_install = False
 prune = True
 
 
@@ -362,10 +363,12 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
     # assert cp.returncode == ReturnCodes.InstallAppPullFailure
     # verify_callback([])
 
+    cmd = ['install']
     if explicit_version:
-        cp = invoke_aklite(['install', str(target.actual_version)]) # OK
-    else:
-        cp = invoke_aklite(['install']) # OK
+        cmd.append(str(target.actual_version))
+    if delay_app_install:
+        cmd.append("--install-mode=delay-app-install")
+    cp = invoke_aklite(cmd)
     if target.install_rollback:
         assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
         verify_callback([("install-pre", ""), ("install-post", "FAILED"), ("install-pre", ""), ("install-post", "OK")])
@@ -398,28 +401,76 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
                 })
     else:
         if target.run_rollback:
-            assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
-            verify_callback([
-                ("install-pre", ""), ("install-post", "FAILED"),
-                ("install-pre", ""), ("install-post", "OK")
-                ])
-            verify_events(target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', False),
-            }, True)
+            if delay_app_install:
+                assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization, cp.stdout.decode("utf-8")
+                verify_callback([
+                    ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")
+                    ])
 
-            verify_events(final_target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', True),
-            }, False)
+                verify_events(target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationApplied', None),
+                })
+                cp = invoke_aklite(['run'])
+                assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
+                verify_callback([
+                    ("install-final-pre", ""), ("install-post", "FAILED"),
+                    ("install-pre", ""), ("install-post", "OK")
+                ])
+
+                verify_events(target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationApplied', None),
+                    ('EcuInstallationCompleted', False),
+                }, True)
+
+                verify_events(final_target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationCompleted', True),
+                }, False)
+
+            else:
+                assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
+                verify_callback([
+                    ("install-pre", ""), ("install-post", "FAILED"),
+                    ("install-pre", ""), ("install-post", "OK")
+                    ])
+                verify_events(target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationCompleted', False),
+                }, True)
+
+                verify_events(final_target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationCompleted', True),
+                }, False)
 
         else:
-            assert cp.returncode == ReturnCodes.Ok
-            verify_callback([("install-pre", ""), ("install-post", "OK")])
-            verify_events(target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', True),
-            })
+            if delay_app_install:
+                assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization
+                verify_callback([
+                    ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")
+                    ])
+
+                verify_events(target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationApplied', None),
+                })
+                cp = invoke_aklite(['run'])
+                assert cp.returncode == ReturnCodes.Ok
+                verify_callback([("install-final-pre", ""), ("install-post", "OK")])
+                verify_events(target.actual_version, {
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationApplied', None),
+                        ('EcuInstallationCompleted', True),
+                    })
+            else:
+                assert cp.returncode == ReturnCodes.Ok
+                verify_callback([("install-pre", ""), ("install-post", "OK")])
+                verify_events(target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationCompleted', True),
+                })
 
     if (requires_reboot and not do_reboot):
         assert aklite_current_version() == previous_target.actual_version, cp.stdout.decode("utf-8")
@@ -440,10 +491,12 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
         final_target = target
     requires_reboot = previous_target.ostree_image_version != final_target.ostree_image_version
 
+    cmd = ['update']
     if explicit_version:
-        cp = invoke_aklite(['update', str(target.actual_version)])
-    else:
-        cp = invoke_aklite(['update'])
+        cmd.append(str(target.actual_version))
+    if delay_app_install:
+        cmd.append("--install-mode=delay-app-install")
+    cp = invoke_aklite(cmd)
 
     if target.install_rollback:
         assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
@@ -491,38 +544,99 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
                 })
     else:
         if target.run_rollback:
-            assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
-            verify_callback([
-                ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
-                ("download-pre", ""), ("download-post", "OK"),
-                ("install-pre", ""), ("install-post", "FAILED"),
-                ("install-pre", ""), ("install-post", "OK")
-                ])
-            verify_events(target.actual_version, {
-                ('EcuDownloadStarted', None),
-                ('EcuDownloadCompleted', True),
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', False),
-            }, True)
+            if delay_app_install:
+                assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization, cp.stdout.decode("utf-8")
+                verify_callback([
+                    ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
+                    ("download-pre", ""), ("download-post", "OK"),
+                    ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")
+                    ])
 
-            verify_events(final_target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', True),
-            }, False)
+                verify_events(target.actual_version, {
+                    ('EcuDownloadStarted', None),
+                    ('EcuDownloadCompleted', True),
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationApplied', None),
+                })
+
+                cp = invoke_aklite(['run'])
+                assert cp.returncode == ReturnCodes.InstallRollbackOk
+                verify_callback([
+                    ("install-final-pre", ""), ("install-post", "FAILED"),
+                    ("install-pre", ""), ("install-post", "OK")
+                ])
+
+                verify_events(target.actual_version, {
+                    ('EcuDownloadStarted', None),
+                    ('EcuDownloadCompleted', True),
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationApplied', None),
+                    ('EcuInstallationCompleted', False),
+                }, True)
+
+                verify_events(final_target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationCompleted', True),
+                }, False)
+
+            else:
+                assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
+                verify_callback([
+                    ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
+                    ("download-pre", ""), ("download-post", "OK"),
+                    ("install-pre", ""), ("install-post", "FAILED"),
+                    ("install-pre", ""), ("install-post", "OK")
+                    ])
+                verify_events(target.actual_version, {
+                    ('EcuDownloadStarted', None),
+                    ('EcuDownloadCompleted', True),
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationCompleted', False),
+                }, True)
+
+                verify_events(final_target.actual_version, {
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationCompleted', True),
+                }, False)
 
         else:
-            assert cp.returncode == ReturnCodes.Ok
-            verify_callback([
-                ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
-                ("download-pre", ""), ("download-post", "OK"),
-                ("install-pre", ""), ("install-post", "OK")
-                ])
-            verify_events(target.actual_version, {
-                ('EcuDownloadStarted', None),
-                ('EcuDownloadCompleted', True),
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', True),
-            })
+            if delay_app_install:
+                assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization
+                verify_callback([
+                    ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
+                    ("download-pre", ""), ("download-post", "OK"),
+                    ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")
+                    ])
+
+                verify_events(target.actual_version, {
+                    ('EcuDownloadStarted', None),
+                    ('EcuDownloadCompleted', True),
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationApplied', None),
+                })
+                cp = invoke_aklite(['run'])
+                assert cp.returncode == ReturnCodes.Ok
+                verify_callback([("install-final-pre", ""), ("install-post", "OK")])
+                verify_events(target.actual_version, {
+                        ('EcuDownloadStarted', None),
+                        ('EcuDownloadCompleted', True),
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationApplied', None),
+                        ('EcuInstallationCompleted', True),
+                    })
+            else:
+                assert cp.returncode == ReturnCodes.Ok
+                verify_callback([
+                    ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
+                    ("download-pre", ""), ("download-post", "OK"),
+                    ("install-pre", ""), ("install-post", "OK")
+                    ])
+                verify_events(target.actual_version, {
+                    ('EcuDownloadStarted', None),
+                    ('EcuDownloadCompleted', True),
+                    ('EcuInstallationStarted', None),
+                    ('EcuInstallationCompleted', True),
+                })
     if (requires_reboot and not do_reboot):
         assert aklite_current_version() == previous_target.actual_version, cp.stdout.decode("utf-8")
     else:
@@ -618,7 +732,7 @@ def do_rollback(target: Target, requires_reboot: bool, installation_in_progress:
 
 def restore_system_state():
     # Get to the starting point
-    logger.info(f"Restoring base environment. Offline={offline}, SingleStep={single_step}, Prune={prune}...")
+    logger.info(f"Restoring base environment. Offline={offline}, SingleStep={single_step}, DelayAppsInstall={delay_app_install}, Prune={prune}...")
     write_settings()
     sys_reboot()
     cp = invoke_aklite(['run'])
@@ -659,7 +773,7 @@ def run_test_sequence_incremental():
         if target.build_error: # skip this one for now
             continue
 
-        logger.info(f"Updating to {target.actual_version} {target}. SingleStep={single_step}, Offline={offline}")
+        logger.info(f"Updating to {target.actual_version} {target}. SingleStep={single_step}, Offline={offline} DelayAppsInstall={delay_app_install}")
         write_settings(apps, prune)
         install_target(target)
         check_running_apps(apps)
@@ -706,10 +820,12 @@ def test_apps_selection():
 
 @pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
-def test_incremental_updates(offline_, single_step_):
-    global offline, single_step
+@pytest.mark.parametrize('delay_app_install_', [True, False])
+def test_incremental_updates(offline_, single_step_, delay_app_install_):
+    global offline, single_step, delay_app_install
     offline = offline_
     single_step = single_step_
+    delay_app_install = delay_app_install_
     run_test_sequence_incremental()
 
 @pytest.mark.parametrize('offline_', [True, False])
