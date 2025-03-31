@@ -262,6 +262,9 @@ StatusCode CompleteInstall(AkliteClient &client) {
       if (rir.status == InstallResult::Status::NeedsCompletion) {
         LOG_INFO << "Successfully installed the rollback Target, reboot is required to complete it";
         return StatusCode::InstallRollbackNeedsReboot;
+      } else if (rir.status == InstallResult::Status::Ok) {
+        LOG_INFO << "Successfully installed the rollback Target";
+        return StatusCode::InstallRollbackOk;
       }
       LOG_ERROR << "Failed to rollback to " << rollback_target.Name() << " try to install another Target";
       return StatusCode::InstallRollbackFailed;

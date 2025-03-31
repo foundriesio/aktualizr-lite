@@ -240,23 +240,16 @@ bool LiteClient::finalizeInstall(data::InstallationResult* ir) {
 }
 
 Uptane::Target LiteClient::getRollbackTarget() {
-  const auto rollback_hash{sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kRollback)};
+  std::vector<Uptane::Target> installed_versions;
+  storage->loadPrimaryInstallationLog(&installed_versions,
+                                      true /* make sure that Target has been successfully installed */);
 
-  Uptane::Target rollback_target{Uptane::Target::Unknown()};
-  {
-    std::vector<Uptane::Target> installed_versions;
-    storage->loadPrimaryInstallationLog(&installed_versions,
-                                        true /* make sure that Target has been successfully installed */);
-
-    std::vector<Uptane::Target>::reverse_iterator it;
-    for (it = installed_versions.rbegin(); it != installed_versions.rend(); it++) {
-      if (it->sha256Hash() == rollback_hash) {
-        rollback_target = *it;
-        break;
-      }
-    }
+  if (installed_versions.empty()) {
+    LOG_WARNING << "No fully installed target found to rollback to";
+    return Uptane::Target::Unknown();
+  } else {
+    return installed_versions.back();
   }
-  return rollback_target;
 }
 
 void LiteClient::callback(const char* msg, const Uptane::Target& install_target, const std::string& result) {
