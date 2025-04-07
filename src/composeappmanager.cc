@@ -249,7 +249,13 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
 ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const Uptane::Target& target) {
   AppsSyncReason apps_and_reasons;
   std::set<std::string> fetched_apps;
-  cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, apps_and_reasons, fetched_apps);
+  if (!cfg_.force_update) {
+    cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, apps_and_reasons, fetched_apps);
+  } else {
+    LOG_INFO << "All Apps are forced to be updated...";
+    cur_apps_to_fetch_and_update_ = getApps(target);
+  }
+
   if (!!cfg_.reset_apps) {
     cur_apps_to_fetch_ = getAppsToFetch(target, true, &cur_apps_to_fetch_and_update_, &fetched_apps);
   }
