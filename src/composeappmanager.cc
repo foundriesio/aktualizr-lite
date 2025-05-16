@@ -197,6 +197,8 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
   return apps;
 }
 
+bool ComposeAppManager::isAppRunning(const AppEngine::App& app) { return app_engine_->isRunning(app); }
+
 ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane::Target& t,
                                                                     AppsSyncReason& apps_and_reasons,
                                                                     std::set<std::string>& fetched_apps) const {
