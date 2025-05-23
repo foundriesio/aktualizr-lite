@@ -819,9 +819,9 @@ def run_test_sequence_apps_selection():
 def test_apps_selection():
     run_test_sequence_apps_selection()
 
-@pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('delay_app_install_', [True, False])
+@pytest.mark.parametrize('offline_', [True, False])
 def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
     global offline, single_step, delay_app_install
     offline = offline_
@@ -829,8 +829,8 @@ def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_insta
     delay_app_install = delay_app_install_
     run_test_sequence_incremental()
 
-@pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
+@pytest.mark.parametrize('offline_', [True, False])
 def test_update_to_latest(offline_: bool, single_step_: bool):
     global offline, single_step
     offline = offline_
@@ -887,16 +887,16 @@ def run_test_deamon_auto_downgrade():
         expected_callbacks += [("download-pre", ""), ("download-post", "OK"), ("install-pre", ""), ("install-post", "FAILED"), ("install-pre", ""), ("install-post", "OK")]
     verify_callback(expected_callbacks)
 
-@pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
+@pytest.mark.parametrize('offline_', [True, False])
 def test_tag_switch(offline_: bool, single_step_: bool):
     global offline, single_step
     offline = offline_
     single_step = single_step_
     run_test_switch_tag()
 
-@pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
+@pytest.mark.parametrize('offline_', [True, False])
 def test_auto_downgrade(offline_: bool, single_step_: bool):
     global offline, single_step
     offline = offline_
@@ -932,10 +932,10 @@ def run_test_rollback(do_reboot: bool, do_finalize: bool):
     logger.info("Performing additional rollback operation, on already rolled back environment")
     do_rollback(all_primary_tag_targets[Target.First], True, False)
 
-@pytest.mark.parametrize('offline_', [True, False])
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('do_reboot', [True, False])
 @pytest.mark.parametrize('do_finalize', [True, False])
+@pytest.mark.parametrize('offline_', [True, False])
 def test_rollback(do_reboot: bool, do_finalize: bool, offline_: bool, single_step_: bool):
     if not do_reboot and do_finalize:
         return
