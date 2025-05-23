@@ -16,6 +16,7 @@ from http import HTTPStatus
 from requests.exceptions import HTTPError
 import os
 import requests
+import shutil
 import subprocess
 import sys
 import time
@@ -26,6 +27,12 @@ aklite_path = os.path.abspath(os.getcwd())
 
 fiopush_cmd = "fiopush"
 fioctl_cmd = "fioctl"
+ostree_cmd = "ostree"
+
+for cmd in [fiopush_cmd, fioctl_cmd, ostree_cmd]:
+    if shutil.which(cmd) is None:
+        print(f"{cmd} not found. Install it before running this script.")
+        sys.exit()
 
 # Experimental mode for creating apps targets without relying on CI builds
 use_custom_app_targets = False
@@ -73,7 +80,7 @@ def create_ostree_repo():
                 with open(ostree_version_txt, 'w') as f:
                         f.write(f"OSTREE_{ostree_version}")
 
-                sp = subprocess.run(["ostree", "--repo=repo", "commit", "--branch=main", tree_path], capture_output=True)
+                sp = subprocess.run([ostree_cmd, "--repo=repo", "commit", "--branch=main", tree_path], capture_output=True)
                 ostree_hashes[ostree_version] = sp.stdout.decode('utf-8').strip()
 
         for ostree_version in ostree_hashes:
