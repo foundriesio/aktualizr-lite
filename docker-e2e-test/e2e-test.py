@@ -333,7 +333,7 @@ def cleanup_installed_data():
 
 def install_with_separate_steps(target: Target, explicit_version=True, do_reboot=True, do_finalize=True):
     cp = invoke_aklite(['check', '--json', '1'])
-    assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion
+    assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion, cp.stdout.decode("utf-8")
     verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
     previous_target = get_target_for_actual_version(aklite_current_version())
@@ -347,7 +347,7 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
         cp = invoke_aklite(['pull', str(target.actual_version)])
     else:
         cp = invoke_aklite(['pull'])
-    assert cp.returncode == ReturnCodes.Ok
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
     verify_callback([("download-pre", ""), ("download-post", "OK")])
     verify_events(target.actual_version, {
             ('EcuDownloadStarted', None),
@@ -382,7 +382,7 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
         }, False)
 
     elif requires_reboot:
-        assert cp.returncode == ReturnCodes.InstallNeedsReboot
+        assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
         verify_callback([("install-pre", ""), ("install-post", "NEEDS_COMPLETION")])
         verify_events(target.actual_version, {
                 ('EcuInstallationStarted', None),
@@ -447,7 +447,7 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
 
         else:
             if delay_app_install:
-                assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization
+                assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization, cp.stdout.decode("utf-8")
                 verify_callback([
                     ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")
                     ])
@@ -457,7 +457,7 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
                     ('EcuInstallationApplied', None),
                 })
                 cp = invoke_aklite(['run'])
-                assert cp.returncode == ReturnCodes.Ok
+                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
                 verify_callback([("install-final-pre", ""), ("install-post", "OK")])
                 verify_events(target.actual_version, {
                         ('EcuInstallationStarted', None),
@@ -465,7 +465,7 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
                         ('EcuInstallationCompleted', True),
                     })
             else:
-                assert cp.returncode == ReturnCodes.Ok
+                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
                 verify_callback([("install-pre", ""), ("install-post", "OK")])
                 verify_events(target.actual_version, {
                     ('EcuInstallationStarted', None),
@@ -480,7 +480,7 @@ def install_with_separate_steps(target: Target, explicit_version=True, do_reboot
     if not explicit_version:
         # Make sure we would not try a new install, after trying to install the latest one
         cp = invoke_aklite(['check', '--json', '1'])
-        assert cp.returncode == ReturnCodes.Ok
+        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
         verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
 def install_with_single_step(target: Target, explicit_version=True, do_reboot=True, do_finalize=True):
@@ -517,7 +517,7 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
         }, False)
 
     elif requires_reboot:
-        assert cp.returncode == ReturnCodes.InstallNeedsReboot
+        assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
         verify_callback([
                 ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
                 ("download-pre", ""), ("download-post", "OK"),
@@ -560,7 +560,7 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
                 })
 
                 cp = invoke_aklite(['run'])
-                assert cp.returncode == ReturnCodes.InstallRollbackOk
+                assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
                 verify_callback([
                     ("install-final-pre", ""), ("install-post", "FAILED"),
                     ("install-pre", ""), ("install-post", "OK")
@@ -601,7 +601,7 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
 
         else:
             if delay_app_install:
-                assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization
+                assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization, cp.stdout.decode("utf-8")
                 verify_callback([
                     ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
                     ("download-pre", ""), ("download-post", "OK"),
@@ -615,7 +615,7 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
                     ('EcuInstallationApplied', None),
                 })
                 cp = invoke_aklite(['run'])
-                assert cp.returncode == ReturnCodes.Ok
+                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
                 verify_callback([("install-final-pre", ""), ("install-post", "OK")])
                 verify_events(target.actual_version, {
                         ('EcuDownloadStarted', None),
@@ -625,7 +625,7 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
                         ('EcuInstallationCompleted', True),
                     })
             else:
-                assert cp.returncode == ReturnCodes.Ok
+                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
                 verify_callback([
                     ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
                     ("download-pre", ""), ("download-post", "OK"),
@@ -645,7 +645,7 @@ def install_with_single_step(target: Target, explicit_version=True, do_reboot=Tr
     if not explicit_version:
         # Make sure we would not try a new install, after trying to install the latest one
         cp = invoke_aklite(['check', '--json', '1'])
-        assert cp.returncode == ReturnCodes.Ok
+        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
         verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
 def install_target(target: Target, explicit_version: bool=True, do_reboot: bool=True, do_finalize: bool=True):
@@ -748,7 +748,7 @@ def restore_system_state():
 
     logger.info("Making sure there are no targets in current DB...")
     cp = invoke_aklite(['list', '--json', '1'])
-    assert cp.returncode == ReturnCodes.CheckinSecurityError
+    assert cp.returncode == ReturnCodes.CheckinSecurityError, cp.stdout.decode("utf-8")
 
 # Incremental install order
 install_sequence_incremental = [
@@ -805,14 +805,14 @@ def run_test_sequence_apps_selection():
     write_settings(apps, prune)
     logger.info(f"Forcing apps sync for target {target.actual_version} {target}. {single_step=} {offline=}")
     cp = invoke_aklite(['update', str(target.actual_version)])
-    assert cp.returncode == ReturnCodes.Ok
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
     check_running_apps(apps)
 
     apps = all_apps
     write_settings(apps, prune)
     logger.info(f"Forcing apps sync for target {target.actual_version} {target}. {single_step=} {offline=}")
     cp = invoke_aklite(['update', str(target.actual_version)])
-    assert cp.returncode == ReturnCodes.Ok
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
     check_running_apps(apps)
 
 def test_apps_selection():
@@ -862,9 +862,9 @@ def run_test_auto_downgrade():
     write_settings(apps, prune)
     cp = invoke_aklite(['check', '--json', '1'])
     if auto_downgrade_enabled:
-        assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion
+        assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion, cp.stdout.decode("utf-8")
     else:
-        assert cp.returncode == ReturnCodes.Ok
+        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
     verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
     install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
@@ -880,7 +880,7 @@ def run_test_deamon_auto_downgrade():
     write_settings(apps, prune)
     os.environ["AKLITE_TEST_RETURN_ON_SLEEP"] = "1"
     cp = invoke_aklite(['daemon'])
-    assert cp.returncode == ReturnCodes.Ok
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
     expected_callbacks = [("check-for-update-pre", ""), ("check-for-update-post", "OK")]
     if auto_downgrade_enabled:
         expected_callbacks += [("download-pre", ""), ("download-post", "OK"), ("install-pre", ""), ("install-post", "FAILED"), ("install-pre", ""), ("install-post", "OK")]
