@@ -64,7 +64,13 @@ static int status_plain(LiteClient& client) {
     if (target.custom_version().length() > 0) {
       name = target.custom_version();
     }
-    client.logTarget("Active image is: ", target);
+
+    auto pending_target = client.getPendingTarget();
+    if (pending_target.IsValid() && pending_target.filename() == target.filename()) {
+      client.logTarget("Pending Target: ", target);
+    } else {
+      client.logTarget("Active image is: ", target);
+    }
   }
   return 0;
 }
