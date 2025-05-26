@@ -16,37 +16,45 @@ from http import HTTPStatus
 from requests.exceptions import HTTPError
 import os
 import requests
+import shutil
 import subprocess
 import sys
 import time
 import yaml
+from typing import Any, Dict, List, Optional, Tuple
 
 local_dir = os.path.abspath("e2e-test-targets")
 aklite_path = os.path.abspath(os.getcwd())
 
 fiopush_cmd = "fiopush"
 fioctl_cmd = "fioctl"
+ostree_cmd = "ostree"
+
+for cmd in [fiopush_cmd, fioctl_cmd, ostree_cmd]:
+    if shutil.which(cmd) is None:
+        print(f"{cmd} not found. Install it before running this script.")
+        sys.exit()
 
 # Experimental mode for creating apps targets without relying on CI builds
 use_custom_app_targets = False
 app_change_counter = 0
 
-user_token = os.getenv("USER_TOKEN")
+user_token = os.getenv("USER_TOKEN", "")
 if not user_token:
     print("USER_TOKEN environment variable not set")
     sys.exit()
 
-factory = os.getenv("FACTORY")
+factory = os.getenv("FACTORY", "")
 if not factory:
     print("FACTORY environment variable not set")
     sys.exit()
 
-tag = os.getenv("TAG")
+tag = os.getenv("TAG", "")
 if not tag:
     print("TAG environment variable not set")
     sys.exit()
 
-def create_ostree_repo():
+def create_ostree_repo() -> Tuple[str, Dict[int, str]]:
         if os.path.exists(local_dir):
                 raise Exception(f"{local_dir} directory already exists. Remove it before running")
 
@@ -62,7 +70,7 @@ def create_ostree_repo():
         os.mkdir(tree_path)
 
         ostree_version_txt = os.path.join(tree_path, "test_ostree.txt")
-        ostree_hashes = {}
+        ostree_hashes: Dict[int, str] = {}
         bad_ostree_versions = { 2, 5 }
         for ostree_version in range(1, 6):
                 make_sys_rootfs_cmd = os.path.join(aklite_path, "tests", "make_sys_rootfs.sh")
@@ -73,7 +81,7 @@ def create_ostree_repo():
                 with open(ostree_version_txt, 'w') as f:
                         f.write(f"OSTREE_{ostree_version}")
 
-                sp = subprocess.run(["ostree", "--repo=repo", "commit", "--branch=main", tree_path], capture_output=True)
+                sp = subprocess.run([ostree_cmd, "--repo=repo", "commit", "--branch=main", tree_path], capture_output=True)
                 ostree_hashes[ostree_version] = sp.stdout.decode('utf-8').strip()
 
         for ostree_version in ostree_hashes:
@@ -81,7 +89,8 @@ def create_ostree_repo():
         return repo_dir, ostree_hashes
 
 
-def add_tag_to_ci(tag):
+def add_tag_to_ci(tag: str):
+        ci_script_yaml: Any = None
         os.system(f"[ -d ci-scripts ] || git clone https://source.foundries.io/factories/{factory}/ci-scripts.git")
         with open("ci-scripts/factory-config.yml") as stream:
                 try:
@@ -104,10 +113,10 @@ def add_tag_to_ci(tag):
         os.system(f"git push")
         os.chdir("..")
 
-def set_offline_containers(enabled):
+def set_offline_containers(enabled: bool):
         os.system(f"[ -d ci-scripts ] || git clone https://source.foundries.io/factories/{factory}/ci-scripts.git")
 
-        ci_script_yaml = None
+        ci_script_yaml: Any = None
         with open("ci-scripts/factory-config.yml") as stream:
                 try:
                         ci_script_yaml = yaml.safe_load(stream)
@@ -127,12 +136,12 @@ def set_offline_containers(enabled):
         os.system(f"git push")
         os.chdir("..")
 
-def write_file(filename, content):
+def write_file(filename: str, content: str):
         with open(filename, "w") as stream:
                 stream.write(content)
 
 
-def create_app(base_http_port, http_instances_count, reference_app_base_port, break_build=False, script_suffix="", message_prefix=""):
+def create_app(base_http_port: int, http_instances_count: int, reference_app_base_port: Optional[int], break_build: bool = False, script_suffix: str = "", message_prefix: str = ""):
         # script_suffix is used to break execution of app
 
         app_name = f"shellhttpd_base_{base_http_port}"
@@ -209,7 +218,7 @@ services:
 
         os.chdir("..")
 
-def add_target(hash, tag, factory, first=False):
+def add_target(hash: str, tag: str, factory: str, first: bool = False):
         if first:
                 src_tag = "main"
         else:
@@ -224,9 +233,9 @@ def add_target(hash, tag, factory, first=False):
         else:
                 return int(version_line[0].split(":")[1].strip('" '))
 
-def push_apps(message, tag):
+def push_apps(message: str, tag: str):
         if use_custom_app_targets:
-                apps = []
+                apps: List[str] = []
                 subdirs = [f.path.strip("./") for f in os.scandir(".") if f.is_dir()]
                 for app_name in subdirs:
                         hash = ""
@@ -239,7 +248,7 @@ def push_apps(message, tag):
         else:
                 os.system(f"git add *; git commit --no-gpg-sign -m '{message}' && git push origin {tag}")
 
-def retrieve_api_request(url, token, method="get", **kwargs):
+def retrieve_api_request(url: str, token: str, method: str = "get", **kwargs: Dict[str, str]) -> Any:
         authentication = {
                 "OSF-TOKEN": token,
         }
@@ -271,13 +280,13 @@ def retrieve_api_request(url, token, method="get", **kwargs):
                                 continue
                         raise
 
-def get_api_builds(factory, user_token):
+def get_api_builds(factory: str, user_token: str):
         # Get the first page only (which contains the latest builds)
         domain = "foundries.io"
         url = f"https://api.{domain}/projects/{factory}/lmp/builds/"
         return retrieve_api_request(url, user_token).get("data")
 
-def wait_jobs_execution(factory, user_token):
+def wait_jobs_execution(factory: str, user_token: str):
         print(f"Waiting for jobs in factory {factory} to finish")
         last_logged_pending_builds = None
         while True:

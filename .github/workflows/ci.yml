@@ -85,7 +85,7 @@ jobs:
       - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
       - run: git submodule update --init --recursive
       - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
-      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[True-False] or test_incremental_updates[False-False] or test_update_to_latest[False-False] or test_update_to_latest[True-False]'
+      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[False or test_update_to_latest[False'
         env:
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
           BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
