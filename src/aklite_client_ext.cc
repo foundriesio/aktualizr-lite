@@ -343,3 +343,7 @@ InstallResult AkliteClientExt::Rollback(const LocalUpdateSource* local_update_so
                             !installation_in_progress, true, !installation_in_progress);
   return ret;
 }
+
+bool AkliteClientExt::IsAppRunning(const std::string& name, const std::string& uri) const {
+  return client_->isAppRunning({name, uri});
+};

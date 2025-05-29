@@ -36,8 +36,7 @@ static int status_finalize(LiteClient& client, const bpo::variables_map& unused)
   return client.finalizeInstall() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static int status_main(LiteClient& client, const bpo::variables_map& unused) {
-  (void)unused;
+static int status_plain(LiteClient& client) {
   auto target = client.getCurrent();
 
   try {
@@ -65,9 +64,35 @@ static int status_main(LiteClient& client, const bpo::variables_map& unused) {
     if (target.custom_version().length() > 0) {
       name = target.custom_version();
     }
-    client.logTarget("Active image is: ", target);
+
+    auto pending_target = client.getPendingTarget();
+    if (pending_target.IsValid() && pending_target.filename() == target.filename()) {
+      client.logTarget("Pending Target: ", target);
+    } else {
+      client.logTarget("Active image is: ", target);
+    }
   }
   return 0;
+}
+
+static int status_json(LiteClient& client) {
+  std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  AkliteClientExt akclient(client_ptr, false, true);
+  std::cout << aklite::cli::GetStatusJson(akclient) << "\n";
+  return 0;
+}
+
+static int status_main(LiteClient& client, const bpo::variables_map& params) {
+  bool json_output = false;
+  if (params.count("json") > 0) {
+    json_output = params.at("json").as<bool>();
+  }
+
+  if (json_output) {
+    return status_json(client);
+  } else {
+    return status_plain(client);
+  }
 }
 
 static void fillUpdateSource(LocalUpdateSource& local_update_source, const std::string& src_dir) {
@@ -313,7 +338,7 @@ bpo::variables_map parse_options(int argc, char** argv) {
       ("clear-installed-versions", "DANGER - clear the history of installed updates before applying the given update. This is handy when doing test/debug and you need to rollback to an old version manually")
 #endif
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for updates when in daemon mode")
-      ("json", bpo::value<bool>(), "Output targets information as json when running check and list commands")
+      ("json", bpo::value<bool>(), "Output targets information as json when running status, check, and list commands")
       ("src-dir", bpo::value<std::string>(), "Directory that contains an offline update bundle. Enables offline mode for check, pull, install, and update commands")
       ("command", bpo::value<std::string>(), "Command to be executed");
   // clang-format on

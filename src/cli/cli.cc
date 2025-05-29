@@ -10,6 +10,8 @@
 #include "json/reader.h"
 #include "json/value.h"
 #include "logging/logging.h"
+#include "storage/invstorage.h"
+#include "target.h"
 
 namespace aklite::cli {
 
@@ -392,6 +394,73 @@ StatusCode CompleteInstall(AkliteClient &client) {
 StatusCode Rollback(AkliteClientExt &client, const LocalUpdateSource *local_update_source) {
   auto install_result = client.Rollback(local_update_source);
   return res2StatusCode<InstallResult::Status>(i2s, install_result.status);
+}
+
+Json::Value getTargetStatusJson(AkliteClientExt &akclient, const Uptane::Target &target,
+                                boost::optional<std::vector<std::string>> app_shortlist) {
+  Json::Value target_json;
+  target_json["name"] = target.filename();
+  try {
+    target_json["version"] = std::stoi(target.custom_version());
+  } catch (const std::invalid_argument &exc) {
+    LOG_INFO << "Unable to convert version value to integer: '" << target.custom_version() << "'";
+  }
+
+  target_json["ostree_hash"] = target.sha256Hash();
+  Json::Value apps_array(Json::arrayValue);
+  for (const auto &app : TufTarget::Apps(Target::toTufTarget(target))) {
+    bool app_status =
+        (!app_shortlist || std::find(app_shortlist->begin(), app_shortlist->end(), app.name) != app_shortlist->end());
+
+    Json::Value json_app;
+    json_app["name"] = app.name;
+    json_app["uri"] = app.uri;
+    json_app["on"] = app_status;
+    json_app["running"] = akclient.IsAppRunning(app.name, app.uri);
+    apps_array.append(json_app);
+  }
+  target_json["apps"] = apps_array;
+  return target_json;
+}
+
+Json::Value GetStatusJson(AkliteClientExt &akclient) {
+  Json::Value json_root;
+
+  // Device information
+  auto res = akclient.GetDevice();
+  json_root["device_name"] = res.name;
+  json_root["device_factory"] = res.factory;
+  try {
+    json_root["device_uuid"] = akclient.GetDeviceID();
+  } catch (const std::exception &exc) {
+    LOG_WARNING << "Failed to get a device UUID: " << exc.what();
+  }
+  // GetCurrent always returns the booted ostree hash value
+  const auto current = akclient.GetCurrent();
+  json_root["ostree_hash"] = current.Sha256Hash();
+  auto config = akclient.GetConfig();
+  auto tag = config.get("pacman.tags", "");
+  json_root["tag"] = tag.substr(1, tag.size() - 2);
+
+  // Targets information
+  boost::optional<Uptane::Target> applied_target;
+  boost::optional<Uptane::Target> pending_target;
+  StorageConfig sc;
+  sc.updateFromPropertyTree(config.get_child("storage"));
+
+  auto storage = INvStorage::newStorage(sc, false);
+  storage->loadPrimaryInstalledVersions(&applied_target, &pending_target);
+
+  auto app_shortlist = akclient.GetAppShortlist();
+  if (!!applied_target) {
+    json_root["applied_target"] = getTargetStatusJson(akclient, *applied_target, app_shortlist);
+  }
+
+  if (!!pending_target) {
+    json_root["pending_target"] = getTargetStatusJson(akclient, *pending_target, app_shortlist);
+  }
+
+  return json_root;
 }
 
 }  // namespace aklite::cli

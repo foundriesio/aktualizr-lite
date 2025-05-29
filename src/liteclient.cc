@@ -784,6 +784,15 @@ ComposeAppManager::AppsSyncReason LiteClient::appsToUpdate(const Uptane::Target&
   return {};
 }
 
+bool LiteClient::isAppRunning(const AppEngine::App& app) const {
+  if (package_manager_->name() == ComposeAppManager::Name) {
+    auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());
+    return compose_pacman->isAppRunning(app);
+  } else {
+    return false;
+  }
+}
+
 void LiteClient::setAppsNotChecked() {
   if (package_manager_->name() == ComposeAppManager::Name) {
     auto* compose_pacman = dynamic_cast<ComposeAppManager*>(package_manager_.get());

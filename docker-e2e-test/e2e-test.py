@@ -236,12 +236,9 @@ def verify_callback(expected_calls: List[Tuple[str, str]]):
     assert expected_calls == calls
 
 def aklite_current_version():
-    sp = invoke_aklite(['status'])
-    # Last line should be like this:
-    # info: Active image is: 42    sha256:1f5c2258e6e493741c719394bd267b2e163609f1cb3457ccb71fcaf770c5c116
-    lines = [ x for x in sp.stdout.decode('utf-8').splitlines() if "Active image is:" in x ]
-    assert len(lines) == 1
-    version = int(lines[0].split()[3])
+    sp = invoke_aklite(['status', '--json', '1'])
+    out_json = json.loads(sp.stdout)
+    version = out_json["applied_target"]["version"]
     return version
 
 def aklite_current_version_based_on_list():
@@ -318,6 +315,12 @@ def get_running_apps():
     running_app_names = [ l.split()[0] for l in output_lines if l.split()[1] == "(running)" ]
     return running_app_names
 
+def get_running_apps_from_status():
+    sp = invoke_aklite(['status', '--json', '1'])
+    out_json = json.loads(sp.stdout)
+    running_app_names = [ app["name"] for app in out_json["applied_target"]["apps"] if app["running"] ]
+    return running_app_names
+
 def check_running_apps(expected_apps: Optional[List[str]]=None):
     # if no apps list is specified, all apps should be running
     if expected_apps is None:
@@ -325,6 +328,10 @@ def check_running_apps(expected_apps: Optional[List[str]]=None):
     logger.info(f"Verifying running apps. {expected_apps=}")
     running_apps = get_running_apps()
     assert set(expected_apps) == set(running_apps)
+
+    # also verify status output
+    running_apps_from_status = get_running_apps_from_status()
+    assert set(expected_apps) == set(running_apps_from_status)
 
 def cleanup_tuf_metadata():
     os.system("""sqlite3 /var/sota/sql.db  "delete from meta where meta_type <> 0 or version >= 3;" ".exit" """)

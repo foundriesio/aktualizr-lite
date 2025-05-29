@@ -98,6 +98,8 @@ class AkliteClientExt : public AkliteClient {
 
   bool RebootIfRequired();
 
+  bool IsAppRunning(const std::string &name, const std::string &uri) const;
+
  private:
   bool cleanup_removed_apps_{true};
 };
