@@ -189,7 +189,7 @@ register_if_required()
 device_name = get_device_name()
 
 def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, Optional[bool]]]] = None, second_to_last_corr_id: bool = False):
-    logger.info(f"Verifying events for version {target_version}")
+    logger.info(f"  Verifying events for version {target_version}")
     headers = {'OSF-TOKEN': user_token}
     r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/', headers=headers)
     d = json.loads(r.text)
@@ -225,7 +225,7 @@ def clear_callbacks_log():
 
 # TODO: verify additional callback variables
 def verify_callback(expected_calls: List[Tuple[str, str]]):
-    logger.info(f"Verifying callbacks")
+    logger.info(f"  Verifying callbacks")
     calls: List[Tuple[str, str]] = []
     if os.path.isfile(callback_log_path):
         with open(callback_log_path) as f:
@@ -253,11 +253,11 @@ def aklite_current_version_based_on_list():
 def invoke_aklite(options: List[str]):
     if offline:
         options = options + [ "--src-dir", os.path.abspath("./offline-bundles/unified/") ]
-    logger.info("Running `" + " ".join([aklite_path] + options) + "`")
+    logger.info("  Running `" + " ".join([aklite_path] + options) + "`")
     return subprocess.run([aklite_path] + options, capture_output=True)
 
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None):
-    logger.info(f"Updating settings. {apps=}")
+    logger.info(f"  Updating settings. {apps=}")
     callback_file = "/var/sota/callback.sh"
 
     callback_content = \
@@ -325,7 +325,7 @@ def check_running_apps(expected_apps: Optional[List[str]]=None):
     # if no apps list is specified, all apps should be running
     if expected_apps is None:
         expected_apps = get_all_current_apps()
-    logger.info(f"Verifying running apps. {expected_apps=}")
+    logger.info(f"  Verifying running apps. {expected_apps=}")
     running_apps = get_running_apps()
     assert set(expected_apps) == set(running_apps)
 
