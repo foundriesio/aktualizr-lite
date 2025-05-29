@@ -54,6 +54,12 @@ if not tag:
     print("TAG environment variable not set")
     sys.exit()
 
+def run_cmd(cmd: str, success_required: bool = True) -> str:
+    sp = subprocess.run(cmd, shell=True, capture_output=True)
+    if sp.returncode != 0 and success_required:
+        raise Exception(f"\nCommand '{cmd}' failed with error:\n{sp.stderr.decode('utf-8')}")
+    return sp.stdout.decode('utf-8').strip()
+
 def create_ostree_repo() -> Tuple[str, Dict[int, str]]:
         if os.path.exists(local_dir):
                 raise Exception(f"{local_dir} directory already exists. Remove it before running")
@@ -64,7 +70,7 @@ def create_ostree_repo() -> Tuple[str, Dict[int, str]]:
         os.mkdir(ostree_path)
         os.chdir(ostree_path)
         repo_dir = os.path.join(ostree_path, "repo")
-        os.system(f"ostree --repo={repo_dir} init --mode=archive")
+        run_cmd(f"ostree --repo={repo_dir} init --mode=archive")
 
         tree_path = os.path.join(ostree_path, "tree")
         os.mkdir(tree_path)
@@ -74,9 +80,9 @@ def create_ostree_repo() -> Tuple[str, Dict[int, str]]:
         bad_ostree_versions = { 2, 5 }
         for ostree_version in range(1, 6):
                 make_sys_rootfs_cmd = os.path.join(aklite_path, "tests", "make_sys_rootfs.sh")
-                os.system(f"{make_sys_rootfs_cmd} {tree_path} {tag} intel-corei7-64 lmp")
+                run_cmd(f"{make_sys_rootfs_cmd} {tree_path} {tag} intel-corei7-64 lmp")
                 if ostree_version in bad_ostree_versions:
-                        os.system("rm -rf tree/boot")
+                        run_cmd("rm -rf tree/boot")
 
                 with open(ostree_version_txt, 'w') as f:
                         f.write(f"OSTREE_{ostree_version}")
@@ -91,7 +97,7 @@ def create_ostree_repo() -> Tuple[str, Dict[int, str]]:
 
 def add_tag_to_ci(tag: str):
         ci_script_yaml: Any = None
-        os.system(f"[ -d ci-scripts ] || git clone https://source.foundries.io/factories/{factory}/ci-scripts.git")
+        run_cmd(f"[ -d ci-scripts ] || git clone https://source.foundries.io/factories/{factory}/ci-scripts.git")
         with open("ci-scripts/factory-config.yml") as stream:
                 try:
                         ci_script_yaml = yaml.safe_load(stream)
@@ -109,12 +115,12 @@ def add_tag_to_ci(tag: str):
 
         print(ci_script_yaml)
         os.chdir("ci-scripts")
-        os.system(f"git commit -s --no-gpg-sign factory-config.yml -m 'Adding tag {tag} to CI'")
-        os.system(f"git push")
+        run_cmd(f"git commit -s --no-gpg-sign factory-config.yml -m 'Adding tag {tag} to CI'", False)
+        run_cmd(f"git push")
         os.chdir("..")
 
 def set_offline_containers(enabled: bool):
-        os.system(f"[ -d ci-scripts ] || git clone https://source.foundries.io/factories/{factory}/ci-scripts.git")
+        run_cmd(f"[ -d ci-scripts ] || git clone https://source.foundries.io/factories/{factory}/ci-scripts.git")
 
         ci_script_yaml: Any = None
         with open("ci-scripts/factory-config.yml") as stream:
@@ -132,8 +138,9 @@ def set_offline_containers(enabled: bool):
 
         print(ci_script_yaml)
         os.chdir("ci-scripts")
-        os.system(f"git commit -s --no-gpg-sign factory-config.yml -m 'Setting offline containers enabled = {enabled}'")
-        os.system(f"git push")
+        run_cmd(f"git commit -s --no-gpg-sign factory-config.yml -m 'Setting offline containers enabled = {enabled}'", False)
+        run_cmd(f"git push")
+
         os.chdir("..")
 
 def write_file(filename: str, content: str):
@@ -199,9 +206,9 @@ f"""
 """
 
         if not reference_app_base_port and use_custom_app_targets:
-                os.system(f"docker build . -t hub.foundries.io/{factory}/{app_name}:latest")
-                os.system("docker login hub.foundries.io")
-                os.system(f"docker push hub.foundries.io/{factory}/{app_name}:latest")
+                run_cmd(f"docker build . -t hub.foundries.io/{factory}/{app_name}:latest")
+                run_cmd("docker login hub.foundries.io")
+                run_cmd(f"docker push hub.foundries.io/{factory}/{app_name}:latest")
 
         write_file("docker-compose.yml",
 f"""version: '3.2'
@@ -214,7 +221,7 @@ services:
                 global app_change_counter
                 app_change_counter += 1
                 composectl_cmd = "composectl"
-                os.system(f"{composectl_cmd} publish hub.foundries.io/{factory}/{app_name}:{tag}-{app_change_counter} -d app.hash")
+                run_cmd(f"{composectl_cmd} publish hub.foundries.io/{factory}/{app_name}:{tag}-{app_change_counter} -d app.hash")
 
         os.chdir("..")
 
@@ -246,7 +253,7 @@ def push_apps(message: str, tag: str):
                 cmd = [fioctl_cmd, "targets", "add", "--type", "app", "--tags", tag, "--src-tag", tag, "--factory", factory ] + apps
                 subprocess.run(cmd)
         else:
-                os.system(f"git add *; git commit --no-gpg-sign -m '{message}' && git push origin {tag}")
+                run_cmd(f"git add *; git commit --no-gpg-sign -m '{message}' && git push origin {tag}", False)
 
 def retrieve_api_request(url: str, token: str, method: str = "get", **kwargs: Dict[str, str]) -> Any:
         authentication = {
@@ -311,7 +318,7 @@ def wait_jobs_execution(factory: str, user_token: str):
 if __name__ == "__main__":
         repo_dir, ostree_hashes = create_ostree_repo()
 
-        os.system(f"{fiopush_cmd} -factory {factory} -repo {repo_dir} -token {user_token}")
+        run_cmd(f"{fiopush_cmd} -factory {factory} -repo {repo_dir} -token {user_token}")
 
         os.chdir(local_dir)
 
@@ -325,14 +332,14 @@ if __name__ == "__main__":
         add_target(ostree_hashes[1], tag, factory, True)
 
         if use_custom_app_targets:
-                os.system(f"[ -d containers ] || mkdir -p containers")
+                run_cmd(f"[ -d containers ] || mkdir -p containers")
         else:
-                os.system(f"[ -d containers ] || git clone https://source.foundries.io/factories/{factory}/containers.git")
+                run_cmd(f"[ -d containers ] || git clone https://source.foundries.io/factories/{factory}/containers.git")
         os.chdir("containers")
         if not use_custom_app_targets:
-                os.system(f"git checkout {tag} || git checkout -B {tag}")
+                run_cmd(f"git checkout {tag} || git checkout -B {tag}")
 
-        os.system("git rm -r *")
+        run_cmd("git rm -r *", False)
         push_apps("Clear all apps", tag)
 
         wait_jobs_execution(factory, user_token)
