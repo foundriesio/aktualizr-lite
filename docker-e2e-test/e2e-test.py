@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import pytest
 import requests
 import stat
@@ -238,7 +239,7 @@ def verify_callback(expected_calls: List[Tuple[str, str]]):
 def aklite_current_version():
     sp = invoke_aklite(['status', '--json', '1'])
     out_json = json.loads(sp.stdout)
-    version = out_json["applied_target"]["version"]
+    version = out_json["applied_target"].get("version")
     return version
 
 def aklite_current_version_based_on_list():
@@ -341,7 +342,6 @@ def cleanup_installed_data():
 
 def install_with_separate_steps(target: Target, explicit_version: bool = True, do_reboot: bool = True, do_finalize: bool = True):
     cp = invoke_aklite(['check', '--json', '1'])
-    assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion, cp.stdout.decode("utf-8")
     verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
     previous_target = get_target_for_actual_version(aklite_current_version())
@@ -350,6 +350,8 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
     else:
         final_target = target
     requires_reboot = previous_target.ostree_image_version != final_target.ostree_image_version
+    if target.run_rollback:
+        requires_reboot = previous_target.ostree_image_version != target.ostree_image_version
 
     if explicit_version:
         cp = invoke_aklite(['pull', str(target.actual_version)])
@@ -401,13 +403,34 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
 
         if do_finalize:
             cp = invoke_aklite(['run'])
-            verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-            verify_events(target.actual_version, {
-                    ('EcuInstallationStarted', None),
-                    ('EcuInstallationApplied', None),
-                    ('EcuInstallationCompleted', True),
-                })
-    else:
+            if target.run_rollback:
+                assert cp.returncode == ReturnCodes.InstallRollbackNeedsReboot, cp.stdout.decode("utf-8")
+                verify_callback([
+                    ("install-final-pre", ""), ("install-post", "FAILED"),
+                    ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")])
+                sys_reboot()
+                cp = invoke_aklite(['run'])
+                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+                verify_callback([("install-final-pre", ""), ("install-post", "OK")])
+                verify_events(target.actual_version, {
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationApplied', None),
+                        ('EcuInstallationCompleted', False),
+                    }, True)
+                verify_events(final_target.actual_version, {
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationApplied', None),
+                        ('EcuInstallationCompleted', True),
+                    }, False)
+            else:
+                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+                verify_callback([("install-final-pre", ""), ("install-post", "OK")])
+                verify_events(target.actual_version, {
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationApplied', None),
+                        ('EcuInstallationCompleted', True),
+                    })
+    else: # !install_rollback and !requires_reboot
         if target.run_rollback:
             if delay_app_install:
                 assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization, cp.stdout.decode("utf-8")
@@ -498,6 +521,8 @@ def install_with_single_step(target: Target, explicit_version: bool = True, do_r
     else:
         final_target = target
     requires_reboot = previous_target.ostree_image_version != final_target.ostree_image_version
+    if target.run_rollback:
+        requires_reboot = previous_target.ostree_image_version != target.ostree_image_version
 
     cmd = ['update']
     if explicit_version:
@@ -541,15 +566,37 @@ def install_with_single_step(target: Target, explicit_version: bool = True, do_r
             sys_reboot()
         if do_finalize:
             cp = invoke_aklite(['run'])
-            # TODO: handle run_rollback
-            verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-            verify_events(target.actual_version, {
-                    ('EcuDownloadStarted', None),
-                    ('EcuDownloadCompleted', True),
-                    ('EcuInstallationStarted', None),
-                    ('EcuInstallationApplied', None),
-                    ('EcuInstallationCompleted', True),
-                })
+            if target.run_rollback:
+                assert cp.returncode == ReturnCodes.InstallRollbackNeedsReboot, cp.stdout.decode("utf-8")
+                verify_callback([
+                    ("install-final-pre", ""), ("install-post", "FAILED"),
+                    ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")])
+                sys_reboot()
+                cp = invoke_aklite(['run'])
+                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+                verify_callback([("install-final-pre", ""), ("install-post", "OK")])
+                verify_events(target.actual_version, {
+                        ('EcuDownloadStarted', None),
+                        ('EcuDownloadCompleted', True),
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationApplied', None),
+                        ('EcuInstallationCompleted', False),
+                    }, True)
+                verify_events(final_target.actual_version, {
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationApplied', None),
+                        ('EcuInstallationCompleted', True),
+                    }, False)
+            else:
+                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+                verify_callback([("install-final-pre", ""), ("install-post", "OK")])
+                verify_events(target.actual_version, {
+                        ('EcuDownloadStarted', None),
+                        ('EcuDownloadCompleted', True),
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationApplied', None),
+                        ('EcuInstallationCompleted', True),
+                    })
     else:
         if target.run_rollback:
             if delay_app_install:
@@ -747,6 +794,7 @@ def restore_system_state():
     version = all_primary_tag_targets[Target.First].actual_version
     cleanup_installed_data()
     cp = invoke_aklite(['update', str(version)])
+    assert cp.returncode in [ ReturnCodes.Ok, ReturnCodes.InstallNeedsReboot ], cp.stdout.decode("utf-8")
     print(cp.stdout)
     sys_reboot()
     cp = invoke_aklite(['run'])
@@ -772,6 +820,22 @@ install_sequence_incremental = [
     Target.UpdateOstreeWithApps,
     Target.BrokenOstreeWithApps,
 ]
+
+def run_test_sequence_random(updates_count: int = 20):
+    restore_system_state()
+    apps = None # All apps, for now
+    random.seed(42) # for reproducibility
+
+    for i in range(updates_count):
+        target_version = random.choice(install_sequence_incremental)
+        target = all_primary_tag_targets[target_version]
+        if target.build_error: # skip this one for now
+            continue
+
+        logger.info(f"Updating to {target.actual_version} {target}. SingleStep={single_step}, Offline={offline} DelayAppsInstall={delay_app_install}")
+        write_settings(apps, prune)
+        install_target(target)
+        check_running_apps(apps)
 
 def run_test_sequence_incremental():
     restore_system_state()
@@ -835,6 +899,16 @@ def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_insta
     single_step = single_step_
     delay_app_install = delay_app_install_
     run_test_sequence_incremental()
+
+@pytest.mark.parametrize('single_step_', [True, False])
+@pytest.mark.parametrize('delay_app_install_', [True, False])
+@pytest.mark.parametrize('offline_', [True, False])
+def test_random_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
+    global offline, single_step, delay_app_install
+    offline = offline_
+    single_step = single_step_
+    delay_app_install = delay_app_install_
+    run_test_sequence_random()
 
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
