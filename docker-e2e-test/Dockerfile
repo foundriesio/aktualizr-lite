@@ -28,10 +28,18 @@ COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
 # # Install fioctl
 # COPY --from=composeapp /build/fioctl/bin/fioctl-linux-amd64 /usr/bin/fioctl
 
+# Install boosts from source
+ARG BOOST_VERSION="1_85_0"
+RUN apt-get install -y bzip2 \
+  && wget https://archives.boost.io/release/$(echo ${BOOST_VERSION} | tr '_' '.')/source/boost_${BOOST_VERSION}.tar.bz2 \
+  && tar xf boost_${BOOST_VERSION}.tar.bz2 \
+  && cd boost_${BOOST_VERSION} \
+  && ./bootstrap.sh \
+  && ./b2 \
+  && ./b2 install --prefix=/usr \
+  && cd .. && rm boost_* -rf
 
 # Install lmp-device-register
-RUN  apt-get install -y libboost-iostreams-dev
-
 RUN git clone https://github.com/foundriesio/lmp-device-register \
   && cd lmp-device-register && git checkout mp-90 \
   && cmake -S . -B ./build -DDOCKER_COMPOSE_APP=ON -DHARDWARE_ID=intel-corei7-64 && cmake --build ./build --target install
