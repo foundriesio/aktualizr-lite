@@ -15,7 +15,7 @@ namespace aklite::tuf {
 class AkRepo : public Repo {
  public:
   explicit AkRepo(const boost::filesystem::path& storage_path);
-  explicit AkRepo(const Config& config);
+  explicit AkRepo(const Config& config, bool read_only_storage = false);
   std::vector<TufTarget> GetTargets() override;
   std::string GetRoot(int version) override;
   void UpdateMeta(std::shared_ptr<RepoSource> repo_src) override;

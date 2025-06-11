@@ -31,7 +31,7 @@ class LiteClient {
 
   explicit LiteClient(Config config_in, const std::shared_ptr<AppEngine>& app_engine = nullptr,
                       const std::shared_ptr<P11EngineGuard>& p11 = nullptr,
-                      std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher = nullptr);
+                      std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher = nullptr, bool read_only_storage = false);
   ~LiteClient();
   LiteClient(const LiteClient&) = delete;
   LiteClient& operator=(const LiteClient&) = delete;

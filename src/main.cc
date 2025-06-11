@@ -77,7 +77,7 @@ static int status_plain(LiteClient& client) {
 
 static int status_json(LiteClient& client) {
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClientExt akclient(client_ptr, false, true);
+  AkliteClientExt akclient(client_ptr, true, false);
   std::cout << aklite::cli::GetStatusJson(akclient) << "\n";
   return 0;
 }
@@ -114,7 +114,8 @@ static int checkin(LiteClient& client, aklite::cli::CheckMode check_mode, const 
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
-  AkliteClientExt akclient(client_ptr, false, true);
+  AkliteClientExt akclient(client_ptr, check_mode == aklite::cli::CheckMode::Current,
+                           check_mode != aklite::cli::CheckMode::Current);
 
   LocalUpdateSource local_update_source;
   if (!src_dir.empty()) {
@@ -260,6 +261,7 @@ struct Cmd {
   const std::string name;
   const std::string description;
   int (*func)(LiteClient&, const bpo::variables_map&);
+  bool read_only_storage{false};
 };
 
 // clang-format off
@@ -268,9 +270,9 @@ static const std::array<Cmd, 10> commands = {{
     {"update", "Update TUF metadata, download and install the selected target", cli_update},
     {"pull", "Download the selected target data to the device, to allow a install operation to be performed", cli_pull},
     {"install", "Install a previously pulled target", cli_install},
-    {"list", "List the available targets, using current TUF metadata information. No TUF update is performed", cli_list},
+    {"list", "List the available targets, using current TUF metadata information. No TUF update is performed", cli_list, true},
     {"check", "Update the device TUF metadata, and list the available targets", cli_check},
-    {"status", "Show information of the target currently running on the device", status_main},
+    {"status", "Show information of the target currently running on the device", status_main, true},
     {"finalize", "Finalize installation by starting the updated apps", cli_complete_install},
     {"run", "Alias for the finalize command", cli_complete_install},
     {"rollback", "Rollback to the previous successfully installed target [experimental]", cli_rollback},
@@ -308,7 +310,7 @@ int run_command(const Cmd& cmd, const bpo::variables_map& commandline_map) {
   config.telemetry.report_network = !config.tls.server.empty();
   config.telemetry.report_config = !config.tls.server.empty();
   LOG_DEBUG << "Running " << cmd.name;
-  LiteClient client(config, nullptr);
+  LiteClient client(config, nullptr, nullptr, nullptr, cmd.read_only_storage);
   return cmd.func(client, commandline_map);
 }
 

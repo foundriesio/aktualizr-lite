@@ -448,7 +448,7 @@ Json::Value GetStatusJson(AkliteClientExt &akclient) {
   StorageConfig sc;
   sc.updateFromPropertyTree(config.get_child("storage"));
 
-  auto storage = INvStorage::newStorage(sc, false);
+  auto storage = INvStorage::newStorage(sc, true);
   storage->loadPrimaryInstalledVersions(&applied_target, &pending_target);
 
   auto app_shortlist = akclient.GetAppShortlist();

@@ -161,7 +161,7 @@ void AkliteClient::Init(Config& config, bool finalize, bool apply_lock) {
     }
   }
 
-  tuf_repo_ = std::make_unique<aklite::tuf::AkRepo>(client_->config);
+  tuf_repo_ = std::make_unique<aklite::tuf::AkRepo>(client_->config, read_only_);
   hw_id_ = client_->primary_ecu.second.ToString();
 }
 

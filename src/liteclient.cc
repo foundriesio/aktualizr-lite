@@ -53,11 +53,11 @@ class OfflineMetaFetcher : public Uptane::IMetadataFetcher {
 };
 
 LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const std::shared_ptr<P11EngineGuard>& p11,
-                       std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher)
+                       std::shared_ptr<Uptane::IMetadataFetcher> meta_fetcher, bool read_only_storage)
     : config{std::move(config_in)},
       primary_ecu{Uptane::EcuSerial::Unknown(), ""},
       uptane_fetcher_{std::move(meta_fetcher)} {
-  storage = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
+  storage = INvStorage::newStorage(config.storage, read_only_storage, StorageClient::kTUF);
   storage->importData(config.import);
 
   std::map<std::string, std::string>& raw = config.pacman.extra;
