@@ -2,8 +2,12 @@ FROM golang:1.22.2-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
 RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
-    && STOREROOT=/var/sota/reset-apps COMPOSEROOT=/var/sota/compose-apps BASESYSTEMCONFIG=/usr/lib/docker make \
-    && cp ./bin/composectl /usr/bin/
+    && STOREROOT=/var/sota/reset-apps COMPOSEROOT=/var/sota/compose-apps BASESYSTEMCONFIG=/usr/lib/docker make 
+
+WORKDIR /build_lmp95
+RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
+    && git checkout mp-95 \
+    && STOREROOT=/var/sota/reset-apps COMPOSEROOT=/var/sota/compose-apps BASESYSTEMCONFIG=/usr/lib/docker make 
 
 # We may add fioctl and fioconfig to the test sequence. For now, we don't use them
 # WORKDIR /build
@@ -19,8 +23,19 @@ RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
 
 FROM foundries/aklite-dev AS aklite
 
+WORKDIR /build_lmp95
+RUN git clone --recurse-submodules https://github.com/foundriesio/aktualizr-lite.git && cd aktualizr-lite \
+    && git checkout --recurse-submodules mp-95 \
+    && make -f dev-flow.mk \
+    && cp ./build/src/aktualizr-lite /usr/bin/aktualizr-lite_lmp95
+
+  
 # Install composectl
-COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
+COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/composectl_main
+COPY --from=composeapp /build_lmp95/composeapp/bin/composectl /usr/bin/composectl_lmp95
+RUN rm -f /usr/bin/composectl
+
+RUN chmod a+w /usr/bin/
 
 # # Install fioconfig
 # COPY --from=composeapp /build/fioconfig/bin/fioconfig-linux-amd64 /usr/bin/fioconfig
