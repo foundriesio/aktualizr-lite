@@ -9,6 +9,17 @@ import subprocess
 import sys
 from typing import Dict, List, Optional, Set, Tuple
 
+# docker build -t aklite-e2e-test:latest docker-e2e-test
+
+# TODO
+# - Allow 2 versions of aklite/composectl to be tested at once: e.g. aktualizr-lite-lmp95 for old version, aktualizr-lite-current for new version, making sure the transition works. 
+#   UseOldAklite=True/False, OldAkluteSuffix="-lmp95", Each target indicates if it has an old or current aklite
+# - Improve several tags flow
+# - Randomize other aspects of the update:
+#   - enabling and disabling apps
+
+
+
 # Aklite CLI return codes:
 class ReturnCodes:
   UnknownError = 1
@@ -89,8 +100,8 @@ def secondary_tag_is_set():
 
 logger.info(f"Base target version: {base_version[primary_tag]}")
 
-aklite_path = "./build/src/aktualizr-lite"
-composectl_path = "/usr/bin/composectl"
+aklite_path_current = "./build/src/aktualizr-lite"
+composectl_path_main = "/usr/bin/composectl_main"
 callback_log_path = "/var/sota/callback_log.txt"
 
 # Test modes
@@ -98,6 +109,7 @@ offline = False
 single_step = True
 delay_app_install = False
 prune = True
+old_aklite_suffix = ""
 
 
 class Target:
@@ -251,9 +263,34 @@ def aklite_current_version_based_on_list():
     curr_target = next(target for target in out_json if target.get("current", False))
     return curr_target["version"]
 
+
+def adjust_for_old_aklite() -> str:
+    if not old_aklite_suffix:
+        return aklite_path_current
+
+    version = aklite_current_version()
+    if version is None:
+        is_old_ostree = True
+    else:
+        target = get_target_for_actual_version(aklite_current_version())
+        old_tools_ostree = { 1, 2, 3 }
+        is_old_ostree = target.ostree_image_version in old_tools_ostree
+    if is_old_ostree:
+        os.system(f"ln -sfn /usr/bin/composectl{old_aklite_suffix} /usr/bin/composectl")
+        return "/usr/bin/aktualizr-lite" + old_aklite_suffix
+    else:
+        os.system("ln -sfn /usr/bin/composectl_main /usr/bin/composectl")
+        return aklite_path_current
+
 def invoke_aklite(options: List[str]):
     if offline:
         options = options + [ "--src-dir", os.path.abspath("./offline-bundles/unified/") ]
+    
+    os.system("ln -sfn /usr/bin/composectl_main /usr/bin/composectl")
+    if "status" in options:
+        aklite_path = aklite_path_current
+    else:
+        aklite_path = adjust_for_old_aklite()
     logger.info("  Running `" + " ".join([aklite_path] + options) + "`")
     return subprocess.run([aklite_path] + options, capture_output=True)
 
@@ -310,7 +347,7 @@ def get_all_current_apps() -> List[str]:
     return [ app["name"] for app in target_apps[0] ]
 
 def get_running_apps():
-    sp = subprocess.run([composectl_path, "ps"], capture_output=True)
+    sp = subprocess.run([composectl_path_main, "ps"], capture_output=True)
     output_lines = sp.stdout.decode('utf-8').splitlines()
     # print(output_lines)
     running_app_names = [ l.split()[0] for l in output_lines if l.split()[1] == "(running)" ]
@@ -864,14 +901,16 @@ def run_test_sequence_apps_selection():
 def test_apps_selection():
     run_test_sequence_apps_selection()
 
+@pytest.mark.parametrize('old_aklite_suffix_', ["_lmp95"])
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('delay_app_install_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
-def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
-    global offline, single_step, delay_app_install
+def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_install_: bool, old_aklite_suffix_: str):
+    global offline, single_step, delay_app_install, old_aklite_suffix
     offline = offline_
     single_step = single_step_
     delay_app_install = delay_app_install_
+    old_aklite_suffix = old_aklite_suffix_
     run_test_sequence_incremental()
 
 @pytest.mark.parametrize('single_step_', [True, False])
