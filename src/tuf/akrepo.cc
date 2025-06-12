@@ -6,8 +6,8 @@ namespace aklite::tuf {
 // AkRepo
 AkRepo::AkRepo(const boost::filesystem::path& storage_path) { init(storage_path); }
 
-AkRepo::AkRepo(const Config& config) {
-  storage_ = INvStorage::newStorage(config.storage, false, StorageClient::kTUF);
+AkRepo::AkRepo(const Config& config, bool read_only_storage) {
+  storage_ = INvStorage::newStorage(config.storage, read_only_storage, StorageClient::kTUF);
   storage_->importData(config.import);
 }
 
