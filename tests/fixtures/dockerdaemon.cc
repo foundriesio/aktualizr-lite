@@ -1,6 +1,7 @@
 #include "fixtures/basehttpclient.cc"
 
 #include "libaktualizr/http/httpclient.h"
+#include "boost/filesystem.hpp"
 
 namespace fixtures {
 

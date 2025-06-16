@@ -2,8 +2,8 @@
 
 #include <set>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
-#include <boost/process.hpp>
 #include <boost/range/iterator_range_core.hpp>
 
 #include "bootloader/bootloaderlite.h"
@@ -140,9 +140,8 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
     std::string docker_host{"unix:///var/run/docker.sock"};
 
     if (!!cfg_.reset_apps) {
-      auto env{boost::this_process::environment()};
-      if (env.end() != env.find("DOCKER_HOST")) {
-        docker_host = env.get("DOCKER_HOST");
+      if (std::getenv("DOCKER_HOST") != nullptr) {
+        docker_host = std::getenv("DOCKER_HOST");
       }
 #ifdef USE_COMPOSEAPP_ENGINE
       const auto composectl_cmd{boost::filesystem::canonical(cfg_.composectl_bin).string()};

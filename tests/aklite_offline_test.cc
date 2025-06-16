@@ -161,9 +161,8 @@ class AkliteOffline : public ::testing::Test {
     }
 
     std::string docker_host{"unix:///var/run/docker.sock"};
-    auto env{boost::this_process::environment()};
-    if (env.end() != env.find("DOCKER_HOST")) {
-      docker_host = env.get("DOCKER_HOST");
+    if (std::getenv("DOCKER_HOST") != nullptr) {
+      docker_host = std::getenv("DOCKER_HOST");
     }
 
     auto docker_client{local_update_source_.docker_client_ptr != nullptr

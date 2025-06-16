@@ -1,8 +1,10 @@
 #include "liteclient.h"
 
+#include <cstdlib>
 #include <fcntl.h>
 #include <sys/file.h>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/process.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>

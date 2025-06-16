@@ -3,6 +3,7 @@
 
 #include <boost/optional.hpp>
 #include <boost/algorithm/hex.hpp>
+#include <boost/algorithm/string.hpp>
 #include "libaktualizr/crypto/crypto.h"
 
 
