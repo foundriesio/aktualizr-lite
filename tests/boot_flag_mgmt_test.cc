@@ -1,7 +1,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <boost/algorithm/string.hpp>
-#include <boost/process.hpp>
 
 #include "test_utils.h"
 #include "uptane_generator/image_repo.h"

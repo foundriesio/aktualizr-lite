@@ -73,7 +73,7 @@ class DeviceGatewayMock {
   const std::string req_headers_file_;
   const std::string events_file_;
   const std::string sota_toml_file_;
-  boost::process::child process_;
+  bp::child process_;
 };
 
 std::string DeviceGatewayMock::RunCmd;

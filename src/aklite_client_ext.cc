@@ -3,7 +3,6 @@
 #include <sys/file.h>
 #include <unistd.h>
 #include <boost/format.hpp>
-#include <boost/process.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>

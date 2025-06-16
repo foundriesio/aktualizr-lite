@@ -4,7 +4,33 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
+
+#include <boost/version.hpp>
+
+#if BOOST_VERSION >= 108800
+#include <boost/process/v1/args.hpp>
+#include <boost/process/v1/async.hpp>
+#include <boost/process/v1/async_system.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/cmd.hpp>
+#include <boost/process/v1/env.hpp>
+#include <boost/process/v1/environment.hpp>
+#include <boost/process/v1/error.hpp>
+#include <boost/process/v1/exe.hpp>
+#include <boost/process/v1/group.hpp>
+#include <boost/process/v1/handles.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/pipe.hpp>
+#include <boost/process/v1/search_path.hpp>
+#include <boost/process/v1/shell.hpp>
+#include <boost/process/v1/spawn.hpp>
+#include <boost/process/v1/start_dir.hpp>
+#include <boost/process/v1/system.hpp>
+namespace bp = boost::process::v1;
+#else
 #include <boost/process.hpp>
+namespace bp = boost::process;
+#endif
 #include "logging/logging.h"
 
 struct ExecError : std::runtime_error {
@@ -25,9 +51,8 @@ static void exec(const std::string& cmd, const std::string& err_msg_prefix, Args
 
   try {
     LOG_DEBUG << "Running: `" << cmd << "`";
-    boost::process::child child_process(cmd, boost::process::std_err > err_output,
-                                        boost::process::on_exit = child_process_exit_code, io_context,
-                                        std::forward<Args>(args)...);
+    bp::child child_process(cmd, bp::std_err > err_output, bp::on_exit = child_process_exit_code, io_context,
+                            std::forward<Args>(args)...);
 
     io_context.run();
 

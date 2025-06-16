@@ -10,7 +10,6 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/process.hpp>
 #include <boost/range/iterator_range_core.hpp>
 
 #include "crypto/crypto.h"
@@ -145,7 +144,7 @@ AppEngine::Result RestorableAppEngine::verify(const App& app) {
 
     LOG_DEBUG << app.name << ": verifying App: " << app_dir << " --> " << app_dir;
     exec(boost::format("%s config %s") % compose_cmd_ % "-q", "compose file verification failed",
-         boost::process::start_dir = app_dir);
+         bp::start_dir = app_dir);
   } catch (const std::exception& exc) {
     LOG_ERROR << "failed to verify App; app: " + app.name + "; uri: " + app.uri + "; err: " + exc.what();
     res = {false, exc.what()};
@@ -557,7 +556,7 @@ void RestorableAppEngine::installApp(const boost::filesystem::path& app_dir, con
 
   boost::filesystem::create_directories(dst_dir);
   exec(boost::format{"tar --overwrite -xzf %s"} % archive_full_path.string(), "failed to install Compose App",
-       boost::process::start_dir = dst_dir);
+       bp::start_dir = dst_dir);
 }
 
 void RestorableAppEngine::installAppImages(const boost::filesystem::path& app_dir) {
@@ -851,26 +850,22 @@ void RestorableAppEngine::loadImageToDockerStore(Docker::DockerClient::Ptr& dock
 }
 
 void RestorableAppEngine::verifyComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
-  exec(boost::format{"%s config"} % compose_cmd, "Compose App verification failed",
-       boost::process::start_dir = app_dir);
+  exec(boost::format{"%s config"} % compose_cmd, "Compose App verification failed", bp::start_dir = app_dir);
 }
 
 void RestorableAppEngine::pullComposeAppImages(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
                                                const std::string& flags) {
-  exec(boost::format{"%s pull %s"} % compose_cmd % flags, "failed to pull Compose App images",
-       boost::process::start_dir = app_dir);
+  exec(boost::format{"%s pull %s"} % compose_cmd % flags, "failed to pull Compose App images", bp::start_dir = app_dir);
 }
 
 void RestorableAppEngine::startComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir,
                                           const std::string& flags) {
-  exec(boost::format{"%s up %s"} % compose_cmd % flags, "failed to bring Compose App up",
-       boost::process::start_dir = app_dir);
+  exec(boost::format{"%s up %s"} % compose_cmd % flags, "failed to bring Compose App up", bp::start_dir = app_dir);
 }
 
 void RestorableAppEngine::stopComposeApp(const std::string& compose_cmd, const boost::filesystem::path& app_dir) {
   if (boost::filesystem::exists(app_dir)) {
-    exec(boost::format{"%s down"} % compose_cmd, "failed to bring Compose App down",
-         boost::process::start_dir = app_dir);
+    exec(boost::format{"%s down"} % compose_cmd, "failed to bring Compose App down", bp::start_dir = app_dir);
   }
 }
 

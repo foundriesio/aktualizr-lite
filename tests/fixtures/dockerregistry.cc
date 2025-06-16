@@ -224,7 +224,7 @@ class DockerRegistry {
   const std::string repo_; // repo, aka Factory name
 
   const std::string port_;
-  boost::process::child process_;
+  bp::child process_;
 
   std::unordered_map<std::string, std::string> hash2manifest_;
   std::unordered_map<std::string, int> manifest2pull_numb_;

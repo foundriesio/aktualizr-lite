@@ -3,7 +3,6 @@
 #include "dockerclient.h"
 
 #include <sys/statvfs.h>
-#include <boost/process.hpp>
 #include <filesystem>
 
 #include "exec.h"
@@ -401,18 +400,18 @@ bool ComposeAppEngine::checkAvailableStorageSpace(const boost::filesystem::path&
 void ComposeAppEngine::verifyAppArchive(const App& app, const std::string& archive_file_name) {
   try {
     exec("tar -tf " + archive_file_name + " " + ComposeFile, "no compose file found in archive",
-         boost::process::start_dir = appRoot(app));
+         bp::start_dir = appRoot(app));
   } catch (const std::exception&) {
     exec("tar -tf " + archive_file_name + " ./" + ComposeFile, "no compose file found in archive",
-         boost::process::start_dir = appRoot(app));
+         bp::start_dir = appRoot(app));
   }
 }
 
 void ComposeAppEngine::extractAppArchive(const App& app, const std::string& archive_file_name,
                                          bool delete_after_extraction) {
-  exec("tar -xzf " + archive_file_name, "failed to extract App archive", boost::process::start_dir = appRoot(app));
+  exec("tar -xzf " + archive_file_name, "failed to extract App archive", bp::start_dir = appRoot(app));
   if (delete_after_extraction) {
-    exec("rm -f " + archive_file_name, "failed to delete App archive", boost::process::start_dir = appRoot(app));
+    exec("rm -f " + archive_file_name, "failed to delete App archive", bp::start_dir = appRoot(app));
   }
 }
 
@@ -515,7 +514,7 @@ void ComposeAppEngine::AppState::File::read(void* data, ssize_t size) const {
 }
 
 void ComposeAppEngine::runComposeCmd(const App& app, const std::string& cmd, const std::string& err_msg) const {
-  exec(compose_ + cmd, err_msg, boost::process::start_dir = appRoot(app));
+  exec(compose_ + cmd, err_msg, bp::start_dir = appRoot(app));
 }
 
 }  // namespace Docker
