@@ -13,7 +13,6 @@
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
 #include "crypto/p11engine.h"
-#include "exec.h"
 #include "helpers.h"
 #include "http/httpclient.h"
 #include "primary/reportqueue.h"
@@ -262,23 +261,23 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
   if (callback_program.empty()) {
     return;
   }
-  auto env = boost::this_process::environment();
-  bp::environment env_copy = env;
-  env_copy["MESSAGE"] = msg;
-  env_copy["CURRENT_TARGET"] = (config.storage.path / "current-target").string();
+  std::string env_variables;
+  env_variables += "MESSAGE=\"" + std::string(msg) + "\" ";
+  env_variables += "CURRENT_TARGET=\"" + (config.storage.path / "current-target").string() + "\" ";
   auto current = getCurrent();
   if (!current.MatchTarget(Uptane::Target::Unknown())) {
-    env_copy["CURRENT_TARGET_NAME"] = current.filename();
+    env_variables += "CURRENT_TARGET_NAME=\"" + current.filename() + "\" ";
   }
 
   if (!install_target.MatchTarget(Uptane::Target::Unknown())) {
-    env_copy["INSTALL_TARGET_NAME"] = install_target.filename();
+    env_variables += "INSTALL_TARGET_NAME=\"" + install_target.filename() + "\" ";
   }
   if (!result.empty()) {
-    env_copy["RESULT"] = result;
+    env_variables += "RESULT=\"" + result + "\" ";
   }
 
-  int rc = bp::system(callback_program, env_copy);
+  LOG_DEBUG << "Running callback: " << callback_program.string() << " with env variables: " << env_variables;
+  int rc = std::system((env_variables + callback_program.string()).c_str());
   if (rc != 0) {
     LOG_ERROR << "Error with callback: " << rc;
   }
