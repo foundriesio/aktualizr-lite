@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <boost/filesystem.hpp>
-#include <boost/process.hpp>
 #include <boost/algorithm/hex.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include "http/httpclient.h"
 #include "test_utils.h"
@@ -15,6 +15,7 @@
 
 #include "composeappmanager.h"
 #include "docker/composeappengine.h"
+#include "exec.h"
 #include "target.h"
 #include "fixtures/dockerdaemon.cc"
 
@@ -35,7 +36,7 @@ class FakeRegistry {
       Utils::writeFile(docker_file, app_content);
       tgz_path_ = root_dir_ / app_name / (app_name + ".tgz");
       std::string stdout_msg;
-      boost::process::system("tar -czf " + tgz_path_.string() + " " + file_name, boost::process::start_dir = (root_dir_ / app_name));
+      bp::system("tar -czf " + tgz_path_.string() + " " + file_name, bp::start_dir = (root_dir_ / app_name));
       std::string tgz_content = Utils::readFile(tgz_path_);
       auto hash = boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(tgz_content)));
       // TODO: it should be in ComposeAppEngine::Manifest::Manifest()

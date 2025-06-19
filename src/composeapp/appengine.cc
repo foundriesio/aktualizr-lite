@@ -1,7 +1,6 @@
 #include "appengine.h"
 
 #include <boost/format.hpp>
-#include <boost/process.hpp>
 
 #include "aktualizr-lite/storage/stat.h"
 #include "exec.h"
@@ -70,7 +69,7 @@ bool AppEngine::isRunning(const App& app) const {
     std::future<std::string> output;
     exec(boost::format{"%s --store %s --compose %s ps %s --format json"} % composectl_cmd_ % storeRoot() %
              installRoot() % app.uri,
-         "", boost::process::std_out > output);
+         "", bp::std_out > output);
     const auto app_status{Utils::parseJSON(output.get())};
     // Make sure app images and bundle are properly installed
     res = checkAppInstallationStatus(app, app_status);
@@ -88,8 +87,7 @@ Json::Value AppEngine::getRunningAppsInfo() const {
   Json::Value app_statuses;
   try {
     std::future<std::string> output;
-    exec(boost::format{"%s --store %s ps --format json"} % composectl_cmd_ % storeRoot(), "",
-         boost::process::std_out > output);
+    exec(boost::format{"%s --store %s ps --format json"} % composectl_cmd_ % storeRoot(), "", bp::std_out > output);
     const auto output_str{output.get()};
     app_statuses = Utils::parseJSON(output_str);
   } catch (const std::exception& exc) {
@@ -104,7 +102,7 @@ void AppEngine::prune(const Apps& app_shortlist) {
     // Remove apps that are not in the shortlist
     std::future<std::string> output;
     exec(boost::format{"%s --store %s ls --format json"} % composectl_cmd_ % storeRoot(), "failed to list apps",
-         boost::process::std_out > output);
+         bp::std_out > output);
     const std::string output_str{output.get()};
     const auto app_list{Utils::parseJSON(output_str)};
 
@@ -138,7 +136,7 @@ void AppEngine::prune(const Apps& app_shortlist) {
     // Pruning unused store blobs
     std::future<std::string> output;
     exec(boost::format{"%s --store %s prune --format=json"} % composectl_cmd_ % storeRoot(),
-         "failed to prune app blobs", boost::process::std_out > output);
+         "failed to prune app blobs", bp::std_out > output);
     const std::string output_str{output.get()};
     const auto pruned_blobs{Utils::parseJSON(output_str)};
 
@@ -163,7 +161,7 @@ bool AppEngine::isAppFetched(const App& app) const {
   try {
     std::future<std::string> output;
     exec(boost::format{"%s --store %s check %s --local --format json"} % composectl_cmd_ % storeRoot() % app.uri, "",
-         boost::process::std_out > output);
+         bp::std_out > output);
     const std::string output_str{output.get()};
     const auto app_fetch_status{Utils::parseJSON(output_str)};
     if (app_fetch_status.isMember("fetch_check") && app_fetch_status["fetch_check"].isMember("missing_blobs") &&
@@ -186,7 +184,7 @@ bool AppEngine::isAppInstalled(const App& app) const {
     std::future<std::string> output;
     exec(boost::format{"%s --store %s check %s --local --install --format json"} % composectl_cmd_ % storeRoot() %
              app.uri,
-         "", boost::process::std_out > output);
+         "", bp::std_out > output);
     const std::string output_str{output.get()};
     const auto app_fetch_status{Utils::parseJSON(output_str)};
     if (app_fetch_status.isMember("install_check") && app_fetch_status["install_check"].isMember(app.uri) &&

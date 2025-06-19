@@ -2,8 +2,6 @@
 #include <gtest/gtest.h>
 
 #include <boost/filesystem.hpp>
-#include <boost/process.hpp>
-#include <boost/process/env.hpp>
 
 #include "libaktualizr/types.h"
 #include "logging/logging.h"

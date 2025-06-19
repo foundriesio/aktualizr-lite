@@ -1,6 +1,7 @@
 #include "fixtures/basehttpclient.cc"
 
 #include "libaktualizr/http/httpclient.h"
+#include "boost/filesystem.hpp"
 
 namespace fixtures {
 
@@ -100,8 +101,8 @@ class DockerDaemon {
   const std::string none_containers_{"[]"};
   boost::filesystem::path dir_;
   const std::string port_;
-  boost::process::child unix_process_;
-  boost::process::child process_;
+  bp::child unix_process_;
+  bp::child process_;
 };
 
 std::string DockerDaemon::RunCmd{"./tests/docker-daemon_fake.py"};

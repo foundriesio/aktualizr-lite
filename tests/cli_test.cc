@@ -2,7 +2,6 @@
 #include <gtest/gtest.h>
 
 #include <boost/format.hpp>
-#include <boost/process.hpp>
 
 #include "aktualizr-lite/aklite_client_ext.h"
 #include "aktualizr-lite/cli/cli.h"

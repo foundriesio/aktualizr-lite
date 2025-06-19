@@ -3,8 +3,9 @@
 
 #include <boost/optional.hpp>
 #include <boost/algorithm/hex.hpp>
+#include <boost/algorithm/string.hpp>
 #include "libaktualizr/crypto/crypto.h"
-
+#include "exec.h"
 
 namespace fixtures {
 
@@ -129,7 +130,7 @@ class ComposeApp {
 
     Utils::writeFile(app_dir.Path() / compose_file_, std::string(content_));
     auto cmd = std::string("tar -czf ") + arch_file.Path().string() + " " + compose_file_;
-    if (0 != boost::process::system(cmd, boost::process::start_dir = app_dir.Path())) {
+    if (0 != bp::system(cmd, bp::start_dir = app_dir.Path())) {
       throw std::runtime_error("failed to create App archive: " + name());
     }
     arch_ = Utils::readFile(arch_file.Path());

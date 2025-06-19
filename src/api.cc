@@ -2,8 +2,8 @@
 
 #include <sys/file.h>
 #include <unistd.h>
+#include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
-#include <boost/process.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -980,9 +980,8 @@ class LocalLiteInstall : public LiteInstall {
     }
 
     std::string docker_host{"unix:///var/run/docker.sock"};
-    auto env{boost::this_process::environment()};
-    if (env.end() != env.find("DOCKER_HOST")) {
-      docker_host = env.get("DOCKER_HOST");
+    if (std::getenv("DOCKER_HOST") != nullptr) {
+      docker_host = std::getenv("DOCKER_HOST");
     }
 
     auto docker_client{local_update_source_.docker_client_ptr != nullptr

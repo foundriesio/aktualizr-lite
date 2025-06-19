@@ -4,7 +4,6 @@
 #include <archive_entry.h>
 #include <boost/format.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/process.hpp>
 
 #include "http/httpclient.h"
 #include "logging/logging.h"
@@ -14,9 +13,8 @@ namespace Docker {
 
 const DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = [](const std::string& docker_host_in) {
   std::string docker_host{docker_host_in};
-  auto env{boost::this_process::environment()};
-  if (env.end() != env.find("DOCKER_HOST")) {
-    docker_host = env.get("DOCKER_HOST");
+  if (std::getenv("DOCKER_HOST") != nullptr) {
+    docker_host = std::getenv("DOCKER_HOST");
   }
   static const std::string docker_host_prefix{"unix://"};
   const auto find_res = docker_host.find_first_of(docker_host_prefix);
@@ -29,10 +27,10 @@ const DockerClient::HttpClientFactory DockerClient::DefaultHttpClientFactory = [
   // Set a timeout for the overall request processing:
   // "the maximum time in milliseconds that you allow the entire transfer operation to take".
   int64_t timeout_ms{1000 * 60}; /* by default 1m timeout */
-  if (1 == env.count("COMPOSE_HTTP_TIMEOUT")) {
+  if (std::getenv("COMPOSE_HTTP_TIMEOUT") != nullptr) {
     std::string timeout_str;
     try {
-      timeout_str = env.get("COMPOSE_HTTP_TIMEOUT");
+      timeout_str = std::getenv("COMPOSE_HTTP_TIMEOUT");
       const auto timeout_s{boost::lexical_cast<int64_t>(timeout_str)};
       timeout_ms = timeout_s * 1000;
       LOG_DEBUG << "Docker client: setting the timeout defined by `COMPOSE_HTTP_TIMEOUT` env variable: " << timeout_str;

@@ -2,7 +2,9 @@
 
 #include <fcntl.h>
 #include <sys/file.h>
+#include <cstdlib>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/process.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -11,6 +13,7 @@
 #include "composeappmanager.h"
 #include "crypto/keymanager.h"
 #include "crypto/p11engine.h"
+#include "exec.h"
 #include "helpers.h"
 #include "http/httpclient.h"
 #include "primary/reportqueue.h"
@@ -260,7 +263,7 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
     return;
   }
   auto env = boost::this_process::environment();
-  boost::process::environment env_copy = env;
+  bp::environment env_copy = env;
   env_copy["MESSAGE"] = msg;
   env_copy["CURRENT_TARGET"] = (config.storage.path / "current-target").string();
   auto current = getCurrent();
@@ -275,7 +278,7 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
     env_copy["RESULT"] = result;
   }
 
-  int rc = boost::process::system(callback_program, env_copy);
+  int rc = bp::system(callback_program, env_copy);
   if (rc != 0) {
     LOG_ERROR << "Error with callback: " << rc;
   }

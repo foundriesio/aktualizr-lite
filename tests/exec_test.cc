@@ -6,7 +6,7 @@
 TEST(Exec, SuccessfulExec) {
   TemporaryDirectory test_dir;
   const auto test_file{test_dir / "test-file"};
-  exec("touch " + test_file.string(), "touch failed", boost::process::start_dir = test_dir.Path());
+  exec("touch " + test_file.string(), "touch failed", bp::start_dir = test_dir.Path());
   ASSERT_TRUE(boost::filesystem::exists(test_file));
 }
 

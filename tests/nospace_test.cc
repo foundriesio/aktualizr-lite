@@ -3,8 +3,6 @@
 #include <sys/statvfs.h>
 
 #include <boost/filesystem.hpp>
-#include <boost/process.hpp>
-#include <boost/process/env.hpp>
 
 #include "test_utils.h"
 #include "uptane_generator/image_repo.h"

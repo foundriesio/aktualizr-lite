@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
 #include <boost/format.hpp>
-#include <boost/process.hpp>
 #include "boost/format.hpp"
 
 #include "docker/docker.h"
