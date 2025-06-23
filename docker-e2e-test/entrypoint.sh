@@ -5,6 +5,9 @@ if [ -z $DEV_USER ] || [ -z $DEV_GROUP ]; then
     exit 1
 fi
 
+# Recent ubuntu images have a user named 'ubuntu' with UID 1000, which might conflict with $DEV_USER.
+deluser ubuntu 2> /dev/null || true
+
 # Create a group with the specified GID if it doesn't already exist
 if ! getent group $DEV_GROUP >/dev/null; then
     groupadd -g $DEV_GROUP devgrp
