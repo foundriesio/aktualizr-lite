@@ -17,7 +17,7 @@ RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
 #     && cp ./bin/fioctl-linux-amd64 /usr/bin/fioctl
 
 
-FROM foundries/aklite-dev AS aklite
+FROM foundries/aklite-dev:ubuntu-22.04 AS aklite
 
 # Install composectl
 COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
