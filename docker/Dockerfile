@@ -5,7 +5,7 @@ RUN git clone https://github.com/foundriesio/composeapp.git && \
     cd composeapp && git checkout v95 && make && cp ./bin/composectl /usr/bin/
 
 
-FROM ubuntu:jammy
+FROM ubuntu:plucky
 LABEL Description="Aktualizr testing dockerfile for Ubuntu Focal with static checks"
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -21,10 +21,10 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   bison \
   bash \
   ccache \
-  clang-11 \
-  clang-format-11 \
-  clang-tidy-11 \
-  clang-tools-11 \
+  clang \
+  clang-format \
+  clang-tidy \
+  clang-tools \
   cmake \
   curl \
   doxygen \
@@ -84,21 +84,17 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   docker-compose \
   sudo \
   shellcheck \
-  gcovr
-
-RUN ln -s clang-11 /usr/bin/clang && \
-    ln -s clang++-11 /usr/bin/clang++
-
-WORKDIR /tmp
-RUN git clone https://github.com/pantoniou/libfyaml.git
-RUN cd libfyaml && ./bootstrap.sh && ./configure --prefix /usr && make && make install
-RUN ldconfig
+  gcovr \
+  libfyaml-dev \
+  libfyaml-utils \
+  python3-docker \
+  skopeo
 
 # OSTREE with libcurl support for HSM
 #  This allows ostree calls to libcurl to be able to keys controlled by pkcs11
 WORKDIR /tmp
 RUN mkdir ostree && cd ostree && git init && git remote add origin https://github.com/ostreedev/ostree && \
-    git fetch origin v2021.6 && git checkout FETCH_HEAD && \
+    git fetch origin v2024.10 && git checkout FETCH_HEAD && \
     ./autogen.sh CC="clang" CFLAGS='-Wno-error=missing-prototypes' \
     --with-libarchive \
     --disable-man \
@@ -106,14 +102,21 @@ RUN mkdir ostree && cd ostree && git init && git remote add origin https://githu
     --with-curl --without-soup --prefix=/usr && \
     make -j8  install
 
+# Add Docker's official GPG key:
+RUN apt-get update && apt-get install -y ca-certificates curl
+RUN install -m 0755 -d /etc/apt/keyrings
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+RUN chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+RUN echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+RUN apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin
+
 # Install composeapp
 COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
-# Install skopeo
-RUN echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
-    wget -nv https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key -O- | apt-key add -
-RUN apt-get update && apt-get -y install skopeo && ln -s /usr/bin/skopeo /sbin/skopeo
-
-# Install specific version of docker-compose
-RUN pip3 install docker==4.2.1 && pip3 install docker-compose==1.26 pyOpenSSL==23.0.0
 
 WORKDIR /

@@ -17,7 +17,7 @@ RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
 #     && cp ./bin/fioctl-linux-amd64 /usr/bin/fioctl
 
 
-FROM foundries/aklite-dev:ubuntu-22.04 AS aklite
+FROM foundries/aklite-dev:ubuntu-25.04 AS aklite
 
 # Install composectl
 COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
@@ -30,26 +30,11 @@ COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
 
 
 # Install lmp-device-register
-RUN  apt-get install -y libboost-iostreams-dev
+RUN apt-get install -y libboost-iostreams-dev
 
 RUN git clone https://github.com/foundriesio/lmp-device-register \
   && cd lmp-device-register && git checkout mp-90 \
   && cmake -S . -B ./build -DDOCKER_COMPOSE_APP=ON -DHARDWARE_ID=intel-corei7-64 && cmake --build ./build --target install
-
-
-# Add Docker's official GPG key:
-RUN apt-get update && apt-get install -y ca-certificates curl
-RUN install -m 0755 -d /etc/apt/keyrings
-RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-RUN chmod a+r /etc/apt/keyrings/docker.asc
-
-# Add the repository to Apt sources:
-RUN echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-RUN apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin
 
 # Install docker credential helper and auth configuration
 COPY config.json /usr/lib/docker/config.json
@@ -60,11 +45,9 @@ RUN wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/downloa
     chmod +x /usr/local/bin/gosu && \
     gosu nobody true
 
-# Install pytest
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir pytest
+RUN  apt-get install -y python3-pytest
 
-    # Copy the entrypoint script
+# Copy the entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
