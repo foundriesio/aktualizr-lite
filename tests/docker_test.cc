@@ -209,8 +209,8 @@ class ImageTest : virtual public ::testing::Test {
 TEST_F(ImageTest, ImageManifest) {
   ASSERT_NO_THROW(const auto man{Docker::ImageManifest{img_man_}};
                   EXPECT_EQ(Docker::Descriptor{img_man_["config"]}, man.config()); const auto man_layers{man.layers()};
-                  int indx{0}; for (const auto& l
-                                    : man.layers()) { EXPECT_EQ(Docker::Descriptor{img_layers_[indx++]}, l); };);
+                  int indx{0};
+                  for (const auto& l : man.layers()) { EXPECT_EQ(Docker::Descriptor{img_layers_[indx++]}, l); };);
 }
 
 TEST_F(ImageTest, ImageManifestNegative) {

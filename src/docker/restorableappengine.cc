@@ -1049,7 +1049,7 @@ bool RestorableAppEngine::areDockerAndSkopeoOnTheSameVolume(const boost::filesys
 }
 
 std::tuple<uint64_t, bool> RestorableAppEngine::getPathVolumeID(const boost::filesystem::path& path) {
-  struct statvfs stvfsbuf {};
+  struct statvfs stvfsbuf{};
   const int stat_res = statvfs(path.c_str(), &stvfsbuf);
   if (stat_res < 0) {
     return {0, false};

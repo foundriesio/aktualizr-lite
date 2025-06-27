@@ -22,7 +22,7 @@ static std::string getStat(const std::string& path, Stat& stat) {
   if (-1 == (fd = open(path.c_str(), O_DIRECTORY | O_RDONLY))) {
     return std::string("Failed to open a file/directory; path: ") + path + ", err: " + std::strerror(errno);
   }
-  struct statvfs fs_stat {};
+  struct statvfs fs_stat{};
   const auto stat_res = fstatvfs(fd, &fs_stat);
   close(fd);
   if (-1 == stat_res) {

@@ -87,6 +87,6 @@ class Target {
    private:
     Json::Value target_apps_json_;
   };  // Apps
-};    // Target
+};  // Target
 
 #endif  // AKTUALIZR_LITE_TARGET_H_
