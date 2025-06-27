@@ -67,7 +67,7 @@ static const std::unordered_map<InstallResult::Status, StatusCode> i2s = {
     {InstallResult::Status::NeedsCompletion, SC::InstallNeedsReboot},
     {InstallResult::Status::AppsNeedCompletion, SC::InstallAppsNeedFinalization},
     {InstallResult::Status::BootFwNeedsCompletion, SC::InstallNeedsRebootForBootFw},
-    {InstallResult::Status::DownloadFailed, SC::InstallAppPullFailure},
+    {InstallResult::Status::DownloadFailed, SC::InstallTargetPullFailure},
     {InstallResult::Status::DownloadOstreeFailed, SC::DownloadFailure},
     {InstallResult::Status::VerificationFailed, SC::DownloadFailureVerificationFailed},
     {InstallResult::Status::DownloadFailed_NoSpace, SC::DownloadFailureNoSpace},
@@ -117,7 +117,7 @@ static const std::unordered_map<SC, std::string> status2string = {
 
     // Return codes for Install
     {SC::InstallAppsNeedFinalization, "Execute the `run` subcommand to finalize installation"},
-    {SC::InstallAppPullFailure, "Unable read target data, make sure it was pulled"},
+    {SC::InstallTargetPullFailure, "Unable read target data, make sure it was pulled"},
     {SC::InstallNeedsRebootForBootFw,
      "Reboot is required to complete the previous boot firmware update. After reboot the update attempt must be "
      "repeated from the beginning"},
