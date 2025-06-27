@@ -382,7 +382,7 @@ bool ComposeAppEngine::areContainersCreated(const App& app) {
 
 bool ComposeAppEngine::checkAvailableStorageSpace(const boost::filesystem::path& app_root,
                                                   uint64_t& out_available_size) {
-  struct statvfs stat_buf {};
+  struct statvfs stat_buf{};
   const int stat_res = statvfs(app_root.c_str(), &stat_buf);
   if (stat_res < 0) {
     LOG_WARNING << "Unable to read filesystem statistics: error code " << stat_res;
@@ -426,10 +426,7 @@ void ComposeAppEngine::pruneDockerStore(AppEngine::Client& client) {
 }
 
 ComposeAppEngine::AppState::AppState(const App& app, const boost::filesystem::path& root, bool set_version) try
-    : version_file_ {
-  (root / MetaDir / VersionFile).string()
-}
-, state_file_{(root / MetaDir / StateFile).string()} {
+    : version_file_{(root / MetaDir / VersionFile).string()}, state_file_{(root / MetaDir / StateFile).string()} {
   version_ = version_file_.readStr();
   if (app.uri.empty() || version_ == app.uri) {
     state_ = static_cast<State>(state_file_.read());
@@ -441,8 +438,7 @@ ComposeAppEngine::AppState::AppState(const App& app, const boost::filesystem::pa
     version_ = app.uri;
     version_file_.write(version_);
   }
-}
-catch (const std::exception& exc) {
+} catch (const std::exception& exc) {
   LOG_ERROR << "Failed to read version or state file: " << exc.what();
 }
 
