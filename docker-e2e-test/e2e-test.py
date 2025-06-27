@@ -958,6 +958,45 @@ def test_auto_downgrade(offline_: bool, single_step_: bool):
     single_step = single_step_
     run_test_auto_downgrade()
 
+
+def run_test_pull_install_different_versions():
+    logger.info("Testing pull/install with different versions")
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+
+    cp = invoke_aklite(['check', '--json', '1'])
+    verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
+
+    test_pairs = [
+        # apps missing
+        (all_primary_tag_targets[Target.WorkingOstree], all_primary_tag_targets[Target.AddFirstApp]),
+        # ostree hash missing
+        (all_primary_tag_targets[Target.UpdateOstreeWithApps], all_primary_tag_targets[Target.BrokenOstreeWithApps]),
+        # apps + ostree hash missing
+        (all_primary_tag_targets[Target.WorkingOstree], all_primary_tag_targets[Target.BrokenOstreeWithApps])
+    ]
+
+    for download_target, install_target in test_pairs:
+        # pull one version
+        cp = invoke_aklite(['pull', str(download_target.actual_version)])
+        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+        verify_callback([("download-pre", ""), ("download-post", "OK")])
+        verify_events(download_target.actual_version, {
+                ('EcuDownloadStarted', None),
+                ('EcuDownloadCompleted', True),
+            })
+
+        # try to install other version
+        cp = invoke_aklite(['install', str(install_target.actual_version)])
+        assert cp.returncode == ReturnCodes.InstallTargetPullFailure, cp.stdout.decode("utf-8")
+
+@pytest.mark.parametrize('offline_', [True, False])
+def test_pull_install_different_tags(offline_: bool):
+    global offline
+    offline = offline_
+    run_test_pull_install_different_versions()
+
 def test_auto_downgrade_daemon():
     run_test_deamon_auto_downgrade()
 
