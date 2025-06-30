@@ -6,7 +6,7 @@
 TEST(Exec, SuccessfulExec) {
   TemporaryDirectory test_dir;
   const auto test_file{test_dir / "test-file"};
-  exec("touch " + test_file.string(), "touch failed", bp::start_dir = test_dir.Path());
+  exec("touch " + test_file.string(), "touch failed", test_dir.Path());
   ASSERT_TRUE(boost::filesystem::exists(test_file));
 }
 
@@ -17,7 +17,7 @@ TEST(Exec, FailedExec) {
   } catch (const std::exception& exc) {
     const std::string err_msg{exc.what()};
 
-    ASSERT_EQ(err_msg.find("Failed to spawn process"), 0);
+    ASSERT_NE(err_msg.find("failed to run command"), std::string::npos);
     ASSERT_NE(err_msg.find(executable), std::string::npos) << "Actual error message: " + err_msg;
     ;
     ASSERT_NE(err_msg.find("No such file or directory"), std::string::npos) << "Actual error message: " + err_msg;

@@ -66,11 +66,11 @@ void AppEngine::remove(const App& app) {
 bool AppEngine::isRunning(const App& app) const {
   bool res{false};
   try {
-    std::future<std::string> output;
+    std::string output;
     exec(boost::format{"%s --store %s --compose %s ps %s --format json"} % composectl_cmd_ % storeRoot() %
              installRoot() % app.uri,
-         "", bp::std_out > output);
-    const auto app_status{Utils::parseJSON(output.get())};
+         "", "", &output);
+    const auto app_status{Utils::parseJSON(output)};
     // Make sure app images and bundle are properly installed
     res = checkAppInstallationStatus(app, app_status);
     if (res) {
@@ -86,10 +86,9 @@ bool AppEngine::isRunning(const App& app) const {
 Json::Value AppEngine::getRunningAppsInfo() const {
   Json::Value app_statuses;
   try {
-    std::future<std::string> output;
-    exec(boost::format{"%s --store %s ps --format json"} % composectl_cmd_ % storeRoot(), "", bp::std_out > output);
-    const auto output_str{output.get()};
-    app_statuses = Utils::parseJSON(output_str);
+    std::string output;
+    exec(boost::format{"%s --store %s ps --format json"} % composectl_cmd_ % storeRoot(), "", "", &output);
+    app_statuses = Utils::parseJSON(output);
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
   }
@@ -100,11 +99,10 @@ Json::Value AppEngine::getRunningAppsInfo() const {
 void AppEngine::prune(const Apps& app_shortlist) {
   try {
     // Remove apps that are not in the shortlist
-    std::future<std::string> output;
-    exec(boost::format{"%s --store %s ls --format json"} % composectl_cmd_ % storeRoot(), "failed to list apps",
-         bp::std_out > output);
-    const std::string output_str{output.get()};
-    const auto app_list{Utils::parseJSON(output_str)};
+    std::string output;
+    exec(boost::format{"%s --store %s ls --format json"} % composectl_cmd_ % storeRoot(), "failed to list apps", "",
+         &output);
+    const auto app_list{Utils::parseJSON(output)};
 
     Apps apps_to_prune;
     for (const auto& store_app_json : app_list) {
@@ -134,11 +132,10 @@ void AppEngine::prune(const Apps& app_shortlist) {
   }
   try {
     // Pruning unused store blobs
-    std::future<std::string> output;
+    std::string output;
     exec(boost::format{"%s --store %s prune --format=json"} % composectl_cmd_ % storeRoot(),
-         "failed to prune app blobs", bp::std_out > output);
-    const std::string output_str{output.get()};
-    const auto pruned_blobs{Utils::parseJSON(output_str)};
+         "failed to prune app blobs", "", &output);
+    const auto pruned_blobs{Utils::parseJSON(output)};
 
     // If at least one blob was pruned then the docker store needs to be pruned too to remove corresponding blobs
     // from the docker store
@@ -159,11 +156,10 @@ bool AppEngine::isAppFetched(const App& app) const {
     return true;
   }
   try {
-    std::future<std::string> output;
+    std::string output;
     exec(boost::format{"%s --store %s check %s --local --format json"} % composectl_cmd_ % storeRoot() % app.uri, "",
-         bp::std_out > output);
-    const std::string output_str{output.get()};
-    const auto app_fetch_status{Utils::parseJSON(output_str)};
+         "", &output);
+    const auto app_fetch_status{Utils::parseJSON(output)};
     if (app_fetch_status.isMember("fetch_check") && app_fetch_status["fetch_check"].isMember("missing_blobs") &&
         app_fetch_status["fetch_check"]["missing_blobs"].empty()) {
       res = true;
@@ -181,12 +177,11 @@ bool AppEngine::isAppFetched(const App& app) const {
 bool AppEngine::isAppInstalled(const App& app) const {
   bool res{false};
   try {
-    std::future<std::string> output;
+    std::string output;
     exec(boost::format{"%s --store %s check %s --local --install --format json"} % composectl_cmd_ % storeRoot() %
              app.uri,
-         "", bp::std_out > output);
-    const std::string output_str{output.get()};
-    const auto app_fetch_status{Utils::parseJSON(output_str)};
+         "", "", &output);
+    const auto app_fetch_status{Utils::parseJSON(output)};
     if (app_fetch_status.isMember("install_check") && app_fetch_status["install_check"].isMember(app.uri) &&
         app_fetch_status["install_check"][app.uri].isMember("missing_images") &&
         (app_fetch_status["install_check"][app.uri]["missing_images"].isNull() ||
