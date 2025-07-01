@@ -34,7 +34,7 @@ enum class StatusCode {
   DownloadFailureNoSpace = 60,
   DownloadFailureVerificationFailed = 70,
   InstallAlreadyInstalled = 75,
-  InstallAppPullFailure = 80,
+  InstallTargetPullFailure = 80,
   InstallNeedsRebootForBootFw = 90,
   InstallOfflineRollbackOk = 99,
   InstallNeedsReboot = 100,
