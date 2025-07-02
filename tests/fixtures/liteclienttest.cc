@@ -353,7 +353,7 @@ class ClientTest :virtual public ::testing::Test {
       }
     }
     if (download_result) {
-      ASSERT_EQ(client.install(to), expected_install_code);
+      ASSERT_EQ(client.install(to).result_code.num_code, expected_install_code);
       // make sure that the new Target hasn't been applied/finalized before reboot
       ASSERT_EQ(client.getCurrent().sha256Hash(), from.sha256Hash());
       ASSERT_EQ(client.getCurrent().filename(), from.filename());
@@ -400,7 +400,7 @@ class ClientTest :virtual public ::testing::Test {
       return;
     }
 
-    ASSERT_EQ(client.install(to), expected_install_code);
+    ASSERT_EQ(client.install(to).result_code.num_code, expected_install_code);
     if (expected_install_code == data::ResultCode::Numeric::kOk) {
       // make sure that the new Target has been applied
       ASSERT_EQ(client.getCurrent().sha256Hash(), to.sha256Hash());

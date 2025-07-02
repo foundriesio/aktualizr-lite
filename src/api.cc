@@ -674,7 +674,7 @@ class LiteInstall : public InstallContext {
     // setAppsNotChecked is required to force a re-load of apps list in case of a new Download operation
     client_->setAppsNotChecked();
     if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {
-      return InstallResult{InstallResult::Status::DownloadFailed, ""};
+      return InstallResult{InstallResult::Status::DownloadFailed, "Target verification failed, it may not have been pulled"};
     }
 
     // Update the target's custom data with a list of apps considered for an update taking into account
@@ -690,7 +690,8 @@ class LiteInstall : public InstallContext {
     }
     target_->updateCustom(custom);
 
-    auto rc = client_->install(*target_, mode_);
+    auto iresult = client_->install(*target_, mode_);
+    auto rc = iresult.result_code.num_code;
     auto status = InstallResult::Status::Failed;
     if (rc == data::ResultCode::Numeric::kNeedCompletion) {
       if (client_->isPendingTarget(*target_)) {
@@ -709,7 +710,7 @@ class LiteInstall : public InstallContext {
     } else if (rc == data::ResultCode::Numeric::kDownloadFailed) {
       status = InstallResult::Status::DownloadFailed;
     }
-    return InstallResult{status, ""};
+    return InstallResult{status, iresult.description};
   }
 
   DownloadResult Download() override {
@@ -1110,12 +1111,12 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
 InstallResult AkliteClient::CompleteInstallation() {
   data::InstallationResult ir;
   auto install_completed{client_->finalizeInstall(&ir)};
-  InstallResult complete_install_res{InstallResult::Status::Failed, ""};
+  InstallResult complete_install_res{InstallResult::Status::Failed, ir.description};
   if (install_completed) {
     if (!client_->isBootFwUpdateInProgress()) {
-      complete_install_res = {InstallResult::Status::Ok, ""};
+      complete_install_res = {InstallResult::Status::Ok, ir.description};
     } else {
-      complete_install_res = {InstallResult::Status::OkBootFwNeedsCompletion, ""};
+      complete_install_res = {InstallResult::Status::OkBootFwNeedsCompletion, ir.description};
     }
   } else if (ir.needCompletion()) {
     complete_install_res = {InstallResult::Status::NeedsCompletion, ir.description};

@@ -80,6 +80,12 @@ class InstallResult {
     UnknownError,
   };
   Status status;
+
+  /**
+   * Text description of the result.
+   * This is a human-readable string that can be used for logging or debugging. The content of this string might change
+   * between different versions of aktualizr-lite, so it should not be used for programmatic decision-making.
+   */
   std::string description;
 
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)

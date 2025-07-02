@@ -719,7 +719,7 @@ DownloadResult LiteClient::download(const Uptane::Target& target, const std::str
   return download_result;
 }
 
-data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target, InstallMode install_mode) {
+data::InstallationResult LiteClient::install(const Uptane::Target& target, InstallMode install_mode) {
   notifyInstallStarted(target);
   auto iresult = installPackage(target, install_mode);
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
@@ -757,7 +757,7 @@ data::ResultCode::Numeric LiteClient::install(const Uptane::Target& target, Inst
     // let go of the lock since we couldn't update
   }
   notifyInstallFinished(target, iresult);
-  return iresult.result_code.num_code;
+  return iresult;
 }
 
 bool LiteClient::isTargetActive(const Uptane::Target& target) const {
