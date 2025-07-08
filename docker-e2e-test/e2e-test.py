@@ -1038,3 +1038,38 @@ def test_rollback(do_reboot: bool, do_finalize: bool, offline_: bool, single_ste
     single_step = single_step_
     logger.info(f"Testing rollback {do_reboot=} {do_finalize=}")
     run_test_rollback(do_reboot, do_finalize)
+
+
+def run_test_restart_app_after_docker_stop():
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+
+    # Install
+    target = all_primary_tag_targets[Target.UpdateOstreeWithApps]
+    install_target(target)
+    check_running_apps(all_apps)
+
+    # Get the container ID of the shellhttpd_base_30000-httpd_1 container
+    docker_cmd_ps = ["docker", "ps", "--format", "json", "--filter", "name=shellhttpd_base_30000-httpd_1"]
+    cp = subprocess.run(docker_cmd_ps, capture_output=True)
+    ps_result = json.loads(cp.stdout.decode("utf-8"))
+    container_id:str = ps_result["ID"]
+
+    # Stop the container
+    docker_cmd_stop = ["docker", "stop", container_id]
+    cp = subprocess.run(docker_cmd_stop, capture_output=True)
+
+    # shellhttpd_base_300000 app is not running anymore
+    check_running_apps(["shellhttpd_base_10000", "shellhttpd_base_20000"])
+    install_target(target)
+
+    # After install (apps synchronization install), all apps should be running
+    check_running_apps(all_apps)
+
+def test_restart_app_after_docker_stop():
+    global offline, single_step
+    offline = False
+    single_step = True
+    logger.info(f"Testing restart app after docker stop")
+    run_test_restart_app_after_docker_stop()
