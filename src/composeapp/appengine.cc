@@ -214,7 +214,7 @@ static bool checkAppStatus(const AppEngine::App& app, const Json::Value& status)
   }
 
   bool is_running{true};
-  const std::set<std::string> broken_states{"created", "missing", "unknown"};
+  const std::set<std::string> broken_states{"created", "exited", "missing", "unknown"};
   for (const auto& s : status[app.uri]["services"]) {
     if (broken_states.count(s["state"].asString()) > 0) {
       is_running = false;
