@@ -3,6 +3,10 @@
 
 The following is a guide on how to run aktualizr-lite on your local Linux®-based host against FoundriesFactory®.
 
+> ⚠️
+Although it is possible to run `aktualizr-lite` directly on your host operating system,
+the use of the [Development Container](development-container.md) is recomended instead.
+
 ## Work Directory Setup
 
 `mkdir local-device-001 && cd local-device-001`
@@ -125,7 +129,7 @@ sudo ldconfig
 
 #### Fetch and Build lmp-device-register
 
-```
+```bash
 git clone https://github.com/foundriesio/lmp-device-register/
 cd lmp-device-register
 cmake -S . -B build -DDOCKER_COMPOSE_APP=ON -DHARDWARE_ID=intel-corei7-64 -DDEVICE_FACTORY=<factory-name>
@@ -148,7 +152,7 @@ chmod 700 .
 
 Create a toml file/snippet, e.g. `local.toml` with the following content:
 
-```
+```yaml
 [pacman]
 os = "lmp"
 sysroot = "$PWD/sysroot"
