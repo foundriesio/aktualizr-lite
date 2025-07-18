@@ -1,33 +1,30 @@
 # aktualizr-lite
 
-C++ implementation of [TUF](https://theupdateframework.io/) OTA update client based on [aktualizr](https://github.com/advancedtelematic/aktualizr)
+`aktualizr-lite` is an Over-The-Air (OTA) update client targeting embedded systems.
+It supports OTA updates for both the operating system (OS) and container-based applications,
+ensuring differential, atomic, and authenticated updates.
+
+## Features
+
+- **Security and Authenticity via TUF**  
+  The client verifies the authenticity and integrity of both OS and application updates using 
+  [TUF (The Update Framework)](https://theupdateframework.io/) for robust software supply chain security. 
 
 
-## Reference Manual
+- **OS Updates with OSTree**  
+  OS updates are powered by [OSTree](https://github.com/ostreedev/ostree), a versioned filesystem
+  technology that enables differential and atomic system updates using a Git-like model.
+  
 
-### Customizing Over-the-air Update Flow
+- **Containerized App Updates**  
+  Supports updates of container-based applications defined by the [Compose Specification](https://github.com/compose-spec/compose-spec),
+  enabling efficient and modular application delivery.
+  `aktualizr-lite` utilizes [composectl](https://github.com/foundriesio/composeapp) to update and manage compose apps.
 
-By default, Secure Over The Air (SOTA) update operates as a daemon process (Aktualizr-Lite) which periodically checks for updates. If an update is available, it will automatically download, and install it to a device that is following the update tag.
-
-This is not always the desired operation. There are a couple ways to control this operation:
-
-* [Command Line Interface - CLI](./docs/command-line-interface.md)
-* [Callbacks](./docs/callbacks.md)
-* [Custom Update Agent](./docs/custom-client.md)
-
-
-### Configuration
-
-[Configuration](./docs/configuration.md)
-
-
-### Architecture Overview
-
+## Architecture
 [Architecture Overview](./docs/architecture.md)
 
-
 ## Development and Testing
-
 
 ### Dependencies
 
@@ -88,3 +85,22 @@ Here are instructions on running aktualizr-lite in different environments:
 * [Running on Containerized Environment](./docs/development-container.md)
 * [Testing Changes on Device](./docs/testing-changes-on-device.md)
 * [Run aktualizr-lite locally against your Factory](./docs/how-to-run-locally.md)
+
+## Reference Manual
+
+### Customizing Over-the-air Update Flow
+
+By default, `aktualizr-lite` embedded into [the Foundries.io™ Linux® microPlatform (LmP)](https://docs.foundries.io/latest/reference-manual/linux/linux.html) operates as a daemon process
+which periodically checks for updates. If an update is available for a device then, it will automatically check, download, and install
+the update.
+
+This is not always the desired operation. There are a couple ways to control this operation:
+
+* [Command Line Interface - CLI](./docs/command-line-interface.md)
+* [Callbacks](./docs/callbacks.md)
+* [Custom Update Agent](./docs/custom-client.md)
+
+
+### Configuration
+
+[Configuration](./docs/configuration.md)
