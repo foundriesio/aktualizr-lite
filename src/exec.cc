@@ -6,8 +6,13 @@
 #include "logging/logging.h"
 
 void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost::filesystem::path& start_dir,
-          std::string* output) {
-  std::string command = "timeout 900 " + cmd + " 2>&1";
+          std::string* output, const std::string& timeout) {
+  std::string command;
+
+  if (!timeout.empty()) {
+    command = "timeout " + timeout + " ";
+  }
+  command += cmd + " 2>&1";
   if (!start_dir.empty()) {
     command = "cd " + start_dir.string() + " && " + command;
   }
@@ -52,6 +57,6 @@ void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost
 }
 
 void exec(const boost::format& cmd, const std::string& err_msg, const boost::filesystem::path& start_dir,
-          std::string* output) {
-  exec(cmd.str(), err_msg, start_dir, output);
+          std::string* output, const std::string& timeout) {
+  exec(cmd.str(), err_msg, start_dir, output, timeout);
 }

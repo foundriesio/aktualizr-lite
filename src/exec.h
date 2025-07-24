@@ -14,9 +14,9 @@ struct ExecError : std::runtime_error {
 };
 
 void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost::filesystem::path& start_dir = "",
-          std::string* output = nullptr);
+          std::string* output = nullptr, const std::string& timeout = "900s");
 
 void exec(const boost::format& cmd, const std::string& err_msg, const boost::filesystem::path& start_dir = "",
-          std::string* output = nullptr);
+          std::string* output = nullptr, const std::string& timeout = "900s");
 
 #endif  // AKTUALIZR_LITE_EXEC_H_
