@@ -674,7 +674,8 @@ class LiteInstall : public InstallContext {
     // setAppsNotChecked is required to force a re-load of apps list in case of a new Download operation
     client_->setAppsNotChecked();
     if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {
-      return InstallResult{InstallResult::Status::DownloadFailed, "Target verification failed, it may not have been pulled"};
+      return InstallResult{InstallResult::Status::DownloadFailed,
+                           "Target verification failed, it may not have been pulled"};
     }
 
     // Update the target's custom data with a list of apps considered for an update taking into account
