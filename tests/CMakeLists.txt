@@ -224,6 +224,7 @@ add_aktualizr_test(NAME exec
 )
 aktualizr_source_file_checks(exec_test.cc)
 target_include_directories(t_exec PRIVATE ${TEST_INCS})
+target_link_libraries(t_exec ${MAIN_TARGET_LIB})
 set_tests_properties(test_exec PROPERTIES LABELS "aklite:exec")
 
 add_aktualizr_test(NAME docker
