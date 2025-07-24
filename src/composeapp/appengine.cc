@@ -21,11 +21,11 @@ AppEngine::Result AppEngine::fetch(const App& app) {
     if (local_source_path_.empty()) {
       exec(boost::format{"%s --store %s pull -p %s --storage-usage-watermark %d"} % composectl_cmd_ % storeRoot() %
                app.uri % storage_watermark_,
-           "failed to pull compose app");
+           "failed to pull compose app", "", nullptr, "", true);
     } else {
       exec(boost::format{"%s --store %s pull -p %s -l %s --storage-usage-watermark %d"} % composectl_cmd_ %
                storeRoot() % app.uri % local_source_path_ % storage_watermark_,
-           "failed to pull compose app");
+           "failed to pull compose app", "", nullptr, "", true);
     }
     res = true;
     fetched_apps_.insert(app.uri);

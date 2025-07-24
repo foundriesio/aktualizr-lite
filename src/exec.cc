@@ -6,11 +6,19 @@
 #include "logging/logging.h"
 
 void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost::filesystem::path& start_dir,
-          std::string* output, const std::string& timeout) {
+          std::string* output, const std::string& timeout, bool print_output) {
   std::string command;
 
+  if (print_output) {
+    setvbuf(stdout, NULL, _IOLBF, 0);
+  }
+
+  if (print_output && isatty(STDOUT_FILENO)) {
+    command = "PARENT_HAS_TTY=1 ";
+  }
+
   if (!timeout.empty()) {
-    command = "timeout " + timeout + " ";
+    command += "timeout " + timeout + " ";
   }
   command += cmd + " 2>&1";
   if (!start_dir.empty()) {
@@ -27,6 +35,9 @@ void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost
     std::array<char, 128> buffer_array = {};
     char* buffer = buffer_array.data();
     while (std::fgets(buffer, sizeof(buffer_array), pipe) != nullptr) {
+      if (print_output) {
+        fputs(buffer, stdout);
+      }
       result += buffer;
     }
 
@@ -57,6 +68,6 @@ void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost
 }
 
 void exec(const boost::format& cmd, const std::string& err_msg, const boost::filesystem::path& start_dir,
-          std::string* output, const std::string& timeout) {
-  exec(cmd.str(), err_msg, start_dir, output, timeout);
+          std::string* output, const std::string& timeout, bool print_output) {
+  exec(cmd.str(), err_msg, start_dir, output, timeout, print_output);
 }
