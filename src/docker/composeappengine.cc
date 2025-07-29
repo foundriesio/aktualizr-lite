@@ -2,6 +2,7 @@
 #include "composeinfo.h"
 #include "dockerclient.h"
 
+#include <fcntl.h>
 #include <sys/statvfs.h>
 #include <filesystem>
 

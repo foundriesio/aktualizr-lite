@@ -2,6 +2,7 @@ set(TARGET_EXE aktualizr-lite)
 set(TARGET_LIB ${MAIN_TARGET_LIB})
 
 set(SRC helpers.cc
+        exec.cc
         storage/stat.cc
         composeappmanager.cc
         rootfstreemanager.cc
@@ -27,6 +28,7 @@ set(SRC helpers.cc
         aklitereportqueue.cc)
 
 set(HEADERS helpers.h
+        exec.h
         ../include/aktualizr-lite/storage/stat.h
         composeappmanager.h
         rootfstreemanager.h
@@ -44,7 +46,6 @@ set(HEADERS helpers.h
         target.h
         downloader.h
         installer.h
-        exec.h
         ../include/aktualizr-lite/cli/cli.h
         tuf/akhttpsreposource.h
         tuf/localreposource.h
