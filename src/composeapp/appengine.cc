@@ -234,6 +234,14 @@ static bool checkAppInstallationStatus(const AppEngine::App& app, const Json::Va
     LOG_ERROR << "could not get app status; uri: " << app.uri;
     return false;
   }
+  if (isNullOrEmptyOrUnset(app_status, "in_store")) {
+    LOG_ERROR << "could not check if app is in store; uri: " << app.uri;
+    return false;
+  }
+  if (!app_status["in_store"].asBool()) {
+    LOG_INFO << app.name << " is not found in the local store";
+    return false;
+  }
   if (!isNullOrEmptyOrUnset(app_status, "missing_images")) {
     LOG_INFO << app.name << " is not fully installed; missing images:\n" << app_status["missing_images"];
     return false;
