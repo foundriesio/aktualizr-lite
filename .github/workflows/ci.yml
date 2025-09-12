@@ -16,7 +16,7 @@ jobs:
     name: Clang Format And Tidy
     runs-on: ubuntu-latest
     container:
-      image: foundries/aklite-dev
+      image: foundries/aklite-dev:ubuntu-22.04
       env:
         CXX: clang++
         CC: clang
@@ -37,7 +37,7 @@ jobs:
     name: Build Garage Tools
     runs-on: ubuntu-latest
     container:
-      image: foundries/aklite-dev
+      image: foundries/aklite-dev:ubuntu-22.04
       env:
         CXX: clang++
         CC: clang
@@ -64,7 +64,7 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     container:
-      image: foundries/aklite-dev
+      image: foundries/aklite-dev:ubuntu-22.04
       env:
         CXX: clang++
         CC: clang
