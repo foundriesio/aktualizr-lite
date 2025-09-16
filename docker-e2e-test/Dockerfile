@@ -1,7 +1,7 @@
 FROM golang:1.22.2-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
-RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
+RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp &&  git checkout v95.1 \
     && STOREROOT=/var/sota/reset-apps COMPOSEROOT=/var/sota/compose-apps BASESYSTEMCONFIG=/usr/lib/docker make \
     && cp ./bin/composectl /usr/bin/
 
@@ -17,7 +17,7 @@ RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
 #     && cp ./bin/fioctl-linux-amd64 /usr/bin/fioctl
 
 
-FROM foundries/aklite-dev AS aklite
+FROM foundries/aklite-dev:ubuntu-22.04 AS aklite
 
 # Install composectl
 COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/

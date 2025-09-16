@@ -2,7 +2,7 @@
 
 ## A simple wrapper to allow development to occur in a container.
 
-container="foundries/aklite-dev"
+container="foundries/aklite-dev:ubuntu-22.04"
 DEF_COMPILER_ARGS="-e CC=clang -e CXX=clang++"
 
 here=$(dirname $(readlink -f $0))
