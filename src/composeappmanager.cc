@@ -647,23 +647,39 @@ Json::Value ComposeAppManager::getAppsState() const {
 
     if (!apps.isNull()) {
       for (Json::ValueIterator ii = apps.begin(); ii != apps.end(); ++ii) {
+        Json::Value& app{*ii};
+        // Determine the app state (health in the given context) based on its services health or state
         const auto app_name{ii.key().asString()};
-        const Json::Value& services{(*ii)["services"]};
-
-        (*ii)["state"] = "healthy";
-        for (Json::ValueConstIterator jj = services.begin(); jj != services.end(); ++jj) {
-          const Json::Value service{(*jj)};
+        Json::Value& services{app["services"]};
+        app["state"] = "healthy";
+        for (Json::ValueIterator jj = services.begin(); jj != services.end(); ++jj) {
+          Json::Value& service{(*jj)};
           // determine a service health based on its `health` field value if present
-          if (service["health"] == "unhealthy") {
-            // if it's unhealthy then an overall App is considered unhealthy
-            (*ii)["state"] = "unhealthy";
-            break;
+          if (service.isMember("health")) {
+            if (service["health"] != "healthy") {
+              // if it's not healthy then an overall App is considered unhealthy
+              app["state"] = "unhealthy";
+              break;
+            }
+          } else {
+            // if the service health field is not present then determine its health based on service state,
+            // also, set the "health" field accordingly so aklite reports consistent "apps-states" report
+            // regardless of the app engine
+            auto state = service["state"].asString();
+            if (state == "dead" ||
+                (state == "exited" && service["status"].asString().find("Exited (0)") == std::string::npos)) {
+              app["state"] = "unhealthy";
+              service["health"] = "unhealthy";
+              break;
+            } else {
+              service["health"] = "healthy";
+            }
           }
         }
 
-        if (!(*ii).isMember("uri")) {
+        if (!app.isMember("uri")) {
           // App's URI is stored in the `state` in the case of a regular Compose App engine
-          (*ii)["uri"] = "";  // TODO: figure out an app's URI
+          app["uri"] = "";  // TODO: figure out an app's URI
         }
       }  // for each App
     }
