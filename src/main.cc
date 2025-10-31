@@ -104,8 +104,13 @@ static void fillUpdateSource(LocalUpdateSource& local_update_source, const std::
 
 static int checkin(LiteClient& client, aklite::cli::CheckMode check_mode, const bpo::variables_map& params) {
   bool json_output = false;
+  bool report_hw_info = false;
   if (params.count("json") > 0) {
     json_output = params.at("json").as<bool>();
+  }
+
+  if (params.count("report-hw-info") > 0) {
+    report_hw_info = params.at("report-hw-info").as<bool>();
   }
 
   std::string src_dir;
@@ -114,6 +119,9 @@ static int checkin(LiteClient& client, aklite::cli::CheckMode check_mode, const 
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  if (!report_hw_info) {
+    client.disableHwInfoReporting();
+  }
   AkliteClientExt akclient(client_ptr, check_mode == aklite::cli::CheckMode::Current,
                            check_mode != aklite::cli::CheckMode::Current);
 
@@ -164,11 +172,16 @@ static int install(LiteClient& client, const bpo::variables_map& params, aklite:
                    aklite::cli::CheckMode check_mode) {
   int version;
   std::string target_name;
+  bool report_hw_info = false;
   get_target_id(params, version, target_name);
 
   std::string install_mode;
   if (params.count("install-mode") > 0) {
     install_mode = params.at("install-mode").as<std::string>();
+  }
+
+  if (params.count("report-hw-info") > 0) {
+    report_hw_info = params.at("report-hw-info").as<bool>();
   }
 
   LocalUpdateSource local_update_source;
@@ -181,6 +194,9 @@ static int install(LiteClient& client, const bpo::variables_map& params, aklite:
   }
 
   std::shared_ptr<LiteClient> client_ptr{&client, [](LiteClient* /*unused*/) {}};
+  if (!report_hw_info) {
+    client.disableHwInfoReporting();
+  }
   AkliteClientExt akclient{client_ptr, false, true};
 
   const static std::unordered_map<std::string, InstallMode> str2Mode = {{"delay-app-install", InstallMode::OstreeOnly}};
@@ -341,6 +357,7 @@ bpo::variables_map parse_options(int argc, char** argv) {
 #endif
       ("interval", bpo::value<uint64_t>(), "Override uptane.polling_secs interval to poll for updates when in daemon mode")
       ("json", bpo::value<bool>(), "Output targets information as json when running status, check, and list commands")
+      ("report-hw-info", bpo::value<bool>(), "Report hardware information to device gateway. Disabled by default. Affects check and update commands")
       ("src-dir", bpo::value<std::string>(), "Directory that contains an offline update bundle. Enables offline mode for check, pull, install, and update commands")
       ("command", bpo::value<std::string>(), "Command to be executed");
   // clang-format on

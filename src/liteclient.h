@@ -92,6 +92,7 @@ class LiteClient {
   bool wasTargetInstalled(const Uptane::Target& target) const;
   Type type() const { return type_; }
   boost::optional<std::vector<std::string>> getAppShortlist() const;
+  void disableHwInfoReporting() { hwinfo_reported_ = true; }
 
  private:
   FRIEND_TEST(helpers, locking);
