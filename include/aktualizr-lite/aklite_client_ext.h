@@ -101,6 +101,7 @@ class AkliteClientExt : public AkliteClient {
   bool IsAppRunning(const std::string &name, const std::string &uri) const;
 
  private:
+  bool UseComposeAppsProxy() const;
   bool cleanup_removed_apps_{true};
 };
 

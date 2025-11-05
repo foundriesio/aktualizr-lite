@@ -2,6 +2,7 @@
 
 #include <sys/file.h>
 #include <unistd.h>
+#include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -23,6 +24,37 @@
 #include "tuf/akrepo.h"
 #include "tuf/localreposource.h"
 #include "uptane/exceptions.h"
+
+class ComposeAppsProxy {
+public:
+  explicit ComposeAppsProxy() {}
+
+  InstallResult SetToken(std::shared_ptr<LiteClient> client) {
+    auto url = client->config.tls.server;
+    auto res = client->http_client->get(url + "/compose-apps-token", 1024);
+    if (res.isOk()) {
+      url = url.replace(0, 8, "https://"+res.body+"@");
+      setenv("COMPOSE_APPS_PROXY", url.c_str(), true);
+      auto capath = client->config.storage.tls_cacert_path.get(client->config.storage.path);
+      setenv("COMPOSE_APPS_PROXY_CA", capath.c_str(), true);
+    } else {
+      std::string desc{"Unable to get compose-apps proxy token: HTTP_" + std::to_string(res.http_status_code) + ": " + res.body};
+      LOG_ERROR << desc;
+      return {InstallResult::Status::Failed, desc};
+    }
+    return {InstallResult::Status::Ok};
+  }
+
+  ~ComposeAppsProxy() {
+    LOG_ERROR << "ANDY decon";
+    unsetenv("COMPOSE_APPS_PROXY");
+  }
+
+  ComposeAppsProxy(const ComposeAppsProxy&) = delete;
+  ComposeAppsProxy(ComposeAppsProxy&&) = delete;
+  ComposeAppsProxy &operator=(const ComposeAppsProxy&) = delete;
+  ComposeAppsProxy &operator=(ComposeAppsProxy&&) = delete;
+};
 
 // Returns the target that should be installed, if any.
 // It might be an updated version, a rollback target, or even the currently installed target, in case we need to sync
@@ -182,6 +214,16 @@ static const std::unordered_map<DownloadResult::Status, InstallResult::Status> d
     {DownloadResult::Status::DownloadFailed_NoSpace, InstallResult::Status::DownloadFailed_NoSpace},
 };
 
+bool AkliteClientExt::UseComposeAppsProxy() const {
+  const auto raw = client_->config.pacman.extra;
+  if (raw.count("compose_apps_proxy") == 1) {
+    std::string val = raw.at("compose_apps_proxy");
+    boost::algorithm::to_lower(val);
+    return val != "0" && val != "false";
+  }
+  return false;
+}
+
 InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std::string& reason,
                                               const std::string& correlation_id, const InstallMode install_mode,
                                               const LocalUpdateSource* local_update_source, const bool do_download,
@@ -229,6 +271,14 @@ InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std
   }
 
   if (do_download) {
+    ComposeAppsProxy proxy; 
+    if (UseComposeAppsProxy()) {
+      LOG_INFO << "Using proxy to download compose apps";
+      auto ir = proxy.SetToken(client_);
+      if (ir.status == InstallResult::Status::Failed) {
+        return ir;
+      }
+    }
     auto dr = installer->Download();
     if (!dr) {
       if (dr.noSpace()) {
