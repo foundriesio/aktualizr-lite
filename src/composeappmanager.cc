@@ -63,6 +63,12 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   if (raw.count("composectl_bin") == 1) {
     composectl_bin = raw.at("composectl_bin");
   }
+  if (raw.count("compose_apps_proxy") == 1) {
+    apps_proxy = raw.at("compose_apps_proxy");
+  }
+  if (raw.count("compose_apps_proxy_ca") == 1) {
+    apps_proxy_ca = raw.at("compose_apps_proxy_ca");
+  }
 #endif  // USE_COMPOSEAPP_ENGINE
 
   if (raw.count("docker_prune") == 1) {
@@ -145,10 +151,24 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
       }
 #ifdef USE_COMPOSEAPP_ENGINE
       const auto composectl_cmd{boost::filesystem::canonical(cfg_.composectl_bin).string()};
+      composeapp::ProxyProvider proxy{nullptr};
+      if (!cfg_.apps_proxy.empty()) {
+        proxy = [this]() {
+          std::string proxy_url;
+          const auto& proxyUrlResp{http_->post(cfg_.apps_proxy, "")};
+          if (proxyUrlResp.isOk()) {
+            proxy_url = proxyUrlResp.body;
+            LOG_DEBUG << "Got app proxy URL: " << proxy_url;
+          } else {
+            LOG_ERROR << "Failed to obtain proxy URL: " << proxyUrlResp.getStatusStr();
+          }
+          return std::make_pair(proxy_url, cfg_.apps_proxy_ca);
+        };
+      }
       app_engine_ = std::make_shared<composeapp::AppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
           std::make_shared<Docker::DockerClient>(), docker_host, compose_cmd, composectl_cmd, cfg_.storage_watermark,
-          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
+          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark), nullptr, true, "", proxy);
 #else
       const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
       app_engine_ = std::make_shared<Docker::RestorableAppEngine>(
