@@ -27,6 +27,8 @@ class ComposeAppManager : public RootfsTreeManager {
     boost::filesystem::path skopeo_bin{"/sbin/skopeo"};
 #ifdef USE_COMPOSEAPP_ENGINE
     boost::filesystem::path composectl_bin{"/usr/bin/composectl"};
+    std::string apps_proxy;
+    std::string apps_proxy_ca;
 #endif  // USE_COMPOSEAPP_ENGINE
     bool docker_prune{true};
     bool force_update{false};

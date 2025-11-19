@@ -149,6 +149,7 @@ LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const
       // Enforce the restorable app engine usage
       config.pacman.extra["reset_apps"] = "";
     }
+    config.pacman.extra["compose_apps_proxy_ca"] = config.storage.tls_cacert_path.get(config.storage.path).string();
     basepacman = std::make_shared<ComposeAppManager>(config.pacman, config.bootloader, storage, http_client,
                                                      ostree_sysroot, *key_manager_, app_engine);
   } else if (config.pacman.type == RootfsTreeManager::Name) {

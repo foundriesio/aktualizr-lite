@@ -14,11 +14,22 @@ static bool isNullOrEmptyOrUnset(const Json::Value& val, const std::string& fiel
 
 AppEngine::Result AppEngine::fetch(const App& app) {
   Result res{false};
+  bool was_proxy_set{false};
   try {
     // If a given app was fetched before, then don't consider it as a fetched app if a caller tries to fetch it again
     // for one reason or another - hence remove it from the set of fetched apps.
     fetched_apps_.erase(app.uri);
     if (local_source_path_.empty()) {
+      if (proxy_) {
+        // If the proxy provider is set, then obtain the proxy URL and CA from it,
+        // and set the corresponding environment variables for `composectl`.
+        const auto proxy{proxy_()};
+        if (!proxy.first.empty()) {
+          ::setenv("COMPOSE_APPS_PROXY", proxy.first.c_str(), 1);
+          ::setenv("COMPOSE_APPS_PROXY_CA", proxy.second.c_str(), 1);
+          was_proxy_set = true;
+        }
+      }
       exec(boost::format{"%s --store %s pull -p %s --storage-usage-watermark %d"} % composectl_cmd_ % storeRoot() %
                app.uri % storage_watermark_,
            "failed to pull compose app", "", nullptr, "4h", true);
@@ -39,6 +50,10 @@ AppEngine::Result AppEngine::fetch(const App& app) {
     }
   } catch (const std::exception& exc) {
     res = {false, exc.what()};
+  }
+  if (was_proxy_set) {
+    ::unsetenv("COMPOSE_APPS_PROXY");
+    ::unsetenv("COMPOSE_APPS_PROXY_CA");
   }
   return res;
 }
