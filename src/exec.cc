@@ -6,7 +6,7 @@
 #include "logging/logging.h"
 
 void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost::filesystem::path& start_dir,
-          std::string* output, const std::string& timeout, bool print_output) {
+          std::string* output, const std::string& timeout, bool print_output, bool ignore_stderr) {
   std::string command;
 
   if (print_output) {
@@ -20,7 +20,13 @@ void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost
   if (!timeout.empty()) {
     command += "timeout " + timeout + " ";
   }
-  command += cmd + " 2>&1";
+
+  command += cmd;
+
+  if (!ignore_stderr) {
+    command + " 2>&1";
+  }
+
   if (!start_dir.empty()) {
     command = "cd " + start_dir.string() + " && " + command;
   }
@@ -68,6 +74,6 @@ void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost
 }
 
 void exec(const boost::format& cmd, const std::string& err_msg, const boost::filesystem::path& start_dir,
-          std::string* output, const std::string& timeout, bool print_output) {
-  exec(cmd.str(), err_msg, start_dir, output, timeout, print_output);
+          std::string* output, const std::string& timeout, bool print_output, bool ignore_stderr) {
+  exec(cmd.str(), err_msg, start_dir, output, timeout, print_output, ignore_stderr);
 }
