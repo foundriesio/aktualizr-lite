@@ -95,6 +95,12 @@ class LiteClient {
   void disableHwInfoReporting() { hwinfo_reported_ = true; }
 
  private:
+  struct Diff {
+    int from;
+    int to;
+  };
+  using TufUpdateDetails = std::map<std::string, Diff>;
+
   FRIEND_TEST(helpers, locking);
   FRIEND_TEST(helpers, callback);
   FRIEND_TEST(AkliteTest, RollbackIfAppsInstallFails);
@@ -114,6 +120,9 @@ class LiteClient {
   void updateRequestHeaders();
   static bool isRegistered(const KeyManager& key_manager);
   static Type getClientType(const KeyManager& key_manager);
+
+  static void forEachRoleVersion(std::shared_ptr<const INvStorage> storage,
+                                 const std::function<void(const Uptane::Role&, int)>& func);
 
   boost::filesystem::path callback_program;
   std::unique_ptr<KeyManager> key_manager_;
@@ -135,6 +144,8 @@ class LiteClient {
   const int report_queue_run_pause_s_{10};
   const int report_queue_event_limit_{6};
   Type type_{Type::Undefined};
+
+  TufUpdateDetails tuf_update_details_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_

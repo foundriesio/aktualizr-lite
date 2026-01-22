@@ -126,7 +126,7 @@ TEST_F(ApiClientTest, CheckIn) {
   auto result = client.CheckIn();
 
   auto events = getDeviceGateway().getEvents();
-  ASSERT_EQ(2, events.size());
+  ASSERT_EQ(3, events.size());
   auto val = getDeviceGateway().readSotaToml();
   ASSERT_NE(std::string::npos, val.find("[pacman]"));
 
@@ -141,7 +141,7 @@ TEST_F(ApiClientTest, CheckIn) {
   EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
   EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")));
   result = client.CheckIn();
-  ASSERT_EQ(0, getDeviceGateway().getEvents().size());
+  ASSERT_EQ(1, getDeviceGateway().getEvents().size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);
   ASSERT_EQ(2, result.Targets().size());
@@ -164,7 +164,7 @@ TEST_F(ApiClientTest, CheckInLocal) {
 
   // No communication is done with the device gateway inside CheckInLocal
   auto events = getDeviceGateway().getEvents();
-  ASSERT_EQ(0, events.size());
+  ASSERT_EQ(1, events.size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());
 
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);
@@ -173,7 +173,7 @@ TEST_F(ApiClientTest, CheckInLocal) {
   auto new_target = createTarget();
   tuf_repo_.updateBundleMeta(new_target.filename());
   result = client.CheckInLocal(&local_update_source_);
-  ASSERT_EQ(0, getDeviceGateway().getEvents().size());
+  ASSERT_EQ(2, getDeviceGateway().getEvents().size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);
   ASSERT_EQ(2, result.Targets().size());
@@ -187,7 +187,7 @@ TEST_F(ApiClientTest, CheckInWithoutTargetImport) {
   auto result = client.CheckIn();
 
   auto events = getDeviceGateway().getEvents();
-  ASSERT_EQ(2, events.size());
+  ASSERT_EQ(3, events.size());
   auto val = getDeviceGateway().readSotaToml();
   ASSERT_NE(std::string::npos, val.find("[pacman]"));
 
@@ -199,7 +199,7 @@ TEST_F(ApiClientTest, CheckInWithoutTargetImport) {
 
   auto new_target = createTarget();
   result = client.CheckIn();
-  ASSERT_EQ(0, getDeviceGateway().getEvents().size());
+  ASSERT_EQ(1, getDeviceGateway().getEvents().size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());
   ASSERT_EQ(CheckInResult::Status::Ok, result.status);
   ASSERT_EQ(1, result.Targets().size());
@@ -603,7 +603,8 @@ TEST_F(ApiClientTest, CheckInCurrent) {
   auto result = client.CheckIn();
 
   auto events = getDeviceGateway().getEvents();
-  ASSERT_EQ(2, events.size());
+  // Network info + System info + MetadataUpdateCompleted event
+  ASSERT_EQ(3, events.size());
   auto val = getDeviceGateway().readSotaToml();
   ASSERT_NE(std::string::npos, val.find("[pacman]"));
 
