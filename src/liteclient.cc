@@ -412,6 +412,18 @@ bool LiteClient::wasTargetInstalled(const Uptane::Target& target) const {
          });
 }
 
+class MetadataUpdateCompletedReport : public ReportEvent {
+ public:
+  MetadataUpdateCompletedReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, bool success,
+                                const std::string& details)
+      : ReportEvent("MetadataUpdateCompleted", 0) {
+    setEcu(ecu);
+    setCorrelationId(correlation_id);
+    custom["success"] = success;
+    custom["details"] = details;
+  }
+};
+
 class DetailedDownloadReport : public EcuDownloadStartedReport {
  public:
   DetailedDownloadReport(const Uptane::EcuSerial& ecu, const std::string& correlation_id, const std::string& details)
@@ -429,11 +441,63 @@ class DetailedDownloadCompletedReport : public EcuDownloadCompletedReport {
   }
 };
 
-void LiteClient::notifyTufUpdateStarted() { callback("check-for-update-pre", Uptane::Target::Unknown(), ""); }
+void LiteClient::notifyTufUpdateStarted() {
+  callback("check-for-update-pre", Uptane::Target::Unknown(), "");
+
+  forEachRoleVersion(storage, [&](const Uptane::Role& role, int version) {
+    auto& d = tuf_update_details_[role.ToString()];
+    d.from = version;
+  });
+}
 
 void LiteClient::notifyTufUpdateFinished(const std::string& err, const Uptane::Target& t) {
   auto msg = err.empty() ? "OK" : "FAILED: " + err;
   callback("check-for-update-post", t, msg);
+
+  static thread_local boost::uuids::random_generator uuid_gen;
+  const std::string prefix{"tuf-meta"};
+  auto cor_id = prefix + "-" + boost::uuids::to_string(uuid_gen());
+
+  bool was_updated;
+  std::string details;
+  bool need_separator{false};
+
+  forEachRoleVersion(storage, [&](const Uptane::Role& role, int version) {
+    auto& d = tuf_update_details_[role.ToString()];
+    d.to = version;
+    was_updated = d.from != d.to;
+  });
+
+  if (!err.empty() || was_updated) {
+    // Compose the "details" string with info about metadata if there is an error or metadata was updated
+    for (const auto& d : tuf_update_details_) {
+      if (need_separator) {
+        details += "; ";
+      }
+      details += d.first + ": " + std::to_string(d.second.from);
+      if (d.second.from != d.second.to) {
+        details += " -> " + std::to_string(d.second.to);
+      }
+      need_separator = true;
+    }
+  }
+
+  if (!err.empty()) {
+    if (need_separator) {
+      details += "; err: ";
+    }
+    details += err;
+  }
+  if (!details.empty()) {
+    // If there is an error or the TUF metadata was updated ("details" is not empty), then send the metadata update
+    // completed event
+    auto update_target{t};
+    if (!update_target.IsValid()) {
+      update_target = getCurrent();
+    }
+    notify(update_target,
+           std_::make_unique<MetadataUpdateCompletedReport>(primary_ecu.first, cor_id, err.empty(), details));
+  }
 }
 
 void LiteClient::notifyDownloadStarted(const Uptane::Target& t, const std::string& reason) {
@@ -870,4 +934,25 @@ LiteClient::Type LiteClient::getClientType(const KeyManager& key_manager) {
 
 boost::optional<std::vector<std::string>> LiteClient::getAppShortlist() const {
   return config.pacman.type == ComposeAppManager::Name ? ComposeAppManager::Config(config.pacman).apps : boost::none;
+}
+
+void LiteClient::forEachRoleVersion(std::shared_ptr<const INvStorage> storage,
+                                    const std::function<void(const Uptane::Role&, int)>& func) {
+  for (const auto& role : Uptane::Role::Roles()) {
+    int ver{-1};
+    std::string meta;
+    bool loaded;
+
+    if (role == Uptane::Role::Root()) {
+      loaded = storage->loadRoot(&meta, Uptane::RepositoryType::Image(), Uptane::Version());
+    } else {
+      loaded = storage->loadNonRoot(&meta, Uptane::RepositoryType::Image(), role);
+    }
+
+    if (loaded) {
+      ver = Uptane::extractVersionUntrusted(meta);
+    }
+
+    func(role, ver);
+  }
 }
