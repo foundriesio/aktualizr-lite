@@ -11,6 +11,7 @@ enum class ExitCode { ExitCodeInsufficientSpace = 100 };
 static bool checkAppStatus(const AppEngine::App& app, const Json::Value& status);
 static bool checkAppInstallationStatus(const AppEngine::App& app, const Json::Value& status);
 static bool isNullOrEmptyOrUnset(const Json::Value& val, const std::string& field);
+static Json::Value parseJSON(const std::string& json_str);
 
 AppEngine::Result AppEngine::fetch(const App& app) {
   Result res{false};
@@ -85,7 +86,7 @@ bool AppEngine::isRunning(const App& app) const {
     exec(boost::format{"%s --store %s --compose %s ps %s --format json"} % composectl_cmd_ % storeRoot() %
              installRoot() % app.uri,
          "", "", &output);
-    const auto app_status{Utils::parseJSON(output)};
+    const auto app_status{parseJSON(output)};
     // Make sure app images and bundle are properly installed
     res = checkAppInstallationStatus(app, app_status);
     if (res) {
@@ -103,7 +104,7 @@ Json::Value AppEngine::getRunningAppsInfo() const {
   try {
     std::string output;
     exec(boost::format{"%s --store %s ps --format json"} % composectl_cmd_ % storeRoot(), "", "", &output);
-    app_statuses = Utils::parseJSON(output);
+    app_statuses = parseJSON(output);
   } catch (const std::exception& exc) {
     LOG_WARNING << "Failed to get an info about running containers: " << exc.what();
   }
@@ -117,7 +118,7 @@ void AppEngine::prune(const Apps& app_shortlist) {
     std::string output;
     exec(boost::format{"%s --store %s ls --format json"} % composectl_cmd_ % storeRoot(), "failed to list apps", "",
          &output);
-    const auto app_list{Utils::parseJSON(output)};
+    const auto app_list{parseJSON(output)};
 
     Apps apps_to_prune;
     for (const auto& store_app_json : app_list) {
@@ -174,7 +175,7 @@ bool AppEngine::isAppFetched(const App& app) const {
     std::string output;
     exec(boost::format{"%s --store %s check %s --local --format json"} % composectl_cmd_ % storeRoot() % app.uri, "",
          "", &output);
-    const auto app_fetch_status{Utils::parseJSON(output)};
+    const auto app_fetch_status{parseJSON(output)};
     if (app_fetch_status.isMember("fetch_check") && app_fetch_status["fetch_check"].isMember("missing_blobs") &&
         app_fetch_status["fetch_check"]["missing_blobs"].empty()) {
       res = true;
@@ -196,7 +197,7 @@ bool AppEngine::isAppInstalled(const App& app) const {
     exec(boost::format{"%s --store %s check %s --local --install --format json"} % composectl_cmd_ % storeRoot() %
              app.uri,
          "", "", &output);
-    const auto app_fetch_status{Utils::parseJSON(output)};
+    const auto app_fetch_status{parseJSON(output)};
     if (app_fetch_status.isMember("install_check") && app_fetch_status["install_check"].isMember(app.uri) &&
         app_fetch_status["install_check"][app.uri].isMember("missing_images") &&
         (app_fetch_status["install_check"][app.uri]["missing_images"].isNull() ||
@@ -276,6 +277,17 @@ static bool isNullOrEmptyOrUnset(const Json::Value& val, const std::string& fiel
     res = true;
   }
   return res;
+}
+
+static Json::Value parseJSON(const std::string& json_str) {
+  std::istringstream strs(json_str);
+  Json::Value json_value;
+  std::string parse_error;
+  parseFromStream(Json::CharReaderBuilder(), strs, &json_value, &parse_error);
+  if (json_value.isNull() && !parse_error.empty()) {
+    throw std::runtime_error("failed to parse json; err: " + parse_error + ", json: " + json_str);
+  }
+  return json_value;
 }
 
 }  // namespace composeapp
