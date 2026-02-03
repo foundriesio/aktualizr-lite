@@ -1,5 +1,6 @@
 #include "exec.h"
 
+#include <boost/chrono.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 
@@ -21,6 +22,7 @@ struct ProcessResult {
   int exit_code;
 };
 
+static long long convertToSeconds(std::string input);
 class Process {
  private:
   int stdout_pipe[2];
@@ -35,7 +37,8 @@ class Process {
   }
 
   // Read from both pipes simultaneously to avoid deadlock
-  void readFromBothPipes(std::string& stdout_data, std::string& stderr_data, bool print_output) {
+  void readFromBothPipes(std::string& stdout_data, std::string& stderr_data, bool print_output,
+                         const std::string& timeout) {
     std::array<char, 4096> buffer;
     fd_set read_fds;
     int max_fd = std::max(stdout_pipe[0], stderr_pipe[0]) + 1;
@@ -46,13 +49,23 @@ class Process {
     setNonBlocking(stdout_pipe[0]);
     setNonBlocking(stderr_pipe[0]);
 
+    auto start_time = boost::chrono::steady_clock::now();
+    auto end_time = start_time;
+    if (!timeout.empty()) {
+      end_time = start_time + boost::chrono::seconds(convertToSeconds(timeout));
+    }
     while (stdout_open || stderr_open) {
       FD_ZERO(&read_fds);
 
       if (stdout_open) FD_SET(stdout_pipe[0], &read_fds);
       if (stderr_open) FD_SET(stderr_pipe[0], &read_fds);
 
-      int result = select(max_fd, &read_fds, nullptr, nullptr, NULL);
+      // Wait for data on either pipe (with timeout)
+      struct timeval select_timeout;
+      select_timeout.tv_sec = 1;
+      select_timeout.tv_usec = 0;
+
+      int result = select(max_fd, &read_fds, nullptr, nullptr, &select_timeout);
       if (result == -1) {
         LOG_ERROR << "Error in select: " << strerror(errno);
         throw std::runtime_error("exec: Error creating pipes");
@@ -85,6 +98,9 @@ class Process {
           stderr_open = false;
         }
       }
+      if (!timeout.empty() && boost::chrono::steady_clock::now() > end_time) {
+        throw std::runtime_error("Timeout occurred while waiting for a child process completion");
+      }
     }
   }
 
@@ -106,7 +122,7 @@ class Process {
     stderr_pipe[0] = stderr_pipe[1] = -1;
   }
 
-  ProcessResult execute(const std::string& command, bool print_output) {
+  ProcessResult execute(const std::string& command, bool print_output, const std::string& timeout) {
     ProcessResult result;
     result.exit_code = -1;
 
@@ -152,7 +168,7 @@ class Process {
     stderr_pipe[1] = -1;
 
     // Read from both pipes simultaneously to avoid deadlock
-    readFromBothPipes(result.stdout_output, result.stderr_output, print_output);
+    readFromBothPipes(result.stdout_output, result.stderr_output, print_output, timeout);
 
     // Close read ends
     close(stdout_pipe[0]);
@@ -172,6 +188,24 @@ class Process {
   }
 };
 
+static long long convertToSeconds(std::string input) {
+  if (input.empty()) return 0;
+
+  char unit = input.back();
+  long long value = std::stoll(input.substr(0, input.size() - 1));
+
+  switch (unit) {
+    case 'h':
+      return value * 3600;
+    case 'm':
+      return value * 60;
+    case 's':
+      return value;
+    default:
+      throw std::invalid_argument("Invalid time interval " + input);
+  }
+}
+
 void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost::filesystem::path& start_dir,
           std::string* output, const std::string& timeout, bool print_output) {
   std::string command;
@@ -184,9 +218,6 @@ void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost
     command = "PARENT_HAS_TTY=1 ";
   }
 
-  if (!timeout.empty()) {
-    command += "timeout " + timeout + " ";
-  }
   command += cmd;
   if (!start_dir.empty()) {
     command = "cd " + start_dir.string() + " && " + command;
@@ -194,12 +225,8 @@ void exec(const std::string& cmd, const std::string& err_msg_prefix, const boost
 
   LOG_DEBUG << "Running: `" << command << "`";
   Process proc;
-  auto result = proc.execute(command.c_str(), print_output);
+  auto result = proc.execute(command.c_str(), print_output, timeout);
 
-  if (result.exit_code == 124) {
-    // `timeout` command return code indicating that a timeout has occurred
-    throw std::runtime_error("Timeout occurred while waiting for a child process completion");
-  }
   LOG_DEBUG << "Command exited with code " << result.exit_code;
 
   if (result.exit_code != EXIT_SUCCESS) {
