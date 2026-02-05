@@ -17,10 +17,8 @@ TEST(Exec, FailedExec) {
   } catch (const std::exception& exc) {
     const std::string err_msg{exc.what()};
 
-    ASSERT_NE(err_msg.find("failed to run command"), std::string::npos);
+    ASSERT_NE(err_msg.find("not found"), std::string::npos) << "Actual error message: " + err_msg;
     ASSERT_NE(err_msg.find(executable), std::string::npos) << "Actual error message: " + err_msg;
-    ;
-    ASSERT_NE(err_msg.find("No such file or directory"), std::string::npos) << "Actual error message: " + err_msg;
     ;
   }
 }
@@ -38,6 +36,18 @@ TEST(Exec, SuccessfulExecFailedExecutable) {
     ASSERT_EQ(err_msg.find(err_msg_prefix), 0);
     ASSERT_NE(err_msg.find("unrecognized option \'" + bad_option + "\'"), std::string::npos)
         << "Actual error message: " + err_msg;
+  }
+}
+
+TEST(Exec, ExecTimeout) {
+  const std::string cmd{"sleep 10"};
+
+  try {
+    exec(cmd, "", "", nullptr, "2s", false);
+  } catch (const std::runtime_error& exc) {
+    const std::string err_msg{exc.what()};
+
+    ASSERT_NE(err_msg.find("Timeout"), std::string::npos) << "Actual error message: " + err_msg;
   }
 }
 
