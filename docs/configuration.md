@@ -1,11 +1,10 @@
 # Configuration
 
-
 ## Configuration Update Methods
 
-* Editing ``/var/sota/sota.toml`` on a device
-* Adding or editing an existing configuration snippet, e.g. ``/etc/sota/conf.d/z-50-fioctl-01.toml`` on a device
-* Running ``fioctl devices config <device>`` from a host.
+* Editing `/var/sota/sota.toml` on a device
+* Adding or editing an existing configuration snippet, e.g. `/etc/sota/conf.d/z-50-fioctl-01.toml` on a device
+* Running `fioctl devices config <device>` from a host.
   See [Configuring Devices](https://docs.foundries.io/latest/reference-manual/ota/configuring.html#ref-configuring-devices) for more details.
 
 ## Parameters
