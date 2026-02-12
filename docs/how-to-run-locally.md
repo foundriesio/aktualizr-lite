@@ -1,11 +1,12 @@
 
-# How to run aktualizr-lite Locally
+# How to Run Aktualizr-Lite Locally
 
-The following is a guide on how to run aktualizr-lite on your local Linux®-based host against FoundriesFactory®.
+The following is a guide on how to run aktualizr-lite on your local Linux®-based host against
+the FoundriesFactory® Platform.
 
-> ⚠️
-Although it is possible to run `aktualizr-lite` directly on your host operating system,
-the use of the [Development Container](development-container.md) is recomended instead.
+> [!TIP]
+> Although it is possible to run `aktualizr-lite` directly on your host operating system,
+> the use of the [Development Container](development-container.md) is recomended instead.
 
 ## Work Directory Setup
 
@@ -30,7 +31,7 @@ python3 -m pip install docker-compose
 apt install -y newuidmap newgidmap slirp4netns
 ```
 
-More details can be found https://docs.docker.com/engine/security/rootless/
+More details can be found in the [Docker documentation](https://docs.docker.com/engine/security/rootless/)
 
 ```
 mkdir docker-data
@@ -40,12 +41,14 @@ chmod u+x dockerd-rootless.sh
 
 ### Dependency: Ostree/Libostree
 
-Aktualizr-lite requires libostree built with libcurl—not with libsoup which is the default in Ubuntu.
-If `ostree --version | grep libcurl` yields an empty result, then OSTree & libostree should be built & installed locally.
+Aktualizr-lite requires `libostree` built with `libcurl`—not with `libsoup`, the default in Ubuntu.
+If `ostree --version | grep libcurl` yields an empty result,
+then OSTree & `libostree` should be built & installed locally.
 
 #### Configure, Build and Install OSTree/Libostree
 
-libostree itself has a bunch of prerequisites. What is required depends on the host system, such as
+`libostree` itself has prerequisites.
+What is required depends on the host system, such as
 Distro, version, what is already installed, etc.
 See the [full list of dependencies](https://github.com/foundriesio/aktualizr/blob/2020.9%2Bfio/docker/Dockerfile.ubuntu.bionic).
 Most likely, the following will be required:
@@ -108,9 +111,10 @@ ostree admin deploy --os=$OS $deploy_hash
 
 #### Install YAML to JSON Tool
 
-Aktualizr-lite uses libfyaml to consume `docker.yml` files in json format.
-In order to resolve that binary dependency we need to install it in the same host where aktualizr-lite will be executing.
-The LmP targets install v0.6.3 so to replicate that install:
+Aktualizr-lite uses `libfyaml` to consume `docker.yml` files in JSON format.
+In order to resolve that binary dependency,
+we need to install it on the same host where aktualizr-lite will be executing.
+The LmP Targets install `v0.6.3`, so to replicate,install:
 
 ```
 cd /tmp/
@@ -123,11 +127,11 @@ sudo make install
 sudo ldconfig
 ```
 
-## Aktualizr-lite Registration and Configuration
+## Aktualizr-Lite Registration and Configuration
 
 ### Registration
 
-#### Fetch and Build lmp-device-register
+#### Fetch and Build `lmp-device-register`
 
 ```bash
 git clone https://github.com/foundriesio/lmp-device-register/
@@ -189,5 +193,6 @@ Make sure you run `export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock` in th
 $LITE -c . daemon
 ```
 
-To emulate device reboot after the system rootfs update run `rm need_reboot` from the workdir,
-otherwise the next aktualizr-lite run/restart will be treated as a rollback.
+To emulate device reboot after the system rootfs update,
+run `rm need_reboot` from the workdir.
+Otherwise the next aktualizr-lite run/restart will be treated as a rollback.
