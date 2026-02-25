@@ -448,6 +448,7 @@ void LiteClient::notifyTufUpdateStarted() {
     auto& d = tuf_update_details_[role.ToString()];
     d.from = version;
   });
+  targets_ = getTargetList(storage);
 }
 
 void LiteClient::notifyTufUpdateFinished(const std::string& err, const Uptane::Target& t) {
@@ -467,6 +468,15 @@ void LiteClient::notifyTufUpdateFinished(const std::string& err, const Uptane::T
     d.to = version;
     was_updated = d.from != d.to;
   });
+
+  if (was_updated && targets_ && targets_->isInitialized()) {
+    // If TUF meta was updated and the target list before the update is valid,
+    // then check if the target list was updated too.
+    const auto current_targets{getTargetList(storage)};
+    if (current_targets && current_targets->isInitialized()) {
+      was_updated = !Uptane::MatchTargetVector(current_targets->targets, targets_->targets);
+    }
+  }
 
   if (!err.empty() || was_updated) {
     // Compose the "details" string with info about metadata if there is an error or metadata was updated
@@ -955,4 +965,27 @@ void LiteClient::forEachRoleVersion(std::shared_ptr<const INvStorage> storage,
 
     func(role, ver);
   }
+}
+
+std::shared_ptr<Uptane::Targets> LiteClient::getTargetList(std::shared_ptr<const INvStorage> storage) {
+  std::shared_ptr<Uptane::Targets> targets;
+  std::string meta;
+  bool loaded;
+
+  loaded = storage->loadNonRoot(&meta, Uptane::RepositoryType::Image(), Uptane::Role::Targets());
+  if (!loaded) {
+    return targets;
+  }
+
+  const auto meta_json{Utils::parseJSON(meta)};
+  if (meta_json.empty() || !meta_json.isObject()) {
+    return targets;
+  }
+
+  try {
+    targets = std::make_shared<Uptane::Targets>(meta_json);
+  } catch (const std::exception& exc) {
+    LOG_DEBUG << "Failed to load targets meta: " << exc.what();
+  }
+  return targets;
 }
