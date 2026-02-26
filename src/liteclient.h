@@ -124,6 +124,8 @@ class LiteClient {
   static void forEachRoleVersion(std::shared_ptr<const INvStorage> storage,
                                  const std::function<void(const Uptane::Role&, int)>& func);
 
+  static std::shared_ptr<Uptane::Targets> getTargetList(std::shared_ptr<const INvStorage> storage);
+
   boost::filesystem::path callback_program;
   std::unique_ptr<KeyManager> key_manager_;
   std::shared_ptr<PackageManagerInterface> package_manager_;
@@ -146,6 +148,7 @@ class LiteClient {
   Type type_{Type::Undefined};
 
   TufUpdateDetails tuf_update_details_;
+  std::shared_ptr<Uptane::Targets> targets_;
 };
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_
