@@ -176,10 +176,16 @@ bool AppEngine::isAppFetched(const App& app) const {
     exec(boost::format{"%s --store %s check %s --local --format json"} % composectl_cmd_ % storeRoot() % app.uri, "",
          "", &output);
     const auto app_fetch_status{parseJSON(output)};
-    if (app_fetch_status.isMember("fetch_check") && app_fetch_status["fetch_check"].isMember("missing_blobs") &&
-        app_fetch_status["fetch_check"]["missing_blobs"].empty()) {
-      res = true;
-      fetched_apps_.insert(app.uri);
+    if (app_fetch_status.isMember("fetch_check") && app_fetch_status["fetch_check"].isMember("missing_blobs")) {
+      if (app_fetch_status["fetch_check"]["missing_blobs"].empty()) {
+        res = true;
+        fetched_apps_.insert(app.uri);
+      } else {
+        LOG_INFO << "Missing blobs of " << app.uri;
+        for (const auto& blob : app_fetch_status["fetch_check"]["missing_blobs"]) {
+          LOG_INFO << " - " << blob["descriptor"]["digest"] << ", size: " << blob["descriptor"]["size"];
+        }
+      }
     }
   } catch (const ExecError& exc) {
     LOG_DEBUG << "app is not fully fetched; app: " << app.name << ", status: " << exc.what();
