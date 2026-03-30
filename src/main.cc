@@ -326,6 +326,9 @@ int run_command(const Cmd& cmd, const bpo::variables_map& commandline_map) {
   config.telemetry.report_network = !config.tls.server.empty();
   config.telemetry.report_config = !config.tls.server.empty();
   LOG_DEBUG << "Running " << cmd.name;
+  if (cmd.name == "pull" || cmd.name == "install" || cmd.name == "update") {
+    config.pacman.extra["force_update"] = "1";
+  }
   LiteClient client(config, nullptr, nullptr, nullptr, cmd.read_only_storage);
   return cmd.func(client, commandline_map);
 }
