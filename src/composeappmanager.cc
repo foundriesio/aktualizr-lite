@@ -306,6 +306,7 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
   if (!are_apps_checked_) {
     checkForAppsToUpdate(uptane_target);
   }
+  setAppsNotChecked();
 
   LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
@@ -343,7 +344,6 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
     LOG_INFO << "Post Apps pull storage usage info; " << post_pull_fs_usage;
   }
 
-  are_apps_checked_ = false;
   return res;
 }
 
@@ -384,7 +384,12 @@ data::InstallationResult ComposeAppManager::Install(const TufTarget& target, Ins
   if (mode == InstallMode::OstreeOnly) {
     return RootfsTreeManager::Install(target, mode);
   }
-  return install(Target::fromTufTarget(target));
+  const auto uptane_target{Target::fromTufTarget(target)};
+  if (!are_apps_checked_) {
+    checkForAppsToUpdate(uptane_target);
+  }
+  setAppsNotChecked();
+  return install(uptane_target);
 }
 
 data::InstallationResult ComposeAppManager::install(const Uptane::Target& target) const {

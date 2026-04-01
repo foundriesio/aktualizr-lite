@@ -669,10 +669,6 @@ class LiteInstall : public InstallContext {
   InstallResult Install() override {
     client_->logTarget("Installing: ", *target_);
 
-    // Call appsInSync to update applications list inside the package manager
-    client_->appsInSync(*target_);
-    // setAppsNotChecked is required to force a re-load of apps list in case of a new Download operation
-    client_->setAppsNotChecked();
     if (client_->VerifyTarget(*target_) != TargetStatus::kGood) {
       return InstallResult{InstallResult::Status::DownloadFailed,
                            "Target verification failed, it may not have been pulled"};
