@@ -165,7 +165,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
         res.status = GetTargetToInstallResult::Status::TargetAlreadyInstalled;
       }
     }
-    client_->setAppsNotChecked();
+    // client_->setAppsNotChecked();
   }
 
   if (!invoke_post_cb_at_checkin_) {
