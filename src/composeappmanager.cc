@@ -303,13 +303,7 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
   DownloadResult res{ostree_download_res};
   const Uptane::Target uptane_target{Target::fromTufTarget(target)};
 
-  if (cfg_.force_update) {
-    LOG_INFO << "All Apps are forced to be updated...";
-    cur_apps_to_fetch_and_update_ = getApps(uptane_target);
-  } else if (!are_apps_checked_) {
-    // non-daemon mode (force check) or a new Target to be applied in daemon mode,
-    // then do full check if Target Apps are installed and running
-    LOG_INFO << "Checking for Apps to be installed or updated...";
+  if (!are_apps_checked_) {
     checkForAppsToUpdate(uptane_target);
   }
 
