@@ -142,6 +142,7 @@ logger.info(f"  User Token: {user_token[:2] + '*' * (len(user_token) - 2)}")
 aklite_path = "./build/src/aktualizr-lite"
 composectl_path = "/usr/bin/composectl"
 callback_log_path = "/var/sota/callback_log.txt"
+tc_path = "/usr/sbin/tc"
 
 # Test modes
 offline = False
@@ -362,7 +363,7 @@ def aklite_current_version_based_on_list():
     curr_target = next(target for target in out_json if target.get("current", False))
     return curr_target["version"]
 
-def invoke_aklite(options: List[str]):
+def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
     if offline:
         options = options + [ "--src-dir", os.path.abspath("./offline-bundles/unified/") ]
 
@@ -377,7 +378,19 @@ def invoke_aklite(options: List[str]):
             options = [ x.replace('pull', 'fetch').replace('run', 'start') for x in options if x not in ['--install-mode=delay-app-install'] ]
         cmd = fioup_cmd
 
-    logger.info("  Running `" + " ".join([cmd] + options) + "`")
+    logger.info("  Running `" + " ".join([aklite_path] + options) + "`")
+    if kill_after_sec is not None:
+        proc = subprocess.Popen([cmd] + options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            outs, errs = proc.communicate(timeout=kill_after_sec)
+            return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
+        except subprocess.TimeoutExpired:
+            logger.info(f"  Killing process due to timeout after {kill_after_sec} seconds")
+            proc.kill()
+            if os.path.isfile("/var/lock/aklite.lock"):
+                os.remove("/var/lock/aklite.lock")
+            outs, errs = proc.communicate()
+            return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
     return subprocess.run([cmd] + options, capture_output=True)
 
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None):
@@ -1405,3 +1418,30 @@ def test_no_space(offline_: bool, single_step_: bool):
     single_step = single_step_
     logger.info(f"Testing no space left on device")
     run_test_no_space()
+
+
+def run_test_kill_process():
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+    try:
+        cmd = [ tc_path, "qdisc", "add", "dev", "eth0", "root", "netem", "delay", "500ms" ]
+        subprocess.call(cmd)
+        for i in range(5):
+            logger.info(f" Calling update and interrupting after {i} seconds")
+            cp = invoke_aklite(['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)], i)
+            ReturnCodeProcessKilled = -9
+            assert cp.returncode == ReturnCodeProcessKilled, cp.stdout.decode("utf-8")
+
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+        logger.info(f" Calling update that should succeed now")
+
+        cp = invoke_aklite(['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
+        assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
+
+    finally:
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+
+def test_kill_process():
+    logger.info(f"Testing kill process")
+    run_test_kill_process()
