@@ -666,6 +666,7 @@ class LiteInstall : public InstallContext {
               InstallMode install_mode = InstallMode::All)
       : client_(std::move(client)), target_(std::move(t)), reason_(reason), mode_{install_mode} {}
 
+  ~LiteInstall() override { client_->setAppsNotChecked(); }
   InstallResult Install() override {
     client_->logTarget("Installing: ", *target_);
 
@@ -1036,24 +1037,34 @@ bool AkliteClient::IsInstallationInProgress() const { return client_->getPending
 
 TufTarget AkliteClient::GetPendingTarget() const { return Target::toTufTarget(client_->getPendingTarget()); }
 
-std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
+std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() {
   std::unique_ptr<InstallContext> installer = nullptr;
-  auto target = std::make_unique<Uptane::Target>(client_->getCurrent());
-  if (!client_->appsInSync(*target)) {
+
+  setAppsCheckFlag(false);
+  const auto target{GetCurrent()};
+  const auto apps_to_update = checkAppsForUpdate(target);
+  if (!apps_to_update.empty()) {
+    // Calculate and set the correlation ID
     boost::uuids::uuid tmp = boost::uuids::random_generator()();
-    auto correlation_id = target->custom_version() + "-" + boost::uuids::to_string(tmp);
-    target->setCorrelationId(correlation_id);
-    std::string reason = "Sync active target apps";
-    installer = std::make_unique<LiteInstall>(client_, std::move(target), reason, InstallMode::All);
+    const auto correlation_id = std::to_string(target.Version()) + "-" + boost::uuids::to_string(tmp);
+    auto t = std::make_unique<Uptane::Target>(Target::fromTufTarget(target));
+    t->setCorrelationId(correlation_id);
+
+    // Set the sync reason
+    std::string reason = "Sync active target apps:\n";
+    for (const auto& app_to_update : apps_to_update) {
+      reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
+    }
+
+    installer = std::make_unique<LiteInstall>(client_, std::move(t), reason, InstallMode::All);
   }
-  client_->setAppsNotChecked();
   return installer;
 }
 
 std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason,
                                                         std::string correlation_id, InstallMode install_mode,
                                                         const LocalUpdateSource* local_update_source,
-                                                        bool require_target_in_tuf) const {
+                                                        bool require_target_in_tuf) {
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
@@ -1096,6 +1107,17 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
     throw std::runtime_error("Correlation ID's must be less than 64 bytes");
   }
   target->setCorrelationId(correlation_id);
+
+  if (!areAppsChecked()) {
+    const auto apps_to_update = checkAppsForUpdate(Target::toTufTarget(*target));
+    if (!apps_to_update.empty()) {
+      reason += "\n";
+      for (const auto& app_to_update : apps_to_update) {
+        reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
+      }
+    }
+  }
+
   if (local_update_source == nullptr) {
     return std::make_unique<LiteInstall>(client_, std::move(target), reason, install_mode);
   } else {
@@ -1170,6 +1192,12 @@ void AkliteClient::setAppsCheckFlag(bool are_apps_checked) {
   if (!are_apps_checked) {
     client_->setAppsNotChecked();
   }
+}
+
+AkliteClient::AppsUpdateReason AkliteClient::checkAppsForUpdate(const TufTarget& target) {
+  auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(target), false);
+  setAppsCheckFlag(true);
+  return apps_to_update;
 }
 
 static Json::Value checkAndGetRootMeta(const std::shared_ptr<aklite::tuf::Repo>& device_tuf_repo,

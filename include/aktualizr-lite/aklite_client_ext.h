@@ -102,7 +102,7 @@ class AkliteClientExt : public AkliteClient {
 
  private:
   using AppsUpdateReason = std::unordered_map<std::string, std::string>;
-  AppsUpdateReason checkAppsForUpdate(const TufTarget &target);
+  AppsUpdateReason checkAppsForUpdate(const TufTarget &target) override;
 
   bool cleanup_removed_apps_{true};
 };

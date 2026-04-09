@@ -261,7 +261,7 @@ class AkliteClient {
    * an InstallContext is returned that may be called to synchronize the
    * apps.
    */
-  std::unique_ptr<InstallContext> CheckAppsInSync() const;
+  std::unique_ptr<InstallContext> CheckAppsInSync();
 
   /**
    * Performs a "check-in" with the device-gateway. A check-in consists of:
@@ -326,7 +326,7 @@ class AkliteClient {
   std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
                                             std::string correlation_id = "", InstallMode = InstallMode::All,
                                             const LocalUpdateSource *local_update_source = nullptr,
-                                            bool require_target_in_tuf = true) const;
+                                            bool require_target_in_tuf = true);
 
   /**
    * @brief Complete a pending installation
@@ -371,6 +371,7 @@ class AkliteClient {
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  protected:
+  using AppsUpdateReason = std::unordered_map<std::string, std::string>;
   /**
    * @brief areAppsChecked verifies if the apps check flag is set
    * @return status of the apps check flag
@@ -381,6 +382,8 @@ class AkliteClient {
    * @param are_apps_checked value to set the apps check flag to
    */
   void setAppsCheckFlag(bool are_apps_checked);
+
+  virtual AppsUpdateReason checkAppsForUpdate(const TufTarget &target);
 
   /* check-for-update-post success callback may be called at the end of CheckIn, or the end of GetTargetToInstall */
   bool invoke_post_cb_at_checkin_{true};
