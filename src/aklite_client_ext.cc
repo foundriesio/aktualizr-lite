@@ -126,7 +126,13 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     res.selected_target = candidate_target;
     res.reason = std::string(rollback_operation ? "Rolling back" : "Updating") + " from " + current.Name() + " to " +
                  res.selected_target.Name();
-
+    auto apps_to_update = checkAppsForUpdate(candidate_target);
+    if (!apps_to_update.empty()) {
+      res.reason += "\n";
+      for (const auto& app_to_update : apps_to_update) {
+        res.reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
+      }
+    }
   } else {
     if (is_bad_target) {
       LOG_INFO << "Target: " << candidate_target.Name() << " is a failing Target (aka known locally)."
