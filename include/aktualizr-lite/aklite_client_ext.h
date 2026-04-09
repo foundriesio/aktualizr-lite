@@ -101,6 +101,9 @@ class AkliteClientExt : public AkliteClient {
   bool IsAppRunning(const std::string &name, const std::string &uri) const;
 
  private:
+  using AppsUpdateReason = std::unordered_map<std::string, std::string>;
+  AppsUpdateReason checkAppsForUpdate(const TufTarget &target);
+
   bool cleanup_removed_apps_{true};
 };
 
