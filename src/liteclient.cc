@@ -876,7 +876,7 @@ void LiteClient::setAppsNotChecked() {
     if (compose_pacman == nullptr) {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
     } else {
-      compose_pacman->setAppsNotChecked();
+      compose_pacman->setAppsCheckFlag(false);
     }
   }
 }
