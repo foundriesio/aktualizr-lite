@@ -272,10 +272,11 @@ ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const 
   bool check_apps_to_fetch;
 
   if (!cfg_.force_update) {
+    LOG_INFO << "Checking status of target apps; target: " << target.filename();
     cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, apps_and_reasons, fetched_apps);
     check_apps_to_fetch = true;
   } else {
-    LOG_INFO << "All Apps are forced to be updated...";
+    LOG_INFO << "All target apps are forced to be updated";
     cur_apps_to_fetch_and_update_ = getApps(target);
     for (const auto& app : cur_apps_to_fetch_and_update_) {
       apps_and_reasons[app.first] = "forced update";
@@ -308,8 +309,6 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
     checkForAppsToUpdate(uptane_target);
   }
   setAppsCheckFlag(false);
-
-  LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
 
   AppsContainer all_apps_to_fetch;
   all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());

@@ -145,7 +145,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
         res.selected_target = current;
       }
       LOG_INFO
-          << "The specified Target is already installed, enforcing installation to make sure it's synced and running:"
+          << "The specified Target is already installed, enforcing installation to make sure it is synced and running: "
           << res.selected_target.Name();
 
       res.status = GetTargetToInstallResult::Status::UpdateSyncApps;
