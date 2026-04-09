@@ -251,6 +251,8 @@ InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std
     LOG_ERROR << "Failed to install Target; target: " << target.Name() << ", err: " << ir;
     // Make sure the installer instance is destroyed before creating a new one for rollback.
     installer = nullptr;
+    // Unset the apps check flag, so the apps to be updated are checked again during rollback.
+    setAppsCheckFlag(false);
     if (ir.status == InstallResult::Status::Failed) {
       LOG_INFO << "Rolling back to the previous target: " << current.Name() << "...";
       const auto installer =

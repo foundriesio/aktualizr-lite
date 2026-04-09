@@ -670,7 +670,6 @@ class LiteInstall : public InstallContext {
     target_->updateCustom(custom);
   }
 
-  ~LiteInstall() override { client_->setAppsNotChecked(); }
   InstallResult Install() override {
     client_->logTarget("Installing: ", *target_);
 
