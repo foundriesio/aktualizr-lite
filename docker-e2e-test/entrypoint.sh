@@ -67,5 +67,4 @@ if [ ! -d /var/run/aktualizr-session ]; then
 	chmod 700 /var/run/aktualizr-session
 fi
 
-# Run the command as the created user
-exec gosu $DEV_USER:$DEV_GROUP "$@"
+exec "$@"
