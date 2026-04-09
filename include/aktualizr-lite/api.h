@@ -371,6 +371,17 @@ class AkliteClient {
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  protected:
+  /**
+   * @brief areAppsChecked verifies if the apps check flag is set
+   * @return status of the apps check flag
+   */
+  bool areAppsChecked() const { return are_apps_checked_; }
+  /**
+   * @brief setAppsCheckFlag sets the apps check flag
+   * @param are_apps_checked value to set the apps check flag to
+   */
+  void setAppsCheckFlag(bool are_apps_checked);
+
   /* check-for-update-post success callback may be called at the end of CheckIn, or the end of GetTargetToInstall */
   bool invoke_post_cb_at_checkin_{true};
   bool is_booted_env{true};
@@ -384,6 +395,14 @@ class AkliteClient {
   std::string hw_id_;
   std::vector<std::string> secondary_hwids_;
   mutable bool configUploaded_{false};
+  /**
+   * @brief are_apps_checked_ Indicates whether target apps needing update or sync have been identified
+   *
+   * In the case of a non-forced update, not all target apps need to be updated or synced; some may already be installed
+   * and healthy. Therefore, the API implementation needs to check which target apps require updating/syncing before
+   * performing the update.
+   */
+  bool are_apps_checked_{false};
 };
 
 #endif  // AKTUALIZR_LITE_API_H_

@@ -31,7 +31,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
                                                              const std::string& target_name, bool allow_bad_target,
                                                              bool force_apps_sync, bool is_offline_mode,
                                                              bool auto_downgrade) {
-  client_->setAppsNotChecked();
+  setAppsCheckFlag(false);
 
   std::string err;
   if (!checkin_res) {

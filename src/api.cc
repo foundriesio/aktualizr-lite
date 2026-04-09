@@ -1164,6 +1164,14 @@ InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus
 
 boost::optional<std::vector<std::string>> AkliteClient::GetAppShortlist() const { return client_->getAppShortlist(); }
 
+void AkliteClient::setAppsCheckFlag(bool are_apps_checked) {
+  LOG_DEBUG << "Setting the apps check flag for the api client to " << are_apps_checked;
+  are_apps_checked_ = are_apps_checked;
+  if (!are_apps_checked) {
+    client_->setAppsNotChecked();
+  }
+}
+
 static Json::Value checkAndGetRootMeta(const std::shared_ptr<aklite::tuf::Repo>& device_tuf_repo,
                                        const boost::filesystem::path& bundle_tuf_repo_path) {
   auto latest_root{device_tuf_repo->GetRoot(-1)};
