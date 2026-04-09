@@ -664,7 +664,11 @@ class LiteInstall : public InstallContext {
  public:
   LiteInstall(std::shared_ptr<LiteClient> client, std::unique_ptr<Uptane::Target> t, std::string& reason,
               InstallMode install_mode = InstallMode::All)
-      : client_(std::move(client)), target_(std::move(t)), reason_(reason), mode_{install_mode} {}
+      : client_(std::move(client)), target_(std::move(t)), reason_(reason), mode_{install_mode} {
+    auto custom{target_->custom_data()};
+    custom["api"] = true;
+    target_->updateCustom(custom);
+  }
 
   ~LiteInstall() override { client_->setAppsNotChecked(); }
   InstallResult Install() override {
@@ -1017,8 +1021,11 @@ class LocalLiteInstall : public LiteInstall {
         )};
 #endif
 
-    return std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
-                                               storage_, nullptr, ostree_sysroot_, *nulled_key_manager_, app_engine);
+    auto pacman =
+        std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader, storage_,
+                                            nullptr, ostree_sysroot_, *nulled_key_manager_, app_engine);
+    pacman->checkForAppsToUpdate(*target_);
+    return pacman;
   }
 
   const LocalUpdateSource local_update_source_;
