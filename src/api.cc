@@ -1044,19 +1044,14 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() {
 
   setAppsCheckFlag(false);
   const auto target{GetCurrent()};
-  const auto apps_to_update = checkAppsForUpdate(target);
+  std::string reason = "Sync active target apps";
+  const auto apps_to_update = checkAndSetAppsForUpdate(target, reason);
   if (!apps_to_update.empty()) {
     // Calculate and set the correlation ID
     boost::uuids::uuid tmp = boost::uuids::random_generator()();
     const auto correlation_id = std::to_string(target.Version()) + "-" + boost::uuids::to_string(tmp);
     auto t = std::make_unique<Uptane::Target>(Target::fromTufTarget(target));
     t->setCorrelationId(correlation_id);
-
-    // Set the sync reason
-    std::string reason = "Sync active target apps:\n";
-    for (const auto& app_to_update : apps_to_update) {
-      reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
-    }
 
     installer = std::make_unique<LiteInstall>(client_, std::move(t), reason, InstallMode::All);
   }
@@ -1111,13 +1106,7 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
   target->setCorrelationId(correlation_id);
 
   if (!areAppsChecked()) {
-    const auto apps_to_update = checkAppsForUpdate(Target::toTufTarget(*target));
-    if (!apps_to_update.empty()) {
-      reason += "\n";
-      for (const auto& app_to_update : apps_to_update) {
-        reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
-      }
-    }
+    checkAndSetAppsForUpdate(Target::toTufTarget(*target), reason);
   }
 
   if (local_update_source == nullptr) {
@@ -1196,10 +1185,20 @@ void AkliteClient::setAppsCheckFlag(bool are_apps_checked) {
   }
 }
 
-AkliteClient::AppsUpdateReason AkliteClient::checkAppsForUpdate(const TufTarget& target) {
+AkliteClient::AppsUpdateReason AkliteClient::checkAndSetAppsForUpdate(const TufTarget& target, std::string& reason) {
   auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(target), cleanup_removed_apps_);
   setAppsCheckFlag(true);
   cleanup_removed_apps_ = false;
+
+  if (!apps_to_update.empty()) {
+    if (!reason.empty()) {
+      reason += "\n";
+    }
+    for (const auto& app_to_update : apps_to_update) {
+      reason += " - " + app_to_update.first + ": " + app_to_update.second + "\n";
+    }
+  }
+
   return apps_to_update;
 }
 

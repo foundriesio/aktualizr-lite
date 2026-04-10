@@ -383,7 +383,7 @@ class AkliteClient {
    */
   void setAppsCheckFlag(bool are_apps_checked);
 
-  AppsUpdateReason checkAppsForUpdate(const TufTarget &target);
+  AppsUpdateReason checkAndSetAppsForUpdate(const TufTarget &target, std::string &reason);
 
   /* check-for-update-post success callback may be called at the end of CheckIn, or the end of GetTargetToInstall */
   bool invoke_post_cb_at_checkin_{true};

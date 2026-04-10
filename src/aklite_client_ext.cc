@@ -126,20 +126,15 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     res.selected_target = candidate_target;
     res.reason = std::string(rollback_operation ? "Rolling back" : "Updating") + " from " + current.Name() + " to " +
                  res.selected_target.Name();
-    auto apps_to_update = checkAppsForUpdate(candidate_target);
-    if (!apps_to_update.empty()) {
-      res.reason += "\n";
-      for (const auto& app_to_update : apps_to_update) {
-        res.reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
-      }
-    }
+    checkAndSetAppsForUpdate(candidate_target, res.reason);
   } else {
     if (is_bad_target) {
       LOG_INFO << "Target: " << candidate_target.Name() << " is a failing Target (aka known locally)."
                << " Skipping its installation.";
     }
 
-    auto apps_to_update = checkAppsForUpdate(current);
+    res.reason = "Syncing Active Target Apps";
+    auto apps_to_update = checkAndSetAppsForUpdate(current, res.reason);
     if (force_apps_sync || !apps_to_update.empty()) {
       // Force installation of apps
       res.selected_target = checkin_res.SelectTarget(current.Version());
@@ -153,10 +148,6 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
           << res.selected_target.Name();
 
       res.status = GetTargetToInstallResult::Status::UpdateSyncApps;
-      res.reason = "Syncing Active Target Apps\n";
-      for (const auto& app_to_update : apps_to_update) {
-        res.reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
-      }
     } else {
       // No targets to install
       res.selected_target = TufTarget();
