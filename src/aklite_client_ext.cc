@@ -352,10 +352,3 @@ InstallResult AkliteClientExt::Rollback(const LocalUpdateSource* local_update_so
 bool AkliteClientExt::IsAppRunning(const std::string& name, const std::string& uri) const {
   return client_->isAppRunning({name, uri});
 };
-
-AkliteClientExt::AppsUpdateReason AkliteClientExt::checkAppsForUpdate(const TufTarget& target) {
-  auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(target), cleanup_removed_apps_);
-  cleanup_removed_apps_ = false;
-  setAppsCheckFlag(true);
-  return apps_to_update;
-}

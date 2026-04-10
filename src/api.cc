@@ -1197,8 +1197,9 @@ void AkliteClient::setAppsCheckFlag(bool are_apps_checked) {
 }
 
 AkliteClient::AppsUpdateReason AkliteClient::checkAppsForUpdate(const TufTarget& target) {
-  auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(target), false);
+  auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(target), cleanup_removed_apps_);
   setAppsCheckFlag(true);
+  cleanup_removed_apps_ = false;
   return apps_to_update;
 }
 

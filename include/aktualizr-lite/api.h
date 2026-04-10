@@ -383,7 +383,7 @@ class AkliteClient {
    */
   void setAppsCheckFlag(bool are_apps_checked);
 
-  virtual AppsUpdateReason checkAppsForUpdate(const TufTarget &target);
+  AppsUpdateReason checkAppsForUpdate(const TufTarget &target);
 
   /* check-for-update-post success callback may be called at the end of CheckIn, or the end of GetTargetToInstall */
   bool invoke_post_cb_at_checkin_{true};
@@ -406,6 +406,18 @@ class AkliteClient {
    * performing the update.
    */
   bool are_apps_checked_{false};
+
+  /**
+   * @brief cleanup_removed_apps_ Indicates whether apps needs to be pruned
+   *
+   * If an app list is changed in the ".toml" configuration and no update or sync is needed then the apps removed
+   * from the `pacman.compose_apps` and from `pacman.reset_apps` should be removed just after the check if an update is
+   * needed.
+   *
+   * For example. One of the current target is removed from the config, then the following daemon restart should prune
+   * the removed app.
+   */
+  bool cleanup_removed_apps_{true};
 };
 
 #endif  // AKTUALIZR_LITE_API_H_
