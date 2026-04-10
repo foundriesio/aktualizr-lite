@@ -300,7 +300,7 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
             ('EcuInstallationApplied', None),
             ('EcuInstallationCompleted', True)
         }
-    else:
+    elif use_fioup:
         expected_events.update([
             ('UpdateInitStarted', None),
             ('UpdateInitCompleted', True),
