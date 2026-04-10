@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import json
+import hashlib
 import logging
 import os
 import random
@@ -1478,3 +1479,74 @@ def test_bad_network(single_step_: bool):
 
     logger.info(f"Testing bad network conditions with single_step={single_step}")
     run_test_bad_network()
+
+
+def corrupt_file(file_path: str, expected_hash: str):
+    logger.info(f"Corrupting {file_path}")
+    with open(file_path, "r+b") as f:
+        f.write(b'\x0E\x0E\x0E\x0B')
+
+    # Make sure file was corrupted
+    with open(file_path, "rb") as f:
+        data = f.read()
+        sha256_hash = hashlib.sha256(data).hexdigest()
+        assert sha256_hash != expected_hash, f"File hash mismatch expected after corruption {expected_hash}, still got {sha256_hash}"
+
+def verify_file_integrity(file_path: str, expected_hash: str):
+    logger.info(f"Verifying integrity of {file_path}")
+    with open(file_path, "rb") as f:
+        data = f.read()
+        sha256_hash = hashlib.sha256(data).hexdigest()
+        assert sha256_hash == expected_hash, f"File hash mismatch after corruption and new pull, expected {expected_hash}, got {sha256_hash}"
+
+def test_forced_sync():
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+
+    target = all_primary_tag_targets[Target.AddMoreApps]
+    logger.info(f"Testing force sync for target {target.actual_version} {target}. {single_step=} {offline=}")
+    install_target(target)
+    check_running_apps(apps)
+
+    # Get the current target information from `check` command, and identify the app URI
+    cp = invoke_aklite(['check', '--json', '1'])
+    check_result = json.loads(cp.stdout.decode("utf-8"))
+    target_info = next((t for t in check_result if t['version'] == target.actual_version), None)
+    assert target_info is not None, f"Target with version {target.actual_version} not found in check result"
+    app_name = target.apps[0]
+    app_info = next((a for a in target_info['apps'] if a['name'] == app_name), None)
+    assert app_info is not None, f"App {app_name} not found in check result"
+    app_uri = app_info['uri']
+    logger.info(f"App URI: {app_uri}")
+
+    # Identify a blob hash for the given application
+    cp = subprocess.run([composectl_path, 'inspect', app_uri, '--format', 'json'], capture_output=True)
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    out_json = json.loads(cp.stdout.decode("utf-8"))
+    blob_digest = out_json['bundle']['services'][0]['image']['manifests'][0]['config']['digest'].split(':')[1]
+
+    # Test forced `pull` command
+    logger.info("Testing corruption of pulled blob, to make sure it's re-downloaded with `pull` command")
+    pulled_blob_path = f"/var/sota/reset-apps/blobs/sha256/{blob_digest}"
+    corrupt_file(pulled_blob_path, blob_digest)
+    cp = invoke_aklite(['pull', str(target.actual_version)])
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    verify_file_integrity(pulled_blob_path, blob_digest)
+
+    # Test forced  `install` command
+    logger.info("Testing corruption of installed blob, to make sure it's re-installed with `install` command")
+    installed_blob_path = f"/var/lib/docker/image/overlay2/imagedb/content/sha256/{blob_digest}"
+    corrupt_file(installed_blob_path, blob_digest)
+    cp = invoke_aklite(['install', str(target.actual_version)])
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    verify_file_integrity(installed_blob_path, blob_digest)
+
+    # Test forced `update` command
+    logger.info("Testing corruption of both pulled and installed blobs, to make sure both are re-downloaded/re-installed with `update` command")
+    corrupt_file(pulled_blob_path, blob_digest)
+    corrupt_file(installed_blob_path, blob_digest)
+    cp = invoke_aklite(['update', str(target.actual_version)])
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    verify_file_integrity(pulled_blob_path, blob_digest)
+    verify_file_integrity(installed_blob_path, blob_digest)
