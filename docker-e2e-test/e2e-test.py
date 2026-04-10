@@ -1445,3 +1445,36 @@ def run_test_kill_process():
 def test_kill_process():
     logger.info(f"Testing kill process")
     run_test_kill_process()
+
+
+def run_test_bad_network():
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+
+    try:
+        cmd = [ tc_path, "qdisc", "add", "dev", "eth0", "root", "netem", "loss", "20%" ]
+        subprocess.call(cmd)
+        logger.info(f" Testing update with high network error rate")
+        if single_step:
+            cp = invoke_aklite(['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
+            assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
+        else:
+            cp = invoke_aklite(['check'])
+            assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion, cp.stdout.decode("utf-8")
+            cp = invoke_aklite(['pull', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
+            assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+            cp = invoke_aklite(['install', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
+            assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
+        logger.info(f" Done")
+    finally:
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+
+@pytest.mark.parametrize('single_step_', [True, False])
+def test_bad_network(single_step_: bool):
+    global offline, single_step
+    offline = False
+    single_step = single_step_
+
+    logger.info(f"Testing bad network conditions with single_step={single_step}")
+    run_test_bad_network()
