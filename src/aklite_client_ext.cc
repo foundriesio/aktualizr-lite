@@ -126,6 +126,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     res.selected_target = candidate_target;
     res.reason = std::string(rollback_operation ? "Rolling back" : "Updating") + " from " + current.Name() + " to " +
                  res.selected_target.Name();
+    checkAndSetAppsForUpdate(candidate_target, res.reason);
 
   } else {
     if (is_bad_target) {
