@@ -1164,6 +1164,22 @@ InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus
 
 boost::optional<std::vector<std::string>> AkliteClient::GetAppShortlist() const { return client_->getAppShortlist(); }
 
+AkliteClient::AppsUpdateReason AkliteClient::checkAndSetAppsForUpdate(const TufTarget& target, std::string& reason) {
+  auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(target), cleanup_removed_apps_);
+  cleanup_removed_apps_ = false;
+
+  if (!apps_to_update.empty()) {
+    if (!reason.empty()) {
+      reason += "\n";
+    }
+    for (const auto& app_to_update : apps_to_update) {
+      reason += " - " + app_to_update.first + ": " + app_to_update.second + "\n";
+    }
+  }
+
+  return apps_to_update;
+}
+
 static Json::Value checkAndGetRootMeta(const std::shared_ptr<aklite::tuf::Repo>& device_tuf_repo,
                                        const boost::filesystem::path& bundle_tuf_repo_path) {
   auto latest_root{device_tuf_repo->GetRoot(-1)};
