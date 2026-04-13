@@ -302,14 +302,6 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
   }
 
   DownloadResult res{ostree_download_res};
-  const Uptane::Target uptane_target{Target::fromTufTarget(target)};
-
-  if (!areAppsChecked()) {
-    LOG_INFO << "Checking for Apps to be installed or updated...";
-    checkForAppsToUpdate(uptane_target);
-  }
-  setAppsCheckFlag(false);
-
   AppsContainer all_apps_to_fetch;
   all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
   all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());

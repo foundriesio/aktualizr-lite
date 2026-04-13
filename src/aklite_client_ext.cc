@@ -31,8 +31,6 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
                                                              const std::string& target_name, bool allow_bad_target,
                                                              bool force_apps_sync, bool is_offline_mode,
                                                              bool auto_downgrade) {
-  client_->setAppsNotChecked();
-
   std::string err;
   if (!checkin_res) {
     err = "Can't select target to install using a failed check-in result";
@@ -165,7 +163,6 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
         res.status = GetTargetToInstallResult::Status::TargetAlreadyInstalled;
       }
     }
-    client_->setAppsNotChecked();
   }
 
   if (!invoke_post_cb_at_checkin_) {

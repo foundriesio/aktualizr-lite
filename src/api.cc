@@ -1049,7 +1049,6 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
     t->setCorrelationId(correlation_id);
     installer = std::make_unique<LiteInstall>(client_, std::move(t), reason, InstallMode::All);
   }
-  client_->setAppsNotChecked();
   return installer;
 }
 
@@ -1172,8 +1171,10 @@ boost::optional<std::vector<std::string>> AkliteClient::GetAppShortlist() const 
 
 AkliteClient::AppsUpdateReason AkliteClient::checkAndSetAppsForUpdate(const TufTarget& target,
                                                                       std::string& reason) const {
+  client_->setAppsNotChecked();
   auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(target), cleanup_removed_apps_);
   cleanup_removed_apps_ = false;
+  client_->setAppsNotChecked();
 
   if (!apps_to_update.empty()) {
     if (!reason.empty()) {
