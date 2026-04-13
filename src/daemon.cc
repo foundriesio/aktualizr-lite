@@ -39,7 +39,7 @@ int run_daemon(LiteClient& client, uint64_t interval, bool return_on_sleep, bool
     if (ci_res) {
       auto gti_res = akclient.GetTargetToInstall(ci_res);
       if (!gti_res.selected_target.IsUnknown()) {
-        LOG_INFO << "Going to install " << gti_res.selected_target.Name() << ". Reason: " << gti_res.reason;
+        LOG_INFO << "Going to install " << gti_res.selected_target.Name();
         // A target is supposed to be installed
         auto install_result =
             akclient.PullAndInstall(gti_res.selected_target, gti_res.reason, "", InstallMode::All, nullptr, true, true,

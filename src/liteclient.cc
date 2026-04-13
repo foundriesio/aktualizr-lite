@@ -850,7 +850,6 @@ ComposeAppManager::AppsSyncReason LiteClient::appsToUpdate(const Uptane::Target&
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
       return {};
     }
-    LOG_INFO << "Checking status of Active Target (" << target.filename() << ")";
     auto apps_to_update = compose_pacman->checkForAppsToUpdate(target);
     if (cleanup_removed_apps && apps_to_update.empty()) {
       compose_pacman->handleRemovedApps(getCurrent());
@@ -876,7 +875,7 @@ void LiteClient::setAppsNotChecked() {
     if (compose_pacman == nullptr) {
       LOG_ERROR << "Cannot downcast the package manager to a specific type";
     } else {
-      compose_pacman->setAppsNotChecked();
+      compose_pacman->setAppsCheckFlag(false);
     }
   }
 }

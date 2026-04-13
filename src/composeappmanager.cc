@@ -272,10 +272,11 @@ ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const 
   bool check_apps_to_fetch;
 
   if (!cfg_.force_update) {
+    LOG_INFO << "Checking status of target apps; target: " << target.filename();
     cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, apps_and_reasons, fetched_apps);
     check_apps_to_fetch = true;
   } else {
-    LOG_INFO << "All Apps are forced to be updated...";
+    LOG_INFO << "All target apps are forced to be updated";
     cur_apps_to_fetch_and_update_ = getApps(target);
     for (const auto& app : cur_apps_to_fetch_and_update_) {
       apps_and_reasons[app.first] = "forced update";
@@ -285,7 +286,7 @@ ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const 
   if (!!cfg_.reset_apps) {
     cur_apps_to_fetch_ = getAppsToFetch(target, check_apps_to_fetch, &cur_apps_to_fetch_and_update_, &fetched_apps);
   }
-  are_apps_checked_ = true;
+  setAppsCheckFlag(true);
   for (const auto& app : cur_apps_to_fetch_) {
     if (apps_and_reasons.count(app.first) == 0) {
       apps_and_reasons[app.first] = "not fetched (reset apps)";
@@ -303,17 +304,11 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
   DownloadResult res{ostree_download_res};
   const Uptane::Target uptane_target{Target::fromTufTarget(target)};
 
-  if (cfg_.force_update) {
-    LOG_INFO << "All Apps are forced to be updated...";
-    cur_apps_to_fetch_and_update_ = getApps(uptane_target);
-  } else if (!are_apps_checked_) {
-    // non-daemon mode (force check) or a new Target to be applied in daemon mode,
-    // then do full check if Target Apps are installed and running
+  if (!areAppsChecked()) {
     LOG_INFO << "Checking for Apps to be installed or updated...";
     checkForAppsToUpdate(uptane_target);
   }
-
-  LOG_INFO << "Found " << cur_apps_to_fetch_and_update_.size() << " Apps to update";
+  setAppsCheckFlag(false);
 
   AppsContainer all_apps_to_fetch;
   all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
@@ -349,7 +344,6 @@ DownloadResult ComposeAppManager::Download(const TufTarget& target) {
     LOG_INFO << "Post Apps pull storage usage info; " << post_pull_fs_usage;
   }
 
-  are_apps_checked_ = false;
   return res;
 }
 

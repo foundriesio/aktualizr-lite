@@ -145,7 +145,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
         res.selected_target = current;
       }
       LOG_INFO
-          << "The specified Target is already installed, enforcing installation to make sure it's synced and running:"
+          << "The specified Target is already installed, enforcing installation to make sure it is synced and running: "
           << res.selected_target.Name();
 
       res.status = GetTargetToInstallResult::Status::UpdateSyncApps;
@@ -221,8 +221,7 @@ InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std
   }
   state_when_download_failed = {"", "", {.err = "undefined"}};
 
-  const auto installer =
-      Installer(target, reason, correlation_id, install_mode, local_update_source, require_target_in_tuf);
+  auto installer = Installer(target, reason, correlation_id, install_mode, local_update_source, require_target_in_tuf);
   if (installer == nullptr) {
     LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
     return InstallResult{InstallResult::Status::UnknownError};
@@ -247,6 +246,8 @@ InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std
   auto ir = installer->Install();
   if (!ir) {
     LOG_ERROR << "Failed to install Target; target: " << target.Name() << ", err: " << ir;
+    // Make sure the installer instance is destroyed before creating a new one for rollback.
+    installer = nullptr;
     if (ir.status == InstallResult::Status::Failed) {
       LOG_INFO << "Rolling back to the previous target: " << current.Name() << "...";
       const auto installer =
