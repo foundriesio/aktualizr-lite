@@ -221,7 +221,8 @@ InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std
   }
   state_when_download_failed = {"", "", {.err = "undefined"}};
 
-  auto installer = Installer(target, reason, correlation_id, install_mode, local_update_source, require_target_in_tuf);
+  auto installer =
+      Installer(target, reason, correlation_id, install_mode, local_update_source, require_target_in_tuf, true);
   if (installer == nullptr) {
     LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
     return InstallResult{InstallResult::Status::UnknownError};

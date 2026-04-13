@@ -326,7 +326,7 @@ class AkliteClient {
   std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
                                             std::string correlation_id = "", InstallMode = InstallMode::All,
                                             const LocalUpdateSource *local_update_source = nullptr,
-                                            bool require_target_in_tuf = true) const;
+                                            bool require_target_in_tuf = true, bool are_apps_checked = false) const;
 
   /**
    * @brief Complete a pending installation

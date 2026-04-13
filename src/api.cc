@@ -1051,7 +1051,7 @@ std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
 std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std::string reason,
                                                         std::string correlation_id, InstallMode install_mode,
                                                         const LocalUpdateSource* local_update_source,
-                                                        bool require_target_in_tuf) const {
+                                                        bool require_target_in_tuf, bool are_apps_checked) const {
   if (read_only_) {
     throw std::runtime_error("Can't perform this operation from read-only mode");
   }
@@ -1094,6 +1094,9 @@ std::unique_ptr<InstallContext> AkliteClient::Installer(const TufTarget& t, std:
     throw std::runtime_error("Correlation ID's must be less than 64 bytes");
   }
   target->setCorrelationId(correlation_id);
+  if (!are_apps_checked) {
+    checkAndSetAppsForUpdate(Target::toTufTarget(*target), reason);
+  }
   if (local_update_source == nullptr) {
     return std::make_unique<LiteInstall>(client_, std::move(target), reason, install_mode);
   } else {
