@@ -1016,8 +1016,13 @@ class LocalLiteInstall : public LiteInstall {
         )};
 #endif
 
-    return std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
-                                               storage_, nullptr, ostree_sysroot_, *nulled_key_manager_, app_engine);
+    auto pacman =
+        std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader, storage_,
+                                            nullptr, ostree_sysroot_, *nulled_key_manager_, app_engine);
+    if (pacman != nullptr) {
+      pacman->checkForAppsToUpdate(*target_);
+    }
+    return pacman;
   }
 
   const LocalUpdateSource local_update_source_;
