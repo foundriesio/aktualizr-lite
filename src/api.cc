@@ -1038,13 +1038,15 @@ TufTarget AkliteClient::GetPendingTarget() const { return Target::toTufTarget(cl
 
 std::unique_ptr<InstallContext> AkliteClient::CheckAppsInSync() const {
   std::unique_ptr<InstallContext> installer = nullptr;
-  auto target = std::make_unique<Uptane::Target>(client_->getCurrent());
-  if (!client_->appsInSync(*target)) {
+  const auto target{GetCurrent()};
+  std::string reason = "Sync active target apps";
+  const auto apps_to_update = checkAndSetAppsForUpdate(target, reason);
+  if (!apps_to_update.empty()) {
     boost::uuids::uuid tmp = boost::uuids::random_generator()();
-    auto correlation_id = target->custom_version() + "-" + boost::uuids::to_string(tmp);
-    target->setCorrelationId(correlation_id);
-    std::string reason = "Sync active target apps";
-    installer = std::make_unique<LiteInstall>(client_, std::move(target), reason, InstallMode::All);
+    auto correlation_id = std::to_string(target.Version()) + "-" + boost::uuids::to_string(tmp);
+    auto t = std::make_unique<Uptane::Target>(Target::fromTufTarget(target));
+    t->setCorrelationId(correlation_id);
+    installer = std::make_unique<LiteInstall>(client_, std::move(t), reason, InstallMode::All);
   }
   client_->setAppsNotChecked();
   return installer;
@@ -1164,7 +1166,8 @@ InstallResult AkliteClient::SetSecondaries(const std::vector<SecondaryEcu>& ecus
 
 boost::optional<std::vector<std::string>> AkliteClient::GetAppShortlist() const { return client_->getAppShortlist(); }
 
-AkliteClient::AppsUpdateReason AkliteClient::checkAndSetAppsForUpdate(const TufTarget& target, std::string& reason) {
+AkliteClient::AppsUpdateReason AkliteClient::checkAndSetAppsForUpdate(const TufTarget& target,
+                                                                      std::string& reason) const {
   auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(target), cleanup_removed_apps_);
   cleanup_removed_apps_ = false;
 

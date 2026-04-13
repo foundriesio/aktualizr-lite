@@ -382,7 +382,7 @@ class AkliteClient {
    * @param reason String containing reason for each app to be updated
    * @return The map of app names to their update reasons
    */
-  AppsUpdateReason checkAndSetAppsForUpdate(const TufTarget &target, std::string &reason);
+  AppsUpdateReason checkAndSetAppsForUpdate(const TufTarget &target, std::string &reason) const;
 
   /* check-for-update-post success callback may be called at the end of CheckIn, or the end of GetTargetToInstall */
   bool invoke_post_cb_at_checkin_{true};
@@ -408,7 +408,7 @@ class AkliteClient {
    * For example, if an app from the current target is removed from the
    * configuration, the next daemon restart should remove that app.
    */
-  bool cleanup_removed_apps_{true};
+  mutable bool cleanup_removed_apps_{true};
 };
 
 #endif  // AKTUALIZR_LITE_API_H_
