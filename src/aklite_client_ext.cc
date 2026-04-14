@@ -31,8 +31,6 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
                                                              const std::string& target_name, bool allow_bad_target,
                                                              bool force_apps_sync, bool is_offline_mode,
                                                              bool auto_downgrade) {
-  client_->setAppsNotChecked();
-
   std::string err;
   if (!checkin_res) {
     err = "Can't select target to install using a failed check-in result";
@@ -126,6 +124,7 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     res.selected_target = candidate_target;
     res.reason = std::string(rollback_operation ? "Rolling back" : "Updating") + " from " + current.Name() + " to " +
                  res.selected_target.Name();
+    checkAndSetAppsForUpdate(candidate_target, res.reason);
 
   } else {
     if (is_bad_target) {
@@ -133,9 +132,9 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
                << " Skipping its installation.";
     }
 
-    auto apps_to_update = client_->appsToUpdate(Target::fromTufTarget(current), cleanup_removed_apps_);
-    // Automatically cleanup during check only once. A cleanup will also occur after a new target is installed
-    cleanup_removed_apps_ = false;
+    res.reason = "Syncing Active Target Apps";
+    auto apps_to_update = checkAndSetAppsForUpdate(current, res.reason);
+
     if (force_apps_sync || !apps_to_update.empty()) {
       // Force installation of apps
       res.selected_target = checkin_res.SelectTarget(current.Version());
@@ -149,7 +148,6 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
           << res.selected_target.Name();
 
       res.status = GetTargetToInstallResult::Status::UpdateSyncApps;
-      res.reason = "Syncing Active Target Apps\n";
       for (const auto& app_to_update : apps_to_update) {
         res.reason += "- " + app_to_update.first + ": " + app_to_update.second + "\n";
       }
@@ -165,7 +163,6 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
         res.status = GetTargetToInstallResult::Status::TargetAlreadyInstalled;
       }
     }
-    client_->setAppsNotChecked();
   }
 
   if (!invoke_post_cb_at_checkin_) {
@@ -221,7 +218,8 @@ InstallResult AkliteClientExt::PullAndInstall(const TufTarget& target, const std
   }
   state_when_download_failed = {"", "", {.err = "undefined"}};
 
-  auto installer = Installer(target, reason, correlation_id, install_mode, local_update_source, require_target_in_tuf);
+  auto installer =
+      Installer(target, reason, correlation_id, install_mode, local_update_source, require_target_in_tuf, true);
   if (installer == nullptr) {
     LOG_ERROR << "Unexpected error: installer couldn't find Target in the DB; try again later";
     return InstallResult{InstallResult::Status::UnknownError};

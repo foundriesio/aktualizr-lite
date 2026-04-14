@@ -326,7 +326,7 @@ class AkliteClient {
   std::unique_ptr<InstallContext> Installer(const TufTarget &t, std::string reason = "",
                                             std::string correlation_id = "", InstallMode = InstallMode::All,
                                             const LocalUpdateSource *local_update_source = nullptr,
-                                            bool require_target_in_tuf = true) const;
+                                            bool require_target_in_tuf = true, bool are_apps_checked = false) const;
 
   /**
    * @brief Complete a pending installation
@@ -371,6 +371,19 @@ class AkliteClient {
   static const std::vector<boost::filesystem::path> CONFIG_DIRS;
 
  protected:
+  /**
+   *  @brief AppsUpdateReason A map of app names to their update reasons
+   */
+  using AppsUpdateReason = std::unordered_map<std::string, std::string>;
+
+  /**
+   * @brief checkAndSetAppsForUpdate Checks and sets apps for an update
+   * @param target Target containing apps to be checked and set for an update
+   * @param reason String containing reason for each app to be updated
+   * @return The map of app names to their update reasons
+   */
+  AppsUpdateReason checkAndSetAppsForUpdate(const TufTarget &target, std::string &reason) const;
+
   /* check-for-update-post success callback may be called at the end of CheckIn, or the end of GetTargetToInstall */
   bool invoke_post_cb_at_checkin_{true};
   bool is_booted_env{true};
@@ -384,6 +397,18 @@ class AkliteClient {
   std::string hw_id_;
   std::vector<std::string> secondary_hwids_;
   mutable bool configUploaded_{false};
+
+  /**
+   * @brief Controls pruning of apps removed from configuration.
+   *
+   * When the app list in the `.toml` configuration changes and no update or
+   * sync is required, apps removed from `pacman.compose_apps` or
+   * `pacman.reset_apps` should be pruned immediately after the update check.
+   *
+   * For example, if an app from the current target is removed from the
+   * configuration, the next daemon restart should remove that app.
+   */
+  mutable bool cleanup_removed_apps_{true};
 };
 
 #endif  // AKTUALIZR_LITE_API_H_

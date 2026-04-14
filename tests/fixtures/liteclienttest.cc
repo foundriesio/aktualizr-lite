@@ -341,6 +341,9 @@ class ClientTest :virtual public ::testing::Test {
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
 
+    // Emulate an update triggered through the API flow, which performs an apps status check and determines which apps need updating.
+    client.appsToUpdate(to, true);
+
     // TODO: call client->getTarget() once the method is moved to LiteClient
     const auto download_result{client.download(to, "")};
     ASSERT_EQ(download_result.status, expected_download_result.status);
@@ -377,6 +380,9 @@ class ClientTest :virtual public ::testing::Test {
     device_gateway_.resetEvents(client.http_client);
     // TODO: remove it once aklite is moved to the newer version of LiteClient that exposes update() method
     ASSERT_TRUE(client.checkForUpdatesBegin());
+
+    // Emulate an update triggered through the API flow, which performs an apps status check and determines which apps need updating.
+    client.appsToUpdate(to, true);
 
     // TODO: call client->getTarget() once the method is moved to LiteClient
     const DownloadResult dr{client.download(to, "")};

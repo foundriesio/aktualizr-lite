@@ -380,6 +380,7 @@ TEST(ComposeApp, fetch) {
 
   TestClient client("app2 doesnotexist", nullptr, &registry);  // only app2 can be fetched
   LOG_ERROR << target_json;
+  client.pacman->checkForAppsToUpdate(target);
   const auto result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_TRUE(result);
   const std::string expected_file = (client.apps_root / "app2"/ app_file_name).string();
@@ -413,6 +414,7 @@ TEST(ComposeApp, fetchNegative) {
   // Now do a quick check that we can handle a simple download failure
   target_json["custom"]["docker_compose_apps"]["app2"]["uri"] = "FAILTEST";
   target = Uptane::Target("pull", target_json);
+  client.pacman->checkForAppsToUpdate(target);
   auto result = client.downloader->Download(Target::toTufTarget(target));
   ASSERT_FALSE(result);
 
