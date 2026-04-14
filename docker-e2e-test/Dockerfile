@@ -2,7 +2,7 @@ FROM golang:1.22.12-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
 RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
-    && git checkout lmp-97.0.0 \
+    && git checkout main \
     && STOREROOT=/var/sota/reset-apps COMPOSEROOT=/var/sota/compose-apps BASESYSTEMCONFIG=/usr/lib/docker make \
     && cp ./bin/composectl /usr/bin/
 
