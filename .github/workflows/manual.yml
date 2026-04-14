@@ -1,0 +1,22 @@
+name: End-to-end manual tests
+
+on:
+    workflow_dispatch:
+
+jobs:
+  offline-e2e-test:
+    name: Offline end-to-end tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+      - run: git submodule update --init --recursive
+      - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
+      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[True or test_update_to_latest[True'
+        env:
+          FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
+          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
+          USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.E2E_TEST_TAG}}
+          E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
