@@ -1003,6 +1003,7 @@ done"""
 
 def restore_system_state():
     # Get to the starting point
+    global offline
     logger.info(f"Restoring base environment. Offline={offline}, SingleStep={single_step}, DelayAppsInstall={delay_app_install}, Prune={prune}...")
     if offline:
         create_offline_bundles()
@@ -1016,6 +1017,14 @@ def restore_system_state():
     version = all_primary_tag_targets[Target.First].actual_version
     cleanup_tuf_metadata()
     cleanup_installed_data()
+
+    if offline:
+        os.makedirs("/usr/lib/sota/tuf/ci/", exist_ok=True)
+        # offline bundles miss root metadata versions 1 and 2. Fetch them manually
+        for root_version in [1, 2]:
+            ret = os.system(f"curl -s -H 'OSF-TOKEN: {user_token}' https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/{root_version}.root.json -o /usr/lib/sota/tuf/ci/{root_version}.root.json")
+            assert ret == 0, f"Failed to download root metadata for offline bundles version {root_version}"
+
     cp = invoke_aklite(['update', str(version)])
     assert cp.returncode in [ ReturnCodes.Ok, ReturnCodes.InstallNeedsReboot ], cp.stdout.decode("utf-8")
     print(cp.stdout)
