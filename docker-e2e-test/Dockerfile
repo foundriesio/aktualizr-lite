@@ -1,4 +1,4 @@
-FROM golang:1.22.12-bookworm AS composeapp
+FROM golang:1.24.13-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
 RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
@@ -6,16 +6,17 @@ RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
     && STOREROOT=/var/sota/reset-apps COMPOSEROOT=/var/sota/compose-apps BASESYSTEMCONFIG=/usr/lib/docker make \
     && cp ./bin/composectl /usr/bin/
 
-# We may add fioctl and fioconfig to the test sequence. For now, we don't use them
+# We may add fioconfig to the test sequence. For now, we don't use it
 # WORKDIR /build
 # RUN git clone https://github.com/foundriesio/fioconfig.git && cd fioconfig \
 #     && make bin/fioconfig-linux-amd64 \
 #     && cp ./bin/fioconfig-linux-amd64 /usr/bin/fioconfig
 
-# WORKDIR /build
-# RUN git clone https://github.com/foundriesio/fioctl.git && cd fioctl \
-#     && make fioctl-linux-amd64 \
-#     && cp ./bin/fioctl-linux-amd64 /usr/bin/fioctl
+WORKDIR /build
+RUN git clone https://github.com/foundriesio/fioctl.git && cd fioctl \
+    && git checkout v0.46 \
+    && make fioctl-linux-amd64 \
+    && cp ./bin/fioctl-linux-amd64 /usr/bin/fioctl
 
 
 FROM foundries/aklite-dev:ubuntu-25.04 AS aklite
@@ -26,8 +27,8 @@ COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
 # # Install fioconfig
 # COPY --from=composeapp /build/fioconfig/bin/fioconfig-linux-amd64 /usr/bin/fioconfig
 
-# # Install fioctl
-# COPY --from=composeapp /build/fioctl/bin/fioctl-linux-amd64 /usr/bin/fioctl
+# Install fioctl
+COPY --from=composeapp /build/fioctl/bin/fioctl-linux-amd64 /usr/bin/fioctl
 
 
 # Install lmp-device-register
