@@ -2,7 +2,7 @@ FROM golang:1.22.12-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
 RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
-    && git checkout lmp-97.0.0 \
+    && git checkout main \
     && STOREROOT=/var/sota/reset-apps COMPOSEROOT=/var/sota/compose-apps BASESYSTEMCONFIG=/usr/lib/docker make \
     && cp ./bin/composectl /usr/bin/
 
@@ -47,10 +47,13 @@ RUN wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/downloa
     gosu nobody true
 
 RUN  apt-get install -y python3-pytest
+RUN  apt-get install -y iproute2
 
 # Copy the entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+RUN git config --global --add safe.directory .
 
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

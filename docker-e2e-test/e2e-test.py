@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import json
+import hashlib
 import logging
 import os
 import random
@@ -142,6 +143,7 @@ logger.info(f"  User Token: {user_token[:2] + '*' * (len(user_token) - 2)}")
 aklite_path = "./build/src/aktualizr-lite"
 composectl_path = "/usr/bin/composectl"
 callback_log_path = "/var/sota/callback_log.txt"
+tc_path = "/usr/sbin/tc"
 
 # Test modes
 offline = False
@@ -362,7 +364,7 @@ def aklite_current_version_based_on_list():
     curr_target = next(target for target in out_json if target.get("current", False))
     return curr_target["version"]
 
-def invoke_aklite(options: List[str]):
+def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
     if offline:
         options = options + [ "--src-dir", os.path.abspath("./offline-bundles/unified/") ]
 
@@ -377,7 +379,19 @@ def invoke_aklite(options: List[str]):
             options = [ x.replace('pull', 'fetch').replace('run', 'start') for x in options if x not in ['--install-mode=delay-app-install'] ]
         cmd = fioup_cmd
 
-    logger.info("  Running `" + " ".join([cmd] + options) + "`")
+    logger.info("  Running `" + " ".join([aklite_path] + options) + "`")
+    if kill_after_sec is not None:
+        proc = subprocess.Popen([cmd] + options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            outs, errs = proc.communicate(timeout=kill_after_sec)
+            return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
+        except subprocess.TimeoutExpired:
+            logger.info(f"  Killing process due to timeout after {kill_after_sec} seconds")
+            proc.kill()
+            if os.path.isfile("/var/lock/aklite.lock"):
+                os.remove("/var/lock/aklite.lock")
+            outs, errs = proc.communicate()
+            return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
     return subprocess.run([cmd] + options, capture_output=True)
 
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None):
@@ -1405,3 +1419,140 @@ def test_no_space(offline_: bool, single_step_: bool):
     single_step = single_step_
     logger.info(f"Testing no space left on device")
     run_test_no_space()
+
+
+def run_test_kill_process():
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+    try:
+        cmd = [ tc_path, "qdisc", "add", "dev", "eth0", "root", "netem", "delay", "500ms" ]
+        subprocess.call(cmd)
+        for i in range(5):
+            logger.info(f" Calling update and interrupting after {i} seconds")
+            cp = invoke_aklite(['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)], i)
+            ReturnCodeProcessKilled = -9
+            assert cp.returncode == ReturnCodeProcessKilled, cp.stdout.decode("utf-8")
+
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+        logger.info(f" Calling update that should succeed now")
+
+        cp = invoke_aklite(['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
+        assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
+
+    finally:
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+
+def test_kill_process():
+    logger.info(f"Testing kill process")
+    run_test_kill_process()
+
+
+def run_test_bad_network():
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+
+    try:
+        cmd = [ tc_path, "qdisc", "add", "dev", "eth0", "root", "netem", "loss", "20%" ]
+        subprocess.call(cmd)
+        logger.info(f" Testing update with high network error rate")
+        if single_step:
+            cp = invoke_aklite(['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
+            assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
+        else:
+            cp = invoke_aklite(['check'])
+            assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion, cp.stdout.decode("utf-8")
+            cp = invoke_aklite(['pull', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
+            assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+            cp = invoke_aklite(['install', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
+            assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
+        logger.info(f" Done")
+    finally:
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+
+@pytest.mark.parametrize('single_step_', [True, False])
+def test_bad_network(single_step_: bool):
+    global offline, single_step
+    offline = False
+    single_step = single_step_
+
+    logger.info(f"Testing bad network conditions with single_step={single_step}")
+    run_test_bad_network()
+
+
+def corrupt_file(file_path: str, expected_hash: str):
+    logger.info(f"Corrupting {file_path}")
+    with open(file_path, "r+b") as f:
+        f.write(b'\x0E\x0E\x0E\x0B')
+
+    # Make sure file was corrupted
+    with open(file_path, "rb") as f:
+        data = f.read()
+        sha256_hash = hashlib.sha256(data).hexdigest()
+        assert sha256_hash != expected_hash, f"File hash mismatch expected after corruption {expected_hash}, still got {sha256_hash}"
+
+def verify_file_integrity(file_path: str, expected_hash: str):
+    logger.info(f"Verifying integrity of {file_path}")
+    with open(file_path, "rb") as f:
+        data = f.read()
+        sha256_hash = hashlib.sha256(data).hexdigest()
+        assert sha256_hash == expected_hash, f"File hash mismatch after corruption and new pull, expected {expected_hash}, got {sha256_hash}"
+
+def test_forced_sync():
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
+
+    target = all_primary_tag_targets[Target.AddMoreApps]
+    logger.info(f"Testing force sync for target {target.actual_version} {target}. {single_step=} {offline=}")
+    install_target(target)
+    check_running_apps(apps)
+
+    # Get the current target information from `check` command, and identify the app URI
+    cp = invoke_aklite(['check', '--json', '1'])
+    check_result = json.loads(cp.stdout.decode("utf-8"))
+    target_info = next((t for t in check_result if t['version'] == target.actual_version), None)
+    assert target_info is not None, f"Target with version {target.actual_version} not found in check result"
+    app_name = target.apps[0]
+    app_info = next((a for a in target_info['apps'] if a['name'] == app_name), None)
+    assert app_info is not None, f"App {app_name} not found in check result"
+    app_uri = app_info['uri']
+    logger.info(f"App URI: {app_uri}")
+
+    # Identify a blob hash for the given application
+    cp = subprocess.run([composectl_path, 'inspect', app_uri, '--format', 'json'], capture_output=True)
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    out_json = json.loads(cp.stdout.decode("utf-8"))
+    blob_digest = out_json['bundle']['services'][0]['image']['manifests'][0]['config']['digest'].split(':')[1]
+
+    # Test forced `pull` command
+    logger.info("Testing corruption of pulled blob, to make sure it's re-downloaded with `pull` command")
+    pulled_blob_path = f"/var/sota/reset-apps/blobs/sha256/{blob_digest}"
+    corrupt_file(pulled_blob_path, blob_digest)
+    cp = invoke_aklite(['pull', str(target.actual_version)])
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    verify_file_integrity(pulled_blob_path, blob_digest)
+
+    # Test forced  `install` command
+    logger.info("Testing corruption of installed blob, to make sure it's re-installed with `install` command")
+    installed_blob_path = f"/var/lib/docker/image/overlay2/imagedb/content/sha256/{blob_digest}"
+    corrupt_file(installed_blob_path, blob_digest)
+    cp = invoke_aklite(['install', str(target.actual_version)])
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    verify_file_integrity(installed_blob_path, blob_digest)
+
+    # Test forced `update` command
+    logger.info("Testing corruption of both pulled and installed blobs, to make sure both are re-downloaded/re-installed with `update` command")
+    corrupt_file(pulled_blob_path, blob_digest)
+    corrupt_file(installed_blob_path, blob_digest)
+    cp = invoke_aklite(['update', str(target.actual_version)])
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    verify_file_integrity(pulled_blob_path, blob_digest)
+    verify_file_integrity(installed_blob_path, blob_digest)
+
+# Restores the system state, useful when running commands manually inside the e2e test environment
+def test_clear_env():
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune)
