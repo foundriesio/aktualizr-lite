@@ -4,19 +4,80 @@ on:
     workflow_dispatch:
 
 jobs:
-  offline-e2e-test:
-    name: Offline end-to-end tests
+  full-e2e-test:
+    name: Generate test targets and run all end-to-end tests
     runs-on: ubuntu-latest
 
     steps:
+      - name: Download fioctl
+        run: |
+          curl -L https://github.com/foundriesio/fioctl/releases/latest/download/fioctl-linux-amd64 -o fioctl
+
+      - name: Install fioctl
+        run: |
+          sudo cp fioctl /usr/local/bin/fioctl
+          sudo chmod +x /usr/local/bin/fioctl
+
+      - name: Verify installation
+        run: fioctl --help
+
+      - uses: actions/checkout@v4
+        with:
+           repository: foundriesio/ostreeuploader
+      - run: |
+          make
+          sudo mv ./bin/fiopush /usr/local/bin/fiopush
+          sudo chmod +x /usr/local/bin/fiopush
+
+      - name: Install OSTree
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ostree
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.3'
+
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+
+      - name: Install dependencies
+        run: |
+          pip install -r docker-e2e-test/requirements.txt
+
+      - name: Generate Test Targets - Primary Tag
+        id: gen-targets
+        run: |
+            python docker-e2e-test/e2e-test-create-targets.py
+            mv e2e-test-targets primary-tag-targets
+        env:
+          FACTORY: ${{ secrets.GEN_TARGETS_E2E_TEST_FACTORY }}
+          USER_TOKEN: ${{ secrets.GEN_TARGETS_E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.GEN_TARGETS_E2E_TEST_TAG}}
+
+      - name: Generate Test Targets - Secondary Tag
+        id: gen-targets-secondary
+        run: |
+            python docker-e2e-test/e2e-test-create-targets.py
+            mv e2e-test-targets secondary-tag-targets
+        env:
+          FACTORY: ${{ secrets.GEN_TARGETS_E2E_TEST_FACTORY }}
+          USER_TOKEN: ${{ secrets.GEN_TARGETS_E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.GEN_TARGETS_E2E_TEST_SECONDARY_TAG }}
+
       - uses: actions/checkout@v4
       - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
       - run: git submodule update --init --recursive
       - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
-      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[True or test_update_to_latest[True'
+
+      - name: Run all end-to-end tests
+        run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py
         env:
-          FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
-          USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
-          TAG: ${{secrets.E2E_TEST_TAG}}
-          E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
+          FACTORY: ${{ secrets.GEN_TARGETS_E2E_TEST_FACTORY }}
+          USER_TOKEN: ${{ secrets.GEN_TARGETS_E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.GEN_TARGETS_E2E_TEST_TAG}}
+          SECONDARY_TAG: ${{secrets.GEN_TARGETS_E2E_TEST_SECONDARY_TAG }}
+          BASE_TARGET_VERSION: ${{ steps.gen-targets.outputs.BASE_TARGET_VERSION }}
+          SECONDARY_BASE_TARGET_VERSION: ${{ steps.gen-targets-secondary.outputs.BASE_TARGET_VERSION }}
+          E2E_TEST_OSTREE_TGZ: ${{ steps.gen-targets.outputs.E2E_TEST_OSTREE_TGZ }}
+          SECONDARY_E2E_TEST_OSTREE_TGZ: ${{ steps.gen-targets-secondary.outputs.E2E_TEST_OSTREE_TGZ }}
