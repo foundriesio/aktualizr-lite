@@ -82,7 +82,9 @@ def create_ostree_repo() -> Tuple[str, Dict[int, str]]:
                 make_sys_rootfs_cmd = os.path.join(aklite_path, "tests", "make_sys_rootfs.sh")
                 run_cmd(f"{make_sys_rootfs_cmd} {tree_path} {tag} intel-corei7-64 lmp")
                 if ostree_version in bad_ostree_versions:
-                        run_cmd("rm -rf tree/boot")
+                        boot_path = os.path.join(tree_path, "boot")
+                        if os.path.exists(boot_path):
+                                run_cmd(f"rm -rf {boot_path}")
 
                 with open(ostree_version_txt, 'w') as f:
                         f.write(f"OSTREE_{ostree_version}")

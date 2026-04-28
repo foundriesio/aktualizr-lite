@@ -101,7 +101,7 @@ factory_name = os.getenv("FACTORY")
 if not factory_name:
     pytest.fail("FACTORY variable needs to be set with the name of the factory to be used during end-to-end tests")
 
-primary_tag = os.getenv("TAG")
+primary_tag: str = os.getenv("TAG", "")
 if not primary_tag:
     pytest.fail("TAG variable needs to be set with the tag of the e2e test targets")
 
@@ -131,6 +131,8 @@ def secondary_tag_is_set():
         return False
     return True
 
+e2e_test_ostree_tgz = os.getenv("E2E_TEST_OSTREE_TGZ")
+
 logger.info(f"End-to-end test environment variables:")
 logger.info(f"  Factory: {factory_name}")
 logger.info(f"  Tag: {primary_tag}")
@@ -139,6 +141,10 @@ if secondary_tag:
     logger.info(f"  Secondary Tag: {secondary_tag}")
 logger.info(f"  Base target version: {base_version[primary_tag]}")
 logger.info(f"  User Token: {user_token[:2] + '*' * (len(user_token) - 2)}")
+if e2e_test_ostree_tgz:
+    logger.info(f"  OSTree tar.gz: {e2e_test_ostree_tgz[:2]}...")
+else:
+    logger.info(f"  OSTree tar.gz: not set")
 
 aklite_path = "./build/src/aktualizr-lite"
 composectl_path = "/usr/bin/composectl"
@@ -962,9 +968,45 @@ def do_rollback(target: Target, requires_reboot: bool, installation_in_progress:
             })
     assert aklite_current_version() == target.actual_version, cp.stdout.decode("utf-8")
 
+def create_offline_bundles():
+    if not e2e_test_ostree_tgz and not os.path.exists("./offline-bundles/unified/"):
+        assert False, "No OSTree repo tgz provided, and offline bundles directory does not exist. Cannot proceed with offline update tests"
+
+    if not e2e_test_ostree_tgz:
+        logger.warning("No OSTree repo tgz provided for offline bundles test, skipping offline bundles creation")
+        return
+
+    if os.path.exists("./offline-bundles/unified/"):
+        logger.info("Offline bundles directory already exists, skipping offline bundles creation")
+        return
+
+    cmd = f"""
+mkdir -p `readlink -f .`/e2e-test-targets/small-ostree/
+echo "{e2e_test_ostree_tgz}" | base64 -d | tar -xzf - -C `readlink -f .`/e2e-test-targets/small-ostree/ --strip-components=1
+mkdir -p offline-bundles
+echo "Creating offline bundles for versions {base_version[primary_tag]} to {base_version[primary_tag] + 11} (skipping {base_version[primary_tag] + 7})"
+for version_offset in 0 1 2 3 4 5 6 8 9 10 11; do
+echo offset $version_offset;
+version=$[ $version_offset + {base_version[primary_tag]} ];
+echo version $version;
+fioctl targets offline-update \
+--ostree-repo-source=`readlink -f .`/e2e-test-targets/small-ostree/repo \
+--allow-multiple-targets intel-corei7-64-lmp-$version \
+-f {factory_name} offline-bundles/unified  \
+--tag {primary_tag} \
+--expires-in-days=1 \
+--factory {factory_name} \
+--token {user_token} || break;
+done"""
+    os.system(f"bash -x -c '{cmd}'")
+
+
 def restore_system_state():
     # Get to the starting point
+    global offline
     logger.info(f"Restoring base environment. Offline={offline}, SingleStep={single_step}, DelayAppsInstall={delay_app_install}, Prune={prune}...")
+    if offline:
+        create_offline_bundles()
     set_device_apps(None)
     write_settings()
     sys_reboot()
@@ -975,6 +1017,14 @@ def restore_system_state():
     version = all_primary_tag_targets[Target.First].actual_version
     cleanup_tuf_metadata()
     cleanup_installed_data()
+
+    if offline:
+        os.makedirs("/usr/lib/sota/tuf/ci/", exist_ok=True)
+        # offline bundles miss root metadata versions 1 and 2. Fetch them manually
+        for root_version in [1, 2]:
+            ret = os.system(f"curl -s -H 'OSF-TOKEN: {user_token}' https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/{root_version}.root.json -o /usr/lib/sota/tuf/ci/{root_version}.root.json")
+            assert ret == 0, f"Failed to download root metadata for offline bundles version {root_version}"
+
     cp = invoke_aklite(['update', str(version)])
     assert cp.returncode in [ ReturnCodes.Ok, ReturnCodes.InstallNeedsReboot ], cp.stdout.decode("utf-8")
     print(cp.stdout)
