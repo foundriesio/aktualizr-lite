@@ -12,6 +12,7 @@ USER_TOKEN, FACTORY, TAG environment variables need to be set before execution.
 This script is not officially supported, and should be executed only by aktualizr-lite developers.
 """
 
+import base64
 from http import HTTPStatus
 from requests.exceptions import HTTPError
 import os
@@ -33,7 +34,7 @@ ostree_cmd = "ostree"
 for cmd in [fiopush_cmd, fioctl_cmd, ostree_cmd]:
     if shutil.which(cmd) is None:
         print(f"{cmd} not found. Install it before running this script.")
-        sys.exit()
+        sys.exit(1)
 
 # Experimental mode for creating apps targets without relying on CI builds
 use_custom_app_targets = False
@@ -54,13 +55,34 @@ if not tag:
     print("TAG environment variable not set")
     sys.exit()
 
+git_config_path = os.path.expanduser("~/.gitconfig")
+if not os.path.exists(git_config_path) or f"/__w/aktualizr-lite/" in open(git_config_path).read():
+    # create dir and git config file
+    with open(git_config_path, "w") as f:
+        f.write(f"""
+[safe]
+        directory = .
+
+[user]
+    name = "e2e-test"
+    email = "e2e-test@example.com"
+
+[http "https://source.foundries.io"]
+    extraheader = "Authorization: basic {base64.b64encode(user_token.encode()).decode()}"
+""")
+
+# dump content of os.path.expanduser("~/.gitconfig")
+with open(git_config_path, "r") as f:
+    print(f"Content of {git_config_path}:\n{f.read()}")
+
 def run_cmd(cmd: str, success_required: bool = True) -> str:
+    print(f"Running command: {cmd}")
     sp = subprocess.run(cmd, shell=True, capture_output=True)
     if sp.returncode != 0 and success_required:
         raise Exception(f"\nCommand '{cmd}' failed with error:\n{sp.stderr.decode('utf-8')}")
     return sp.stdout.decode('utf-8').strip()
 
-def create_ostree_repo() -> Tuple[str, Dict[int, str]]:
+def create_ostree_repo() -> Tuple[str, Dict[int, str], str]:
         if os.path.exists(local_dir):
                 raise Exception(f"{local_dir} directory already exists. Remove it before running")
 
@@ -94,7 +116,15 @@ def create_ostree_repo() -> Tuple[str, Dict[int, str]]:
 
         for ostree_version in ostree_hashes:
                 print(f"OSTREE_HASH_{ostree_version}={ostree_hashes[ostree_version]}")
-        return repo_dir, ostree_hashes
+
+        os.chdir("..")
+        ostree_repo_tgz = os.path.join(local_dir, "small-ostree.tgz")
+        run_cmd(f"tar -czf {ostree_repo_tgz} small-ostree")
+        ostree_repo_tgz_b64 = ""
+        with open(ostree_repo_tgz, "rb") as f:
+            ostree_repo_tgz_b64 = base64.b64encode(f.read())
+
+        return repo_dir, ostree_hashes, ostree_repo_tgz_b64.decode()
 
 
 def add_tag_to_ci(tag: str):
@@ -119,6 +149,23 @@ def add_tag_to_ci(tag: str):
         os.chdir("ci-scripts")
         run_cmd(f"git commit -s --no-gpg-sign factory-config.yml -m 'Adding tag {tag} to CI'", False)
         run_cmd(f"git push")
+        os.chdir("..")
+
+# We need at least one valid lmp build on the test branch / tag.
+# We don't use the image itself, but it is required for the apps targets to be created by CI.
+def ensure_lmp_build(tag: str):
+        run_cmd(f"[ -d meta-subscriber-overrides ] || git clone https://source.foundries.io/factories/{factory}/meta-subscriber-overrides.git")
+        os.chdir("meta-subscriber-overrides")
+        run_cmd(f"git checkout {tag} || git checkout -B {tag}")
+        if not os.path.exists(f"E2E_TEST-{tag}"):
+                run_cmd(f"touch E2E_TEST-{tag}")
+                run_cmd(f"git add E2E_TEST-{tag}; git commit -m 'Adding E2E_TEST-{tag} file to trigger CI for {tag}' --no-gpg-sign", False)
+                run_cmd(f"git push -u origin {tag}", False)
+
+                run_cmd(f"[ -d lmp-manifest ] || git clone https://source.foundries.io/factories/{factory}/lmp-manifest.git")
+                os.chdir("lmp-manifest")
+                run_cmd(f"git checkout {tag} || git checkout -B {tag}")
+                run_cmd(f"git push -u origin {tag}", False)
         os.chdir("..")
 
 def set_offline_containers(enabled: bool):
@@ -228,21 +275,20 @@ services:
         os.chdir("..")
 
 def add_target(hash: str, tag: str, factory: str, first: bool = False):
-        if first:
-                src_tag = "main"
-        else:
-                src_tag = tag
-        cmd = [fioctl_cmd, "targets", "add", "--type", "ostree", "--tags", tag, "--src-tag", src_tag, "intel-corei7-64", hash, "--factory", factory]
+        cmd = [fioctl_cmd, "targets", "add", "--type", "ostree", "--tags", tag, "--src-tag", tag, "intel-corei7-64", hash, "--factory", factory, "--token", user_token]
         sp = subprocess.run(cmd, capture_output=True)
         output = sp.stdout.decode('utf-8').strip()
         lines = output.splitlines()
         version_line = [ x for x in lines if x.strip().startswith('"version":') ]
         if not version_line:
+                print("Version line not found in fioctl output:")
+                print(output)
                 return 0
         else:
                 return int(version_line[0].split(":")[1].strip('" '))
 
 def push_apps(message: str, tag: str):
+        print(f"Pushing apps with message: {message}")
         if use_custom_app_targets:
                 apps: List[str] = []
                 subdirs = [f.path.strip("./") for f in os.scandir(".") if f.is_dir()]
@@ -252,7 +298,7 @@ def push_apps(message: str, tag: str):
                                 hash = hash_file.read()
                         apps.append(f"hub.foundries.io/{factory}/{app_name}@{hash}")
 
-                cmd = [fioctl_cmd, "targets", "add", "--type", "app", "--tags", tag, "--src-tag", tag, "--factory", factory ] + apps
+                cmd = [fioctl_cmd, "targets", "add", "--type", "app", "--tags", tag, "--src-tag", tag, "--factory", factory, "--token", user_token ] + apps
                 subprocess.run(cmd)
         else:
                 run_cmd(f"git add *; git commit --no-gpg-sign -m '{message}' && git push origin {tag}", False)
@@ -318,13 +364,15 @@ def wait_jobs_execution(factory: str, user_token: str):
         print(f"Done waiting for jobs in factory {factory} to finish")
 
 if __name__ == "__main__":
-        repo_dir, ostree_hashes = create_ostree_repo()
+        repo_dir, ostree_hashes, ostree_repo_tgz_b64 = create_ostree_repo()
 
         run_cmd(f"{fiopush_cmd} -factory {factory} -repo {repo_dir} -token {user_token}")
 
         os.chdir(local_dir)
 
         add_tag_to_ci(tag)
+
+        ensure_lmp_build(tag)
 
         wait_jobs_execution(factory, user_token)
 
@@ -402,3 +450,12 @@ done
 # Run tests:
 ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py
 """)
+
+        formatted_ostree_repo_tgz_b64 = "\n".join([ostree_repo_tgz_b64[i:i+78] for i in range(0, len(ostree_repo_tgz_b64), 78)])
+        print(f"E2E_TEST_OSTREE_TGZ=\"{formatted_ostree_repo_tgz_b64}\"")
+
+        output_file = os.getenv('GITHUB_OUTPUT')
+        if output_file:
+                with open(output_file, 'a') as f:
+                        f.write(f"BASE_TARGET_VERSION={base_target_version}\n")
+                        f.write(f"E2E_TEST_OSTREE_TGZ={ostree_repo_tgz_b64}\n")
