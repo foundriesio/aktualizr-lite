@@ -139,6 +139,8 @@ logger.info(f"  Tag: {primary_tag}")
 logger.info(f"  Hardware ID: {hardware_id}")
 if secondary_tag:
     logger.info(f"  Secondary Tag: {secondary_tag}")
+else:
+    logger.info(f"  Secondary Tag: not set")
 logger.info(f"  Base target version: {base_version[primary_tag]}")
 logger.info(f"  User Token: {user_token[:2] + '*' * (len(user_token) - 2)}")
 if e2e_test_ostree_tgz:
@@ -1163,7 +1165,10 @@ def run_test_switch_tag():
     install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
     install_target(all_primary_tag_targets[Target.BrokenOstreeWithApps], False)
 
+    logger.info(f"Switching tag to secondary tag {secondary_tag}")
     write_settings(apps, prune, secondary_tag)
+
+    logger.info(f"Testing rollback to target from previous tag")
     # Make sure we will rollback to previous target
     install_target(all_secondary_tag_targets[Target.BrokenOstreeWithApps], False)
 
