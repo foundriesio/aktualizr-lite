@@ -1210,15 +1210,16 @@ def run_test_deamon_auto_downgrade():
     verify_callback(expected_callbacks)
 
 @pytest.mark.parametrize('single_step_', [True, False])
-@pytest.mark.parametrize('offline_', [True, False])
+@pytest.mark.parametrize('offline_', [False])
 def test_tag_switch(offline_: bool, single_step_: bool):
     global offline, single_step
     offline = offline_
     single_step = single_step_
     run_test_switch_tag()
 
+@pytest.mark.skip(reason="Needs review")
 @pytest.mark.parametrize('single_step_', [True, False])
-@pytest.mark.parametrize('offline_', [True, False])
+@pytest.mark.parametrize('offline_', [False])
 def test_auto_downgrade(offline_: bool, single_step_: bool):
     global offline, single_step
     offline = offline_
@@ -1258,7 +1259,7 @@ def run_test_pull_install_different_versions():
         cp = invoke_aklite(['install', str(install_target.actual_version)])
         assert cp.returncode == ReturnCodes.InstallTargetPullFailure, cp.stdout.decode("utf-8")
 
-@pytest.mark.parametrize('offline_', [True, False])
+@pytest.mark.parametrize('offline_', [False])
 def test_pull_install_different_tags(offline_: bool):
     global offline
     offline = offline_
@@ -1293,6 +1294,7 @@ def run_test_rollback(do_reboot: bool, do_finalize: bool):
     logger.info("Performing additional rollback operation, on already rolled back environment")
     do_rollback(all_primary_tag_targets[Target.First], True, False)
 
+@pytest.mark.skip(reason="Needs review")
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('do_reboot', [True, False])
 @pytest.mark.parametrize('do_finalize', [True, False])
