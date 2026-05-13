@@ -1009,7 +1009,6 @@ def restore_system_state():
     logger.info(f"Restoring base environment. Offline={offline}, SingleStep={single_step}, DelayAppsInstall={delay_app_install}, Prune={prune}...")
     if offline:
         create_offline_bundles()
-    set_device_apps(None)
     write_settings()
     sys_reboot()
     if use_fioup:
@@ -1035,6 +1034,7 @@ def restore_system_state():
     assert aklite_current_version() == version
     clear_callbacks_log()
     cleanup_tuf_metadata()
+    set_device_apps(None)
 
     if use_fioup:
         os.environ.pop("FIOUP_VERSION_UPPER_LIMIT", None)
