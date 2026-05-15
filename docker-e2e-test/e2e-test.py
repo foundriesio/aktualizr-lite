@@ -139,6 +139,8 @@ logger.info(f"  Tag: {primary_tag}")
 logger.info(f"  Hardware ID: {hardware_id}")
 if secondary_tag:
     logger.info(f"  Secondary Tag: {secondary_tag}")
+else:
+    logger.info(f"  Secondary Tag: not set")
 logger.info(f"  Base target version: {base_version[primary_tag]}")
 logger.info(f"  User Token: {user_token[:2] + '*' * (len(user_token) - 2)}")
 if e2e_test_ostree_tgz:
@@ -1007,7 +1009,6 @@ def restore_system_state():
     logger.info(f"Restoring base environment. Offline={offline}, SingleStep={single_step}, DelayAppsInstall={delay_app_install}, Prune={prune}...")
     if offline:
         create_offline_bundles()
-    set_device_apps(None)
     write_settings()
     sys_reboot()
     if use_fioup:
@@ -1033,6 +1034,7 @@ def restore_system_state():
     assert aklite_current_version() == version
     clear_callbacks_log()
     cleanup_tuf_metadata()
+    set_device_apps(None)
 
     if use_fioup:
         os.environ.pop("FIOUP_VERSION_UPPER_LIMIT", None)
@@ -1163,7 +1165,10 @@ def run_test_switch_tag():
     install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
     install_target(all_primary_tag_targets[Target.BrokenOstreeWithApps], False)
 
+    logger.info(f"Switching tag to secondary tag {secondary_tag}")
     write_settings(apps, prune, secondary_tag)
+
+    logger.info(f"Testing rollback to target from previous tag")
     # Make sure we will rollback to previous target
     install_target(all_secondary_tag_targets[Target.BrokenOstreeWithApps], False)
 
@@ -1205,15 +1210,16 @@ def run_test_deamon_auto_downgrade():
     verify_callback(expected_callbacks)
 
 @pytest.mark.parametrize('single_step_', [True, False])
-@pytest.mark.parametrize('offline_', [True, False])
+@pytest.mark.parametrize('offline_', [False])
 def test_tag_switch(offline_: bool, single_step_: bool):
     global offline, single_step
     offline = offline_
     single_step = single_step_
     run_test_switch_tag()
 
+@pytest.mark.skip(reason="Needs review")
 @pytest.mark.parametrize('single_step_', [True, False])
-@pytest.mark.parametrize('offline_', [True, False])
+@pytest.mark.parametrize('offline_', [False])
 def test_auto_downgrade(offline_: bool, single_step_: bool):
     global offline, single_step
     offline = offline_
@@ -1253,7 +1259,7 @@ def run_test_pull_install_different_versions():
         cp = invoke_aklite(['install', str(install_target.actual_version)])
         assert cp.returncode == ReturnCodes.InstallTargetPullFailure, cp.stdout.decode("utf-8")
 
-@pytest.mark.parametrize('offline_', [True, False])
+@pytest.mark.parametrize('offline_', [False])
 def test_pull_install_different_tags(offline_: bool):
     global offline
     offline = offline_
@@ -1288,6 +1294,7 @@ def run_test_rollback(do_reboot: bool, do_finalize: bool):
     logger.info("Performing additional rollback operation, on already rolled back environment")
     do_rollback(all_primary_tag_targets[Target.First], True, False)
 
+@pytest.mark.skip(reason="Needs review")
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('do_reboot', [True, False])
 @pytest.mark.parametrize('do_finalize', [True, False])

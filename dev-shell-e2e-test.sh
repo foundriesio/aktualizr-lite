@@ -27,4 +27,4 @@ if [ ! -d "$PWD/.device/sysroot" ]; then
     fi
 fi
 
-docker compose --env-file=${docker_path}/.env.dev -f ${docker_path}/docker-compose.yml run -e DEV_USER=$(id -u) -e DEV_GROUP=$(id -g) -e BASE_TARGET_VERSION=${BASE_TARGET_VERSION} -e USER_TOKEN=${USER_TOKEN} -e TAG=${TAG} -e E2E_TEST_OSTREE_TGZ="${E2E_TEST_OSTREE_TGZ}" aklite-e2e-test "$@"
+docker compose --env-file=${docker_path}/.env.dev -f ${docker_path}/docker-compose.yml run -e DEV_USER=$(id -u) -e DEV_GROUP=$(id -g) -e BASE_TARGET_VERSION=${BASE_TARGET_VERSION} -e USER_TOKEN=${USER_TOKEN} -e TAG=${TAG} -e E2E_TEST_OSTREE_TGZ="${E2E_TEST_OSTREE_TGZ}" -e SECONDARY_TAG=${SECONDARY_TAG} -e SECONDARY_BASE_TARGET_VERSION="${SECONDARY_BASE_TARGET_VERSION}" -e SECONDARY_E2E_TEST_OSTREE_TGZ="${SECONDARY_E2E_TEST_OSTREE_TGZ}" aklite-e2e-test "$@"
