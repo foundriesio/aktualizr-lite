@@ -1,0 +1,38 @@
+name: Build and push aklite-e2e-test image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-e2e-image:
+    name: Build and push aklite-e2e-test to GHCR
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: git submodule update --init --recursive
+
+      - name: Compute branch-safe image tag
+        id: tag
+        run: |
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          echo "image=ghcr.io/${{ github.repository }}/aklite-e2e-test:${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: docker-e2e-test
+          file: docker-e2e-test/Dockerfile
+          push: true
+          tags: ${{ steps.tag.outputs.image }}
