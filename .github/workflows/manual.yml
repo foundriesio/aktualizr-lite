@@ -3,6 +3,10 @@ name: End-to-end manual tests
 on:
     workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   full-e2e-test:
     name: Generate test targets and run all end-to-end tests
@@ -68,11 +72,24 @@ jobs:
       - uses: actions/checkout@v4
       - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
       - run: git submodule update --init --recursive
+
+      - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
+        id: check_image
+        run: |
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
+          fi
+
       - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
 
       - name: Run all end-to-end tests
         run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py
         env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.GEN_TARGETS_E2E_TEST_FACTORY }}
           USER_TOKEN: ${{ secrets.GEN_TARGETS_E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.GEN_TARGETS_E2E_TEST_TAG}}
