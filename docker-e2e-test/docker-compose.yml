@@ -17,7 +17,7 @@ services:
           AKLITE_VER: master
         dockerfile: Dockerfile
 
-      image: aklite-e2e-test
+      image: ${AKLITE_E2E_IMAGE:-aklite-e2e-test}
       volumes:
         - "${PWD}:${PWD}"
         - ${SYSROOT}:/sysroot
