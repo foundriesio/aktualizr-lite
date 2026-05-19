@@ -323,6 +323,7 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
     assert set(event_list) == set(expected_events)
 
 def sys_reboot():
+    logger.info(f"  Rebooting")
     need_reboot_path = "/var/run/aktualizr-session/need_reboot"
     if os.path.isfile(need_reboot_path):
         os.remove(need_reboot_path)
@@ -692,7 +693,7 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
                 ('EcuInstallationCompleted', True),
             })
 
-    if (requires_reboot and not do_reboot):
+    if (requires_reboot and (not do_reboot or not do_finalize)):
         assert aklite_current_version() == previous_target.actual_version, cp.stdout.decode("utf-8")
     else:
         assert aklite_current_version() == final_target.actual_version, cp.stdout.decode("utf-8")
@@ -877,7 +878,7 @@ def install_with_single_step(target: Target, explicit_version: bool = True, do_r
                 ('EcuInstallationCompleted', True),
             })
 
-    if (requires_reboot and not do_reboot):
+    if (requires_reboot and (not do_reboot or not do_finalize)):
         assert aklite_current_version() == previous_target.actual_version, cp.stdout.decode("utf-8")
     else:
         assert aklite_current_version() == final_target.actual_version, cp.stdout.decode("utf-8")
@@ -1174,9 +1175,8 @@ def run_test_switch_tag():
 
     install_target(all_secondary_tag_targets[Target.UpdateOstreeWithApps])
 
-def run_test_auto_downgrade():
+def run_test_auto_downgrade_prevention():
     assert secondary_tag_is_set()
-    auto_downgrade_enabled = True
     restore_system_state()
     apps = None # All apps, for now
     write_settings(apps, prune, secondary_tag)
@@ -1184,10 +1184,9 @@ def run_test_auto_downgrade():
 
     write_settings(apps, prune)
     cp = invoke_aklite(['check', '--json', '1'])
-    if auto_downgrade_enabled:
-        assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion, cp.stdout.decode("utf-8")
-    else:
-        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+    # If aklite is built with -DAUTO_DOWNGRADE, the expected return code is ReturnCodes.CheckinUpdateNewVersion
+    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+
     verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
     install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
@@ -1217,14 +1216,13 @@ def test_tag_switch(offline_: bool, single_step_: bool):
     single_step = single_step_
     run_test_switch_tag()
 
-@pytest.mark.skip(reason="Needs review")
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [False])
-def test_auto_downgrade(offline_: bool, single_step_: bool):
+def test_auto_downgrade_prevention(offline_: bool, single_step_: bool):
     global offline, single_step
     offline = offline_
     single_step = single_step_
-    run_test_auto_downgrade()
+    run_test_auto_downgrade_prevention()
 
 
 def run_test_pull_install_different_versions():
@@ -1288,13 +1286,12 @@ def run_test_rollback(do_reboot: bool, do_finalize: bool):
     logger.info("Testing rollback requiring reboot")
     target = all_primary_tag_targets[Target.UpdateOstreeWithApps]
     install_target(target, True, do_reboot, do_finalize)
-    do_rollback(all_primary_tag_targets[Target.WorkingOstree], do_reboot, not do_reboot or not do_finalize)
+    do_rollback(all_primary_tag_targets[Target.WorkingOstree], True, not do_reboot or not do_finalize)
 
     # Do a new rollback, go back to "First" target, from the original system stare
     logger.info("Performing additional rollback operation, on already rolled back environment")
     do_rollback(all_primary_tag_targets[Target.First], True, False)
 
-@pytest.mark.skip(reason="Needs review")
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('do_reboot', [True, False])
 @pytest.mark.parametrize('do_finalize', [True, False])
