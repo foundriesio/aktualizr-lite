@@ -43,7 +43,8 @@ jobs:
           python-version: '3.12.3'
 
       - uses: actions/checkout@v4
-      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+      - run: git config --global --add safe.directory ${{ github.workspace }}
+      - run: git submodule update --init --recursive
 
       - name: Install dependencies
         run: |
@@ -69,9 +70,13 @@ jobs:
           USER_TOKEN: ${{ secrets.GEN_TARGETS_E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.GEN_TARGETS_E2E_TEST_SECONDARY_TAG }}
 
-      - uses: actions/checkout@v4
-      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
-      - run: git submodule update --init --recursive
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: e2e-ccache-${{ github.sha }}
+          restore-keys: |
+            e2e-ccache-
 
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
