@@ -76,8 +76,8 @@ jobs:
       - name: test
         run: make -f dev-flow.mk config build test
 
-  e2e-test:
-    name: End-to-end tests
+  e2e-test-basic-online-single-step:
+    name: Basic online, single step end-to-end tests
     runs-on: ubuntu-latest
 
     steps:
@@ -101,13 +101,115 @@ jobs:
       - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
-      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[False or test_update_to_latest[False'
+      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[False-True or test_update_to_latest[False-True'
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
           BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
+
+  e2e-test-basic-online-granular-steps:
+    name: Basic online, granular steps end-to-end tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+      - run: git submodule update --init --recursive
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
+        id: check_image
+        run: |
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
+          fi
+      - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[False-False or test_update_to_latest[False-False'
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+          FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
+          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
+          USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.E2E_TEST_TAG}}
+
+
+  e2e-test-basic-offline-single-step:
+    name: Basic offline, single step end-to-end tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+      - run: git submodule update --init --recursive
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
+        id: check_image
+        run: |
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
+          fi
+      - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[True-True or test_update_to_latest[True-True'
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+          FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
+          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
+          USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.E2E_TEST_TAG}}
+          E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
+
+  e2e-test-basic-offline-granular-steps:
+    name: Basic offline, granular steps end-to-end tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory /__w/aktualizr-lite/aktualizr-lite
+      - run: git submodule update --init --recursive
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
+        id: check_image
+        run: |
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
+          fi
+      - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_incremental_updates[True-False or test_update_to_latest[True-False'
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+          FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
+          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
+          USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.E2E_TEST_TAG}}
+          E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
 
   e2e-test-1:
     name: End-to-end tests additional set
