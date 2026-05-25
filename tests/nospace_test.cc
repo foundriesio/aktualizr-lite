@@ -485,8 +485,8 @@ TEST_P(AkliteNoSpaceTest, OstreeAndAppUpdateNotEnoughSpaceForApps) {
   // App's containers are re-created before reboot
   auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
 
-  auto client = createLiteClient();
-  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  auto client_ = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client_->getCurrent(), getInitialTarget()));
   ASSERT_FALSE(app_engine->isRunning(app01));
 
   std::vector<AppEngine::App> apps{app01};
@@ -495,6 +495,7 @@ TEST_P(AkliteNoSpaceTest, OstreeAndAppUpdateNotEnoughSpaceForApps) {
   {
     // Not enough free space to pull an App bundle/archive since there is only 20% of free space
     // and 20% is reserved, so 0% is available for the update
+    auto client = createLiteClient();
     SetFreeBlockNumb(20, 100);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
@@ -508,6 +509,7 @@ TEST_P(AkliteNoSpaceTest, OstreeAndAppUpdateNotEnoughSpaceForApps) {
     // Enough free space to pull an App bundle/archive since there is 21 - 20% of free space.
     // But, it's not enough available free space to pull the App image because
     // the App image requires more than 1 block.
+    auto client = createLiteClient();
     SetFreeBlockNumb(21, 100);
     update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
            {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
@@ -520,9 +522,12 @@ TEST_P(AkliteNoSpaceTest, OstreeAndAppUpdateNotEnoughSpaceForApps) {
   {
     // Enough free space to pull an App bundle/archive and the App image layers/blobs.
     // But, it's not enough available free space to accommodate the App in the docker store (extracted image layers).
-    SetFreeBlockNumb(37, 100);
-    update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
-           {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    {
+      auto client = createLiteClient();
+      SetFreeBlockNumb(37, 100);
+      update(*client, getInitialTarget(), new_target, data::ResultCode::Numeric::kDownloadFailed,
+             {DownloadResult::Status::DownloadFailed_NoSpace, "Insufficient storage available"});
+    }
     const auto event_err_msg{getEventContext("EcuDownloadCompleted")};
     ASSERT_TRUE(std::string::npos != event_err_msg.find("store: docker")) << event_err_msg;
     ASSERT_TRUE(std::string::npos !=
