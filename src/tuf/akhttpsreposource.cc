@@ -26,11 +26,11 @@ AkHttpsRepoSource::AkHttpsRepoSource(const std::string& name_in, boost::property
   init(name_in, pt, config);
 }
 
-static std::string readFileIfExists(const utils::BasedPath& based_path) {
+static std::string readFileIfExists(const utils::BasedPath& based_path, const boost::filesystem::path& base) {
   if (based_path.empty()) {
     return "";
   }
-  boost::filesystem::path path = based_path.get("");
+  boost::filesystem::path path = based_path.get(base);
   if (boost::filesystem::exists(path)) {
     return Utils::readFile(path);
   } else {
@@ -50,17 +50,17 @@ void AkHttpsRepoSource::init(const std::string& name_in, boost::property_tree::p
 
 #ifdef BUILD_P11
   P11EngineGuard p11(config.p11.module, config.p11.pass, config.p11.label);
-  std::string tls_ca = config.tls.ca_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_cacert_path)
+  std::string tls_ca = config.tls.ca_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_cacert_path, config.import.base_path)
                                                                    : p11->getItemFullId(config.p11.tls_cacert_id);
   std::string tls_cert = config.tls.cert_source == CryptoSource::kFile
-                             ? readFileIfExists(config.import.tls_clientcert_path)
+                             ? readFileIfExists(config.import.tls_clientcert_path, config.import.base_path)
                              : p11->getItemFullId(config.p11.tls_clientcert_id);
-  std::string tls_pkey = config.tls.cert_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_pkey_path)
+  std::string tls_pkey = config.tls.pkey_source == CryptoSource::kFile ? readFileIfExists(config.import.tls_pkey_path, config.import.base_path)
                                                                        : p11->getItemFullId(config.p11.tls_pkey_id);
 #else
-  std::string tls_ca = readFileIfExists(config.import.tls_cacert_path);
-  std::string tls_cert = readFileIfExists(config.import.tls_clientcert_path);
-  std::string tls_pkey = readFileIfExists(config.import.tls_pkey_path);
+  std::string tls_ca = readFileIfExists(config.import.tls_cacert_path, config.import.base_path);
+  std::string tls_cert = readFileIfExists(config.import.tls_clientcert_path, config.import.base_path);
+  std::string tls_pkey = readFileIfExists(config.import.tls_pkey_path, config.import.base_path);
 #endif
 
   http_client->setCerts(tls_ca, config.tls.ca_source, tls_cert, config.tls.cert_source, tls_pkey,
