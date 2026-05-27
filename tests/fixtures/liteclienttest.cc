@@ -571,10 +571,13 @@ class ClientTest :virtual public ::testing::Test {
   }
 
   std::string getEventContext(const std::string& ev_id) {
-    for (const auto& ev: device_gateway_.getEvents()) {
-      if (ev_id == ev["eventType"]["id"].asString()) {
-        return ev["event"]["details"].asString();
+    for (auto attempt = 0; attempt < 5; attempt++) {
+      for (const auto& ev: device_gateway_.getEvents()) {
+        if (ev_id == ev["eventType"]["id"].asString()) {
+          return ev["event"]["details"].asString();
+        }
       }
+      std::this_thread::sleep_for(std::chrono::milliseconds(500 * (attempt + 1)));
     }
     return "";
   }
