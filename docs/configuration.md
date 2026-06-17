@@ -41,6 +41,12 @@ create_containers_before_reboot = "0"
 # By default, if the configuration param is not specified, it is set to "80".
 storage_watermark = "60" (set to "80" if not specified)
 
+# Absolute amount of free storage to reserve for non-Apps usage, expressed as a byte size with
+# either a binary (e.g. "2GiB", "500MiB") or decimal (e.g. "2GB", "500MB") suffix. When set, Apps
+# may use all available storage except the reserved amount, and this option takes precedence over
+# storage_watermark (a warning is logged if both are set). Unset by default.
+# reserved_storage = "2GiB"
+
 [logger]
 # Set log level 0-5 (trace, debug, info, warning, error, fatal)
 loglevel = 2

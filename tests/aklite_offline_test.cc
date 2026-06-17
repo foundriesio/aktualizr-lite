@@ -169,10 +169,12 @@ class AkliteOffline : public ::testing::Test {
                            : std::make_shared<Docker::DockerClient>()};
 
 #ifdef USE_COMPOSEAPP_ENGINE
+    const auto storage_limit{pacman_cfg.storageSpaceLimit()};
     AppEngine::Ptr app_engine{std::make_shared<composeapp::AppEngine>(
         pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, nullptr, docker_client,
         docker_host, compose_cmd, pacman_cfg.composectl_bin.string(), pacman_cfg.storage_watermark,
-        Docker::RestorableAppEngine::GetDefStorageSpaceFunc(), nullptr,
+        pacman_cfg.reserved_storage,
+        Docker::RestorableAppEngine::GetDefStorageSpaceFunc(storage_limit.first, storage_limit.second), nullptr,
         false, /* don't create containers on install because it makes dockerd check if pinned images
       present in its store what we should avoid until images are registered (hacked) in dockerd store */
         local_update_source_.app_store)};

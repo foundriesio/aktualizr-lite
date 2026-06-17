@@ -178,6 +178,43 @@ TEST(ComposeApp, Config) {
   config.pacman.extra["storage_watermark"] = "50";
   cfg = ComposeAppManager::Config(config.pacman);
   ASSERT_EQ(cfg.storage_watermark, 50);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 0U);
+
+  // reserved_storage reserves an absolute amount of free space in bytes and takes precedence over the
+  // percentage storage_watermark (which stays set to "50" here).
+  config.pacman.extra["reserved_storage"] = "2GiB";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 2ULL * 1024 * 1024 * 1024);
+  ASSERT_EQ(cfg.reserved_storage, "2GiB");
+
+  config.pacman.extra["reserved_storage"] = "500MiB";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 500ULL * 1024 * 1024);
+
+  // Decimal suffixes are accepted in addition to the binary ones; "GB" is 1000-based.
+  config.pacman.extra["reserved_storage"] = "2GB";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 2ULL * 1000 * 1000 * 1000);
+
+  config.pacman.extra["reserved_storage"] = "500MB";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 500ULL * 1000 * 1000);
+
+  // A reserved_storage value without a recognized size suffix is rejected.
+  config.pacman.extra["reserved_storage"] = "2XB";
+  EXPECT_THROW(ComposeAppManager::Config(config.pacman), std::invalid_argument);
+
+  // A scaled byte count that overflows uint64_t is rejected, not truncated. Casting an
+  // out-of-range double to an integer type is undefined, so the overflow guard must run before
+  // the cast.
+  config.pacman.extra["reserved_storage"] = "99999999999PiB";
+  EXPECT_THROW(ComposeAppManager::Config(config.pacman), std::invalid_argument);
+
+  // A numeric literal large enough to overflow double's parser must be rejected via the
+  // std::stod try/catch path rather than escaping as an exception.
+  config.pacman.extra["reserved_storage"] = std::string(400, '9') + "GiB";
+  EXPECT_THROW(ComposeAppManager::Config(config.pacman), std::invalid_argument);
+  config.pacman.extra.erase("reserved_storage");
 }
 
 class TestSysroot: public OSTree::Sysroot {
@@ -282,6 +319,66 @@ struct TestClient {
   std::shared_ptr<OSTree::Sysroot> sysroot;
   AppEngine::Ptr app_engine_;
 };
+
+TEST(ComposeApp, ParseSizeInBytes) {
+  using Config = ComposeAppManager::Config;
+  uint64_t bytes{0};
+
+  // Binary unit suffixes are 1024-based.
+  ASSERT_TRUE(Config::parseSizeInBytes("1KiB", bytes));
+  ASSERT_EQ(bytes, 1024ULL);
+  ASSERT_TRUE(Config::parseSizeInBytes("2MiB", bytes));
+  ASSERT_EQ(bytes, 2ULL * 1024 * 1024);
+  ASSERT_TRUE(Config::parseSizeInBytes("2GiB", bytes));
+  ASSERT_EQ(bytes, 2ULL * 1024 * 1024 * 1024);
+  ASSERT_TRUE(Config::parseSizeInBytes("3TiB", bytes));
+  ASSERT_EQ(bytes, 3ULL * 1024 * 1024 * 1024 * 1024);
+  ASSERT_TRUE(Config::parseSizeInBytes("1PiB", bytes));
+  ASSERT_EQ(bytes, 1ULL * 1024 * 1024 * 1024 * 1024 * 1024);
+
+  // Decimal unit suffixes are 1000-based.
+  ASSERT_TRUE(Config::parseSizeInBytes("1kB", bytes));
+  ASSERT_EQ(bytes, 1000ULL);
+  ASSERT_TRUE(Config::parseSizeInBytes("500MB", bytes));
+  ASSERT_EQ(bytes, 500ULL * 1000 * 1000);
+  ASSERT_TRUE(Config::parseSizeInBytes("2GB", bytes));
+  ASSERT_EQ(bytes, 2ULL * 1000 * 1000 * 1000);
+  ASSERT_TRUE(Config::parseSizeInBytes("3TB", bytes));
+  ASSERT_EQ(bytes, 3ULL * 1000 * 1000 * 1000 * 1000);
+
+  // The trailing "B" is optional; case in the unit letter and the optional "i"/"b" is ignored.
+  ASSERT_TRUE(Config::parseSizeInBytes("2G", bytes));
+  ASSERT_EQ(bytes, 2ULL * 1000 * 1000 * 1000);
+  ASSERT_TRUE(Config::parseSizeInBytes("2GI", bytes));
+  ASSERT_EQ(bytes, 2ULL * 1024 * 1024 * 1024);
+  ASSERT_TRUE(Config::parseSizeInBytes("2gib", bytes));
+  ASSERT_EQ(bytes, 2ULL * 1024 * 1024 * 1024);
+
+  // Fractional values, leading/trailing whitespace, and zero are all accepted.
+  ASSERT_TRUE(Config::parseSizeInBytes("1.5GiB", bytes));
+  ASSERT_EQ(bytes, static_cast<uint64_t>(1.5 * 1024 * 1024 * 1024));
+  ASSERT_TRUE(Config::parseSizeInBytes("  500MiB  ", bytes));
+  ASSERT_EQ(bytes, 500ULL * 1024 * 1024);
+  ASSERT_TRUE(Config::parseSizeInBytes("0GiB", bytes));
+  ASSERT_EQ(bytes, 0ULL);
+
+  // Inputs that do not match the size grammar are rejected. The output `bytes` is left untouched.
+  bytes = 0xDEADBEEF;
+  ASSERT_FALSE(Config::parseSizeInBytes("", bytes));
+  ASSERT_FALSE(Config::parseSizeInBytes("100", bytes));      // bare integer is a percentage, not a byte size
+  ASSERT_FALSE(Config::parseSizeInBytes("2XB", bytes));      // unrecognized unit letter
+  ASSERT_FALSE(Config::parseSizeInBytes("2 GiB extra", bytes));
+  ASSERT_FALSE(Config::parseSizeInBytes("-1GiB", bytes));
+  ASSERT_FALSE(Config::parseSizeInBytes("GiB", bytes));      // no numeric prefix
+  ASSERT_EQ(bytes, 0xDEADBEEFULL);
+
+  // Scaled byte counts that overflow uint64_t must be rejected, not truncated. Casting an
+  // out-of-range double to uint64_t is undefined behaviour; the helper must catch this before
+  // the cast.
+  ASSERT_FALSE(Config::parseSizeInBytes("99999999999PiB", bytes));
+  // Numeric literals that overflow double itself must be handled via the std::stod try/catch.
+  ASSERT_FALSE(Config::parseSizeInBytes(std::string(400, '9') + "GiB", bytes));
+}
 
 TEST(ComposeApp, getApps) {
   TemporaryDirectory dir;
