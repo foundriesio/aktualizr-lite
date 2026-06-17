@@ -178,6 +178,32 @@ TEST(ComposeApp, Config) {
   config.pacman.extra["storage_watermark"] = "50";
   cfg = ComposeAppManager::Config(config.pacman);
   ASSERT_EQ(cfg.storage_watermark, 50);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 0U);
+
+  // reserved_storage reserves an absolute amount of free space in bytes and takes precedence over the
+  // percentage storage_watermark (which stays set to "50" here).
+  config.pacman.extra["reserved_storage"] = "2GiB";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 2ULL * 1024 * 1024 * 1024);
+  ASSERT_EQ(cfg.reserved_storage, "2GiB");
+
+  config.pacman.extra["reserved_storage"] = "500MiB";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 500ULL * 1024 * 1024);
+
+  // Decimal suffixes are accepted in addition to the binary ones; "GB" is 1000-based.
+  config.pacman.extra["reserved_storage"] = "2GB";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 2ULL * 1000 * 1000 * 1000);
+
+  config.pacman.extra["reserved_storage"] = "500MB";
+  cfg = ComposeAppManager::Config(config.pacman);
+  ASSERT_EQ(cfg.reserved_storage_bytes, 500ULL * 1000 * 1000);
+
+  // A reserved_storage value without a recognized size suffix is rejected.
+  config.pacman.extra["reserved_storage"] = "2XB";
+  EXPECT_THROW(ComposeAppManager::Config(config.pacman), std::invalid_argument);
+  config.pacman.extra.erase("reserved_storage");
 }
 
 class TestSysroot: public OSTree::Sysroot {

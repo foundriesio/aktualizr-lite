@@ -312,6 +312,10 @@ TEST_F(RestorableAppEngineTest, CheckStorageWatermarkLimits) {
                std::invalid_argument);
   EXPECT_THROW(Docker::RestorableAppEngine::GetDefStorageSpaceFunc(Docker::RestorableAppEngine::LowWatermarkLimit - 1),
                std::invalid_argument);
+  // In bytes mode the percentage range limits do not apply.
+  EXPECT_NO_THROW(Docker::RestorableAppEngine::GetDefStorageSpaceFunc(2ULL * 1024 * 1024 * 1024, true));
+  EXPECT_NO_THROW(Docker::RestorableAppEngine::GetDefStorageSpaceFunc(
+      Docker::RestorableAppEngine::HighWatermarkLimit + 1, true));
 }
 
 TEST_F(RestorableAppEngineTest, FetchAndCheckSizeInsufficientSpace) {

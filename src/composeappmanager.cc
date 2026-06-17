@@ -1,5 +1,7 @@
 #include "composeappmanager.h"
 
+#include <cctype>
+#include <regex>
 #include <set>
 
 #include <boost/algorithm/string.hpp>
@@ -12,6 +14,46 @@
 #ifdef USE_COMPOSEAPP_ENGINE
 #include "composeapp/appengine.h"
 #endif  // USE_COMPOSEAPP_ENGINE
+
+namespace {
+// Parses a human-readable size into bytes, accepting both binary (e.g. "2GiB", "500MiB") and
+// decimal (e.g. "2GB", "500MB") unit suffixes, matching the formats accepted by composectl's
+// --reserved-storage flag so the same config value yields the same reserved amount across the
+// stack. The presence of an "i" in the suffix selects the binary base (1024); otherwise the
+// decimal base (1000) is used. Returns false when `value` lacks a recognized size unit (e.g. a
+// bare integer, which is interpreted as a percentage instead).
+bool parseSizeInBytes(const std::string& value, uint64_t& bytes) {
+  static const std::regex re{R"(^\s*([0-9]+(?:\.[0-9]+)?)\s*([kKmMgGtTpP])([iI])?[bB]?\s*$)"};
+  std::smatch match;
+  if (!std::regex_match(value, match, re)) {
+    return false;
+  }
+  const double num{std::stod(match[1].str())};
+  const uint64_t base{match[3].matched ? 1024ULL : 1000ULL};
+  uint64_t mult{1};
+  switch (std::tolower(static_cast<unsigned char>(match[2].str()[0]))) {
+    case 'k':
+      mult = base;
+      break;
+    case 'm':
+      mult = base * base;
+      break;
+    case 'g':
+      mult = base * base * base;
+      break;
+    case 't':
+      mult = base * base * base * base;
+      break;
+    case 'p':
+      mult = base * base * base * base * base;
+      break;
+    default:
+      return false;
+  }
+  bytes = static_cast<uint64_t>(num * static_cast<double>(mult));
+  return true;
+}
+}  // namespace
 
 ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
   const std::map<std::string, std::string> raw = pconfig.extra;
@@ -113,6 +155,25 @@ ComposeAppManager::Config::Config(const PackageConfig& pconfig) {
       throw;
     }
   }
+
+  if (raw.count("reserved_storage") > 0) {
+    // reserved_storage reserves an absolute amount of free space (e.g. "2GiB" or "500MB") and takes
+    // precedence over the percentage storage_watermark. The raw value is forwarded to composectl as-is.
+    const std::string reserved_storage_value{raw.at("reserved_storage")};
+    uint64_t bytes{0};
+    if (!parseSizeInBytes(reserved_storage_value, bytes)) {
+      LOG_ERROR
+          << "Invalid sota.toml:pacman:reserved_storage value, should be a byte size such as \"2GiB\" or \"500MB\", got "
+          << reserved_storage_value;
+      throw std::invalid_argument("invalid sota.toml:pacman:reserved_storage value: " + reserved_storage_value);
+    }
+    if (raw.count("storage_watermark") > 0) {
+      LOG_WARNING << "Both sota.toml:pacman:storage_watermark and sota.toml:pacman:reserved_storage are set; "
+                     "ignoring storage_watermark";
+    }
+    reserved_storage = reserved_storage_value;
+    reserved_storage_bytes = bytes;
+  }
 }
 
 ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -165,16 +226,20 @@ ComposeAppManager::ComposeAppManager(const PackageConfig& pconfig, const Bootloa
           return std::make_pair(proxy_url, cfg_.apps_proxy_ca);
         };
       }
+      const auto storage_limit{cfg_.storageSpaceLimit()};
       app_engine_ = std::make_shared<composeapp::AppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
           std::make_shared<Docker::DockerClient>(), docker_host, compose_cmd, composectl_cmd, cfg_.storage_watermark,
-          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark), nullptr, true, "", proxy);
+          cfg_.reserved_storage,
+          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(storage_limit.first, storage_limit.second), nullptr, true,
+          "", proxy);
 #else
       const std::string skopeo_cmd{boost::filesystem::canonical(cfg_.skopeo_bin).string()};
+      const auto storage_limit{cfg_.storageSpaceLimit()};
       app_engine_ = std::make_shared<Docker::RestorableAppEngine>(
           cfg_.reset_apps_root, cfg_.apps_root, cfg_.images_data_root, registry_client,
           std::make_shared<Docker::DockerClient>(), skopeo_cmd, docker_host, compose_cmd,
-          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(cfg_.storage_watermark));
+          Docker::RestorableAppEngine::GetDefStorageSpaceFunc(storage_limit.first, storage_limit.second));
 #endif  // USE_COMPOSEAPP_ENGINE
       is_restorable_engine_ = true;
     } else {
@@ -805,16 +870,20 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToFetch(const Uptane:
 
 std::string ComposeAppManager::getAppsFsUsageInfo() const {
   std::stringstream ss;
-  auto usage_info{storage::Volume::getUsageInfo(cfg_.images_data_root.string(), (100 - cfg_.storage_watermark),
-                                                "pacman:storage_watermark")};
+  const bool in_bytes{cfg_.reserved_storage_bytes > 0};
+  const uint64_t reserved{in_bytes ? cfg_.reserved_storage_bytes
+                                   : ((100 > cfg_.storage_watermark) ? static_cast<uint64_t>(100 - cfg_.storage_watermark)
+                                                                     : 0)};
+  auto usage_info{
+      storage::Volume::getUsageInfo(cfg_.images_data_root.string(), reserved, "pacman:storage_watermark", in_bytes)};
   if (!usage_info.isOk()) {
     LOG_ERROR << "Failed to obtain storage usage statistic: " << usage_info.err;
   }
   ss << usage_info;
   if (is_restorable_engine_ &&
       !Docker::RestorableAppEngine::areDockerAndSkopeoOnTheSameVolume(cfg_.apps_root, cfg_.images_data_root)) {
-    auto usage_info{storage::Volume::getUsageInfo(cfg_.apps_root.string(), (100 - cfg_.storage_watermark),
-                                                  "pacman:storage_watermark")};
+    auto usage_info{
+        storage::Volume::getUsageInfo(cfg_.apps_root.string(), reserved, "pacman:storage_watermark", in_bytes)};
     if (!usage_info.isOk()) {
       LOG_ERROR << "Failed to obtain storage usage statistic: " << usage_info.err;
     }

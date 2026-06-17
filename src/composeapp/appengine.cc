@@ -31,12 +31,19 @@ AppEngine::Result AppEngine::fetch(const App& app) {
           was_proxy_set = true;
         }
       }
-      exec(boost::format{"%s --store %s pull -p %s --storage-usage-watermark %d"} % composectl_cmd_ % storeRoot() %
-               app.uri % storage_watermark_,
+      // reserved_storage, when set, forwards an absolute reserved free space; otherwise the percentage
+      // watermark is forwarded. composectl gives --reserved-storage precedence over the watermark.
+      const std::string storage_arg{
+          reserved_storage_.empty() ? (boost::format{"--storage-usage-watermark %d"} % storage_watermark_).str()
+                                    : (boost::format{"--reserved-storage %s"} % reserved_storage_).str()};
+      exec(boost::format{"%s --store %s pull -p %s %s"} % composectl_cmd_ % storeRoot() % app.uri % storage_arg,
            "failed to pull compose app", "", nullptr, "4h", true);
     } else {
-      exec(boost::format{"%s --store %s pull -p %s -l %s --storage-usage-watermark %d"} % composectl_cmd_ %
-               storeRoot() % app.uri % local_source_path_ % storage_watermark_,
+      const std::string storage_arg{
+          reserved_storage_.empty() ? (boost::format{"--storage-usage-watermark %d"} % storage_watermark_).str()
+                                    : (boost::format{"--reserved-storage %s"} % reserved_storage_).str()};
+      exec(boost::format{"%s --store %s pull -p %s -l %s %s"} % composectl_cmd_ % storeRoot() % app.uri %
+               local_source_path_ % storage_arg,
            "failed to pull compose app", "", nullptr, "4h", true);
     }
     res = true;

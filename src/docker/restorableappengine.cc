@@ -31,20 +31,27 @@ class InsufficientSpaceError : public std::runtime_error {
 
 const std::string RestorableAppEngine::ComposeFile{"docker-compose.yml"};
 
-RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::GetDefStorageSpaceFunc(int watermark) {
-  const int low_watermark_limit{LowWatermarkLimit};
-  const int high_watermark_limit{HighWatermarkLimit};
+RestorableAppEngine::StorageSpaceFunc RestorableAppEngine::GetDefStorageSpaceFunc(uint64_t watermark,
+                                                                                  bool watermark_in_bytes) {
+  if (!watermark_in_bytes) {
+    const int low_watermark_limit{LowWatermarkLimit};
+    const int high_watermark_limit{HighWatermarkLimit};
 
-  if (watermark < low_watermark_limit || watermark > high_watermark_limit) {
-    throw std::invalid_argument(
-        "Unsupported value of a storage watermark (sota.toml:pacman:storage_watermark); should be within [" +
-        std::to_string(low_watermark_limit) + "," + std::to_string(high_watermark_limit) + "] range, got " +
-        std::to_string(watermark));
+    if (watermark < static_cast<uint64_t>(low_watermark_limit) ||
+        watermark > static_cast<uint64_t>(high_watermark_limit)) {
+      throw std::invalid_argument(
+          "Unsupported value of a storage watermark (sota.toml:pacman:storage_watermark); should be within [" +
+          std::to_string(low_watermark_limit) + "," + std::to_string(high_watermark_limit) + "] range, got " +
+          std::to_string(watermark));
+    }
   }
 
-  return [watermark](const boost::filesystem::path& path) {
-    storage::Volume::UsageInfo usage_info{storage::Volume::getUsageInfo(
-        path.string(), (100 > watermark) ? static_cast<unsigned int>(100 - watermark) : 0, "pacman:storage_watermark")};
+  return [watermark, watermark_in_bytes](const boost::filesystem::path& path) {
+    storage::Volume::UsageInfo usage_info{
+        watermark_in_bytes
+            ? storage::Volume::getUsageInfo(path.string(), watermark, "pacman:storage_watermark", true)
+            : storage::Volume::getUsageInfo(path.string(), (100 > watermark) ? (100 - watermark) : 0,
+                                            "pacman:storage_watermark")};
     if (!usage_info.isOk()) {
       LOG_ERROR << "Failed to obtain storage usage statistic: " << usage_info.err;
     }
