@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import glob
 import json
 import hashlib
 import logging
@@ -6,6 +7,7 @@ import os
 import random
 import pytest
 import requests
+import shutil
 import stat
 import subprocess
 import sys
@@ -314,20 +316,31 @@ def get_target_for_actual_version(actual_version: int):
 def register_if_required():
     if not os.path.exists(CLIENT_PEM):
         user_token = os.getenv("USER_TOKEN")
-        if use_fioup:
-            cmd = f'{fioup_cmd} register --api-token "{user_token}" --tag {primary_tag} --factory {factory_name} --hw-id {hardware_id}'
-        else:
-            cmd = f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" --start-daemon 0 --tags {primary_tag} --hwid {hardware_id}'
         logger.info(f"Registering device...")
-        output = os.popen(cmd).read().strip()
-        logger.info(output)
+        if use_fioup:
+            cmd = [fioup_cmd, "register", "--api-token", user_token,
+                   "--tag", primary_tag, "--factory", factory_name, "--hw-id", hardware_id]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+        else:
+            cmd = ["lmp-device-register", "--api-token", user_token, "--start-daemon", "0",
+                   "--tags", primary_tag, "--hwid", hardware_id]
+            res = subprocess.run(cmd, capture_output=True, text=True,
+                                 env={**os.environ, "DEVICE_FACTORY": factory_name})
+        logger.info(res.stdout.strip())
     else:
         logger.info("Device already registered")
 
 def get_device_name():
     # os.getenv("DEVICE_NAME", "aklite-test-device")
-    cmd = "openssl x509 -noout -subject -nameopt multiline -in /var/sota/client.pem | grep commonName | sed -n 's/ *commonName *= //p'"
-    device_uuid = os.popen(cmd).read().strip()
+    res = subprocess.run(
+        ["openssl", "x509", "-noout", "-subject", "-nameopt", "multiline", "-in", CLIENT_PEM],
+        capture_output=True, text=True, check=True)
+    device_uuid = ""
+    for line in res.stdout.splitlines():
+        s = line.strip()
+        if s.startswith("commonName"):
+            device_uuid = s.split("=", 1)[1].strip()
+            break
     assert len(device_uuid) == 36
     # Assuming device name == uuid
     logger.info(f"Device UUID is {device_uuid}")
@@ -582,16 +595,34 @@ def check_running_apps(expected_apps: Optional[List[str]]=None):
     running_apps_from_status = get_running_apps_from_status()
     assert set(expected_apps) == set(running_apps_from_status)
 
+def _run_sqlite(db_path: str, sql: str):
+    subprocess.run(["sqlite3", db_path, sql], check=True, capture_output=True)
+
+
 def cleanup_tuf_metadata():
     if use_fioup:
-        os.system("""rm -f /var/sota/targets.json; rm -rf /var/sota/tuf;""")
+        for p in (f"{SOTA_DIR}/targets.json",):
+            if os.path.exists(p):
+                os.remove(p)
+        tuf_dir = f"{SOTA_DIR}/tuf"
+        if os.path.exists(tuf_dir):
+            shutil.rmtree(tuf_dir)
     else:
-        os.system("""sqlite3 /var/sota/sql.db  "delete from meta where meta_type <> 0 or version >= 3;" ".exit" """)
+        _run_sqlite(f"{SOTA_DIR}/sql.db", "delete from meta where meta_type <> 0 or version >= 3;")
+
 
 def cleanup_installed_data():
     if use_fioup:
-        os.system("""rm -f /var/sota/updates.db /etc/sota/conf.d/* /run/secrets/* /var/sota/.last*""")
-    os.system("""sqlite3 /var/sota/sql.db  "delete from installed_versions;" ".exit" """)
+        for pattern in (f"{SOTA_DIR}/updates.db", "/etc/sota/conf.d/*", "/run/secrets/*", f"{SOTA_DIR}/.last*"):
+            for path in glob.glob(pattern):
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                    else:
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+    _run_sqlite(f"{SOTA_DIR}/sql.db", "delete from installed_versions;")
 
 def install_with_separate_steps(target: Target, explicit_version: bool = True, do_reboot: bool = True, do_finalize: bool = True):
     cp = invoke_aklite(['check', '--json', '1'])
@@ -1115,9 +1146,13 @@ def restore_system_state():
     if offline:
         os.makedirs(TUF_CI_DIR, exist_ok=True)
         # offline bundles miss root metadata versions 1 and 2. Fetch them manually
+        headers = {"OSF-TOKEN": user_token}
         for root_version in [1, 2]:
-            ret = os.system(f"curl -s -H 'OSF-TOKEN: {user_token}' https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/{root_version}.root.json -o {TUF_CI_DIR}/{root_version}.root.json")
-            assert ret == 0, f"Failed to download root metadata for offline bundles version {root_version}"
+            url = f"https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/{root_version}.root.json"
+            r = requests.get(url, headers=headers, timeout=API_REQUEST_TIMEOUT)
+            assert r.status_code == 200, f"Failed to download root metadata for offline bundles version {root_version}: {r.status_code}"
+            with open(f"{TUF_CI_DIR}/{root_version}.root.json", "wb") as f:
+                f.write(r.content)
 
     cp = invoke_aklite(['update', str(version)])
     assert cp.returncode in [ ReturnCodes.Ok, ReturnCodes.InstallNeedsReboot ], cp.stdout.decode("utf-8")
