@@ -152,6 +152,10 @@ aklite_path = "./build/src/aktualizr-lite"
 composectl_path = "/usr/bin/composectl"
 tc_path = "/usr/sbin/tc"
 
+# Timeout for HTTPS calls to api.foundries.io. Keeps the suite from hanging
+# indefinitely when the API is slow or unreachable.
+API_REQUEST_TIMEOUT = 30
+
 # Filesystem paths used by the e2e suite. All test state lives under SOTA_DIR;
 # offline bundles and the fioup binary are looked up relative to the working
 # directory.
@@ -302,7 +306,7 @@ def set_device_apps(apps: Optional[List[str]]):
     }
     url = f"https://api.foundries.io/ota/devices/{device_name}/config/?factory={factory_name}&by-uuid=1"
     headers = {"OSF-TOKEN": user_token, "Content-Type": "application/json"}
-    res = requests.patch(url, json=payload, headers=headers)
+    res = requests.patch(url, json=payload, headers=headers, timeout=API_REQUEST_TIMEOUT)
     assert res.status_code == 201, f"Unable to update device settings: {res.status_code} {res.text}"
     logger.info(f"  Updated device apps settings in the factory: {apps=}")
 
@@ -313,7 +317,7 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
         assert min_date is not None
         logger.info(f"  Checking that no new event was generated since {min_date}")
     headers = {'OSF-TOKEN': user_token}
-    r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/', headers=headers)
+    r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/', headers=headers, timeout=API_REQUEST_TIMEOUT)
     d = json.loads(r.text)
 
     if second_to_last_corr_id:
@@ -333,7 +337,7 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
 
     corr_id = latest_update["correlation-id"]
     assert int(latest_update["version"]) == target_version
-    r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/{corr_id}/', headers=headers)
+    r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/{corr_id}/', headers=headers, timeout=API_REQUEST_TIMEOUT)
 
     d_update = json.loads(r.text)
     event_list = set([ (x["eventType"]["id"], x["event"]["success"]) for x in d_update ])
