@@ -287,14 +287,22 @@ device_name = get_device_name()
 
 def set_device_apps(apps: Optional[List[str]]):
     if apps is None:
-        data = r"""{"reason":"Override aktualizr-lite update configuration ","files":[{"name":"z-50-fioctl.toml","value":"\n[pacman]\n","unencrypted":true,"on-changed":["/usr/share/fioconfig/handlers/aktualizr-toml-update"]}]}"""
+        toml_value = "\n[pacman]\n"
     else:
         apps_str = ",".join(apps)
-        data = r"""{"reason":"Override aktualizr-lite update configuration ","files":[{"name":"z-50-fioctl.toml","value":"\n[pacman]\n  compose_apps = \"""" + apps_str + r"""\"\n  docker_apps = \"""" + apps_str + r"""\"\n","unencrypted":true,"on-changed":["/usr/share/fioconfig/handlers/aktualizr-toml-update"]}]}"""
+        toml_value = f'\n[pacman]\n  compose_apps = "{apps_str}"\n  docker_apps = "{apps_str}"\n'
+    payload = {
+        "reason": "Override aktualizr-lite update configuration ",
+        "files": [{
+            "name": "z-50-fioctl.toml",
+            "value": toml_value,
+            "unencrypted": True,
+            "on-changed": ["/usr/share/fioconfig/handlers/aktualizr-toml-update"],
+        }],
+    }
     url = f"https://api.foundries.io/ota/devices/{device_name}/config/?factory={factory_name}&by-uuid=1"
-    print(data)
-    headers = {'OSF-TOKEN': user_token}
-    res = requests.patch(url, data, headers=headers)
+    headers = {"OSF-TOKEN": user_token, "Content-Type": "application/json"}
+    res = requests.patch(url, json=payload, headers=headers)
     assert res.status_code == 201, f"Unable to update device settings: {res.status_code} {res.text}"
     logger.info(f"  Updated device apps settings in the factory: {apps=}")
 
