@@ -1006,7 +1006,7 @@ def do_rollback(target: Target, requires_reboot: bool, installation_in_progress:
 
 def create_offline_bundles():
     if not e2e_test_ostree_tgz and not os.path.exists(OFFLINE_BUNDLES_DIR):
-        assert False, "No OSTree repo tgz provided, and offline bundles directory does not exist. Cannot proceed with offline update tests"
+        pytest.skip("No OSTree repo tgz provided (set E2E_TEST_OSTREE_TGZ), and offline bundles directory does not exist; cannot proceed with offline update tests.")
 
     if not e2e_test_ostree_tgz:
         logger.warning("No OSTree repo tgz provided for offline bundles test, skipping offline bundles creation")
@@ -1191,7 +1191,8 @@ def test_update_to_latest(offline_: bool, single_step_: bool):
     run_test_sequence_update_to_latest()
 
 def run_test_switch_tag():
-    assert secondary_tag_is_set()
+    if not secondary_tag_is_set():
+        pytest.skip("Secondary tag not configured; set SECONDARY_TAG and SECONDARY_BASE_TARGET_VERSION to run tag-switch tests.")
     restore_system_state()
     apps = None # All apps, for now
     write_settings(apps, prune)
@@ -1209,7 +1210,8 @@ def run_test_switch_tag():
     install_target(all_secondary_tag_targets[Target.UpdateOstreeWithApps])
 
 def run_test_auto_downgrade_prevention():
-    assert secondary_tag_is_set()
+    if not secondary_tag_is_set():
+        pytest.skip("Secondary tag not configured; set SECONDARY_TAG and SECONDARY_BASE_TARGET_VERSION to run tag-switch tests.")
     restore_system_state()
     apps = None # All apps, for now
     write_settings(apps, prune, secondary_tag)
@@ -1225,7 +1227,8 @@ def run_test_auto_downgrade_prevention():
     install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
 
 def run_test_deamon_auto_downgrade():
-    assert secondary_tag_is_set()
+    if not secondary_tag_is_set():
+        pytest.skip("Secondary tag not configured; set SECONDARY_TAG and SECONDARY_BASE_TARGET_VERSION to run tag-switch tests.")
     auto_downgrade_enabled = False
     restore_system_state()
     apps = None # All apps, for now
@@ -1456,9 +1459,8 @@ def is_loopback_mount(path: str):
         return False
 
 def run_test_no_space(reserved_storage: Optional[str] = None):
-    is_loopback = is_loopback_mount(SOTA_DIR)
-    if not is_loopback:
-        assert False, f"{SOTA_DIR} is not a loopback mount point, skipping free space test execution. Device storage must be a loopback device to run this test."
+    if not is_loopback_mount(SOTA_DIR):
+        pytest.skip(f"{SOTA_DIR} is not a loopback mount point; the free-space test needs a loopback-backed device storage to be effective.")
 
     restore_system_state()
     apps = None # All apps, for now
@@ -1471,7 +1473,7 @@ def run_test_no_space(reserved_storage: Optional[str] = None):
     available_bytes = statvfs.f_bavail * statvfs.f_frsize
     logger.info(f"Available space in {SOTA_DIR}: {available_bytes} bytes")
     if available_bytes > MAX_INITIAL_FREE_BYTES:
-        assert False, f"Too much free space left, test environment should be configured to have less than {MAX_INITIAL_FREE_BYTES} bytes free for this test to be effective"
+        pytest.skip(f"Too much free space left ({available_bytes} bytes); the free-space test needs less than {MAX_INITIAL_FREE_BYTES} bytes free to be effective.")
 
     if available_bytes > FILL_TARGET_NO_SPACE:
         # fill /var/sota with data to reduce available space to FILL_TARGET_NO_SPACE bytes, to trigger no space left error
@@ -1522,9 +1524,8 @@ def test_no_space_reserved_storage(offline_: bool, single_step_: bool):
 
 
 def run_test_reserved_storage_update_ok(reserved_storage: str):
-    is_loopback = is_loopback_mount(SOTA_DIR)
-    if not is_loopback:
-        assert False, f"{SOTA_DIR} is not a loopback mount point, skipping free space test execution. Device storage must be a loopback device to run this test."
+    if not is_loopback_mount(SOTA_DIR):
+        pytest.skip(f"{SOTA_DIR} is not a loopback mount point; the free-space test needs a loopback-backed device storage to be effective.")
 
     restore_system_state()
     apps = None # All apps, for now
@@ -1540,7 +1541,7 @@ def run_test_reserved_storage_update_ok(reserved_storage: str):
     available_bytes = statvfs.f_bavail * statvfs.f_frsize
     logger.info(f"Available space in {SOTA_DIR}: {available_bytes} bytes")
     if available_bytes > MAX_INITIAL_FREE_BYTES:
-        assert False, f"Too much free space left, test environment should be configured to have less than {MAX_INITIAL_FREE_BYTES} bytes free for this test to be effective"
+        pytest.skip(f"Too much free space left ({available_bytes} bytes); the free-space test needs less than {MAX_INITIAL_FREE_BYTES} bytes free to be effective.")
 
     if available_bytes > FILL_TARGET_FOR_UPDATE:
         with open(FILL_SPACE_FILE, "wb") as f:
