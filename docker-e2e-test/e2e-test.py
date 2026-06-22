@@ -403,7 +403,8 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
             return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
     return subprocess.run([cmd] + options, capture_output=True)
 
-def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None):
+def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None,
+                   reserved_storage: Optional[str] = None):
     logger.info(f"  Updating settings. {apps=}")
     callback_file = "/var/sota/callback.sh"
 
@@ -432,6 +433,9 @@ compose_apps = "{apps_str}"
 
     if not prune:
         content += "\ndocker_prune = 0\n"
+
+    if reserved_storage is not None:
+        content += f'\nreserved_storage = "{reserved_storage}"\n'
 
     with open("/etc/sota/conf.d/z-50-fioctl.toml", "w") as f:
         f.write(content)
@@ -1422,14 +1426,14 @@ def is_loopback_mount(path: str):
     except subprocess.CalledProcessError:
         return False
 
-def run_test_no_space():
+def run_test_no_space(reserved_storage: Optional[str] = None):
     is_loopback = is_loopback_mount('/var/sota')
     if not is_loopback:
         assert False, "/var/sota is not a loopback mount point, skipping free space test execution. Device storage must be a loopback device to run this test."
 
     restore_system_state()
     apps = None # All apps, for now
-    write_settings(apps, prune)
+    write_settings(apps, prune, reserved_storage=reserved_storage)
 
     invoke_aklite(['check'])
 
@@ -1473,6 +1477,74 @@ def test_no_space(offline_: bool, single_step_: bool):
     single_step = single_step_
     logger.info(f"Testing no space left on device")
     run_test_no_space()
+
+
+@pytest.mark.parametrize('single_step_', [True, False])
+@pytest.mark.parametrize('offline_', [True, False])
+def test_no_space_reserved_storage(offline_: bool, single_step_: bool):
+    global offline, single_step
+    offline = offline_
+    single_step = single_step_
+    # The run_test_no_space helper fills /var/sota down to ~50KB of free space. Reserving 1MiB
+    # in bytes via pacman.reserved_storage must override the percentage watermark and trigger
+    # DownloadFailureNoSpace, since available_bytes < reserved_bytes.
+    logger.info(f"Testing no space left on device with pacman.reserved_storage set in bytes")
+    run_test_no_space(reserved_storage="1MiB")
+
+
+def run_test_reserved_storage_update_ok(reserved_storage: str):
+    is_loopback = is_loopback_mount('/var/sota')
+    if not is_loopback:
+        assert False, "/var/sota is not a loopback mount point, skipping free space test execution. Device storage must be a loopback device to run this test."
+
+    restore_system_state()
+    apps = None # All apps, for now
+    write_settings(apps, prune, reserved_storage=reserved_storage)
+
+    invoke_aklite(['check'])
+
+    # Fill /var/sota the same way the no-space test does, but stop at 20000000 bytes free so the
+    # update can still proceed. Combined with a tiny reserved_storage (e.g. "1KiB") this proves
+    # the bytes-based path doesn't over-reserve: available (~20MB) - reserved (1KiB) is still
+    # enough room for the update to land.
+    statvfs = os.statvfs("/var/sota")
+    available_bytes = statvfs.f_bavail * statvfs.f_frsize
+    logger.info(f"Available space in /var/sota: {available_bytes} bytes")
+    if available_bytes > 100000000:
+        assert False, "Too much free space left, test environment should be configured to have less than 100MB free space for this test to be effective"
+
+    if available_bytes > 20000000:
+        with open("/var/sota/fill_space", "wb") as f:
+            f.write(b"\0" * (available_bytes - 20000000))
+
+    statvfs = os.statvfs("/var/sota")
+    logger.info(f"Available space in /var/sota after filling it up: {statvfs.f_bavail * statvfs.f_frsize} bytes")
+
+    if single_step:
+        cmd = ['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)]
+        expected_success_code = ReturnCodes.InstallNeedsReboot
+    else:
+        cmd = ['pull', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)]
+        expected_success_code = ReturnCodes.Ok
+
+    try:
+        cp = invoke_aklite(cmd)
+        assert cp.returncode == expected_success_code, cp.stdout.decode("utf-8")
+    finally:
+        if os.path.exists("/var/sota/fill_space"):
+            os.remove("/var/sota/fill_space")
+
+
+@pytest.mark.parametrize('single_step_', [True, False])
+@pytest.mark.parametrize('offline_', [True, False])
+def test_reserved_storage_low_allows_update(offline_: bool, single_step_: bool):
+    global offline, single_step
+    offline = offline_
+    single_step = single_step_
+    # A tiny pacman.reserved_storage (1KiB) is well below the actual free space on /var/sota, so
+    # the bytes-based path must not block a legitimate update.
+    logger.info(f"Testing that a low pacman.reserved_storage value still allows the update")
+    run_test_reserved_storage_update_ok(reserved_storage="1KiB")
 
 
 def run_test_kill_process():
