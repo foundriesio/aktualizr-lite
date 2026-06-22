@@ -190,6 +190,53 @@ single_step = True
 delay_app_install = False
 prune = True
 
+# Environment variables that individual tests toggle and that must not leak across tests.
+TEST_ONLY_ENV_VARS = (
+    "AKLITE_TEST_RETURN_ON_SLEEP",
+    "FIOUP_VERSION_UPPER_LIMIT",
+    "FIOUP_E2E_RUNONCE",
+)
+
+
+@pytest.fixture(autouse=True)
+def _e2e_test_isolation():
+    """Snapshot mutable test state before each test and restore it afterwards.
+
+    Several tests mutate module-level mode flags (offline, single_step,
+    delay_app_install, prune), set test-only environment variables, install
+    netem qdiscs, and create a fill-space file under /var/sota. If any test
+    raises before its own cleanup runs, that state would leak into every
+    subsequent test. This fixture snapshots and restores it unconditionally.
+    """
+    global offline, single_step, delay_app_install, prune
+    saved_modes = (offline, single_step, delay_app_install, prune)
+    saved_env = {name: os.environ.get(name) for name in TEST_ONLY_ENV_VARS}
+    try:
+        yield
+    finally:
+        offline, single_step, delay_app_install, prune = saved_modes
+
+        for name, value in saved_env.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+        # Best-effort cleanup of residue some tests can leave behind on failure.
+        if os.path.exists(FILL_SPACE_FILE):
+            try:
+                os.remove(FILL_SPACE_FILE)
+            except OSError:
+                pass
+        # tc qdisc rules installed by the network-error tests. Suppress stderr
+        # so the no-op cleanup of an already-removed qdisc stays quiet.
+        subprocess.run(
+            [tc_path, "qdisc", "del", "dev", "eth0", "root"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
 
 class Target:
     First = 0
