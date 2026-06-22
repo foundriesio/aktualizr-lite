@@ -150,8 +150,35 @@ else:
 
 aklite_path = "./build/src/aktualizr-lite"
 composectl_path = "/usr/bin/composectl"
-callback_log_path = "/var/sota/callback_log.txt"
 tc_path = "/usr/sbin/tc"
+
+# Filesystem paths used by the e2e suite. All test state lives under SOTA_DIR;
+# offline bundles and the fioup binary are looked up relative to the working
+# directory.
+SOTA_DIR = "/var/sota"
+SOTA_TOML = f"{SOTA_DIR}/sota.toml"
+SOTA_CONFD_FIOCTL = "/etc/sota/conf.d/z-50-fioctl.toml"
+CLIENT_PEM = f"{SOTA_DIR}/client.pem"
+CALLBACK_SCRIPT = f"{SOTA_DIR}/callback.sh"
+CALLBACK_LOG = f"{SOTA_DIR}/callback_log.txt"
+AKLITE_LOCK = "/var/lock/aklite.lock"
+NEED_REBOOT_FLAG = "/var/run/aktualizr-session/need_reboot"
+FILL_SPACE_FILE = f"{SOTA_DIR}/fill_space"
+DOCKER_IMAGE_DB = "/var/lib/docker/image/overlay2/imagedb/content/sha256"
+RESET_APPS_BLOBS = f"{SOTA_DIR}/reset-apps/blobs/sha256"
+TUF_CI_DIR = "/usr/lib/sota/tuf/ci"
+OFFLINE_BUNDLES_DIR = "./offline-bundles/unified/"
+
+# Storage usage thresholds for the no-space tests. /var/sota must be a loopback mount
+# sized below MAX_INITIAL_FREE_BYTES for those tests to be effective. The no-space
+# scenario fills /var/sota down to FILL_TARGET_NO_SPACE bytes; the positive
+# reserved_storage scenario stops at FILL_TARGET_FOR_UPDATE so the update can land.
+MAX_INITIAL_FREE_BYTES = 100_000_000
+FILL_TARGET_NO_SPACE = 50_000
+FILL_TARGET_FOR_UPDATE = 20_000_000
+
+# Backwards-compatible alias still referenced elsewhere in this file.
+callback_log_path = CALLBACK_LOG
 
 # Test modes
 offline = False
@@ -234,7 +261,7 @@ def get_target_for_actual_version(actual_version: int):
     assert False, f"Unable to find target with version {actual_version}"
 
 def register_if_required():
-    if not os.path.exists("/var/sota/client.pem"):
+    if not os.path.exists(CLIENT_PEM):
         user_token = os.getenv("USER_TOKEN")
         if use_fioup:
             cmd = f'{fioup_cmd} register --api-token "{user_token}" --tag {primary_tag} --factory {factory_name} --hw-id {hardware_id}'
@@ -324,7 +351,7 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
 
 def sys_reboot():
     logger.info(f"  Rebooting")
-    need_reboot_path = "/var/run/aktualizr-session/need_reboot"
+    need_reboot_path = NEED_REBOOT_FLAG
     if os.path.isfile(need_reboot_path):
         os.remove(need_reboot_path)
 
@@ -375,7 +402,7 @@ def aklite_current_version_based_on_list():
 
 def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
     if offline:
-        options = options + [ "--src-dir", os.path.abspath("./offline-bundles/unified/") ]
+        options = options + [ "--src-dir", os.path.abspath(OFFLINE_BUNDLES_DIR) ]
 
     cmd = aklite_path
     if use_fioup:
@@ -397,8 +424,8 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
         except subprocess.TimeoutExpired:
             logger.info(f"  Killing process due to timeout after {kill_after_sec} seconds")
             proc.kill()
-            if os.path.isfile("/var/lock/aklite.lock"):
-                os.remove("/var/lock/aklite.lock")
+            if os.path.isfile(AKLITE_LOCK):
+                os.remove(AKLITE_LOCK)
             outs, errs = proc.communicate()
             return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
     return subprocess.run([cmd] + options, capture_output=True)
@@ -406,7 +433,7 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None,
                    reserved_storage: Optional[str] = None):
     logger.info(f"  Updating settings. {apps=}")
-    callback_file = "/var/sota/callback.sh"
+    callback_file = CALLBACK_SCRIPT
 
     callback_content = \
 """#!/bin/sh
@@ -437,16 +464,18 @@ compose_apps = "{apps_str}"
     if reserved_storage is not None:
         content += f'\nreserved_storage = "{reserved_storage}"\n'
 
-    with open("/etc/sota/conf.d/z-50-fioctl.toml", "w") as f:
+    with open(SOTA_CONFD_FIOCTL, "w") as f:
         f.write(content)
 
     sota_toml_content = ""
-    with open("/var/sota/sota.toml") as f:
+    with open(SOTA_TOML) as f:
         sota_toml_content = f.read()
 
     if not "callback_program" in sota_toml_content:
-        sota_toml_content = sota_toml_content.replace("[pacman]", '[pacman]\ncallback_program = "/var/sota/callback.sh"\nstorage_watermark = "95"')
-        with open("/var/sota/sota.toml", "w") as f:
+        sota_toml_content = sota_toml_content.replace(
+            "[pacman]",
+            f'[pacman]\ncallback_program = "{CALLBACK_SCRIPT}"\nstorage_watermark = "95"')
+        with open(SOTA_TOML, "w") as f:
             f.write(sota_toml_content)
 
 def get_all_current_apps() -> List[str]:
@@ -976,14 +1005,14 @@ def do_rollback(target: Target, requires_reboot: bool, installation_in_progress:
     assert aklite_current_version() == target.actual_version, cp.stdout.decode("utf-8")
 
 def create_offline_bundles():
-    if not e2e_test_ostree_tgz and not os.path.exists("./offline-bundles/unified/"):
+    if not e2e_test_ostree_tgz and not os.path.exists(OFFLINE_BUNDLES_DIR):
         assert False, "No OSTree repo tgz provided, and offline bundles directory does not exist. Cannot proceed with offline update tests"
 
     if not e2e_test_ostree_tgz:
         logger.warning("No OSTree repo tgz provided for offline bundles test, skipping offline bundles creation")
         return
 
-    if os.path.exists("./offline-bundles/unified/"):
+    if os.path.exists(OFFLINE_BUNDLES_DIR):
         logger.info("Offline bundles directory already exists, skipping offline bundles creation")
         return
 
@@ -1025,10 +1054,10 @@ def restore_system_state():
     cleanup_installed_data()
 
     if offline:
-        os.makedirs("/usr/lib/sota/tuf/ci/", exist_ok=True)
+        os.makedirs(TUF_CI_DIR, exist_ok=True)
         # offline bundles miss root metadata versions 1 and 2. Fetch them manually
         for root_version in [1, 2]:
-            ret = os.system(f"curl -s -H 'OSF-TOKEN: {user_token}' https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/{root_version}.root.json -o /usr/lib/sota/tuf/ci/{root_version}.root.json")
+            ret = os.system(f"curl -s -H 'OSF-TOKEN: {user_token}' https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/{root_version}.root.json -o {TUF_CI_DIR}/{root_version}.root.json")
             assert ret == 0, f"Failed to download root metadata for offline bundles version {root_version}"
 
     cp = invoke_aklite(['update', str(version)])
@@ -1427,9 +1456,9 @@ def is_loopback_mount(path: str):
         return False
 
 def run_test_no_space(reserved_storage: Optional[str] = None):
-    is_loopback = is_loopback_mount('/var/sota')
+    is_loopback = is_loopback_mount(SOTA_DIR)
     if not is_loopback:
-        assert False, "/var/sota is not a loopback mount point, skipping free space test execution. Device storage must be a loopback device to run this test."
+        assert False, f"{SOTA_DIR} is not a loopback mount point, skipping free space test execution. Device storage must be a loopback device to run this test."
 
     restore_system_state()
     apps = None # All apps, for now
@@ -1438,20 +1467,20 @@ def run_test_no_space(reserved_storage: Optional[str] = None):
     invoke_aklite(['check'])
 
     # get available bytes in /var/sota
-    statvfs = os.statvfs("/var/sota")
+    statvfs = os.statvfs(SOTA_DIR)
     available_bytes = statvfs.f_bavail * statvfs.f_frsize
-    logger.info(f"Available space in /var/sota: {available_bytes} bytes")
-    if available_bytes > 100000000:
-        assert False, "Too much free space left, test environment should be configured to have less than 100MB free space for this test to be effective"
+    logger.info(f"Available space in {SOTA_DIR}: {available_bytes} bytes")
+    if available_bytes > MAX_INITIAL_FREE_BYTES:
+        assert False, f"Too much free space left, test environment should be configured to have less than {MAX_INITIAL_FREE_BYTES} bytes free for this test to be effective"
 
-    if available_bytes > 50000:
-        # fill /var/sota with data to reduce available space to 50000 bytes, to trigger no space left error
-        with open("/var/sota/fill_space", "wb") as f:
-            f.write(b"\0" * (available_bytes - 50000))
+    if available_bytes > FILL_TARGET_NO_SPACE:
+        # fill /var/sota with data to reduce available space to FILL_TARGET_NO_SPACE bytes, to trigger no space left error
+        with open(FILL_SPACE_FILE, "wb") as f:
+            f.write(b"\0" * (available_bytes - FILL_TARGET_NO_SPACE))
 
-    statvfs = os.statvfs("/var/sota")
+    statvfs = os.statvfs(SOTA_DIR)
     available_bytes = statvfs.f_bavail * statvfs.f_frsize
-    logger.info(f"Available space in /var/sota after filling it up: {available_bytes} bytes")
+    logger.info(f"Available space in {SOTA_DIR} after filling it up: {available_bytes} bytes")
 
     if single_step:
         cmd = ['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)]
@@ -1463,7 +1492,7 @@ def run_test_no_space(reserved_storage: Optional[str] = None):
         cp = invoke_aklite(cmd)
         assert cp.returncode == ReturnCodes.DownloadFailureNoSpace, cp.stdout.decode("utf-8")
     finally:
-        os.remove("/var/sota/fill_space")
+        os.remove(FILL_SPACE_FILE)
 
     cp = invoke_aklite(cmd)
     assert cp.returncode == expected_success_code, cp.stdout.decode("utf-8")
@@ -1493,9 +1522,9 @@ def test_no_space_reserved_storage(offline_: bool, single_step_: bool):
 
 
 def run_test_reserved_storage_update_ok(reserved_storage: str):
-    is_loopback = is_loopback_mount('/var/sota')
+    is_loopback = is_loopback_mount(SOTA_DIR)
     if not is_loopback:
-        assert False, "/var/sota is not a loopback mount point, skipping free space test execution. Device storage must be a loopback device to run this test."
+        assert False, f"{SOTA_DIR} is not a loopback mount point, skipping free space test execution. Device storage must be a loopback device to run this test."
 
     restore_system_state()
     apps = None # All apps, for now
@@ -1503,22 +1532,22 @@ def run_test_reserved_storage_update_ok(reserved_storage: str):
 
     invoke_aklite(['check'])
 
-    # Fill /var/sota the same way the no-space test does, but stop at 20000000 bytes free so the
-    # update can still proceed. Combined with a tiny reserved_storage (e.g. "1KiB") this proves
-    # the bytes-based path doesn't over-reserve: available (~20MB) - reserved (1KiB) is still
-    # enough room for the update to land.
-    statvfs = os.statvfs("/var/sota")
+    # Fill /var/sota the same way the no-space test does, but stop at FILL_TARGET_FOR_UPDATE bytes
+    # free so the update can still proceed. Combined with a tiny reserved_storage (e.g. "1KiB")
+    # this proves the bytes-based path doesn't over-reserve: available - reserved is still enough
+    # room for the update to land.
+    statvfs = os.statvfs(SOTA_DIR)
     available_bytes = statvfs.f_bavail * statvfs.f_frsize
-    logger.info(f"Available space in /var/sota: {available_bytes} bytes")
-    if available_bytes > 100000000:
-        assert False, "Too much free space left, test environment should be configured to have less than 100MB free space for this test to be effective"
+    logger.info(f"Available space in {SOTA_DIR}: {available_bytes} bytes")
+    if available_bytes > MAX_INITIAL_FREE_BYTES:
+        assert False, f"Too much free space left, test environment should be configured to have less than {MAX_INITIAL_FREE_BYTES} bytes free for this test to be effective"
 
-    if available_bytes > 20000000:
-        with open("/var/sota/fill_space", "wb") as f:
-            f.write(b"\0" * (available_bytes - 20000000))
+    if available_bytes > FILL_TARGET_FOR_UPDATE:
+        with open(FILL_SPACE_FILE, "wb") as f:
+            f.write(b"\0" * (available_bytes - FILL_TARGET_FOR_UPDATE))
 
-    statvfs = os.statvfs("/var/sota")
-    logger.info(f"Available space in /var/sota after filling it up: {statvfs.f_bavail * statvfs.f_frsize} bytes")
+    statvfs = os.statvfs(SOTA_DIR)
+    logger.info(f"Available space in {SOTA_DIR} after filling it up: {statvfs.f_bavail * statvfs.f_frsize} bytes")
 
     if single_step:
         cmd = ['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)]
@@ -1531,8 +1560,8 @@ def run_test_reserved_storage_update_ok(reserved_storage: str):
         cp = invoke_aklite(cmd)
         assert cp.returncode == expected_success_code, cp.stdout.decode("utf-8")
     finally:
-        if os.path.exists("/var/sota/fill_space"):
-            os.remove("/var/sota/fill_space")
+        if os.path.exists(FILL_SPACE_FILE):
+            os.remove(FILL_SPACE_FILE)
 
 
 @pytest.mark.parametrize('single_step_', [True, False])
@@ -1654,7 +1683,7 @@ def test_forced_sync():
 
     # Test forced `pull` command
     logger.info("Testing corruption of pulled blob, to make sure it's re-downloaded with `pull` command")
-    pulled_blob_path = f"/var/sota/reset-apps/blobs/sha256/{blob_digest}"
+    pulled_blob_path = f"{RESET_APPS_BLOBS}/{blob_digest}"
     corrupt_file(pulled_blob_path, blob_digest)
     cp = invoke_aklite(['pull', str(target.actual_version)])
     assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
@@ -1662,7 +1691,7 @@ def test_forced_sync():
 
     # Test forced  `install` command
     logger.info("Testing corruption of installed blob, to make sure it's re-installed with `install` command")
-    installed_blob_path = f"/var/lib/docker/image/overlay2/imagedb/content/sha256/{blob_digest}"
+    installed_blob_path = f"{DOCKER_IMAGE_DB}/{blob_digest}"
     corrupt_file(installed_blob_path, blob_digest)
     cp = invoke_aklite(['install', str(target.actual_version)])
     assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
