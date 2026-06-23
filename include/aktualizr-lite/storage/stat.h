@@ -27,8 +27,11 @@ struct Volume {
     std::string str() const;
   };
 
-  static UsageInfo getUsageInfo(const std::string& path, unsigned int reserved_percentage,
-                                const std::string& reserved_by = "");
+  // Reports filesystem usage for `path` against a `reserved` watermark that bounds how much storage
+  // may be consumed. By default `reserved` is a percentage of the volume capacity; when
+  // `reserved_in_bytes` is true it is an absolute amount of free space to keep reserved (in bytes).
+  static UsageInfo getUsageInfo(const std::string& path, uint64_t reserved, const std::string& reserved_by = "",
+                                bool reserved_in_bytes = false);
 };
 
 }  // namespace storage

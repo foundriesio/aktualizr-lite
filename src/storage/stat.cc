@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <sstream>
@@ -35,25 +36,31 @@ static std::string getStat(const std::string& path, Stat& stat) {
   return "";
 }
 
-Volume::UsageInfo Volume::getUsageInfo(const std::string& path, unsigned int reserved_percentage,
-                                       const std::string& reserved_by) {
+Volume::UsageInfo Volume::getUsageInfo(const std::string& path, uint64_t reserved, const std::string& reserved_by,
+                                       bool reserved_in_bytes) {
   Stat stat{};
   if (std::string err = getStat(path, stat); !err.empty()) {
     return UsageInfo{.err = err};
   }
 
+  const uint64_t size_bytes{stat.blockSize * stat.blockNumb};
   UsageInfo::Type free{stat.blockSize * stat.freeBlockNumber,
                        (static_cast<double>(stat.freeBlockNumber) / stat.blockNumb) * 100};
-  UsageInfo::Type reserved{
-      stat.blockSize * static_cast<uint64_t>(std::ceil(stat.blockNumb * (reserved_percentage / 100.0))),
-      reserved_percentage};
-  UsageInfo::Type available{(free.first > reserved.first) ? (free.first - reserved.first) : 0,
-                            (free.second > reserved.second) ? (free.second - reserved.second) : 0};
+  UsageInfo::Type reserved_usage{};
+  if (reserved_in_bytes) {
+    const uint64_t reserved_bytes{std::min(reserved, size_bytes)};
+    reserved_usage = {reserved_bytes, size_bytes > 0 ? (static_cast<double>(reserved_bytes) / size_bytes) * 100 : 0};
+  } else {
+    reserved_usage = {stat.blockSize * static_cast<uint64_t>(std::ceil(stat.blockNumb * (reserved / 100.0))),
+                      static_cast<float>(reserved)};
+  }
+  UsageInfo::Type available{(free.first > reserved_usage.first) ? (free.first - reserved_usage.first) : 0,
+                            (free.second > reserved_usage.second) ? (free.second - reserved_usage.second) : 0};
   return {
       .path = path,
-      .size = {stat.blockSize * stat.blockNumb, 100},
+      .size = {size_bytes, 100},
       .free = free,
-      .reserved = reserved,
+      .reserved = reserved_usage,
       .reserved_by = reserved_by,
       .available = available,
       .required = {},

@@ -987,10 +987,12 @@ class LocalLiteInstall : public LiteInstall {
                            : std::make_shared<Docker::DockerClient>()};
 
 #ifdef USE_COMPOSEAPP_ENGINE
+    const auto storage_limit{pacman_cfg.storageSpaceLimit()};
     AppEngine::Ptr app_engine{std::make_shared<composeapp::AppEngine>(
         pacman_cfg.reset_apps_root, pacman_cfg.apps_root, pacman_cfg.images_data_root, registry_client, docker_client,
         docker_host, compose_cmd, pacman_cfg.composectl_bin.string(), pacman_cfg.storage_watermark,
-        Docker::RestorableAppEngine::GetDefStorageSpaceFunc(),
+        pacman_cfg.reserved_storage,
+        Docker::RestorableAppEngine::GetDefStorageSpaceFunc(storage_limit.first, storage_limit.second),
         [offline_registry](const Docker::Uri& app_uri, const std::string& image_uri) {
           Docker::Uri uri{Docker::Uri::parseUri(image_uri, false)};
           return "--src-shared-blob-dir " + offline_registry->blobsDir().string() +

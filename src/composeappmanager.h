@@ -39,7 +39,30 @@ class ComposeAppManager : public RootfsTreeManager {
     std::string hub_auth_creds_endpoint{Docker::RegistryClient::DefAuthCredsEndpoint};
     bool create_containers_before_reboot{true};
     bool stop_apps_before_update{true};
+    // Percentage (20-95) of overall storage that Apps may use. Forwarded to composectl as
+    // --storage-usage-watermark unless reserved_storage takes over.
     int storage_watermark{80};
+    // reserved_storage, when set, reserves an absolute amount of free space (e.g. "2GiB" or "500MB")
+    // instead of a percentage and takes precedence over storage_watermark. reserved_storage holds
+    // the raw config value forwarded to composectl as --reserved-storage; reserved_storage_bytes is
+    // its parsed size in bytes (0 when reserved_storage is unset).
+    std::string reserved_storage{};
+    uint64_t reserved_storage_bytes{0};
+
+    // Returns the (limit, in-bytes) pair for the local storage-space check: the reserved free
+    // space in bytes when reserved_storage is set, otherwise the percentage watermark.
+    std::pair<uint64_t, bool> storageSpaceLimit() const {
+      if (reserved_storage_bytes > 0) {
+        return {reserved_storage_bytes, true};
+      }
+      return {static_cast<uint64_t>(storage_watermark), false};
+    }
+
+    // Parses a human-readable byte size (e.g. "2GiB", "500MiB", "2GB", "500MB") into a count of
+    // bytes. The presence of an "i" in the suffix selects the binary base (1024); otherwise the
+    // decimal base (1000) is used. Returns false when `value` lacks a recognized size unit, when
+    // the numeric literal overflows double, or when the scaled byte count would overflow uint64_t.
+    static bool parseSizeInBytes(const std::string& value, uint64_t& bytes);
   };
 
   using AppsContainer = std::unordered_map<std::string, std::string>;

@@ -229,6 +229,43 @@ TEST(StorageStat, UsageInfo) {
     ASSERT_EQ(reserved, usage_info.reserved) << usage_info.reserved.first;
     ASSERT_EQ(storage::Volume::UsageInfo::Type(0, 0), usage_info.available) << usage_info.available.first;
   }
+  {
+    // Reserved space given as an absolute amount of bytes instead of a percentage.
+    unsigned int block_size{4096};
+    uint64_t block_numb{100};
+    unsigned int free_percentage{50};
+    const uint64_t total_bytes{block_size * block_numb};
+    const uint64_t reserved_bytes{block_size * 10};  // 10% of the volume expressed in bytes
+
+    storage::Volume::UsageInfo::Type free{std::ceil(block_numb * (free_percentage / 100.0)) * block_size,
+                                          free_percentage};
+    storage::Volume::UsageInfo::Type reserved{reserved_bytes,
+                                              (static_cast<double>(reserved_bytes) / total_bytes) * 100};
+
+    SetBlockSize(block_size);
+    SetFreeBlockNumb(std::ceil(block_numb * (free_percentage / 100.0)), block_numb);
+    storage::Volume::UsageInfo usage_info{
+        storage::Volume::getUsageInfo("./", reserved_bytes, "pacman:reserved_storage", true)};
+    ASSERT_TRUE(usage_info.isOk());
+    ASSERT_EQ(free, usage_info.free) << usage_info.free.first;
+    ASSERT_EQ(reserved, usage_info.reserved) << usage_info.reserved.first;
+    ASSERT_EQ((free.first - reserved.first), usage_info.available.first) << usage_info.available.first;
+  }
+  {
+    // Reserved bytes larger than the volume are capped at the volume size, leaving nothing available.
+    unsigned int block_size{4096};
+    uint64_t block_numb{100};
+    unsigned int free_percentage{50};
+    const uint64_t total_bytes{block_size * block_numb};
+
+    SetBlockSize(block_size);
+    SetFreeBlockNumb(std::ceil(block_numb * (free_percentage / 100.0)), block_numb);
+    storage::Volume::UsageInfo usage_info{
+        storage::Volume::getUsageInfo("./", total_bytes * 2, "pacman:reserved_storage", true)};
+    ASSERT_TRUE(usage_info.isOk());
+    ASSERT_EQ(total_bytes, usage_info.reserved.first) << usage_info.reserved.first;
+    ASSERT_EQ(storage::Volume::UsageInfo::Type(0, 0), usage_info.available) << usage_info.available.first;
+  }
   UnsetFreeBlockNumb();
 }
 

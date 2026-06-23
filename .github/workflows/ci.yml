@@ -438,7 +438,7 @@ jobs:
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
 
-      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_no_space[False or test_forced_sync or test_bad_network or test_kill_process'
+      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_no_space[False or test_no_space_reserved_storage[False or test_reserved_storage_low_allows_update[False or test_forced_sync or test_bad_network or test_kill_process'
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}

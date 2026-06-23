@@ -80,7 +80,7 @@ class RestorableAppEngine : public AppEngine {
 
   static const int LowWatermarkLimit{20};
   static const int HighWatermarkLimit{95};
-  static StorageSpaceFunc GetDefStorageSpaceFunc(int watermark = 80);
+  static StorageSpaceFunc GetDefStorageSpaceFunc(uint64_t watermark = 80, bool watermark_in_bytes = false);
   static const int SkopeoMaxParallelPullsHighLimit{10};
   static const int SkopeoMaxParallelPullsLowLimit{1};
 

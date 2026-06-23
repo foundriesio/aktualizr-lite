@@ -13,7 +13,7 @@ class AppEngine : public Docker::RestorableAppEngine {
             boost::filesystem::path docker_root, Docker::RegistryClient::Ptr registry_client,
             Docker::DockerClient::Ptr docker_client, std::string docker_host = "unix:///var/run/docker.sock",
             std::string compose_cmd = "/usr/bin/docker-compose", std::string composectl_cmd = "/usr/bin/composectl",
-            int storage_watermark = 80,
+            int storage_watermark = 80, std::string reserved_storage = "",
             StorageSpaceFunc storage_space_func = RestorableAppEngine::GetDefStorageSpaceFunc(),
             ClientImageSrcFunc client_image_src_func = nullptr, bool create_containers_if_install = true,
             const std::string& local_source_path = "", ProxyProvider proxy = nullptr)
@@ -23,6 +23,7 @@ class AppEngine : public Docker::RestorableAppEngine {
             std::move(client_image_src_func), create_containers_if_install, !local_source_path.empty()),
         composectl_cmd_{std::move(composectl_cmd)},
         storage_watermark_{storage_watermark},
+        reserved_storage_{std::move(reserved_storage)},
         local_source_path_{local_source_path},
         proxy_{proxy} {}
 
@@ -39,6 +40,7 @@ class AppEngine : public Docker::RestorableAppEngine {
 
   const std::string composectl_cmd_;
   const int storage_watermark_;
+  const std::string reserved_storage_;
   const std::string local_source_path_;
   ProxyProvider proxy_;
   mutable std::set<std::string> fetched_apps_;
