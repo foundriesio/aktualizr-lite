@@ -30,8 +30,9 @@ aklite_path = os.path.abspath(os.getcwd())
 fiopush_cmd = "fiopush"
 fioctl_cmd = "fioctl"
 ostree_cmd = "ostree"
+git_cmd = "git"
 
-for cmd in [fiopush_cmd, fioctl_cmd, ostree_cmd]:
+for cmd in [fiopush_cmd, fioctl_cmd, ostree_cmd, git_cmd]:
     if shutil.which(cmd) is None:
         print(f"{cmd} not found. Install it before running this script.")
         sys.exit(1)
@@ -55,25 +56,29 @@ if not tag:
     print("TAG environment variable not set")
     sys.exit()
 
-git_config_path = os.path.expanduser("~/.gitconfig")
-if not os.path.exists(git_config_path) or f"/__w/aktualizr-lite/" in open(git_config_path).read():
-    # create dir and git config file
-    with open(git_config_path, "w") as f:
-        f.write(f"""
-[safe]
-        directory = .
+# Configure git so the script can clone from and push to source.foundries.io.
+def git_config_global(key: str, value: str, add: bool = False):
+    if add:
+        existing = subprocess.run([git_cmd, "config", "--global", "--get-all", key],
+                                  capture_output=True).stdout.decode().splitlines()
+        if value in existing:
+            return
+        subprocess.run([git_cmd, "config", "--global", "--add", key, value], check=True)
+    else:
+        # --replace-all collapses any existing values of the key to this one,
+        # so re-running does not accumulate duplicates.
+        subprocess.run([git_cmd, "config", "--global", "--replace-all", key, value], check=True)
 
-[user]
-    name = "e2e-test"
-    email = "e2e-test@example.com"
+auth_header = "Authorization: basic " + base64.b64encode(user_token.encode()).decode()
+git_config_global("user.name", "e2e-test")
+git_config_global("user.email", "e2e-test@example.com")
+git_config_global("safe.directory", aklite_path, add=True)
+git_config_global("http.https://source.foundries.io.extraheader", auth_header)
 
-[http "https://source.foundries.io"]
-    extraheader = "Authorization: basic {base64.b64encode(user_token.encode()).decode()}"
-""")
-
-# dump content of os.path.expanduser("~/.gitconfig")
-with open(git_config_path, "r") as f:
-    print(f"Content of {git_config_path}:\n{f.read()}")
+# Confirm the relevant keys are set without echoing the auth header (its base64
+# value is derived from USER_TOKEN and is not masked in CI logs).
+print("Configured global git: user.name, user.email, safe.directory,"
+      " and http.https://source.foundries.io.extraheader")
 
 def run_cmd(cmd: str, success_required: bool = True) -> str:
     print(f"Running command: {cmd}")
