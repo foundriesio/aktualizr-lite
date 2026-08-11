@@ -172,7 +172,11 @@ class Target:
     FixApp = 8
     UpdateWorkingApp = 9
     UpdateOstreeWithApps = 10
-    BrokenOstreeWithApps = 11
+    # BigOstree is registered before BrokenOstreeWithApps so the latter stays the Factory's
+    # newest target (test_update_to_latest / test_tag_switch install "latest" and expect the
+    # broken ostree). BigOstree (offset 11) is referenced only by explicit version.
+    BigOstree = 11
+    BrokenOstreeWithApps = 12
 
     def __init__(self, version_offset: int, install_rollback: bool, run_rollback: bool, build_error: bool, ostree_image_version: int, tag: str, apps: List[str] = []):
         self.version_offset = version_offset
@@ -200,6 +204,9 @@ all_primary_tag_targets = {
     Target.FixApp: Target(Target.FixApp, False, False, False, 3, primary_tag, all_apps),
     Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 3, primary_tag, all_apps),
     Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 4, primary_tag, all_apps),
+    # BigOstree (offset 11, ostree_hashes[6]) for the fiopull pre-pull size-check tests; registered
+    # before BrokenOstreeWithApps so the latter (offset 12) remains the newest target.
+    Target.BigOstree: Target(Target.BigOstree, False, False, False, 6, primary_tag, []),
     Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 5, primary_tag, all_apps),
 }
 
@@ -222,6 +229,7 @@ if secondary_tag:
         Target.FixApp: Target(Target.FixApp, False, False, False, 13, secondary_tag, all_apps),
         Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 13, secondary_tag, all_apps),
         Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 14, secondary_tag, all_apps),
+        Target.BigOstree: Target(Target.BigOstree, False, False, False, 6, secondary_tag, []),
         Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 15, secondary_tag, all_apps),
     }
 else:
@@ -404,7 +412,7 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
     return subprocess.run([cmd] + options, capture_output=True)
 
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None,
-                   reserved_storage: Optional[str] = None):
+                   reserved_storage: Optional[str] = None, use_fiopull: bool = False):
     logger.info(f"  Updating settings. {apps=}")
     callback_file = "/var/sota/callback.sh"
 
@@ -436,6 +444,9 @@ compose_apps = "{apps_str}"
 
     if reserved_storage is not None:
         content += f'\nreserved_storage = "{reserved_storage}"\n'
+
+    if use_fiopull:
+        content += '\nostree_pull_tool = "fiopull"\n'
 
     with open("/etc/sota/conf.d/z-50-fioctl.toml", "w") as f:
         f.write(content)
@@ -991,8 +1002,8 @@ def create_offline_bundles():
 mkdir -p `readlink -f .`/e2e-test-targets/small-ostree/
 echo "{e2e_test_ostree_tgz}" | base64 -d | tar -xzf - -C `readlink -f .`/e2e-test-targets/small-ostree/ --strip-components=1
 mkdir -p offline-bundles
-echo "Creating offline bundles for versions {base_version[primary_tag]} to {base_version[primary_tag] + 11} (skipping {base_version[primary_tag] + 7})"
-for version_offset in 0 1 2 3 4 5 6 8 9 10 11; do
+echo "Creating offline bundles for versions {base_version[primary_tag]} to {base_version[primary_tag] + 12} (skipping {base_version[primary_tag] + 7} BrokenBuild and {base_version[primary_tag] + 11} BigOstree)"
+for version_offset in 0 1 2 3 4 5 6 8 9 10 12; do
 echo offset $version_offset;
 version=$[ $version_offset + {base_version[primary_tag]} ];
 echo version $version;
@@ -1545,6 +1556,86 @@ def test_reserved_storage_low_allows_update(offline_: bool, single_step_: bool):
     # the bytes-based path must not block a legitimate update.
     logger.info(f"Testing that a low pacman.reserved_storage value still allows the update")
     run_test_reserved_storage_update_ok(reserved_storage="1KiB")
+
+
+def run_test_pre_pull_size_check(expect_enough_space: bool):
+    # aktualizr-lite estimates an update's size before pulling by running the fiopull
+    # `update-size` helper, and skips the download up front when it would not fit. This
+    # exercises that pre-pull path (distinct from test_no_space, which trips a mid-pull
+    # ENOSPC). The helper reads the target commit's ostree.sizes metadata, so no static
+    # delta from the factory is required. fioup has no such check.
+    if use_fioup:
+        pytest.skip("fiopull pre-pull size check is aktualizr-lite only")
+    is_loopback = is_loopback_mount('/var/sota')
+    if not is_loopback:
+        assert False, "/var/sota is not a loopback mount point. Device storage must be a loopback device to run this test."
+
+    restore_system_state()
+    write_settings(apps=None, prune=prune, use_fiopull=True)
+    invoke_aklite(['check'])
+
+    # The big target's ostree commit is ~20MB uncompressed and it carries ~13MB of apps, so the
+    # combined pre-pull requirement is ~33MB. The e2e device volume is ~94MB with ~47MB available
+    # once the base is deployed. For the enough-space case we leave the disk untouched (33MB fits);
+    # for the no-space case we fill it down to ~15MB free so the combined estimate cannot fit and
+    # the update is rejected before the download starts.
+    target = all_primary_tag_targets[Target.BigOstree]
+    statvfs = os.statvfs("/var/sota")
+    available_bytes = statvfs.f_bavail * statvfs.f_frsize
+    logger.info(f"Available space in /var/sota: {available_bytes} bytes")
+    if available_bytes > 100000000:
+        assert False, "Too much free space left, test environment should be configured to have less than 100MB free space for this test to be effective"
+
+    if not expect_enough_space:
+        # Fill down to ~15MB free, well below the ~33MB combined requirement.
+        leave_free = 15000000
+        if available_bytes > leave_free:
+            with open("/var/sota/fill_space", "wb") as f:
+                f.write(b"\0" * (available_bytes - leave_free))
+        statvfs = os.statvfs("/var/sota")
+        logger.info(f"Available space in /var/sota after filling it up: {statvfs.f_bavail * statvfs.f_frsize} bytes")
+
+    if single_step:
+        cmd = ['update', str(target.actual_version)]
+        expected_success_code = ReturnCodes.InstallNeedsReboot
+    else:
+        cmd = ['pull', str(target.actual_version)]
+        expected_success_code = ReturnCodes.Ok
+
+    try:
+        cp = invoke_aklite(cmd)
+        output = cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+        if expect_enough_space:
+            assert cp.returncode == expected_success_code, output
+        else:
+            assert cp.returncode == ReturnCodes.DownloadFailureNoSpace, output
+            # Confirm the rejection came from the pre-pull size estimate (fed by fiopull's
+            # ostree.sizes reading + the apps estimate) rather than a mid-pull failure, so this
+            # test truly covers the new mechanism.
+            assert "Estimated update size via fiopull" in output, output
+            assert "Combined update size check" in output, output
+            assert "combined ostree+apps update" in output, output
+    finally:
+        if os.path.exists("/var/sota/fill_space"):
+            os.remove("/var/sota/fill_space")
+
+
+@pytest.mark.parametrize('single_step_', [True, False])
+def test_pre_pull_no_space(single_step_: bool):
+    global offline, single_step
+    offline = False
+    single_step = single_step_
+    logger.info(f"Testing fiopull pre-pull size check rejects an update that won't fit")
+    run_test_pre_pull_size_check(expect_enough_space=False)
+
+
+@pytest.mark.parametrize('single_step_', [True, False])
+def test_pre_pull_enough_space(single_step_: bool):
+    global offline, single_step
+    offline = False
+    single_step = single_step_
+    logger.info(f"Testing fiopull pre-pull size check allows an update that fits")
+    run_test_pre_pull_size_check(expect_enough_space=True)
 
 
 def run_test_kill_process():

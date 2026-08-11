@@ -87,7 +87,7 @@ def run_cmd(cmd: str, success_required: bool = True) -> str:
         raise Exception(f"\nCommand '{cmd}' failed with error:\n{sp.stderr.decode('utf-8')}")
     return sp.stdout.decode('utf-8').strip()
 
-def create_ostree_repo() -> Tuple[str, Dict[int, str], str]:
+def create_ostree_repo() -> Tuple[str, str, Dict[int, str], str]:
         if os.path.exists(local_dir):
                 raise Exception(f"{local_dir} directory already exists. Remove it before running")
 
@@ -116,11 +116,11 @@ def create_ostree_repo() -> Tuple[str, Dict[int, str], str]:
                 with open(ostree_version_txt, 'w') as f:
                         f.write(f"OSTREE_{ostree_version}")
 
-                sp = subprocess.run([ostree_cmd, "--repo=repo", "commit", "--branch=main", tree_path], capture_output=True)
+                # --generate-sizes embeds an ostree.sizes table in the commit. aktualizr-lite's
+                # pre-pull size check (fiopull update-size) relies on this metadata to estimate
+                # an update's size from a single fetch.
+                sp = subprocess.run([ostree_cmd, "--repo=repo", "commit", "--generate-sizes", "--branch=main", tree_path], capture_output=True)
                 ostree_hashes[ostree_version] = sp.stdout.decode('utf-8').strip()
-
-        for ostree_version in ostree_hashes:
-                print(f"OSTREE_HASH_{ostree_version}={ostree_hashes[ostree_version]}")
 
         os.chdir("..")
         ostree_repo_tgz = os.path.join(local_dir, "small-ostree.tgz")
@@ -129,7 +129,39 @@ def create_ostree_repo() -> Tuple[str, Dict[int, str], str]:
         with open(ostree_repo_tgz, "rb") as f:
             ostree_repo_tgz_b64 = base64.b64encode(f.read())
 
-        return repo_dir, ostree_hashes, ostree_repo_tgz_b64.decode()
+        # A deliberately large ostree commit (version 6) used by the online pre-pull size-check
+        # e2e tests. The big, incompressible file makes the commit's uncompressed size dominate,
+        # so filling the device's storage can push the estimated update size above/below the
+        # available space. Sized so that, combined with the target's ~13MB of apps, it comfortably
+        # fits the e2e device's ~94MB storage volume when there is room, yet is easy to exclude by
+        # filling the disk.
+        #
+        # It is committed to a SEPARATE ostree repo so it stays out of `small-ostree.tgz`: that
+        # tarball is passed to the offline-bundle tests via E2E_TEST_OSTREE_TGZ (a GitHub Actions
+        # step output / repo secret, both size-capped), and the offline bundles only use versions
+        # 0..11 anyway. The big commit is still fiopush'ed to the Factory below, so the online
+        # tests pull it live over the network.
+        big_ostree_path = os.path.abspath(os.path.join(local_dir, "big-ostree"))
+        os.mkdir(big_ostree_path)
+        os.chdir(big_ostree_path)
+        big_repo_dir = os.path.join(big_ostree_path, "repo")
+        run_cmd(f"ostree --repo={big_repo_dir} init --mode=archive")
+        big_tree_path = os.path.join(big_ostree_path, "tree")
+        os.mkdir(big_tree_path)
+        run_cmd(f"{make_sys_rootfs_cmd} {big_tree_path} {tag} intel-corei7-64 lmp")
+        with open(os.path.join(big_tree_path, "test_ostree.txt"), 'w') as f:
+                f.write("OSTREE_6")
+        run_cmd(f"dd if=/dev/urandom of={os.path.join(big_tree_path, 'big.img')} bs=1M count=20")
+        sp = subprocess.run([ostree_cmd, "--repo=repo", "commit", "--generate-sizes", "--branch=main", big_tree_path], capture_output=True)
+        ostree_hashes[6] = sp.stdout.decode('utf-8').strip()
+        run_cmd(f"rm -f {os.path.join(big_tree_path, 'big.img')}")
+        os.chdir("..")
+
+        for ostree_version in ostree_hashes:
+                print(f"OSTREE_HASH_{ostree_version}={ostree_hashes[ostree_version]}")
+
+        return repo_dir, big_repo_dir, ostree_hashes, ostree_repo_tgz_b64.decode()
+
 
 
 def add_tag_to_ci(tag: str):
@@ -369,9 +401,13 @@ def wait_jobs_execution(factory: str, user_token: str):
         print(f"Done waiting for jobs in factory {factory} to finish")
 
 if __name__ == "__main__":
-        repo_dir, ostree_hashes, ostree_repo_tgz_b64 = create_ostree_repo()
+        repo_dir, big_repo_dir, ostree_hashes, ostree_repo_tgz_b64 = create_ostree_repo()
 
+        # Push both the small repo (commits 1-5) and the separate big repo (commit 6) to the
+        # Factory's ostree storage so all targets can be pulled online. Only the small repo is
+        # carried in E2E_TEST_OSTREE_TGZ for the offline-bundle tests.
         run_cmd(f"{fiopush_cmd} -factory {factory} -repo {repo_dir} -token {user_token}")
+        run_cmd(f"{fiopush_cmd} -factory {factory} -repo {big_repo_dir} -token {user_token}")
 
         os.chdir(local_dir)
 
@@ -433,6 +469,14 @@ if __name__ == "__main__":
 
         add_target(ostree_hashes[4], tag, factory)
 
+        # The big ostree target (commit 6) is registered BEFORE the final broken-ostree target so
+        # it does not become the Factory's newest target: test_update_to_latest / test_tag_switch
+        # install "latest" with no explicit version and expect BrokenOstreeWithApps (a broken
+        # ostree that rolls back) to be newest. The big target is used only by the online pre-pull
+        # size-check tests, which reference it by explicit version. It thus takes version offset 11
+        # and BrokenOstreeWithApps takes offset 12 (the latest).
+        add_target(ostree_hashes[6], tag, factory)
+
         add_target(ostree_hashes[5], tag, factory)
 
         print(f"""
@@ -446,7 +490,7 @@ export BASE_TARGET_VERSION={base_target_version}
 
 # Create offline bundles:"
 mkdir -p offline-bundles
-for version_offset in 0 1 2 3 4 5 6 8 9 10 11; do
+for version_offset in 0 1 2 3 4 5 6 8 9 10 12; do
 version=$[ $version_offset + $BASE_TARGET_VERSION ];
 echo $version;
 fioctl targets offline-update --ostree-repo-source={local_dir}/small-ostree/repo --allow-multiple-targets intel-corei7-64-lmp-$version -f ${{FACTORY}} offline-bundles/unified  --tag ${{TAG}} || break;
