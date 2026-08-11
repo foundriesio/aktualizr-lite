@@ -113,6 +113,12 @@ class ComposeAppManager : public RootfsTreeManager {
   void forEachRemovedApp(const Uptane::Target& target,
                          const std::function<void(AppEngine::Ptr&, const std::string&)>& action) const;
   std::string getAppsFsUsageInfo() const;
+  // Checks, before any download starts, that the combined ostree + apps update
+  // fits, accounting for the ostree repo, app/blob store and docker store
+  // possibly living on different volumes. Returns a DownloadFailed_NoSpace
+  // result when a volume is short; an Ok result otherwise (including when sizes
+  // cannot be estimated, in which case the per-pull checks remain the backstop).
+  DownloadResult checkUpdateSize(const TufTarget& target, const AppsContainer& apps_to_fetch);
 
   Config cfg_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;

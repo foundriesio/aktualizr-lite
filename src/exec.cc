@@ -92,6 +92,10 @@ class Process {
         ssize_t bytes_read = read(stderr_pipe[0], buffer.data(), buffer.size());
         if (bytes_read > 0) {
           stderr_data.append(buffer.data(), bytes_read);
+          if (print_output) {
+            std::cerr.write(buffer.data(), bytes_read);
+            std::cerr.flush();
+          }
         } else if (bytes_read == 0) {
           stderr_open = false;
         } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
