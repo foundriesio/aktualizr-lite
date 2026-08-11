@@ -15,6 +15,7 @@ This script is not officially supported, and should be executed only by aktualiz
 import base64
 from http import HTTPStatus
 from requests.exceptions import HTTPError
+import json
 import os
 import requests
 import shutil
@@ -479,6 +480,27 @@ if __name__ == "__main__":
 
         add_target(ostree_hashes[5], tag, factory)
 
+        all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
+        targets_layout = {
+            "targets": {
+                "First":               {"offset": 0,  "ostree_version": 1, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": []},
+                "BrokenOstree":        {"offset": 1,  "ostree_version": 2, "install_rollback": True,  "run_rollback": False, "build_error": False, "apps": []},
+                "WorkingOstree":       {"offset": 2,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": []},
+                "AddFirstApp":         {"offset": 3,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": ["shellhttpd_base_10000"]},
+                "AddMoreApps":         {"offset": 4,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": all_apps},
+                "BreakApp":            {"offset": 5,  "ostree_version": 3, "install_rollback": False, "run_rollback": True,  "build_error": False, "apps": all_apps},
+                "UpdateBrokenApp":     {"offset": 6,  "ostree_version": 3, "install_rollback": False, "run_rollback": True,  "build_error": False, "apps": all_apps},
+                "BrokenBuild":         {"offset": 7,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": True,  "apps": all_apps},
+                "FixApp":              {"offset": 8,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": all_apps},
+                "UpdateWorkingApp":    {"offset": 9,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": all_apps},
+                "UpdateOstreeWithApps":{"offset": 10, "ostree_version": 4, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": all_apps},
+                "BigOstree":           {"offset": 11, "ostree_version": 6, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": []},
+                "BrokenOstreeWithApps":{"offset": 12, "ostree_version": 5, "install_rollback": True,  "run_rollback": False, "build_error": False, "apps": all_apps},
+            },
+            "offline_bundle_offsets": [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12],
+        }
+        targets_layout_json = json.dumps(targets_layout, separators=(",", ":"))
+
         print(f"""
 Test targets successfully created
 
@@ -487,6 +509,7 @@ export FACTORY={factory}
 export TAG={tag}
 export USER_TOKEN={user_token}
 export BASE_TARGET_VERSION={base_target_version}
+export E2E_TARGETS_LAYOUT='{targets_layout_json}'
 
 # Create offline bundles:"
 mkdir -p offline-bundles
@@ -508,3 +531,4 @@ done
                 with open(output_file, 'a') as f:
                         f.write(f"BASE_TARGET_VERSION={base_target_version}\n")
                         f.write(f"E2E_TEST_OSTREE_TGZ={ostree_repo_tgz_b64}\n")
+                        f.write(f"E2E_TARGETS_LAYOUT={targets_layout_json}\n")

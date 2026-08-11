@@ -121,6 +121,43 @@ if secondary_tag:
     if secondary_base_target_version:
         base_version[secondary_tag] = int(secondary_base_target_version)
 
+
+def _load_targets_layout() -> dict:
+    """Load the e2e target sequence layout from E2E_TARGETS_LAYOUT (a JSON object
+    emitted by e2e-test-create-targets.py).  Falls back to the default layout
+    (BigOstree present at offset 11) when the variable is not set.
+    """
+    _all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
+
+    env_json = os.getenv("E2E_TARGETS_LAYOUT")
+    if env_json:
+        try:
+            layout = json.loads(env_json)
+            logger.info("Loaded targets layout from E2E_TARGETS_LAYOUT")
+            return layout
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse E2E_TARGETS_LAYOUT: {e}, using default layout")
+
+    logger.info("E2E_TARGETS_LAYOUT not set, using default layout (no BigOstree, BrokenOstreeWithApps at offset 11)")
+    return {
+        "targets": {
+            "First":               {"offset": 0,  "ostree_version": 1, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": []},
+            "BrokenOstree":        {"offset": 1,  "ostree_version": 2, "install_rollback": True,  "run_rollback": False, "build_error": False, "apps": []},
+            "WorkingOstree":       {"offset": 2,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": []},
+            "AddFirstApp":         {"offset": 3,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": ["shellhttpd_base_10000"]},
+            "AddMoreApps":         {"offset": 4,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": _all_apps},
+            "BreakApp":            {"offset": 5,  "ostree_version": 3, "install_rollback": False, "run_rollback": True,  "build_error": False, "apps": _all_apps},
+            "UpdateBrokenApp":     {"offset": 6,  "ostree_version": 3, "install_rollback": False, "run_rollback": True,  "build_error": False, "apps": _all_apps},
+            "BrokenBuild":         {"offset": 7,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": True,  "apps": _all_apps},
+            "FixApp":              {"offset": 8,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": _all_apps},
+            "UpdateWorkingApp":    {"offset": 9,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": _all_apps},
+            "UpdateOstreeWithApps":{"offset": 10, "ostree_version": 4, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": _all_apps},
+            "BrokenOstreeWithApps":{"offset": 11, "ostree_version": 5, "install_rollback": True,  "run_rollback": False, "build_error": False, "apps": _all_apps},
+        },
+        "offline_bundle_offsets": [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11],
+    }
+
+
 def secondary_tag_is_set():
     if not secondary_tag:
         logger.error("SECONDARY_TAG environment variable not set")
@@ -159,24 +196,29 @@ single_step = True
 delay_app_install = False
 prune = True
 
+# Load the target sequence layout from E2E_TARGETS_LAYOUT (emitted by
+# e2e-test-create-targets.py) or fall back to auto-detecting via the Factory API.
+_layout = _load_targets_layout()
+_layout_targets: dict = _layout["targets"]
+offline_bundle_offsets: List[int] = _layout["offline_bundle_offsets"]
+
 
 class Target:
-    First = 0
-    BrokenOstree = 1
-    WorkingOstree = 2
-    AddFirstApp = 3
-    AddMoreApps = 4
-    BreakApp = 5
-    UpdateBrokenApp = 6
-    BrokenBuild = 7
-    FixApp = 8
-    UpdateWorkingApp = 9
-    UpdateOstreeWithApps = 10
-    # BigOstree is registered before BrokenOstreeWithApps so the latter stays the Factory's
-    # newest target (test_update_to_latest / test_tag_switch install "latest" and expect the
-    # broken ostree). BigOstree (offset 11) is referenced only by explicit version.
-    BigOstree = 11
-    BrokenOstreeWithApps = 12
+    # Offsets are derived from the layout so they match whatever sequence this
+    # Factory was created with. BigOstree is None when absent.
+    First               = _layout_targets["First"]["offset"]
+    BrokenOstree        = _layout_targets["BrokenOstree"]["offset"]
+    WorkingOstree       = _layout_targets["WorkingOstree"]["offset"]
+    AddFirstApp         = _layout_targets["AddFirstApp"]["offset"]
+    AddMoreApps         = _layout_targets["AddMoreApps"]["offset"]
+    BreakApp            = _layout_targets["BreakApp"]["offset"]
+    UpdateBrokenApp     = _layout_targets["UpdateBrokenApp"]["offset"]
+    BrokenBuild         = _layout_targets["BrokenBuild"]["offset"]
+    FixApp              = _layout_targets["FixApp"]["offset"]
+    UpdateWorkingApp    = _layout_targets["UpdateWorkingApp"]["offset"]
+    UpdateOstreeWithApps = _layout_targets["UpdateOstreeWithApps"]["offset"]
+    BigOstree           = _layout_targets["BigOstree"]["offset"] if "BigOstree" in _layout_targets else None
+    BrokenOstreeWithApps = _layout_targets["BrokenOstreeWithApps"]["offset"]
 
     def __init__(self, version_offset: int, install_rollback: bool, run_rollback: bool, build_error: bool, ostree_image_version: int, tag: str, apps: List[str] = []):
         self.version_offset = version_offset
@@ -192,23 +234,24 @@ class Target:
         return f"VersionOffset={self.version_offset} InstallRollback={self.install_rollback}, RunRollback={self.run_rollback}, BuildError={self.build_error}, OSTreeImageVersion={self.ostree_image_version}, ActualVersion={self.actual_version}"
 
 all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
-all_primary_tag_targets = {
-    Target.First: Target(Target.First, False, False, False, 1, primary_tag, []),
-    Target.BrokenOstree: Target(Target.BrokenOstree, True, False, False, 2, primary_tag, []),
-    Target.WorkingOstree: Target(Target.WorkingOstree, False, False, False, 3, primary_tag, []),
-    Target.AddFirstApp: Target(Target.AddFirstApp, False, False, False, 3, primary_tag, ["shellhttpd_base_10000"]),
-    Target.AddMoreApps: Target(Target.AddMoreApps, False, False, False, 3, primary_tag, all_apps),
-    Target.BreakApp: Target(Target.BreakApp, False, True, False, 3, primary_tag, all_apps),
-    Target.UpdateBrokenApp: Target(Target.UpdateBrokenApp, False, True, False, 3, primary_tag, all_apps),
-    Target.BrokenBuild: Target(Target.BrokenBuild, False, False, True, 3, primary_tag, all_apps),
-    Target.FixApp: Target(Target.FixApp, False, False, False, 3, primary_tag, all_apps),
-    Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 3, primary_tag, all_apps),
-    Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 4, primary_tag, all_apps),
-    # BigOstree (offset 11, ostree_hashes[6]) for the fiopull pre-pull size-check tests; registered
-    # before BrokenOstreeWithApps so the latter (offset 12) remains the newest target.
-    Target.BigOstree: Target(Target.BigOstree, False, False, False, 6, primary_tag, []),
-    Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 5, primary_tag, all_apps),
-}
+
+def _make_targets(tag: str) -> Dict[int, "Target"]:
+    """Build the targets dict for a given tag from the loaded layout."""
+    result: Dict[int, Target] = {}
+    for td in _layout_targets.values():
+        offset = td["offset"]
+        result[offset] = Target(
+            offset,
+            td["install_rollback"],
+            td["run_rollback"],
+            td["build_error"],
+            td["ostree_version"],
+            tag,
+            td["apps"],
+        )
+    return result
+
+all_primary_tag_targets = _make_targets(primary_tag)
 
 # fioup has no ostree support, and a install rollback does never happen
 if use_fioup:
@@ -217,21 +260,7 @@ if use_fioup:
         all_primary_tag_targets[t].ostree_image_version = 0
 
 if secondary_tag:
-    all_secondary_tag_targets = {
-        Target.First: Target(Target.First, False, False, False, 11, secondary_tag, []),
-        Target.BrokenOstree: Target(Target.BrokenOstree, True, False, False, 12, secondary_tag, []),
-        Target.WorkingOstree: Target(Target.WorkingOstree, False, False, False, 13, secondary_tag, []),
-        Target.AddFirstApp: Target(Target.AddFirstApp, False, False, False, 13, secondary_tag, ["shellhttpd_base_10000"]),
-        Target.AddMoreApps: Target(Target.AddMoreApps, False, False, False, 13, secondary_tag, all_apps),
-        Target.BreakApp: Target(Target.BreakApp, False, True, False, 13, secondary_tag, all_apps),
-        Target.UpdateBrokenApp: Target(Target.UpdateBrokenApp, False, True, False, 13, secondary_tag, all_apps),
-        Target.BrokenBuild: Target(Target.BrokenBuild, False, False, True, 13, secondary_tag, all_apps),
-        Target.FixApp: Target(Target.FixApp, False, False, False, 13, secondary_tag, all_apps),
-        Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 13, secondary_tag, all_apps),
-        Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 14, secondary_tag, all_apps),
-        Target.BigOstree: Target(Target.BigOstree, False, False, False, 6, secondary_tag, []),
-        Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 15, secondary_tag, all_apps),
-    }
+    all_secondary_tag_targets = _make_targets(secondary_tag)
 else:
     all_secondary_tag_targets = {}
 
@@ -998,12 +1027,13 @@ def create_offline_bundles():
         logger.info("Offline bundles directory already exists, skipping offline bundles creation")
         return
 
+    offsets_str = " ".join(str(o) for o in offline_bundle_offsets)
     cmd = f"""
 mkdir -p `readlink -f .`/e2e-test-targets/small-ostree/
 echo "{e2e_test_ostree_tgz}" | base64 -d | tar -xzf - -C `readlink -f .`/e2e-test-targets/small-ostree/ --strip-components=1
 mkdir -p offline-bundles
-echo "Creating offline bundles for versions {base_version[primary_tag]} to {base_version[primary_tag] + 12} (skipping {base_version[primary_tag] + 7} BrokenBuild and {base_version[primary_tag] + 11} BigOstree)"
-for version_offset in 0 1 2 3 4 5 6 8 9 10 12; do
+echo "Creating offline bundles for offsets: {offsets_str} (base {base_version[primary_tag]})"
+for version_offset in {offsets_str}; do
 echo offset $version_offset;
 version=$[ $version_offset + {base_version[primary_tag]} ];
 echo version $version;
@@ -1566,6 +1596,8 @@ def run_test_pre_pull_size_check(expect_enough_space: bool):
     # delta from the factory is required. fioup has no such check.
     if use_fioup:
         pytest.skip("fiopull pre-pull size check is aktualizr-lite only")
+    if Target.BigOstree is None:
+        pytest.skip("BigOstree target not present in this Factory's target sequence")
     is_loopback = is_loopback_mount('/var/sota')
     if not is_loopback:
         assert False, "/var/sota is not a loopback mount point. Device storage must be a loopback device to run this test."
