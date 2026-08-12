@@ -1697,6 +1697,49 @@ def test_kill_process():
     run_test_kill_process()
 
 
+def run_test_fiopull_interrupt_resume():
+    # Interrupt an ostree pull that is driven by the fiopull helper several times,
+    # then let it finish. This exercises fiopull's resumable download: each SIGKILL
+    # leaves partial .part sidecars in the sysroot repo's tmp/ dir, and the next run
+    # must resume (byte- or object-level) rather than fail or restart from scratch.
+    # It is the fiopull counterpart of test_kill_process (which uses libostree).
+    restore_system_state()
+    apps = None  # All apps, for now
+    write_settings(apps, prune, use_fiopull=True)
+
+    # Prefer the big ostree target when the Factory has one: its larger commit makes
+    # the interruption reliably land mid-pull. Fall back to the regular ostree target.
+    if Target.BigOstree is not None:
+        target = all_primary_tag_targets[Target.BigOstree]
+    else:
+        target = all_primary_tag_targets[Target.UpdateOstreeWithApps]
+
+    try:
+        cmd = [tc_path, "qdisc", "add", "dev", "eth0", "root", "netem", "delay", "500ms"]
+        subprocess.call(cmd)
+        for i in range(5):
+            logger.info(f" Calling fiopull-backed update and interrupting after {i} seconds")
+            cp = invoke_aklite(['update', str(target.actual_version)], i)
+            ReturnCodeProcessKilled = -9
+            assert cp.returncode == ReturnCodeProcessKilled, cp.stdout.decode("utf-8")
+
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+        logger.info(f" Calling update that should resume and succeed now")
+
+        cp = invoke_aklite(['update', str(target.actual_version)])
+        assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+
+    finally:
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+
+
+def test_fiopull_interrupt_resume():
+    if use_fioup:
+        pytest.skip("fiopull pull path is aktualizr-lite only")
+    logger.info(f"Testing fiopull pull interruption and resume")
+    run_test_fiopull_interrupt_resume()
+
+
 def run_test_bad_network():
     restore_system_state()
     apps = None # All apps, for now
