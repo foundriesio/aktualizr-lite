@@ -18,6 +18,12 @@ RUN git clone https://github.com/foundriesio/fioctl.git && cd fioctl \
     && make fioctl-linux-amd64 \
     && cp ./bin/fioctl-linux-amd64 /usr/bin/fioctl
 
+# Build fiopull: PR #22 merged to foundriesio/ostreeuploader master.
+WORKDIR /build
+RUN git clone https://github.com/foundriesio/ostreeuploader.git && cd ostreeuploader \
+    && make fiopull \
+    && cp ./bin/fiopull /usr/bin/fiopull
+
 
 FROM foundries/aklite-dev:ubuntu-25.04 AS aklite
 
@@ -29,6 +35,9 @@ COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
 
 # Install fioctl
 COPY --from=composeapp /build/fioctl/bin/fioctl-linux-amd64 /usr/bin/fioctl
+
+# Install fiopull at the default FioPullBin path so the size check runs.
+COPY --from=composeapp /build/ostreeuploader/bin/fiopull /usr/bin/fiopull
 
 
 # Install lmp-device-register

@@ -113,6 +113,7 @@ class RestorableAppEngine : public AppEngine {
  protected:
   const boost::filesystem::path& storeRoot() const { return store_root_; }
   const boost::filesystem::path& installRoot() const { return install_root_; }
+  const boost::filesystem::path& dockerRoot() const { return docker_root_; }
   const std::string& dockerHost() const { return docker_host_; }
   Docker::DockerClient::Ptr& dockerClient() { return docker_client_; }
   const StorageSpaceFunc& storageSpaceFunc() const { return storage_space_func_; }

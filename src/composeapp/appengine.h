@@ -32,6 +32,7 @@ class AppEngine : public Docker::RestorableAppEngine {
   bool isRunning(const App& app) const override;
   Json::Value getRunningAppsInfo() const override;
   void prune(const Apps& app_shortlist) override;
+  UpdateSize checkUpdateSize(const Apps& apps) const override;
 
  private:
   bool isAppFetched(const App& app) const override;

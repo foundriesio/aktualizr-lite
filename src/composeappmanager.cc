@@ -6,6 +6,8 @@
 #include <regex>
 #include <set>
 
+#include <sys/statvfs.h>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <boost/range/iterator_range_core.hpp>
@@ -371,16 +373,136 @@ ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const 
   return apps_and_reasons;
 }
 
+DownloadResult ComposeAppManager::checkUpdateSize(const TufTarget& target, const AppsContainer& apps_to_fetch) {
+  // Gather each component's required bytes and the path whose volume holds it.
+  struct Need {
+    std::string path;
+    uint64_t required;
+    uint64_t reserved;
+    bool reserved_in_bytes;
+    std::string reserved_by;
+  };
+  std::vector<Need> needs;
+
+  // ostree commit (uncompressed on-disk size) on the sysroot repo volume.
+  const auto ostree_size{getOstreeUpdateSize(target)};
+  if (ostree_size.known) {
+    needs.push_back({ostree_size.path, ostree_size.required,
+                     static_cast<uint64_t>(sysroot()->reservedStorageSpacePercentageOstree()), false,
+                     OSTree::Sysroot::Config::ReservedStorageSpacePercentageOstreeParamName});
+  }
+
+  // apps: blob/app store and docker store (may be on separate volumes).
+  if (!apps_to_fetch.empty()) {
+    AppEngine::Apps apps;
+    apps.reserve(apps_to_fetch.size());
+    for (const auto& pair : apps_to_fetch) {
+      apps.push_back({pair.first, pair.second});
+    }
+    const auto apps_size{app_engine_->checkUpdateSize(apps)};
+    if (apps_size.known) {
+      const auto limit{cfg_.storageSpaceLimit()};
+      const std::string reserved_by{limit.second ? "pacman:reserved_storage" : "pacman:storage_watermark"};
+      // getUsageInfo's percentage `reserved` is the free-space percentage to keep, i.e. 100 - watermark.
+      const uint64_t reserved{limit.second ? limit.first
+                                           : ((100 > limit.first) ? (100 - limit.first) : 0)};
+      if (apps_size.store_required > 0) {
+        needs.push_back({apps_size.store_path, apps_size.store_required, reserved, limit.second, reserved_by});
+      }
+      if (apps_size.docker_required > 0) {
+        needs.push_back({apps_size.docker_path, apps_size.docker_required, reserved, limit.second, reserved_by});
+      }
+    }
+  }
+
+  if (needs.empty()) {
+    // Nothing could be estimated; proceed and rely on the in-pull space checks.
+    return {DownloadResult::Status::Ok, ""};
+  }
+
+  // Group required bytes by filesystem volume (f_fsid), since several components
+  // may share one volume. Track, per volume, a representative path and the
+  // strictest reserve requested by any of its consumers.
+  struct VolAgg {
+    std::string path;
+    uint64_t required{0};
+    uint64_t reserved{0};
+    bool reserved_in_bytes{false};
+    std::string reserved_by;
+  };
+  std::map<uint64_t, VolAgg> by_volume;
+  for (const auto& n : needs) {
+    struct statvfs sv{};
+    uint64_t vol_id{0};
+    if (statvfs(n.path.c_str(), &sv) == 0) {
+      vol_id = sv.f_fsid;
+    } else {
+      // Can't identify the volume; use the path string as a distinct key so its
+      // requirement is still checked on its own.
+      vol_id = std::hash<std::string>{}(n.path);
+    }
+    auto& agg{by_volume[vol_id]};
+    agg.required += n.required;
+    if (agg.path.empty()) {
+      agg.path = n.path;
+    }
+    // Pick the most conservative reserve: compare as bytes where possible. A
+    // bytes reserve and a percentage reserve aren't directly comparable, so
+    // prefer a bytes reserve (absolute floor) when present.
+    if (n.reserved_in_bytes && !agg.reserved_in_bytes) {
+      agg.reserved = n.reserved;
+      agg.reserved_in_bytes = true;
+      agg.reserved_by = n.reserved_by;
+    } else if (n.reserved_in_bytes == agg.reserved_in_bytes && n.reserved > agg.reserved) {
+      agg.reserved = n.reserved;
+      agg.reserved_by = n.reserved_by;
+    } else if (agg.reserved_by.empty()) {
+      agg.reserved = n.reserved;
+      agg.reserved_in_bytes = n.reserved_in_bytes;
+      agg.reserved_by = n.reserved_by;
+    }
+  }
+
+  for (const auto& pair : by_volume) {
+    const auto& agg{pair.second};
+    auto usage{storage::Volume::getUsageInfo(agg.path, agg.reserved, agg.reserved_by, agg.reserved_in_bytes)};
+    if (!usage.isOk()) {
+      LOG_WARNING << "Failed to obtain storage usage for " << agg.path << "; skipping pre-download size check: "
+                  << usage.err;
+      continue;
+    }
+    usage.withRequired(agg.required);
+    LOG_INFO << "Combined update size check; volume of " << agg.path << ": " << usage;
+    if (agg.required > usage.available.first) {
+      const std::string msg{"Insufficient storage available for the combined ostree+apps update; " + usage.str()};
+      LOG_ERROR << msg;
+      return {DownloadResult::Status::DownloadFailed_NoSpace, msg, agg.path, usage};
+    }
+  }
+
+  return {DownloadResult::Status::Ok, ""};
+}
+
 DownloadResult ComposeAppManager::Download(const TufTarget& target) {
+  AppsContainer all_apps_to_fetch;
+  all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
+  all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
+
+  // Before downloading anything, check that the combined ostree + apps update
+  // fits across the (possibly distinct) ostree repo, app store and docker store
+  // volumes. This catches the case where ostree alone fits but ostree + apps do
+  // not, avoiding a partial download that runs out of space mid-way.
+  const auto combined_size_res{checkUpdateSize(target, all_apps_to_fetch)};
+  if (combined_size_res.noSpace()) {
+    return combined_size_res;
+  }
+
   auto ostree_download_res{RootfsTreeManager::Download(target)};
   if (!ostree_download_res) {
     return ostree_download_res;
   }
 
   DownloadResult res{ostree_download_res};
-  AppsContainer all_apps_to_fetch;
-  all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
-  all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
 
   std::stringstream stat_msg;
   if (!all_apps_to_fetch.empty()) {

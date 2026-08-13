@@ -121,6 +121,43 @@ if secondary_tag:
     if secondary_base_target_version:
         base_version[secondary_tag] = int(secondary_base_target_version)
 
+
+def _load_targets_layout() -> dict:
+    """Load the e2e target sequence layout from E2E_TARGETS_LAYOUT (a JSON object
+    emitted by e2e-test-create-targets.py).  Falls back to the default layout
+    (BigOstree present at offset 11) when the variable is not set.
+    """
+    _all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
+
+    env_json = os.getenv("E2E_TARGETS_LAYOUT")
+    if env_json:
+        try:
+            layout = json.loads(env_json)
+            logger.info("Loaded targets layout from E2E_TARGETS_LAYOUT")
+            return layout
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse E2E_TARGETS_LAYOUT: {e}, using default layout")
+
+    logger.info("E2E_TARGETS_LAYOUT not set, using default layout (no BigOstree, BrokenOstreeWithApps at offset 11)")
+    return {
+        "targets": {
+            "First":               {"offset": 0,  "ostree_version": 1, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": []},
+            "BrokenOstree":        {"offset": 1,  "ostree_version": 2, "install_rollback": True,  "run_rollback": False, "build_error": False, "apps": []},
+            "WorkingOstree":       {"offset": 2,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": []},
+            "AddFirstApp":         {"offset": 3,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": ["shellhttpd_base_10000"]},
+            "AddMoreApps":         {"offset": 4,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": _all_apps},
+            "BreakApp":            {"offset": 5,  "ostree_version": 3, "install_rollback": False, "run_rollback": True,  "build_error": False, "apps": _all_apps},
+            "UpdateBrokenApp":     {"offset": 6,  "ostree_version": 3, "install_rollback": False, "run_rollback": True,  "build_error": False, "apps": _all_apps},
+            "BrokenBuild":         {"offset": 7,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": True,  "apps": _all_apps},
+            "FixApp":              {"offset": 8,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": _all_apps},
+            "UpdateWorkingApp":    {"offset": 9,  "ostree_version": 3, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": _all_apps},
+            "UpdateOstreeWithApps":{"offset": 10, "ostree_version": 4, "install_rollback": False, "run_rollback": False, "build_error": False, "apps": _all_apps},
+            "BrokenOstreeWithApps":{"offset": 11, "ostree_version": 5, "install_rollback": True,  "run_rollback": False, "build_error": False, "apps": _all_apps},
+        },
+        "offline_bundle_offsets": [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11],
+    }
+
+
 def secondary_tag_is_set():
     if not secondary_tag:
         logger.error("SECONDARY_TAG environment variable not set")
@@ -159,20 +196,29 @@ single_step = True
 delay_app_install = False
 prune = True
 
+# Load the target sequence layout from E2E_TARGETS_LAYOUT (emitted by
+# e2e-test-create-targets.py) or fall back to auto-detecting via the Factory API.
+_layout = _load_targets_layout()
+_layout_targets: dict = _layout["targets"]
+offline_bundle_offsets: List[int] = _layout["offline_bundle_offsets"]
+
 
 class Target:
-    First = 0
-    BrokenOstree = 1
-    WorkingOstree = 2
-    AddFirstApp = 3
-    AddMoreApps = 4
-    BreakApp = 5
-    UpdateBrokenApp = 6
-    BrokenBuild = 7
-    FixApp = 8
-    UpdateWorkingApp = 9
-    UpdateOstreeWithApps = 10
-    BrokenOstreeWithApps = 11
+    # Offsets are derived from the layout so they match whatever sequence this
+    # Factory was created with. BigOstree is None when absent.
+    First               = _layout_targets["First"]["offset"]
+    BrokenOstree        = _layout_targets["BrokenOstree"]["offset"]
+    WorkingOstree       = _layout_targets["WorkingOstree"]["offset"]
+    AddFirstApp         = _layout_targets["AddFirstApp"]["offset"]
+    AddMoreApps         = _layout_targets["AddMoreApps"]["offset"]
+    BreakApp            = _layout_targets["BreakApp"]["offset"]
+    UpdateBrokenApp     = _layout_targets["UpdateBrokenApp"]["offset"]
+    BrokenBuild         = _layout_targets["BrokenBuild"]["offset"]
+    FixApp              = _layout_targets["FixApp"]["offset"]
+    UpdateWorkingApp    = _layout_targets["UpdateWorkingApp"]["offset"]
+    UpdateOstreeWithApps = _layout_targets["UpdateOstreeWithApps"]["offset"]
+    BigOstree           = _layout_targets["BigOstree"]["offset"] if "BigOstree" in _layout_targets else None
+    BrokenOstreeWithApps = _layout_targets["BrokenOstreeWithApps"]["offset"]
 
     def __init__(self, version_offset: int, install_rollback: bool, run_rollback: bool, build_error: bool, ostree_image_version: int, tag: str, apps: List[str] = []):
         self.version_offset = version_offset
@@ -188,20 +234,32 @@ class Target:
         return f"VersionOffset={self.version_offset} InstallRollback={self.install_rollback}, RunRollback={self.run_rollback}, BuildError={self.build_error}, OSTreeImageVersion={self.ostree_image_version}, ActualVersion={self.actual_version}"
 
 all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
-all_primary_tag_targets = {
-    Target.First: Target(Target.First, False, False, False, 1, primary_tag, []),
-    Target.BrokenOstree: Target(Target.BrokenOstree, True, False, False, 2, primary_tag, []),
-    Target.WorkingOstree: Target(Target.WorkingOstree, False, False, False, 3, primary_tag, []),
-    Target.AddFirstApp: Target(Target.AddFirstApp, False, False, False, 3, primary_tag, ["shellhttpd_base_10000"]),
-    Target.AddMoreApps: Target(Target.AddMoreApps, False, False, False, 3, primary_tag, all_apps),
-    Target.BreakApp: Target(Target.BreakApp, False, True, False, 3, primary_tag, all_apps),
-    Target.UpdateBrokenApp: Target(Target.UpdateBrokenApp, False, True, False, 3, primary_tag, all_apps),
-    Target.BrokenBuild: Target(Target.BrokenBuild, False, False, True, 3, primary_tag, all_apps),
-    Target.FixApp: Target(Target.FixApp, False, False, False, 3, primary_tag, all_apps),
-    Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 3, primary_tag, all_apps),
-    Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 4, primary_tag, all_apps),
-    Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 5, primary_tag, all_apps),
-}
+
+# ostree_image_version is used only for equality comparisons (to decide whether a
+# transition crosses an ostree commit and thus needs a reboot), never as a real
+# commit reference. The secondary tag is a separate Factory build, so its commits
+# differ from the primary's even at the "same" logical version; offset its values
+# into a distinct namespace so a tag switch is correctly seen as an ostree change.
+SECONDARY_OSTREE_VERSION_OFFSET = 100
+
+def _make_targets(tag: str) -> Dict[int, "Target"]:
+    """Build the targets dict for a given tag from the loaded layout."""
+    ostree_ver_offset = 0 if tag == primary_tag else SECONDARY_OSTREE_VERSION_OFFSET
+    result: Dict[int, Target] = {}
+    for td in _layout_targets.values():
+        offset = td["offset"]
+        result[offset] = Target(
+            offset,
+            td["install_rollback"],
+            td["run_rollback"],
+            td["build_error"],
+            td["ostree_version"] + ostree_ver_offset,
+            tag,
+            td["apps"],
+        )
+    return result
+
+all_primary_tag_targets = _make_targets(primary_tag)
 
 # fioup has no ostree support, and a install rollback does never happen
 if use_fioup:
@@ -210,20 +268,7 @@ if use_fioup:
         all_primary_tag_targets[t].ostree_image_version = 0
 
 if secondary_tag:
-    all_secondary_tag_targets = {
-        Target.First: Target(Target.First, False, False, False, 11, secondary_tag, []),
-        Target.BrokenOstree: Target(Target.BrokenOstree, True, False, False, 12, secondary_tag, []),
-        Target.WorkingOstree: Target(Target.WorkingOstree, False, False, False, 13, secondary_tag, []),
-        Target.AddFirstApp: Target(Target.AddFirstApp, False, False, False, 13, secondary_tag, ["shellhttpd_base_10000"]),
-        Target.AddMoreApps: Target(Target.AddMoreApps, False, False, False, 13, secondary_tag, all_apps),
-        Target.BreakApp: Target(Target.BreakApp, False, True, False, 13, secondary_tag, all_apps),
-        Target.UpdateBrokenApp: Target(Target.UpdateBrokenApp, False, True, False, 13, secondary_tag, all_apps),
-        Target.BrokenBuild: Target(Target.BrokenBuild, False, False, True, 13, secondary_tag, all_apps),
-        Target.FixApp: Target(Target.FixApp, False, False, False, 13, secondary_tag, all_apps),
-        Target.UpdateWorkingApp: Target(Target.UpdateWorkingApp, False, False, False, 13, secondary_tag, all_apps),
-        Target.UpdateOstreeWithApps: Target(Target.UpdateOstreeWithApps, False, False, False, 14, secondary_tag, all_apps),
-        Target.BrokenOstreeWithApps: Target(Target.BrokenOstreeWithApps, True, False, False, 15, secondary_tag, all_apps),
-    }
+    all_secondary_tag_targets = _make_targets(secondary_tag)
 else:
     all_secondary_tag_targets = {}
 
@@ -404,7 +449,7 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
     return subprocess.run([cmd] + options, capture_output=True)
 
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None,
-                   reserved_storage: Optional[str] = None):
+                   reserved_storage: Optional[str] = None, use_fiopull: bool = False):
     logger.info(f"  Updating settings. {apps=}")
     callback_file = "/var/sota/callback.sh"
 
@@ -436,6 +481,9 @@ compose_apps = "{apps_str}"
 
     if reserved_storage is not None:
         content += f'\nreserved_storage = "{reserved_storage}"\n'
+
+    if use_fiopull:
+        content += '\nostree_pull_tool = "fiopull"\n'
 
     with open("/etc/sota/conf.d/z-50-fioctl.toml", "w") as f:
         f.write(content)
@@ -987,12 +1035,13 @@ def create_offline_bundles():
         logger.info("Offline bundles directory already exists, skipping offline bundles creation")
         return
 
+    offsets_str = " ".join(str(o) for o in offline_bundle_offsets)
     cmd = f"""
 mkdir -p `readlink -f .`/e2e-test-targets/small-ostree/
 echo "{e2e_test_ostree_tgz}" | base64 -d | tar -xzf - -C `readlink -f .`/e2e-test-targets/small-ostree/ --strip-components=1
 mkdir -p offline-bundles
-echo "Creating offline bundles for versions {base_version[primary_tag]} to {base_version[primary_tag] + 11} (skipping {base_version[primary_tag] + 7})"
-for version_offset in 0 1 2 3 4 5 6 8 9 10 11; do
+echo "Creating offline bundles for offsets: {offsets_str} (base {base_version[primary_tag]})"
+for version_offset in {offsets_str}; do
 echo offset $version_offset;
 version=$[ $version_offset + {base_version[primary_tag]} ];
 echo version $version;
@@ -1547,6 +1596,88 @@ def test_reserved_storage_low_allows_update(offline_: bool, single_step_: bool):
     run_test_reserved_storage_update_ok(reserved_storage="1KiB")
 
 
+def run_test_pre_pull_size_check(expect_enough_space: bool):
+    # aktualizr-lite estimates an update's size before pulling by running the fiopull
+    # `update-size` helper, and skips the download up front when it would not fit. This
+    # exercises that pre-pull path (distinct from test_no_space, which trips a mid-pull
+    # ENOSPC). The helper reads the target commit's ostree.sizes metadata, so no static
+    # delta from the factory is required. fioup has no such check.
+    if use_fioup:
+        pytest.skip("fiopull pre-pull size check is aktualizr-lite only")
+    if Target.BigOstree is None:
+        pytest.skip("BigOstree target not present in this Factory's target sequence")
+    is_loopback = is_loopback_mount('/var/sota')
+    if not is_loopback:
+        assert False, "/var/sota is not a loopback mount point. Device storage must be a loopback device to run this test."
+
+    restore_system_state()
+    write_settings(apps=None, prune=prune, use_fiopull=True)
+    invoke_aklite(['check'])
+
+    # The big target's ostree commit is ~20MB uncompressed and it carries ~13MB of apps, so the
+    # combined pre-pull requirement is ~33MB. The e2e device volume is ~94MB with ~47MB available
+    # once the base is deployed. For the enough-space case we leave the disk untouched (33MB fits);
+    # for the no-space case we fill it down to ~15MB free so the combined estimate cannot fit and
+    # the update is rejected before the download starts.
+    target = all_primary_tag_targets[Target.BigOstree]
+    statvfs = os.statvfs("/var/sota")
+    available_bytes = statvfs.f_bavail * statvfs.f_frsize
+    logger.info(f"Available space in /var/sota: {available_bytes} bytes")
+    if available_bytes > 100000000:
+        assert False, "Too much free space left, test environment should be configured to have less than 100MB free space for this test to be effective"
+
+    if not expect_enough_space:
+        # Fill down to ~15MB free, well below the ~33MB combined requirement.
+        leave_free = 15000000
+        if available_bytes > leave_free:
+            with open("/var/sota/fill_space", "wb") as f:
+                f.write(b"\0" * (available_bytes - leave_free))
+        statvfs = os.statvfs("/var/sota")
+        logger.info(f"Available space in /var/sota after filling it up: {statvfs.f_bavail * statvfs.f_frsize} bytes")
+
+    if single_step:
+        cmd = ['update', str(target.actual_version)]
+        expected_success_code = ReturnCodes.InstallNeedsReboot
+    else:
+        cmd = ['pull', str(target.actual_version)]
+        expected_success_code = ReturnCodes.Ok
+
+    try:
+        cp = invoke_aklite(cmd)
+        output = cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+        if expect_enough_space:
+            assert cp.returncode == expected_success_code, output
+        else:
+            assert cp.returncode == ReturnCodes.DownloadFailureNoSpace, output
+            # Confirm the rejection came from the pre-pull size estimate (fed by fiopull's
+            # ostree.sizes reading + the apps estimate) rather than a mid-pull failure, so this
+            # test truly covers the new mechanism.
+            assert "Estimated update size via fiopull" in output, output
+            assert "Combined update size check" in output, output
+            assert "combined ostree+apps update" in output, output
+    finally:
+        if os.path.exists("/var/sota/fill_space"):
+            os.remove("/var/sota/fill_space")
+
+
+@pytest.mark.parametrize('single_step_', [True, False])
+def test_pre_pull_no_space(single_step_: bool):
+    global offline, single_step
+    offline = False
+    single_step = single_step_
+    logger.info(f"Testing fiopull pre-pull size check rejects an update that won't fit")
+    run_test_pre_pull_size_check(expect_enough_space=False)
+
+
+@pytest.mark.parametrize('single_step_', [True, False])
+def test_pre_pull_enough_space(single_step_: bool):
+    global offline, single_step
+    offline = False
+    single_step = single_step_
+    logger.info(f"Testing fiopull pre-pull size check allows an update that fits")
+    run_test_pre_pull_size_check(expect_enough_space=True)
+
+
 def run_test_kill_process():
     restore_system_state()
     apps = None # All apps, for now
@@ -1572,6 +1703,49 @@ def run_test_kill_process():
 def test_kill_process():
     logger.info(f"Testing kill process")
     run_test_kill_process()
+
+
+def run_test_fiopull_interrupt_resume():
+    # Interrupt an ostree pull that is driven by the fiopull helper several times,
+    # then let it finish. This exercises fiopull's resumable download: each SIGKILL
+    # leaves partial .part sidecars in the sysroot repo's tmp/ dir, and the next run
+    # must resume (byte- or object-level) rather than fail or restart from scratch.
+    # It is the fiopull counterpart of test_kill_process (which uses libostree).
+    restore_system_state()
+    apps = None  # All apps, for now
+    write_settings(apps, prune, use_fiopull=True)
+
+    # Prefer the big ostree target when the Factory has one: its larger commit makes
+    # the interruption reliably land mid-pull. Fall back to the regular ostree target.
+    if Target.BigOstree is not None:
+        target = all_primary_tag_targets[Target.BigOstree]
+    else:
+        target = all_primary_tag_targets[Target.UpdateOstreeWithApps]
+
+    try:
+        cmd = [tc_path, "qdisc", "add", "dev", "eth0", "root", "netem", "delay", "500ms"]
+        subprocess.call(cmd)
+        for i in range(5):
+            logger.info(f" Calling fiopull-backed update and interrupting after {i} seconds")
+            cp = invoke_aklite(['update', str(target.actual_version)], i)
+            ReturnCodeProcessKilled = -9
+            assert cp.returncode == ReturnCodeProcessKilled, cp.stdout.decode("utf-8")
+
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+        logger.info(f" Calling update that should resume and succeed now")
+
+        cp = invoke_aklite(['update', str(target.actual_version)])
+        assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+
+    finally:
+        subprocess.call([tc_path, "qdisc", "del", "dev", "eth0", "root"])
+
+
+def test_fiopull_interrupt_resume():
+    if use_fioup:
+        pytest.skip("fiopull pull path is aktualizr-lite only")
+    logger.info(f"Testing fiopull pull interruption and resume")
+    run_test_fiopull_interrupt_resume()
 
 
 def run_test_bad_network():

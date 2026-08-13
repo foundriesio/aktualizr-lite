@@ -66,6 +66,46 @@ AppEngine::Result AppEngine::fetch(const App& app) {
   return res;
 }
 
+AppEngine::UpdateSize AppEngine::checkUpdateSize(const Apps& apps) const {
+  UpdateSize res{};
+  if (apps.empty()) {
+    res.known = true;
+    return res;
+  }
+  // `composectl check <uri...> --format json` loads each app's manifest from the
+  // registry (no blobs fetched) and reports the aggregate, blob-deduplicated
+  // footprint of everything still missing locally. We attribute its figures to
+  // the two stores: total_store_size to the blob (skopeo) store, total_runtime_size
+  // to the docker data root.
+  std::string uris;
+  for (const auto& app : apps) {
+    uris += " " + app.uri;
+  }
+  try {
+    std::string output;
+    exec(boost::format{"%s --store %s check%s --format json"} % composectl_cmd_ % storeRoot() % uris,
+         "failed to check apps update size", "", &output, "10m");
+    const auto json{parseJSON(output)};
+    if (!json.isMember("fetch_check")) {
+      LOG_WARNING << "composectl check returned no fetch_check; cannot estimate apps update size";
+      return res;  // known=false -> caller proceeds
+    }
+    const auto& fc{json["fetch_check"]};
+    res.store_required = fc.get("total_store_size", 0).asUInt64();
+    res.docker_required = fc.get("total_runtime_size", 0).asUInt64();
+    res.store_path = storeRoot().string();
+    res.docker_path = dockerRoot().string();
+    res.known = true;
+    LOG_INFO << "Estimated apps update size; store: " << res.store_required << "B, docker: " << res.docker_required
+             << "B";
+  } catch (const std::exception& exc) {
+    // A failure here (e.g. registry unreachable) is non-fatal: leave known=false
+    // so the caller proceeds and relies on the in-pull space check.
+    LOG_WARNING << "Failed to estimate apps update size: " << exc.what();
+  }
+  return res;
+}
+
 void AppEngine::remove(const App& app) {
   try {
     fetched_apps_.erase(app.uri);

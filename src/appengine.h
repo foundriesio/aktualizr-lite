@@ -69,6 +69,21 @@ class AppEngine {
   using Apps = std::vector<App>;
   using Ptr = std::shared_ptr<AppEngine>;
 
+  // UpdateSize reports the storage an apps update needs, split by the two stores
+  // an App engine writes to (which may be on different volumes): `store` is the
+  // app/blob (skopeo/composectl) store, `docker` is the docker data root. The
+  // *_path fields are a filesystem path on each store's volume (for a free-space
+  // lookup). `known` is false when the engine could not estimate the size (e.g.
+  // the registry is unreachable); the caller then proceeds and relies on the
+  // engine's own in-pull space checks.
+  struct UpdateSize {
+    bool known{false};
+    uint64_t store_required{0};
+    std::string store_path;
+    uint64_t docker_required{0};
+    std::string docker_path;
+  };
+
   virtual Result fetch(const App& app) = 0;
   virtual Result verify(const App& app) = 0;
   virtual Result install(const App& app) = 0;
@@ -80,6 +95,15 @@ class AppEngine {
   virtual Apps getInstalledApps() const = 0;
   virtual Json::Value getRunningAppsInfo() const = 0;
   virtual void prune(const Apps& app_shortlist) = 0;
+
+  // Estimates the storage the given apps' update will require, without fetching
+  // any blobs, so a caller can check free space before starting a download. The
+  // base implementation returns an "unknown" size (known=false); engines that
+  // can query the size override it.
+  virtual UpdateSize checkUpdateSize(const Apps& apps) const {
+    (void)apps;
+    return UpdateSize{};
+  }
 
   virtual ~AppEngine() = default;
   AppEngine(const AppEngine&&) = delete;

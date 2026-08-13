@@ -2,8 +2,10 @@
 
 #include <boost/algorithm/hex.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/process.hpp>
 
 #include "crypto/crypto.h"
+#include "exec.h"
 #include "http/httpclient.h"
 #include "ostree/repo.h"
 #include "storage/invstorage.h"
@@ -13,6 +15,9 @@ RootfsTreeManager::Config::Config(const PackageConfig& pconfig) {
   if (pconfig.extra.count(UpdateBlockParamName) == 1) {
     std::string val{pconfig.extra.at(UpdateBlockParamName)};
     UpdateBlock = val != "0" && val != "false";
+  }
+  if (pconfig.extra.count(OstreePullToolParamName) == 1) {
+    OstreePullTool = pconfig.extra.at(OstreePullToolParamName);
   }
 }
 
@@ -34,15 +39,7 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
     // TODO: consider make use of it for download progress reporting
   };
 
-  std::vector<Remote> remotes = {{remote, config.ostree_server, {{"X-Correlation-ID", target.Name()}}, &keys_, false}};
-
-  // Try to get additional remotes/origins to fetch an ostree commit from, unless
-  // the base ostree server URL specified in a config refers not to http(s) server.
-  // It helps to skip getting additional remotes if `ostree_server` refers to a local
-  // ostree repo, i.e. file://<path to repo>
-  if (!config.ostree_server.empty() && boost::starts_with(config.ostree_server, "http")) {
-    getAdditionalRemotes(remotes, target.Name());
-  }
+  std::vector<Remote> remotes{getRemotes(target.Name())};
 
   DownloadResult res{DownloadResult::Status::Ok, ""};
   data::InstallationResult pull_err{data::ResultCode::Numeric::kUnknown, ""};
@@ -54,6 +51,13 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
 
     DeltaStat delta_stat{};
     bool delta_stat_avail{getDeltaStatIfAvailable(target, remote, delta_stat)};
+    if (!delta_stat_avail) {
+      // Fall back to the `fiopull` helper, which derives the update size from the
+      // static-delta superblock. This covers cases the delta-stats file does not:
+      // the offline file:// case (delta ships in the bundle), and online factories
+      // that publish no delta-stats (the helper fetches just the remote superblock).
+      delta_stat_avail = getDeltaStatFromFioPull(target, remote, delta_stat);
+    }
 
     storage::Volume::UsageInfo pre_pull_usage_info{getUsageInfo()};
     if (delta_stat_avail) {
@@ -85,8 +89,12 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
     }
 
     LOG_INFO << "Fetching ostree commit " + target.Sha256Hash() + " from " + remote.baseUrl;
-    pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
-                                   prog_cb, remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
+    if (useFioPull(remote)) {
+      pull_err = pullWithFioPull(target, remote);
+    } else {
+      pull_err = OstreeManager::pull(config.sysroot, remote.baseUrl, keys_, Target::fromTufTarget(target), nullptr,
+                                     prog_cb, remote.isRemoteSet ? nullptr : remote.name.c_str(), remote.headers);
+    }
 
     storage::Volume::UsageInfo post_pull_usage_info{getUsageInfo()};
     if (post_pull_usage_info.isOk()) {
@@ -107,7 +115,9 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
           pull_err.description.find("min-free-space-percent") != std::string::npos)) ||
         // not enough storage space in the case of a static delta pull (pulling the delta parts/files)
         (pull_err.description.find("Delta requires") != std::string::npos &&
-         pull_err.description.find("free space, but only") != std::string::npos)) {
+         pull_err.description.find("free space, but only") != std::string::npos) ||
+        // not enough storage space reported by the fiopull pull helper (exit 3)
+        (pull_err.description.find("Insufficient storage available") != std::string::npos)) {
       res = {
           DownloadResult::Status::DownloadFailed_NoSpace,
           "Insufficient storage available; " + pull_err.description + "\nbefore ostree pull; " +
@@ -236,6 +246,34 @@ void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const
   }
 }
 
+std::vector<RootfsTreeManager::Remote> RootfsTreeManager::getRemotes(const std::string& target_name) {
+  std::vector<Remote> remotes = {{remote, config.ostree_server, {{"X-Correlation-ID", target_name}}, &keys_, false}};
+  // Try to get additional remotes/origins to fetch an ostree commit from, unless
+  // the base ostree server URL specified in a config refers not to http(s) server.
+  // It helps to skip getting additional remotes if `ostree_server` refers to a local
+  // ostree repo, i.e. file://<path to repo>
+  if (!config.ostree_server.empty() && boost::starts_with(config.ostree_server, "http")) {
+    getAdditionalRemotes(remotes, target_name);
+  }
+  return remotes;
+}
+
+RootfsTreeManager::OstreeUpdateSize RootfsTreeManager::getOstreeUpdateSize(const TufTarget& target) {
+  OstreeUpdateSize res{};
+  res.path = sysroot_->repoPath();
+  // Query the same delta-size sources Download() uses, over the target's remotes,
+  // and take the first that yields a size. No pull happens.
+  for (const auto& remote : getRemotes(target.Name())) {
+    DeltaStat delta_stat{};
+    if (getDeltaStatIfAvailable(target, remote, delta_stat) || getDeltaStatFromFioPull(target, remote, delta_stat)) {
+      res.required = delta_stat.uncompressedSize;
+      res.known = true;
+      break;
+    }
+  }
+  return res;
+}
+
 void RootfsTreeManager::setRemote(const std::string& name, const std::string& url,
                                   const boost::optional<const KeyManager*>& keys) {
   OSTree::Repo repo{sysroot_->repoPath()};
@@ -336,6 +374,200 @@ bool RootfsTreeManager::getDeltaStatIfAvailable(const TufTarget& target, const R
     LOG_ERROR << "Error occurred while getting static delta stats: " << exc.what();
   }
   return false;
+}
+
+namespace {
+// shellQuote wraps s in single quotes, escaping any embedded single quotes, so
+// it is safe to pass as a single argument through the shell that exec() uses.
+std::string shellQuote(const std::string& s) {
+  std::string out{"'"};
+  for (const char c : s) {
+    if (c == '\'') {
+      out += "'\\''";
+    } else {
+      out += c;
+    }
+  }
+  out += "'";
+  return out;
+}
+}  // namespace
+
+bool RootfsTreeManager::getDeltaStatFromFioPull(const TufTarget& target, const Remote& remote,
+                                                DeltaStat& delta_stat) const {
+  const std::string bin{fioPullBin()};
+  if (bin.empty()) {
+    return false;
+  }
+
+  const std::string from{getCurrentHash()};
+  const std::string to{target.Sha256Hash()};
+  if (to.empty()) {
+    return false;
+  }
+
+  // Use `update-size`, which picks the cheapest accurate source itself: the
+  // static-delta superblock when a from->to delta is available, else the target
+  // commit's ostree.sizes metadata. Both are a single fetch. When neither is
+  // available fiopull exits 4 and we treat the size as simply unavailable
+  // (fail-open), letting the in-pull space checks remain the backstop. The
+  // online case is reached only when getDeltaStatIfAvailable found no
+  // delta-stats reference in the Target.
+  //
+  // Online remotes are queried over http(s). For an offline update the target's
+  // objects (and any delta) ship in the local sysroot repo, which update-size
+  // reads via a file:// URL.
+  // fiopull is DG-agnostic and cannot present an mTLS client certificate, so the
+  // online size check only works for remotes that need none — the GCS remotes
+  // derived from the gateway's download-urls, which carry a bearer token in their
+  // headers. Skip the mTLS gateway remote here (the GCS remotes are tried first);
+  // for the offline file:// case there are no credentials to worry about.
+  std::string url{remote.baseUrl};
+  if (boost::starts_with(url, "http")) {
+    if (!!remote.keys && *remote.keys != nullptr) {
+      LOG_DEBUG << "Skipping fiopull size check for mTLS remote " << url;
+      return false;
+    }
+  } else {
+    if (!boost::starts_with(url, "file://")) {
+      return false;
+    }
+    // Offline: read from the local sysroot repo rather than the bundle URL.
+    url = "file://" + sysroot_->repoPath();
+  }
+
+  std::string cmd{shellQuote(bin) + " update-size --format json"};
+  cmd += " --url " + shellQuote(url);
+  cmd += " --commit " + shellQuote(to);
+  if (!from.empty()) {
+    cmd += " --from " + shellQuote(from);
+  }
+  if (boost::starts_with(remote.baseUrl, "http")) {
+    // Subtract target objects already present in the local sysroot repo, so a
+    // re-run after a successful or interrupted pull sizes only what is still
+    // missing (the diff between the local store and the target commit), not a
+    // full current->target diff. Only for the online case: in the offline case
+    // --url already points at the sysroot repo, so passing it again as --repo
+    // would mark every object present and report ~0.
+    cmd += " --repo " + shellQuote(sysroot_->repoPath());
+    for (const auto& h : remote.headers) {
+      cmd += " --header " + shellQuote(h.first + ": " + h.second);
+    }
+  }
+
+  try {
+    std::string output;
+    exec(cmd, "fiopull size query failed", "", &output, "300s");
+    const auto json{Utils::parseJSON(output)};
+    if (!json.isMember("uncompressed") || !json.isMember("compressed")) {
+      LOG_WARNING << "fiopull returned unexpected output, no update size found: " << output;
+      return false;
+    }
+    delta_stat = {json["compressed"].asUInt64(), json["uncompressed"].asUInt64()};
+    LOG_INFO << "Estimated update size via fiopull; from: " << from << ", to: " << to
+             << ", method: " << json.get("method", "delta").asString()
+             << ", uncompressed: " << delta_stat.uncompressedSize;
+    return true;
+  } catch (const ExecError& exc) {
+    // Exit 4 (no delta and no ostree.sizes) or a missing delta in the offline
+    // case are both expected; treat the size as unknown and proceed (fail-open).
+    LOG_DEBUG << "fiopull could not determine an update size: " << exc.what();
+  } catch (const std::exception& exc) {
+    LOG_WARNING << "Failed to estimate update size via fiopull: " << exc.what();
+  }
+  return false;
+}
+
+std::string RootfsTreeManager::fioPullBin() const {
+  if (!!fio_pull_bin_) {
+    return *fio_pull_bin_;
+  }
+  std::string resolved;
+  const std::string& tool{cfg_.OstreePullTool};
+  if (tool.empty() || tool == "libostree") {
+    // fiopull disabled: use the built-in libostree pull and no size helper.
+  } else if (tool.find('/') != std::string::npos) {
+    // An explicit path: use it as-is when it exists.
+    if (boost::filesystem::exists(tool)) {
+      resolved = tool;
+    } else {
+      LOG_WARNING << "ostree_pull_tool=" << tool << " but no such file; falling back to libostree";
+    }
+  } else {
+    // A bare name: look it up on $PATH.
+    const auto found{boost::process::search_path(tool)};
+    if (found.empty()) {
+      LOG_WARNING << "ostree_pull_tool=" << tool << " not found on PATH; falling back to libostree";
+    } else {
+      resolved = found.string();
+    }
+  }
+  fio_pull_bin_ = resolved;
+  return resolved;
+}
+
+bool RootfsTreeManager::useFioPull(const Remote& remote) const {
+  if (fioPullBin().empty()) {
+    return false;
+  }
+  // fiopull is Device-Gateway-agnostic: it fetches from a plain http(s) server
+  // (a signed object-store URL) using only the remote's headers (e.g. a bearer
+  // token) and does not handle mTLS. Use it only for remotes that need no client
+  // certificate — i.e. the GCS remotes derived from the gateway's download-urls.
+  // For the mTLS gateway remote (which carries the device keys), fall back to
+  // libostree, which can present the client cert (incl. PKCS#11-backed keys).
+  if (!!remote.keys && *remote.keys != nullptr) {
+    LOG_INFO << "Remote requires an mTLS client certificate; using libostree pull instead of fiopull";
+    return false;
+  }
+  return true;
+}
+
+data::InstallationResult RootfsTreeManager::pullWithFioPull(const TufTarget& target, const Remote& remote) const {
+  const std::string to{target.Sha256Hash()};
+  const std::string from{getCurrentHash()};
+
+  std::string cmd{shellQuote(fioPullBin()) + " pull"};
+  cmd += " --repo " + shellQuote(sysroot_->repoPath());
+  // Emit periodic progress lines to stderr so this pull does not look hung on a
+  // large diff; exec() below streams the child's output live to the log.
+  cmd += " --progress log";
+  if (!from.empty()) {
+    // Enables the static-delta fast path; fiopull falls back to a full pull if
+    // no from->to delta is published.
+    cmd += " --from " + shellQuote(from);
+  }
+  // fiopull is DG-agnostic and has no mTLS handling: the remote's headers carry
+  // any auth (e.g. the GCS bearer token from the gateway's download-urls). This
+  // path is only taken for remotes that need no client certificate (see
+  // useFioPull), so there are no TLS credentials to pass.
+  for (const auto& h : remote.headers) {
+    cmd += " --header " + shellQuote(h.first + ": " + h.second);
+  }
+  // URL and commit are positional arguments and must come after all flags.
+  cmd += " " + shellQuote(remote.baseUrl);
+  cmd += " " + shellQuote(to);
+
+  LOG_INFO << "Fetching ostree commit " << to << " from " << remote.baseUrl << " via fiopull";
+  try {
+    std::string output;
+    // print_output=true streams fiopull's progress lines (on stderr) to the log
+    // as the pull runs, instead of buffering them until the process exits.
+    exec(cmd, "fiopull pull failed", "", &output, "3600s", true);
+    LOG_DEBUG << "fiopull pull output:\n" << output;
+    return data::InstallationResult(data::ResultCode::Numeric::kOk, "Pulling OSTree commit via fiopull was successful");
+  } catch (const ExecError& exc) {
+    // Exit code 3 means insufficient storage (fiopull's documented contract).
+    if (exc.ExitCode == 3) {
+      return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed,
+                                      std::string("Insufficient storage available; ") + exc.StdErr);
+    }
+    return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed,
+                                    std::string("fiopull pull failed: ") + exc.what());
+  } catch (const std::exception& exc) {
+    return data::InstallationResult(data::ResultCode::Numeric::kInstallFailed,
+                                    std::string("fiopull pull failed: ") + exc.what());
+  }
 }
 
 bool RootfsTreeManager::getDeltaStatsRef(const Json::Value& json, DeltaStatsRef& ref) {
