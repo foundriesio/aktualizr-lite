@@ -235,8 +235,16 @@ class Target:
 
 all_apps = ["shellhttpd_base_10000", "shellhttpd_base_20000", "shellhttpd_base_30000"]
 
+# ostree_image_version is used only for equality comparisons (to decide whether a
+# transition crosses an ostree commit and thus needs a reboot), never as a real
+# commit reference. The secondary tag is a separate Factory build, so its commits
+# differ from the primary's even at the "same" logical version; offset its values
+# into a distinct namespace so a tag switch is correctly seen as an ostree change.
+SECONDARY_OSTREE_VERSION_OFFSET = 100
+
 def _make_targets(tag: str) -> Dict[int, "Target"]:
     """Build the targets dict for a given tag from the loaded layout."""
+    ostree_ver_offset = 0 if tag == primary_tag else SECONDARY_OSTREE_VERSION_OFFSET
     result: Dict[int, Target] = {}
     for td in _layout_targets.values():
         offset = td["offset"]
@@ -245,7 +253,7 @@ def _make_targets(tag: str) -> Dict[int, "Target"]:
             td["install_rollback"],
             td["run_rollback"],
             td["build_error"],
-            td["ostree_version"],
+            td["ostree_version"] + ostree_ver_offset,
             tag,
             td["apps"],
         )
