@@ -196,6 +196,33 @@ single_step = True
 delay_app_install = False
 prune = True
 
+_TEST_MODE_DEFAULTS = (False, True, False, True)  # offline, single_step, delay_app_install, prune
+
+def set_test_mode(offline_: Optional[bool] = None, single_step_: Optional[bool] = None,
+                   delay_app_install_: Optional[bool] = None, prune_: Optional[bool] = None):
+    """Set the test-mode globals explicitly, in place of each test writing its own
+    `global offline, single_step; offline = offline_; single_step = single_step_` boilerplate
+    (easy to forget a variable, which used to let it leak in from whichever test ran before)."""
+    global offline, single_step, delay_app_install, prune
+    if offline_ is not None:
+        offline = offline_
+    if single_step_ is not None:
+        single_step = single_step_
+    if delay_app_install_ is not None:
+        delay_app_install = delay_app_install_
+    if prune_ is not None:
+        prune = prune_
+
+@pytest.fixture(autouse=True)
+def _reset_test_mode():
+    """Reset the test-mode globals to their defaults before and after every test, so a test that
+    doesn't set one of them (or fails before restoring it) can never inherit a leftover value
+    from whichever test happened to run before it in the module."""
+    global offline, single_step, delay_app_install, prune
+    offline, single_step, delay_app_install, prune = _TEST_MODE_DEFAULTS
+    yield
+    offline, single_step, delay_app_install, prune = _TEST_MODE_DEFAULTS
+
 # Load the target sequence layout from E2E_TARGETS_LAYOUT (emitted by
 # e2e-test-create-targets.py) or fall back to auto-detecting via the Factory API.
 _layout = _load_targets_layout()
@@ -1186,28 +1213,20 @@ def test_apps_selection():
 @pytest.mark.parametrize('delay_app_install_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
-    global offline, single_step, delay_app_install
-    offline = offline_
-    single_step = single_step_
-    delay_app_install = delay_app_install_
+    set_test_mode(offline_, single_step_, delay_app_install_)
     run_test_sequence_incremental()
 
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('delay_app_install_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_random_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
-    global offline, single_step, delay_app_install
-    offline = offline_
-    single_step = single_step_
-    delay_app_install = delay_app_install_
+    set_test_mode(offline_, single_step_, delay_app_install_)
     run_test_sequence_random()
 
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_update_to_latest(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     run_test_sequence_update_to_latest()
 
 def run_test_switch_tag():
@@ -1264,17 +1283,13 @@ def run_test_deamon_auto_downgrade():
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [False])
 def test_tag_switch(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     run_test_switch_tag()
 
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [False])
 def test_auto_downgrade_prevention(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     run_test_auto_downgrade_prevention()
 
 
@@ -1312,8 +1327,7 @@ def run_test_pull_install_different_versions():
 
 @pytest.mark.parametrize('offline_', [False])
 def test_pull_install_different_tags(offline_: bool):
-    global offline
-    offline = offline_
+    set_test_mode(offline_)
     run_test_pull_install_different_versions()
 
 def test_auto_downgrade_daemon():
@@ -1352,9 +1366,7 @@ def run_test_rollback(do_reboot: bool, do_finalize: bool):
 def test_rollback(do_reboot: bool, do_finalize: bool, offline_: bool, single_step_: bool):
     if not do_reboot and do_finalize:
         return
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     logger.info(f"Testing rollback {do_reboot=} {do_finalize=}")
     run_test_rollback(do_reboot, do_finalize)
 
@@ -1521,9 +1533,7 @@ def run_test_no_space(reserved_storage: Optional[str] = None):
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_no_space(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     logger.info(f"Testing no space left on device")
     run_test_no_space()
 
@@ -1531,9 +1541,7 @@ def test_no_space(offline_: bool, single_step_: bool):
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_no_space_reserved_storage(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     # The run_test_no_space helper fills /var/sota down to ~50KB of free space. Reserving 1MiB
     # in bytes via pacman.reserved_storage must override the percentage watermark and trigger
     # DownloadFailureNoSpace, since available_bytes < reserved_bytes.
@@ -1587,9 +1595,7 @@ def run_test_reserved_storage_update_ok(reserved_storage: str):
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_reserved_storage_low_allows_update(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     # A tiny pacman.reserved_storage (1KiB) is well below the actual free space on /var/sota, so
     # the bytes-based path must not block a legitimate update.
     logger.info(f"Testing that a low pacman.reserved_storage value still allows the update")
@@ -1662,18 +1668,14 @@ def run_test_pre_pull_size_check(expect_enough_space: bool):
 
 @pytest.mark.parametrize('single_step_', [True, False])
 def test_pre_pull_no_space(single_step_: bool):
-    global offline, single_step
-    offline = False
-    single_step = single_step_
+    set_test_mode(False, single_step_)
     logger.info(f"Testing fiopull pre-pull size check rejects an update that won't fit")
     run_test_pre_pull_size_check(expect_enough_space=False)
 
 
 @pytest.mark.parametrize('single_step_', [True, False])
 def test_pre_pull_enough_space(single_step_: bool):
-    global offline, single_step
-    offline = False
-    single_step = single_step_
+    set_test_mode(False, single_step_)
     logger.info(f"Testing fiopull pre-pull size check allows an update that fits")
     run_test_pre_pull_size_check(expect_enough_space=True)
 
@@ -1773,9 +1775,7 @@ def run_test_bad_network():
 
 @pytest.mark.parametrize('single_step_', [True, False])
 def test_bad_network(single_step_: bool):
-    global offline, single_step
-    offline = False
-    single_step = single_step_
+    set_test_mode(False, single_step_)
 
     logger.info(f"Testing bad network conditions with single_step={single_step}")
     run_test_bad_network()
