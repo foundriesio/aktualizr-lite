@@ -41,7 +41,11 @@ COPY --from=composeapp /build/ostreeuploader/bin/fiopull /usr/bin/fiopull
 
 
 # The base image's apt lists go stale.
-RUN apt-get update && apt-get install -y libboost-iostreams-dev python3-pytest iproute2
+RUN apt-get update && apt-get install -y libboost-iostreams-dev python3-pytest iproute2 ca-certificates
+
+# Trust the update-server backend's registry: `composectl pull` requires HTTPS.
+COPY registry/certs/registry.crt /usr/local/share/ca-certificates/e2e-registry.crt
+RUN update-ca-certificates
 
 # Install lmp-device-register
 # A commit on main: no release yet builds against OpenSSL 4.0 with the HSM options. Built without
