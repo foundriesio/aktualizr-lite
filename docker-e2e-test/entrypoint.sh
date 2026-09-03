@@ -28,6 +28,17 @@ chown -R dev:devgrp /usr/lib/sota/conf.d
 chown -R dev:devgrp /etc/sota/conf.d
 chown -R dev:devgrp /var/lib/docker
 
+# Trust the `registry` service's self-signed cert (only present when the update-server
+# profile populated the shared volume) -- needed by `composectl pull`, which requires real
+# HTTPS and doesn't honor /etc/docker/certs.d/. A no-op for the default Foundries
+# Factory-backed flow, where /registry-certs stays empty. Poll briefly rather than a
+# one-shot check: this container has no explicit start-order relative to `registry` either.
+for i in $(seq 1 10); do [ -f /registry-certs/registry.crt ] && break; sleep 0.5; done
+if [ -f /registry-certs/registry.crt ] && ! [ -f /usr/local/share/ca-certificates/e2e-registry.crt ]; then
+    cp /registry-certs/registry.crt /usr/local/share/ca-certificates/e2e-registry.crt
+    update-ca-certificates
+fi
+
 # Initialize ostree
 if [ ! -d /sysroot/ostree/repo ]; then
     echo "Initializing sysroot ostree..."

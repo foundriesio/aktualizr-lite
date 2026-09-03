@@ -58,6 +58,8 @@ RUN wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/downloa
 
 RUN  apt-get install -y python3-pytest
 RUN  apt-get install -y iproute2
+# Needed by entrypoint.sh to trust the update-server backend's local registry cert.
+RUN  apt-get install -y ca-certificates
 
 # Copy the entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
