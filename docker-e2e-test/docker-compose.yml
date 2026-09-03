@@ -1,6 +1,20 @@
 version: '3.8'
 
 services:
+  # Self-hosted stand-in for the real Foundries.io Factory backend, used only by the
+  # update-server e2e backend (opt-in via `--profile update-server`; the default Foundries
+  # Factory-backed flow does not start this service).
+  update-server:
+    build:
+      context: ./update-server
+    image: ${UPDATE_SERVER_IMAGE:-aklite-e2e-update-server}
+    volumes:
+      - update-server-data:/data
+    ports:
+      - "8080:8080"
+    profiles:
+      - update-server
+
   dockerd:
     image: ghcr.io/foundriesio/moby:25.0.3_fio
     command: ["dockerd", "-H", "unix:///var/run/docker/docker.sock"]
@@ -45,3 +59,4 @@ services:
 
 volumes:
   docker-runtime:
+  update-server-data:
