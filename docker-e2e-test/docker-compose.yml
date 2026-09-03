@@ -1,6 +1,18 @@
 version: '3.8'
 
 services:
+  # Local stand-in for a Factory; opt-in via `--profile update-server`.
+  update-server:
+    build:
+      context: ./update-server
+    image: ${UPDATE_SERVER_IMAGE:-aklite-e2e-update-server}
+    volumes:
+      - update-server-data:/data
+    ports:
+      - "8080:8080"
+    profiles:
+      - update-server
+
   dockerd:
     image: ghcr.io/foundriesio/moby:25.0.3_fio
     command: ["dockerd", "-H", "unix:///var/run/docker/docker.sock"]
@@ -55,3 +67,4 @@ services:
 
 volumes:
   docker-runtime:
+  update-server-data:
