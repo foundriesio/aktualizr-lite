@@ -53,6 +53,13 @@ services:
       - ${SOTA_DIR}:/var/sota
       - registry-certs:/registry-certs
     privileged: true
+    healthcheck:
+      # aklite-e2e-test's entrypoint touches the socket immediately on start; without this,
+      # `depends_on` only waits for this container to start, not for dockerd to actually create
+      # it, which loses the race whenever dockerd starts from a cold/fresh docker-runtime volume.
+      test: ["CMD", "test", "-S", "/var/run/docker/docker.sock"]
+      interval: 1s
+      retries: 30
 
   aklite-e2e-test:
       build:
@@ -86,7 +93,8 @@ services:
         - CXX=clang++
         - CC=clang
       depends_on:
-      - dockerd
+        dockerd:
+          condition: service_healthy
 
 volumes:
   docker-runtime:

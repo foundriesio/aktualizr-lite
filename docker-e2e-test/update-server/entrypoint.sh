@@ -32,4 +32,4 @@ if [ ! -f "$DATADIR/tuf/keys/root.key" ]; then
 fi
 
 echo "## Starting update-server ..."
-exec fioserver serve --datadir "$DATADIR"
+exec fioserver serve --datadir "$DATADIR" --rolloutinterval "${UPDATE_SERVER_ROLLOUT_INTERVAL:-5s}"
