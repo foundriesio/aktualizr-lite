@@ -297,6 +297,9 @@ targets_layout = {
 if __name__ == "__main__":
         repo_dir, big_repo_dir, ostree_hashes, _ = create_ostree_repo()
 
+        # fiocli writes ~/.config/satcli.yaml on login but doesn't create the directory itself;
+        # a fresh container has no ~/.config at all.
+        os.makedirs(os.path.expanduser("~/.config"), exist_ok=True)
         run_cmd(f"{fiocli_cmd} login {fiocli_context} {update_server_url} --token e2e-local-dev")
 
         os.chdir(local_dir)
