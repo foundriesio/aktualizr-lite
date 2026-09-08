@@ -9,8 +9,10 @@ import requests
 import stat
 import subprocess
 import sys
+import time
 import uuid
 from typing import Dict, List, Optional, Set, Tuple
+from urllib.parse import urlparse
 
 
 fioup_cmd = "./bin/fioup"
@@ -379,6 +381,25 @@ def setup_softhsm():
 _rollout_target_version: Optional[int] = None
 _rollout_counter = 0
 
+def _ensure_device_checkin():
+    # update-server's SetUpdateName only assigns update_name to devices whose `tag` DB column
+    # already matches the rollout's tag -- storage/api/api_storage_test.go's TestStorage
+    # explicitly covers this: a device that has never checked in is excluded from the rollout's
+    # effect even when it's named explicitly by UUID (confirmed: not a bug, a deliberate/tested
+    # invariant, so devices can't be rolled out to a tag they haven't actually reported). A
+    # freshly-registered device has never made a gateway request, so its `tag` is still unset --
+    # without this, the very first rollout _ensure_target_rollout() creates for it would apply
+    # to zero devices, permanently (a rollout is only ever processed once). One lightweight
+    # authenticated request against any tag-checking gateway endpoint establishes it up front.
+    if backend != "update-server":
+        return
+    gateway_url = f"https://{urlparse(update_server_url).hostname}:8443"
+    res = requests.put(f"{gateway_url}/system_info/network", json={},
+                        headers={"x-ats-tags": primary_tag},
+                        cert=("/var/sota/client.pem", "/var/sota/pkey.pem"),
+                        verify="/var/sota/root.crt")
+    assert res.status_code == 200, f"Initial device check-in failed: {res.status_code} {res.text}"
+
 def _ensure_target_rollout(version: int):
     global _rollout_target_version, _rollout_counter
     if backend != "update-server" or version == _rollout_target_version:
@@ -395,7 +416,44 @@ def _ensure_target_rollout(version: int):
     res = requests.put(url, json={"uuids": [device_name]}, headers=headers)
     assert res.status_code in (200, 201, 202), \
         f"Unable to create rollout for {update_name}: {res.status_code} {res.text}"
+
+    # rolloutPut commits the rollout in a goroutine and returns 202 straight away (update-server's
+    # server/ui/api/handlers_rollouts.go), so a `check`/`pull` issued right after the PUT can still
+    # see the device on its previous update. The journal-processing daemon only reconciles what
+    # that goroutine failed to finish, so poll for the rollout to actually be effective.
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        res = requests.get(url, headers=headers)
+        res.raise_for_status()
+        if device_name in res.json().get("effective-uuids", []):
+            break
+        time.sleep(0.3)
+    else:
+        assert False, f"Rollout for {update_name} did not take effect within 30s"
+
+    _refresh_tuf_metadata()
     _rollout_target_version = version
+
+def _refresh_tuf_metadata():
+    # `pull` and `install` run with CheckMode::Current (aktualizr-lite's src/main.cc), i.e. they
+    # use the TUF metadata already stored on the device. A Foundries device gateway lists every
+    # Target for the tag, so that stored copy still contains the one being pulled; update-server
+    # serves only the Target of the assigned update, so it predates the rollout just created and
+    # the lookup fails with "No Target found; version: N". Refresh it here.
+    #
+    # Tests assert on exact callback sequences, and this refresh is not part of any of them, so
+    # restore the callback log afterwards.
+    saved = None
+    if os.path.isfile(callback_log_path):
+        with open(callback_log_path) as f:
+            saved = f.read()
+    subprocess.run([fioup_cmd if use_fioup else aklite_path, "check"], capture_output=True)
+    if saved is None:
+        if os.path.isfile(callback_log_path):
+            os.remove(callback_log_path)
+    else:
+        with open(callback_log_path, "w") as f:
+            f.write(saved)
 
 def register_if_required():
     if not os.path.exists("/var/sota/client.pem"):
@@ -461,6 +519,7 @@ def get_device_name():
 
 register_if_required()
 device_name = get_device_name()
+_ensure_device_checkin()
 
 def set_device_apps(apps: Optional[List[str]]):
     if backend == "update-server":
@@ -646,9 +705,18 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
             options = [ x.replace('pull', 'fetch').replace('run', 'start') for x in options if x not in ['--install-mode=delay-app-install'] ]
         cmd = fioup_cmd
 
+    env = None
+    if backend == "update-server":
+        env = os.environ.copy()
+        # aklite shells out to fiopull for the pre-pull size check. fiopull is a Go binary that
+        # performs its own HTTPS request and has no CA option (`fiopull update-size --help`), so
+        # it cannot verify update-server's private CA and the size check is silently skipped.
+        # Go honours SSL_CERT_FILE; point it at the CA the device already trusts.
+        env.setdefault("SSL_CERT_FILE", "/var/sota/root.crt")
+
     logger.info("  Running `" + " ".join([aklite_path] + options) + "`")
     if kill_after_sec is not None:
-        proc = subprocess.Popen([cmd] + options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([cmd] + options, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         try:
             outs, errs = proc.communicate(timeout=kill_after_sec)
             return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
@@ -659,7 +727,7 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
                 os.remove("/var/lock/aklite.lock")
             outs, errs = proc.communicate()
             return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
-    return subprocess.run([cmd] + options, capture_output=True)
+    return subprocess.run([cmd] + options, capture_output=True, env=env)
 
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None,
                    reserved_storage: Optional[str] = None, use_fiopull: bool = False):
@@ -1075,9 +1143,10 @@ def do_rollback(target: Target, requires_reboot: bool, installation_in_progress:
 def create_offline_bundles():
     if backend == "update-server":
         # Offline bundles are a Foundries Factory-specific artifact (`fioctl targets
-        # offline-update`); update-server has no equivalent yet. Fail loudly rather than
-        # silently doing the wrong thing -- offline-mode tests need E2E_BACKEND=foundries.
-        assert False, "offline mode is not yet supported with E2E_BACKEND=update-server"
+        # offline-update`); update-server has no equivalent yet. Skip rather than fail -- a
+        # full-suite run (e.g. the update-server CI workflow) parametrizes offline_ on every
+        # test, and offline mode simply isn't a thing this backend supports (yet), not a bug.
+        pytest.skip("offline mode is not yet supported with E2E_BACKEND=update-server")
     if not e2e_test_ostree_tgz and not os.path.exists("./offline-bundles/unified/"):
         assert False, "No OSTree repo tgz provided, and offline bundles directory does not exist. Cannot proceed with offline update tests"
 
