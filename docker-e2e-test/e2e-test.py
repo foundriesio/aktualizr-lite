@@ -107,20 +107,6 @@ if not primary_tag:
 
 hardware_id = os.getenv("HARDWARE_ID", "intel-corei7-64")
 
-base_version: Dict[str, int] = {}
-base_target_version = os.getenv("BASE_TARGET_VERSION")
-if not base_target_version:
-    pytest.fail("BASE_TARGET_VERSION variable needs to be set with the first version of the e2e test targets sequence")
-
-base_version[primary_tag] = int(base_target_version)
-
-# secondary tag used for tests that involve tags switching
-secondary_tag = os.getenv("SECONDARY_TAG")
-if secondary_tag:
-    secondary_base_target_version = os.getenv("SECONDARY_BASE_TARGET_VERSION")
-    if secondary_base_target_version:
-        base_version[secondary_tag] = int(secondary_base_target_version)
-
 
 def _load_targets_layout() -> dict:
     """Load the e2e target sequence layout from E2E_TARGETS_LAYOUT (a JSON object
@@ -157,14 +143,46 @@ def _load_targets_layout() -> dict:
         "offline_bundle_offsets": [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11],
     }
 
+# Load the target sequence layout first: base-version detection below needs to know how many
+# targets this run's sequence contains.
+_layout = _load_targets_layout()
+_layout_targets: dict = _layout["targets"]
+offline_bundle_offsets: List[int] = _layout["offline_bundle_offsets"]
+
+
+def _detect_base_target_version(tag: str) -> int:
+    """Auto-detect this run's base ("First") target version from the Factory's TUF targets
+    metadata: highest version currently published for (factory_name, tag, hardware_id), minus
+    (len(_layout_targets) - 1). Assumes the newest len(_layout_targets) versions for this
+    tag+hardware_id are the ones e2e-test-create-targets.py just produced (no concurrent runs
+    against the same tag).
+    """
+    headers = {'OSF-TOKEN': user_token}
+    r = requests.get(f'https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/targets.json', headers=headers)
+    r.raise_for_status()
+    targets = json.loads(r.text)["signed"]["targets"]
+    versions = [
+        int(t["custom"]["version"]) for t in targets.values()
+        if tag in t.get("custom", {}).get("tags", []) and hardware_id in t.get("custom", {}).get("hardwareIds", [])
+    ]
+    assert versions, f"No targets found for tag={tag} hardware_id={hardware_id} in factory {factory_name}"
+    base = max(versions) - (len(_layout_targets) - 1)
+    logger.info(f"Auto-detected base target version {base} for tag={tag} (highest matching version: {max(versions)})")
+    return base
+
+
+base_version: Dict[str, int] = {}
+base_version[primary_tag] = _detect_base_target_version(primary_tag)
+
+# secondary tag used for tests that involve tags switching
+secondary_tag = os.getenv("SECONDARY_TAG")
+if secondary_tag:
+    base_version[secondary_tag] = _detect_base_target_version(secondary_tag)
+
 
 def secondary_tag_is_set():
     if not secondary_tag:
         logger.error("SECONDARY_TAG environment variable not set")
-        return False
-
-    if not base_version[secondary_tag]:
-        logger.error("SECONDARY_BASE_TARGET_VERSION environment variable not set")
         return False
     return True
 
@@ -222,12 +240,6 @@ def _reset_test_mode():
     offline, single_step, delay_app_install, prune = _TEST_MODE_DEFAULTS
     yield
     offline, single_step, delay_app_install, prune = _TEST_MODE_DEFAULTS
-
-# Load the target sequence layout from E2E_TARGETS_LAYOUT (emitted by
-# e2e-test-create-targets.py) or fall back to auto-detecting via the Factory API.
-_layout = _load_targets_layout()
-_layout_targets: dict = _layout["targets"]
-offline_bundle_offsets: List[int] = _layout["offline_bundle_offsets"]
 
 
 class Target:
