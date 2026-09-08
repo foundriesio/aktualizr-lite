@@ -9,8 +9,10 @@ import requests
 import stat
 import subprocess
 import sys
+import time
 import uuid
 from typing import Dict, List, Optional, Set, Tuple
+from urllib.parse import urlparse
 
 
 fioup_cmd = "./bin/fioup"
@@ -361,6 +363,25 @@ def get_target_for_actual_version(actual_version: int):
 _rollout_target_version: Optional[int] = None
 _rollout_counter = 0
 
+def _ensure_device_checkin():
+    # update-server's SetUpdateName only assigns update_name to devices whose `tag` DB column
+    # already matches the rollout's tag -- storage/api/api_storage_test.go's TestStorage
+    # explicitly covers this: a device that has never checked in is excluded from the rollout's
+    # effect even when it's named explicitly by UUID (confirmed: not a bug, a deliberate/tested
+    # invariant, so devices can't be rolled out to a tag they haven't actually reported). A
+    # freshly-registered device has never made a gateway request, so its `tag` is still unset --
+    # without this, the very first rollout _ensure_target_rollout() creates for it would apply
+    # to zero devices, permanently (a rollout is only ever processed once). One lightweight
+    # authenticated request against any tag-checking gateway endpoint establishes it up front.
+    if backend != "update-server":
+        return
+    gateway_url = f"https://{urlparse(update_server_url).hostname}:8443"
+    res = requests.put(f"{gateway_url}/system_info/network", json={},
+                        headers={"x-ats-tags": primary_tag},
+                        cert=("/var/sota/client.pem", "/var/sota/pkey.pem"),
+                        verify="/var/sota/root.crt")
+    assert res.status_code == 200, f"Initial device check-in failed: {res.status_code} {res.text}"
+
 def _ensure_target_rollout(version: int):
     global _rollout_target_version, _rollout_counter
     if backend != "update-server" or version == _rollout_target_version:
@@ -377,6 +398,22 @@ def _ensure_target_rollout(version: int):
     res = requests.put(url, json={"uuids": [device_name]}, headers=headers)
     assert res.status_code in (200, 201, 202), \
         f"Unable to create rollout for {update_name}: {res.status_code} {res.text}"
+
+    # Rollouts are applied asynchronously by a background journal-processing daemon
+    # (update-server's server/ui/daemons rolloutWatchdog) -- poll for it to actually take effect
+    # rather than assuming a fixed wait is long enough, which raced intermittently even with a
+    # short --rolloutinterval (a `check`/`pull` issued right after PUT could still see stale
+    # cached TUF metadata from before the rollout applied).
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        res = requests.get(url, headers=headers)
+        res.raise_for_status()
+        if device_name in res.json().get("effective-uuids", []):
+            break
+        time.sleep(0.3)
+    else:
+        assert False, f"Rollout for {update_name} did not take effect within 30s"
+
     _rollout_target_version = version
 
 def register_if_required():
@@ -420,6 +457,7 @@ def get_device_name():
 
 register_if_required()
 device_name = get_device_name()
+_ensure_device_checkin()
 
 def set_device_apps(apps: Optional[List[str]]):
     if backend == "update-server":
@@ -1034,9 +1072,10 @@ def do_rollback(target: Target, requires_reboot: bool, installation_in_progress:
 def create_offline_bundles():
     if backend == "update-server":
         # Offline bundles are a Foundries Factory-specific artifact (`fioctl targets
-        # offline-update`); update-server has no equivalent yet. Fail loudly rather than
-        # silently doing the wrong thing -- offline-mode tests need E2E_BACKEND=foundries.
-        assert False, "offline mode is not yet supported with E2E_BACKEND=update-server"
+        # offline-update`); update-server has no equivalent yet. Skip rather than fail -- a
+        # full-suite run (e.g. the update-server CI workflow) parametrizes offline_ on every
+        # test, and offline mode simply isn't a thing this backend supports (yet), not a bug.
+        pytest.skip("offline mode is not yet supported with E2E_BACKEND=update-server")
     if not e2e_test_ostree_tgz and not os.path.exists("./offline-bundles/unified/"):
         assert False, "No OSTree repo tgz provided, and offline bundles directory does not exist. Cannot proceed with offline update tests"
 

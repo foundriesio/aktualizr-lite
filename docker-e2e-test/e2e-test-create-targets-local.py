@@ -376,7 +376,7 @@ if __name__ == "__main__":
 Test targets successfully created against {update_server_url}
 
 # Required environment variables for e2e tests:
-export FACTORY=e2e-local
+export FACTORY=e2e-factory
 export TAG={tag}
 export USER_TOKEN=e2e-local-dev
 export BASE_TARGET_VERSION={base_target_version}

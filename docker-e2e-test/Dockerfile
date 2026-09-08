@@ -39,6 +39,12 @@ COPY --from=composeapp /build/fioctl/bin/fioctl-linux-amd64 /usr/bin/fioctl
 # Install fiopull at the default FioPullBin path so the size check runs.
 COPY --from=composeapp /build/ostreeuploader/bin/fiopull /usr/bin/fiopull
 
+# Install fiocli, used only by the update-server e2e backend's local target-generation script
+# (docker-e2e-test/e2e-test-create-targets-local.py) to upload targets and create rollouts.
+# Same pinned release as docker-e2e-test/update-server/Dockerfile's fioserver.
+RUN wget -O /usr/bin/fiocli "https://github.com/foundriesio/update-server/releases/download/v0.9.4/fiocli-linux-amd64" && \
+    chmod +x /usr/bin/fiocli
+
 
 # Install lmp-device-register
 RUN apt-get install -y libboost-iostreams-dev
