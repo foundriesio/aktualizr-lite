@@ -99,8 +99,6 @@ jobs:
           USER_TOKEN: ${{ secrets.GEN_TARGETS_E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.GEN_TARGETS_E2E_TEST_TAG}}
           SECONDARY_TAG: ${{secrets.GEN_TARGETS_E2E_TEST_SECONDARY_TAG }}
-          BASE_TARGET_VERSION: ${{ steps.gen-targets.outputs.BASE_TARGET_VERSION }}
-          SECONDARY_BASE_TARGET_VERSION: ${{ steps.gen-targets-secondary.outputs.BASE_TARGET_VERSION }}
           E2E_TEST_OSTREE_TGZ: ${{ steps.gen-targets.outputs.E2E_TEST_OSTREE_TGZ }}
           SECONDARY_E2E_TEST_OSTREE_TGZ: ${{ steps.gen-targets-secondary.outputs.E2E_TEST_OSTREE_TGZ }}
           E2E_TARGETS_LAYOUT: ${{ steps.gen-targets.outputs.E2E_TARGETS_LAYOUT }}
