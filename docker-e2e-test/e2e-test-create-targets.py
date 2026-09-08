@@ -508,8 +508,11 @@ Test targets successfully created
 export FACTORY={factory}
 export TAG={tag}
 export USER_TOKEN={user_token}
-export BASE_TARGET_VERSION={base_target_version}
 export E2E_TARGETS_LAYOUT='{targets_layout_json}'
+
+# BASE_TARGET_VERSION is not needed by e2e-test.py itself (it auto-detects it from the
+# Factory's targets list), only by the offline bundle creation loop below:
+export BASE_TARGET_VERSION={base_target_version}
 
 # Create offline bundles:"
 mkdir -p offline-bundles
