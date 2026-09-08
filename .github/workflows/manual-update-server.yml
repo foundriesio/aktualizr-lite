@@ -1,0 +1,68 @@
+name: End-to-end manual tests (update-server backend)
+
+on:
+    workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  full-e2e-test-update-server:
+    name: Generate test targets and run all end-to-end tests against a self-hosted update-server
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory ${{ github.workspace }}
+      - run: git submodule update --init --recursive
+
+      - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
+        id: check_image
+        run: |
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
+          fi
+
+      # Runs inside the aklite-e2e-test container (needs docker/composectl/fiocli/ostree, and
+      # a real docker daemon to build+push the test apps' images), unlike
+      # e2e-test-create-targets.py's Foundries equivalent, which runs directly on the runner.
+      - name: Generate Test Targets
+        id: gen-targets
+        run: |
+          OUTPUT=$(./dev-shell-e2e-test-update-server.sh python3 docker-e2e-test/e2e-test-create-targets-local.py)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep '^export BASE_TARGET_VERSION=' | sed 's/^export //' >> $GITHUB_OUTPUT
+          LAYOUT=$(echo "$OUTPUT" | grep "^export E2E_TARGETS_LAYOUT=" | sed "s/^export E2E_TARGETS_LAYOUT='//; s/'$//")
+          echo "E2E_TARGETS_LAYOUT=$LAYOUT" >> $GITHUB_OUTPUT
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: e2e-ccache-${{ github.sha }}
+          restore-keys: |
+            e2e-ccache-
+
+      - run: ./dev-shell-e2e-test-update-server.sh make -f dev-flow.mk config build
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+
+      # Scoped to the two test functions verified against this backend. Not yet covered here:
+      # offline mode (create_offline_bundles() skips itself -- no update-server equivalent yet),
+      # secondary-tag tests (this workflow only generates one tag), fioup-only tests (use_fioup
+      # is off by default), and test_random_updates (can jump *backward* to a previously-
+      # uploaded, lower-TUF-version target; update-server's TUF version counter is monotonic per
+      # tag across all uploads rather than reset per update-name, so aktualizr-lite's client-side
+      # anti-rollback check correctly refuses the "older" metadata and keeps serving its stale
+      # cache -- a real backend/TUF-model mismatch, not a test bug).
+      - name: Run end-to-end tests
+        run: ./dev-shell-e2e-test-update-server.sh pytest docker-e2e-test/e2e-test.py -k "test_apps_selection or test_incremental_updates"
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+          BASE_TARGET_VERSION: ${{ steps.gen-targets.outputs.BASE_TARGET_VERSION }}
+          E2E_TARGETS_LAYOUT: ${{ steps.gen-targets.outputs.E2E_TARGETS_LAYOUT }}
