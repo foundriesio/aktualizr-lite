@@ -1800,6 +1800,11 @@ def run_test_bad_network():
             cp = invoke_aklite(['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
             assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
         else:
+            # invoke_aklite()'s own interception can't help here: a bare `check` carries no
+            # target version on the command line, so it can't infer which target this call
+            # expects to discover. This test already knows -- tell _ensure_target_rollout()
+            # directly, same as install_target() does for its own explicit_version=False case.
+            _ensure_target_rollout(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)
             cp = invoke_aklite(['check'])
             assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion, cp.stdout.decode("utf-8")
             cp = invoke_aklite(['pull', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
