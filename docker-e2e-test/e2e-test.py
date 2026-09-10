@@ -107,20 +107,6 @@ if not primary_tag:
 
 hardware_id = os.getenv("HARDWARE_ID", "intel-corei7-64")
 
-base_version: Dict[str, int] = {}
-base_target_version = os.getenv("BASE_TARGET_VERSION")
-if not base_target_version:
-    pytest.fail("BASE_TARGET_VERSION variable needs to be set with the first version of the e2e test targets sequence")
-
-base_version[primary_tag] = int(base_target_version)
-
-# secondary tag used for tests that involve tags switching
-secondary_tag = os.getenv("SECONDARY_TAG")
-if secondary_tag:
-    secondary_base_target_version = os.getenv("SECONDARY_BASE_TARGET_VERSION")
-    if secondary_base_target_version:
-        base_version[secondary_tag] = int(secondary_base_target_version)
-
 
 def _load_targets_layout() -> dict:
     """Load the e2e target sequence layout from E2E_TARGETS_LAYOUT (a JSON object
@@ -157,14 +143,48 @@ def _load_targets_layout() -> dict:
         "offline_bundle_offsets": [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11],
     }
 
+# Load the target sequence layout first: base-version detection below needs to know how many
+# targets this run's sequence contains.
+_layout = _load_targets_layout()
+_layout_targets: dict = _layout["targets"]
+offline_bundle_offsets: List[int] = _layout["offline_bundle_offsets"]
+
+
+def _detect_base_target_version(tag: str) -> int:
+    """Auto-detect this run's base ("First") target version from the Factory's TUF targets
+    metadata: highest version currently published for (factory_name, tag, hardware_id), minus
+    (len(_layout_targets) - 1). Assumes the newest len(_layout_targets) versions for this
+    tag+hardware_id are the ones e2e-test-create-targets.py just produced (no concurrent runs
+    against the same tag).
+    """
+    headers = {'OSF-TOKEN': user_token}
+    r = requests.get(f'https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/targets.json', headers=headers)
+    r.raise_for_status()
+    targets = json.loads(r.text)["signed"]["targets"]
+    versions = [
+        int(t["custom"]["version"]) for t in targets.values()
+        if tag in t.get("custom", {}).get("tags", []) and hardware_id in t.get("custom", {}).get("hardwareIds", [])
+    ]
+    assert versions, f"No targets found for tag={tag} hardware_id={hardware_id} in factory {factory_name}"
+    base = max(versions) - (len(_layout_targets) - 1)
+    logger.info(f"Auto-detected base target version {base} for tag={tag} (highest matching version: {max(versions)})")
+    return base
+
+
+base_version: Dict[str, int] = {}
+base_target_version = os.getenv("BASE_TARGET_VERSION")
+base_version[primary_tag] = int(base_target_version) if base_target_version else _detect_base_target_version(primary_tag)
+
+# secondary tag used for tests that involve tags switching
+secondary_tag = os.getenv("SECONDARY_TAG")
+if secondary_tag:
+    secondary_base_target_version = os.getenv("SECONDARY_BASE_TARGET_VERSION")
+    base_version[secondary_tag] = int(secondary_base_target_version) if secondary_base_target_version else _detect_base_target_version(secondary_tag)
+
 
 def secondary_tag_is_set():
     if not secondary_tag:
         logger.error("SECONDARY_TAG environment variable not set")
-        return False
-
-    if not base_version[secondary_tag]:
-        logger.error("SECONDARY_BASE_TARGET_VERSION environment variable not set")
         return False
     return True
 
@@ -196,11 +216,32 @@ single_step = True
 delay_app_install = False
 prune = True
 
-# Load the target sequence layout from E2E_TARGETS_LAYOUT (emitted by
-# e2e-test-create-targets.py) or fall back to auto-detecting via the Factory API.
-_layout = _load_targets_layout()
-_layout_targets: dict = _layout["targets"]
-offline_bundle_offsets: List[int] = _layout["offline_bundle_offsets"]
+_TEST_MODE_DEFAULTS = (False, True, False, True)  # offline, single_step, delay_app_install, prune
+
+def set_test_mode(offline_: Optional[bool] = None, single_step_: Optional[bool] = None,
+                   delay_app_install_: Optional[bool] = None, prune_: Optional[bool] = None):
+    """Set the test-mode globals explicitly, in place of each test writing its own
+    `global offline, single_step; offline = offline_; single_step = single_step_` boilerplate
+    (easy to forget a variable, which used to let it leak in from whichever test ran before)."""
+    global offline, single_step, delay_app_install, prune
+    if offline_ is not None:
+        offline = offline_
+    if single_step_ is not None:
+        single_step = single_step_
+    if delay_app_install_ is not None:
+        delay_app_install = delay_app_install_
+    if prune_ is not None:
+        prune = prune_
+
+@pytest.fixture(autouse=True)
+def _reset_test_mode():
+    """Reset the test-mode globals to their defaults before and after every test, so a test that
+    doesn't set one of them (or fails before restoring it) can never inherit a leftover value
+    from whichever test happened to run before it in the module."""
+    global offline, single_step, delay_app_install, prune
+    offline, single_step, delay_app_install, prune = _TEST_MODE_DEFAULTS
+    yield
+    offline, single_step, delay_app_install, prune = _TEST_MODE_DEFAULTS
 
 
 class Target:
@@ -553,9 +594,10 @@ def cleanup_installed_data():
         os.system("""rm -f /var/sota/updates.db /etc/sota/conf.d/* /run/secrets/* /var/sota/.last*""")
     os.system("""sqlite3 /var/sota/sql.db  "delete from installed_versions;" ".exit" """)
 
-def install_with_separate_steps(target: Target, explicit_version: bool = True, do_reboot: bool = True, do_finalize: bool = True):
-    cp = invoke_aklite(['check', '--json', '1'])
-    verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
+def install_target(target: Target, explicit_version: bool = True, do_reboot: bool = True, do_finalize: bool = True):
+    # combined-steps ("update") shares one correlation id for check+download+install, so its
+    # callbacks/events need the check+download prefix; separate-steps verifies those up front.
+    combined_steps = single_step
 
     previous_target = get_target_for_actual_version(aklite_current_version())
     if target.install_rollback or target.run_rollback:
@@ -566,36 +608,47 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
     if target.run_rollback:
         requires_reboot = previous_target.ostree_image_version != target.ostree_image_version
 
-    if explicit_version:
-        cp = invoke_aklite(['pull', str(target.actual_version)])
+    if combined_steps:
+        cmd = ['update']
+        if explicit_version:
+            cmd.append(str(target.actual_version))
+        if delay_app_install:
+            cmd.append("--install-mode=delay-app-install")
+        cp = invoke_aklite(cmd)
+        callback_prefix = [
+            ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
+            ("download-pre", ""), ("download-post", "OK"),
+        ]
+        events_prefix = {('EcuDownloadStarted', None), ('EcuDownloadCompleted', True)}
     else:
-        cp = invoke_aklite(['pull'])
-    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
-    verify_callback([("download-pre", ""), ("download-post", "OK")])
-    verify_events(target.actual_version, {
-            ('EcuDownloadStarted', None),
-            ('EcuDownloadCompleted', True),
-        })
+        cp = invoke_aklite(['check', '--json', '1'])
+        verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
 
-    # cp = invoke_aklite(['install', str(get_target_version(Target.BrokenBuild))]) # not existing target
-    # assert cp.returncode == ReturnCodes.TufTargetNotFound
-    # verify_callback([])
+        if explicit_version:
+            cp = invoke_aklite(['pull', str(target.actual_version)])
+        else:
+            cp = invoke_aklite(['pull'])
+        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+        verify_callback([("download-pre", ""), ("download-post", "OK")])
+        verify_events(target.actual_version, {
+                ('EcuDownloadStarted', None),
+                ('EcuDownloadCompleted', True),
+            })
 
-    # version = 159
-    # cp = invoke_aklite(['install', str(version)]) # not downloaded target
-    # assert cp.returncode == ReturnCodes.InstallAppPullFailure
-    # verify_callback([])
+        cmd = ['install']
+        if explicit_version:
+            cmd.append(str(target.actual_version))
+        if delay_app_install:
+            cmd.append("--install-mode=delay-app-install")
+        cp = invoke_aklite(cmd)
+        callback_prefix = []
+        events_prefix = set()
 
-    cmd = ['install']
-    if explicit_version:
-        cmd.append(str(target.actual_version))
-    if delay_app_install:
-        cmd.append("--install-mode=delay-app-install")
-    cp = invoke_aklite(cmd)
     if target.install_rollback:
         assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
-        verify_callback([("install-pre", ""), ("install-post", "FAILED"), ("install-pre", ""), ("install-post", "OK")])
-        verify_events(target.actual_version, {
+        verify_callback(callback_prefix + [
+            ("install-pre", ""), ("install-post", "FAILED"), ("install-pre", ""), ("install-post", "OK")])
+        verify_events(target.actual_version, events_prefix | {
             ('EcuInstallationStarted', None),
             ('EcuInstallationCompleted', False),
         }, True)
@@ -606,8 +659,8 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
 
     elif requires_reboot: # !install_rollback
         assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
-        verify_callback([("install-pre", ""), ("install-post", "NEEDS_COMPLETION")])
-        verify_events(target.actual_version, {
+        verify_callback(callback_prefix + [("install-pre", ""), ("install-post", "NEEDS_COMPLETION")])
+        verify_events(target.actual_version, events_prefix | {
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationApplied', None),
             })
@@ -625,7 +678,7 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
                 cp = invoke_aklite(['run'])
                 assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
                 verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-                verify_events(target.actual_version, {
+                verify_events(target.actual_version, events_prefix | {
                         ('EcuInstallationStarted', None),
                         ('EcuInstallationApplied', None),
                         ('EcuInstallationCompleted', False),
@@ -638,7 +691,7 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
             else:
                 assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
                 verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-                verify_events(target.actual_version, {
+                verify_events(target.actual_version, events_prefix | {
                         ('EcuInstallationStarted', None),
                         ('EcuInstallationApplied', None),
                         ('EcuInstallationCompleted', True),
@@ -646,23 +699,15 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
 
     elif delay_app_install: # !install_rollback && !requires_reboot
         assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization, cp.stdout.decode("utf-8")
-        verify_callback([
-            ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")
-            ])
+        verify_callback(callback_prefix + [("install-pre", ""), ("install-post", "NEEDS_COMPLETION")])
 
-        if use_fioup:
-            # fioup has the same correlation id for fetch and install operations
-            verify_events(target.actual_version, {
-                ('EcuDownloadStarted', None),
-                ('EcuDownloadCompleted', True),
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationApplied', None),
-            })
-        else:
-            verify_events(target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationApplied', None),
-            })
+        # fioup shares one correlation id for fetch+install regardless of combined_steps.
+        pending_events_prefix = events_prefix | ({('EcuDownloadStarted', None), ('EcuDownloadCompleted', True)} if use_fioup else set())
+        verify_events(target.actual_version, pending_events_prefix | {
+            ('EcuInstallationStarted', None),
+            ('EcuInstallationApplied', None),
+        })
+
         cp = invoke_aklite(['run'])
 
         if target.run_rollback:
@@ -670,7 +715,9 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
                 ("install-final-pre", ""), ("install-post", "FAILED"),
                 ("install-pre", ""), ("install-post", "OK")
             ])
-            if use_fioup:
+            # fioup drops the delay-install flag, so `fioup install` already resolved the failing
+            # app by now (Ok path below); `fioup update` surfaces it as StartFailed instead.
+            if not combined_steps and use_fioup:
                 assert cp.returncode == ReturnCodes.StartFailed, cp.stdout.decode("utf-8")
                 # fioup has the same correlation id for fetch and install operations
                 verify_events(target.actual_version, {
@@ -692,7 +739,7 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
                 }, False)
             else:
                 assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
-                verify_events(target.actual_version, {
+                verify_events(target.actual_version, events_prefix | {
                     ('EcuInstallationStarted', None),
                     ('EcuInstallationApplied', None),
                     ('EcuInstallationCompleted', False),
@@ -704,198 +751,24 @@ def install_with_separate_steps(target: Target, explicit_version: bool = True, d
         else:
             assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
             verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-            if use_fioup:
-                # fioup has the same correlation id for fetch and install operations
-                verify_events(target.actual_version, {
-                    ('EcuDownloadStarted', None),
-                    ('EcuDownloadCompleted', True),
-                    ('EcuInstallationStarted', None),
-                    ('EcuInstallationApplied', None),
-                    ('EcuInstallationCompleted', True),
-                })
-            else:
-                verify_events(target.actual_version, {
-                    ('EcuInstallationStarted', None),
-                    ('EcuInstallationApplied', None),
-                    ('EcuInstallationCompleted', True),
-                })
+            final_events_prefix = events_prefix | ({('EcuDownloadStarted', None), ('EcuDownloadCompleted', True)} if use_fioup else set())
+            verify_events(target.actual_version, final_events_prefix | {
+                ('EcuInstallationStarted', None),
+                ('EcuInstallationApplied', None),
+                ('EcuInstallationCompleted', True),
+            })
 
     else: # !install_rollback && !requires_reboot && !delay_app_install
         if target.run_rollback:
-            assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
-            verify_callback([
+            verify_callback(callback_prefix + [
                 ("install-pre", ""), ("install-post", "FAILED"),
                 ("install-pre", ""), ("install-post", "OK")
                 ])
-            verify_events(target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', False),
-            }, True)
-
-            verify_events(final_target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', True),
-            }, False)
-
-        else:
-            assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
-            verify_callback([("install-pre", ""), ("install-post", "OK")])
-            verify_events(target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', True),
-            })
-
-    if (requires_reboot and (not do_reboot or not do_finalize)):
-        assert aklite_current_version() == previous_target.actual_version, cp.stdout.decode("utf-8")
-    else:
-        assert aklite_current_version() == final_target.actual_version, cp.stdout.decode("utf-8")
-
-    if not explicit_version:
-        # Make sure we would not try a new install, after trying to install the latest one
-        cp = invoke_aklite(['check', '--json', '1'])
-        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
-        verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
-
-def install_with_single_step(target: Target, explicit_version: bool = True, do_reboot: bool = True, do_finalize: bool = True):
-    previous_target = get_target_for_actual_version(aklite_current_version())
-    if target.install_rollback or target.run_rollback:
-        final_target = previous_target
-    else:
-        final_target = target
-    requires_reboot = previous_target.ostree_image_version != final_target.ostree_image_version
-    if target.run_rollback:
-        requires_reboot = previous_target.ostree_image_version != target.ostree_image_version
-
-    cmd = ['update']
-    if explicit_version:
-        cmd.append(str(target.actual_version))
-    if delay_app_install:
-        cmd.append("--install-mode=delay-app-install")
-    cp = invoke_aklite(cmd)
-
-    if target.install_rollback:
-        assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
-        verify_callback([
-            ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
-            ("download-pre", ""), ("download-post", "OK"),
-            ("install-pre", ""), ("install-post", "FAILED"),
-            ("install-pre", ""), ("install-post", "OK")])
-        verify_events(target.actual_version, {
-            ('EcuDownloadStarted', None),
-            ('EcuDownloadCompleted', True),
-            ('EcuInstallationStarted', None),
-            ('EcuInstallationCompleted', False),
-        }, True)
-        verify_events(final_target.actual_version, {
-            ('EcuInstallationStarted', None),
-            ('EcuInstallationCompleted', True),
-        }, False)
-
-    elif requires_reboot: # !install_rollback
-        assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
-        verify_callback([
-                ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
-                ("download-pre", ""), ("download-post", "OK"),
-                ("install-pre", ""), ("install-post", "NEEDS_COMPLETION"),
-                ])
-        verify_events(target.actual_version, {
-                ('EcuDownloadStarted', None),
-                ('EcuDownloadCompleted', True),
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationApplied', None),
-            })
-        if do_reboot:
-            sys_reboot()
-        if do_finalize:
-            cp = invoke_aklite(['run'])
-            if target.run_rollback:
-                assert cp.returncode == ReturnCodes.InstallRollbackNeedsReboot, cp.stdout.decode("utf-8")
-                verify_callback([
-                    ("install-final-pre", ""), ("install-post", "FAILED"),
-                    ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")])
-                sys_reboot()
-                cp = invoke_aklite(['run'])
-                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
-                verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-                verify_events(target.actual_version, {
-                        ('EcuDownloadStarted', None),
-                        ('EcuDownloadCompleted', True),
-                        ('EcuInstallationStarted', None),
-                        ('EcuInstallationApplied', None),
-                        ('EcuInstallationCompleted', False),
-                    }, True)
-                verify_events(final_target.actual_version, {
-                        ('EcuInstallationStarted', None),
-                        ('EcuInstallationApplied', None),
-                        ('EcuInstallationCompleted', True),
-                    }, False)
-            else:
-                assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
-                verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-                verify_events(target.actual_version, {
-                        ('EcuDownloadStarted', None),
-                        ('EcuDownloadCompleted', True),
-                        ('EcuInstallationStarted', None),
-                        ('EcuInstallationApplied', None),
-                        ('EcuInstallationCompleted', True),
-                    })
-
-    elif delay_app_install: # !install_rollback && !requires_reboot
-        assert cp.returncode == ReturnCodes.InstallAppsNeedFinalization, cp.stdout.decode("utf-8")
-        verify_callback([
-            ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
-            ("download-pre", ""), ("download-post", "OK"),
-            ("install-pre", ""), ("install-post", "NEEDS_COMPLETION")
-            ])
-        verify_events(target.actual_version, {
-            ('EcuDownloadStarted', None),
-            ('EcuDownloadCompleted', True),
-            ('EcuInstallationStarted', None),
-            ('EcuInstallationApplied', None),
-        })
-
-        cp = invoke_aklite(['run'])
-        if target.run_rollback:
-            assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
-            verify_callback([
-                ("install-final-pre", ""), ("install-post", "FAILED"),
-                ("install-pre", ""), ("install-post", "OK")
-            ])
-            verify_events(target.actual_version, {
-                ('EcuDownloadStarted', None),
-                ('EcuDownloadCompleted', True),
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationApplied', None),
-                ('EcuInstallationCompleted', False),
-            }, True)
-            verify_events(final_target.actual_version, {
-                ('EcuInstallationStarted', None),
-                ('EcuInstallationCompleted', True),
-            }, False)
-        else:
-            assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
-            verify_callback([("install-final-pre", ""), ("install-post", "OK")])
-            verify_events(target.actual_version, {
-                    ('EcuDownloadStarted', None),
-                    ('EcuDownloadCompleted', True),
-                    ('EcuInstallationStarted', None),
-                    ('EcuInstallationApplied', None),
-                    ('EcuInstallationCompleted', True),
-                })
-
-    else:  # !install_rollback && !requires_reboot && !delay_app_install
-        if target.run_rollback:
-            verify_callback([
-                ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
-                ("download-pre", ""), ("download-post", "OK"),
-                ("install-pre", ""), ("install-post", "FAILED"),
-                ("install-pre", ""), ("install-post", "OK")
-                ])
-            if use_fioup:
+            # fioup's `install` verb resolves a failing app internally; `update` surfaces it as
+            # StartFailed and needs the manual `update --sync-current` recovery below.
+            if combined_steps and use_fioup:
                 assert cp.returncode == ReturnCodes.StartFailed, cp.stdout.decode("utf-8")
-                verify_events(target.actual_version, {
-                    ('EcuDownloadStarted', None),
-                    ('EcuDownloadCompleted', True),
+                verify_events(target.actual_version, events_prefix | {
                     ('EcuInstallationStarted', None),
                     ('EcuInstallationCompleted', False),
                 }, False)
@@ -911,6 +784,13 @@ def install_with_single_step(target: Target, explicit_version: bool = True, do_r
                 }, False)
             else:
                 assert cp.returncode == ReturnCodes.InstallRollbackOk, cp.stdout.decode("utf-8")
+                # separate-steps' `install` gets its own correlation id for the failed attempt;
+                # combined-steps' `update` folds attempt+recovery into one, so nothing separate to check.
+                if not combined_steps:
+                    verify_events(target.actual_version, {
+                        ('EcuInstallationStarted', None),
+                        ('EcuInstallationCompleted', False),
+                    }, True)
                 verify_events(final_target.actual_version, {
                     ('EcuInstallationStarted', None),
                     ('EcuInstallationCompleted', True),
@@ -918,14 +798,8 @@ def install_with_single_step(target: Target, explicit_version: bool = True, do_r
 
         else:
             assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
-            verify_callback([
-                ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
-                ("download-pre", ""), ("download-post", "OK"),
-                ("install-pre", ""), ("install-post", "OK")
-                ])
-            verify_events(target.actual_version, {
-                ('EcuDownloadStarted', None),
-                ('EcuDownloadCompleted', True),
+            verify_callback(callback_prefix + [("install-pre", ""), ("install-post", "OK")])
+            verify_events(target.actual_version, events_prefix | {
                 ('EcuInstallationStarted', None),
                 ('EcuInstallationCompleted', True),
             })
@@ -940,12 +814,6 @@ def install_with_single_step(target: Target, explicit_version: bool = True, do_r
         cp = invoke_aklite(['check', '--json', '1'])
         assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
         verify_callback([("check-for-update-pre", ""), ("check-for-update-post", "OK")])
-
-def install_target(target: Target, explicit_version: bool=True, do_reboot: bool=True, do_finalize: bool=True):
-    if single_step:
-        install_with_single_step(target, explicit_version, do_reboot, do_finalize)
-    else:
-        install_with_separate_steps(target, explicit_version, do_reboot, do_finalize)
 
 
 def do_rollback(target: Target, requires_reboot: bool, installation_in_progress: bool):
@@ -1186,28 +1054,20 @@ def test_apps_selection():
 @pytest.mark.parametrize('delay_app_install_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
-    global offline, single_step, delay_app_install
-    offline = offline_
-    single_step = single_step_
-    delay_app_install = delay_app_install_
+    set_test_mode(offline_, single_step_, delay_app_install_)
     run_test_sequence_incremental()
 
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('delay_app_install_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_random_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
-    global offline, single_step, delay_app_install
-    offline = offline_
-    single_step = single_step_
-    delay_app_install = delay_app_install_
+    set_test_mode(offline_, single_step_, delay_app_install_)
     run_test_sequence_random()
 
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_update_to_latest(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     run_test_sequence_update_to_latest()
 
 def run_test_switch_tag():
@@ -1264,17 +1124,13 @@ def run_test_deamon_auto_downgrade():
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [False])
 def test_tag_switch(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     run_test_switch_tag()
 
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [False])
 def test_auto_downgrade_prevention(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     run_test_auto_downgrade_prevention()
 
 
@@ -1312,8 +1168,7 @@ def run_test_pull_install_different_versions():
 
 @pytest.mark.parametrize('offline_', [False])
 def test_pull_install_different_tags(offline_: bool):
-    global offline
-    offline = offline_
+    set_test_mode(offline_)
     run_test_pull_install_different_versions()
 
 def test_auto_downgrade_daemon():
@@ -1352,9 +1207,7 @@ def run_test_rollback(do_reboot: bool, do_finalize: bool):
 def test_rollback(do_reboot: bool, do_finalize: bool, offline_: bool, single_step_: bool):
     if not do_reboot and do_finalize:
         return
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     logger.info(f"Testing rollback {do_reboot=} {do_finalize=}")
     run_test_rollback(do_reboot, do_finalize)
 
@@ -1521,9 +1374,7 @@ def run_test_no_space(reserved_storage: Optional[str] = None):
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_no_space(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     logger.info(f"Testing no space left on device")
     run_test_no_space()
 
@@ -1531,9 +1382,7 @@ def test_no_space(offline_: bool, single_step_: bool):
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_no_space_reserved_storage(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     # The run_test_no_space helper fills /var/sota down to ~50KB of free space. Reserving 1MiB
     # in bytes via pacman.reserved_storage must override the percentage watermark and trigger
     # DownloadFailureNoSpace, since available_bytes < reserved_bytes.
@@ -1587,9 +1436,7 @@ def run_test_reserved_storage_update_ok(reserved_storage: str):
 @pytest.mark.parametrize('single_step_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_reserved_storage_low_allows_update(offline_: bool, single_step_: bool):
-    global offline, single_step
-    offline = offline_
-    single_step = single_step_
+    set_test_mode(offline_, single_step_)
     # A tiny pacman.reserved_storage (1KiB) is well below the actual free space on /var/sota, so
     # the bytes-based path must not block a legitimate update.
     logger.info(f"Testing that a low pacman.reserved_storage value still allows the update")
@@ -1662,18 +1509,14 @@ def run_test_pre_pull_size_check(expect_enough_space: bool):
 
 @pytest.mark.parametrize('single_step_', [True, False])
 def test_pre_pull_no_space(single_step_: bool):
-    global offline, single_step
-    offline = False
-    single_step = single_step_
+    set_test_mode(False, single_step_)
     logger.info(f"Testing fiopull pre-pull size check rejects an update that won't fit")
     run_test_pre_pull_size_check(expect_enough_space=False)
 
 
 @pytest.mark.parametrize('single_step_', [True, False])
 def test_pre_pull_enough_space(single_step_: bool):
-    global offline, single_step
-    offline = False
-    single_step = single_step_
+    set_test_mode(False, single_step_)
     logger.info(f"Testing fiopull pre-pull size check allows an update that fits")
     run_test_pre_pull_size_check(expect_enough_space=True)
 
@@ -1773,9 +1616,7 @@ def run_test_bad_network():
 
 @pytest.mark.parametrize('single_step_', [True, False])
 def test_bad_network(single_step_: bool):
-    global offline, single_step
-    offline = False
-    single_step = single_step_
+    set_test_mode(False, single_step_)
 
     logger.info(f"Testing bad network conditions with single_step={single_step}")
     run_test_bad_network()
