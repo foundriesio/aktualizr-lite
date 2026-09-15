@@ -81,8 +81,11 @@ jobs:
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
@@ -176,8 +179,11 @@ jobs:
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
@@ -218,8 +224,11 @@ jobs:
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
@@ -260,8 +269,11 @@ jobs:
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
@@ -301,8 +313,11 @@ jobs:
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
@@ -343,8 +358,11 @@ jobs:
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
@@ -385,8 +403,11 @@ jobs:
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
@@ -428,8 +449,11 @@ jobs:
       - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
         id: check_image
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:${{ github.ref_name }}" >> $GITHUB_ENV
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
