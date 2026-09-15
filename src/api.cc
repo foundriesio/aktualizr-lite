@@ -922,6 +922,11 @@ class LocalLiteInstall : public LiteInstall {
 
     ostree_sysroot_ = std::make_shared<OSTree::Sysroot>(offline_update_config_.pacman);
     storage_ = INvStorage::newStorage(offline_update_config_.storage, false, StorageClient::kTUF);
+    // The package managers need a KeyManager reference, but an offline update never uses it;
+    // drop the PKCS#11 config so an HSM module isn't loaded for nothing.
+    auto km_config{offline_update_config_.keymanagerConfig()};
+    km_config.p11 = P11Config();
+    key_manager_ = std::make_unique<KeyManager>(storage_, km_config);
     if (offline_update_config_.pacman.type == ComposeAppManager::Name &&
         offline_update_config_.pacman.extra.count("reset_apps") == 0) {
       LOG_ERROR << "Cannot perform offline update if non-restorable app engine is set; set `[pacman].reset_apps = "
@@ -951,7 +956,7 @@ class LocalLiteInstall : public LiteInstall {
     if (offline_update_config_.pacman.type == RootfsTreeManager::Name) {
       // Download just ostree if this is "ostree" only update
       return std::make_unique<RootfsTreeManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
-                                                 storage_, nullptr, ostree_sysroot_, *nulled_key_manager_);
+                                                 storage_, nullptr, ostree_sysroot_, *key_manager_);
     }
 
     // Handle DG:/token-auth
@@ -1018,9 +1023,8 @@ class LocalLiteInstall : public LiteInstall {
         )};
 #endif
 
-    auto pacman =
-        std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader, storage_,
-                                            nullptr, ostree_sysroot_, *nulled_key_manager_, app_engine);
+    auto pacman = std::make_unique<ComposeAppManager>(offline_update_config_.pacman, offline_update_config_.bootloader,
+                                                      storage_, nullptr, ostree_sysroot_, *key_manager_, app_engine);
     if (pacman != nullptr) {
       pacman->checkForAppsToUpdate(*target_);
     }
@@ -1031,8 +1035,7 @@ class LocalLiteInstall : public LiteInstall {
   Config offline_update_config_;
   OSTree::Sysroot::Ptr ostree_sysroot_;
   std::shared_ptr<INvStorage> storage_;
-  // there is no need in the TLS cert/key manager if it is a local download
-  std::unique_ptr<KeyManager> nulled_key_manager_{nullptr};
+  std::unique_ptr<KeyManager> key_manager_;
 };
 
 bool AkliteClient::IsInstallationInProgress() const { return client_->getPendingTarget().IsValid(); }
