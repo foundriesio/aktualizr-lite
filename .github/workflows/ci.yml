@@ -16,7 +16,7 @@ jobs:
     name: Clang Format And Tidy
     runs-on: ubuntu-latest
     container:
-      image: foundries/aklite-dev
+      image: foundries/aklite-dev:ubuntu-26.10
       env:
         CXX: clang++
         CC: clang
@@ -36,7 +36,7 @@ jobs:
     name: Refresh ccache for development environment
     runs-on: ubuntu-latest
     container:
-      image: foundries/aklite-dev
+      image: foundries/aklite-dev:ubuntu-26.10
       env:
         CXX: clang++
         CC: clang
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: refresh-ccache-dev
     container:
-      image: foundries/aklite-dev
+      image: foundries/aklite-dev:ubuntu-26.10
       env:
         CXX: clang++
         CC: clang
@@ -134,7 +134,7 @@ jobs:
     needs: refresh-ccache-dev
     runs-on: ubuntu-latest
     container:
-      image: foundries/aklite-dev
+      image: foundries/aklite-dev:ubuntu-26.10
       env:
         CXX: clang++
         CC: clang
