@@ -4,6 +4,11 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 
+// Must be included at global scope: the fixtures below are #included inside `namespace fixtures`,
+// where libp11.h's PKCS11_SLOT/PKCS11_CTX typedefs would bind to libaktualizr/config.h's
+// forward declarations and stay incomplete.
+#include <libp11.h>
+
 #include "crypto/p11engine.h"
 #include "libaktualizr/types.h"
 #include "logging/logging.h"
