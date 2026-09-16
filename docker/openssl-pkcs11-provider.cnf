@@ -1,0 +1,13 @@
+# Settings for the pkcs11-provider, picked up whenever a library context loads it by name (e.g.
+# curl for "PROV" TLS client cert/key pkcs11: URIs). Not activated by default, so plain OpenSSL
+# users are unaffected.
+#
+# no-deinit: curl loads the provider into a private library context per easy handle and frees it
+# on curl_easy_cleanup(). Without this quirk the provider calls C_Finalize() then, which tears the
+# PKCS#11 module down for the whole process - breaking libp11 sessions (aktualizr's P11Engine) and
+# concurrent requests (libostree's fetcher) that still use it.
+[provider_sect]
+pkcs11 = pkcs11_sect
+
+[pkcs11_sect]
+pkcs11-module-quirks = no-deinit

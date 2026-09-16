@@ -1,0 +1,43 @@
+diff --git a/src/libostree/ostree-fetcher-curl.c b/src/libostree/ostree-fetcher-curl.c
+index 5c3bdd9a..7f7bbe18 100644
+--- a/src/libostree/ostree-fetcher-curl.c
++++ b/src/libostree/ostree-fetcher-curl.c
+@@ -807,6 +807,23 @@ adopt_steal_mainctx (OstreeFetcher *self, GMainContext *mainctx)
+     setsock (fdp, fdp->sockfd, fdp->action, self);
+ }
+ 
++/* Curl SSLCERTTYPE/SSLKEYTYPE for pkcs11: TLS client cert/key paths. OpenSSL 4.0
++ * removed the ENGINE API, so there curl can only reach PKCS#11 objects through the
++ * pkcs11 OpenSSL provider ("PROV"); keep using the pkcs11 engine ("ENG") otherwise.
++ * CURLOPT_SSLENGINE can't be used to detect this: on OpenSSL >= 3 curl treats the
++ * name as a provider to load, so setting it succeeds either way.
++ */
++static const char *
++pkcs11_curl_type (void)
++{
++  const char *ssl_version = curl_version_info (CURLVERSION_NOW)->ssl_version;
++  const char *openssl = ssl_version ? g_strstr_len (ssl_version, -1, "OpenSSL/") : NULL;
++
++  if (openssl != NULL && g_ascii_strtoull (openssl + strlen ("OpenSSL/"), NULL, 10) >= 4)
++    return "PROV";
++  return "ENG";
++}
++
+ static void
+ initiate_next_curl_request (FetcherRequest *req, GTask *task)
+ {
+@@ -901,12 +918,12 @@ initiate_next_curl_request (FetcherRequest *req, GTask *task)
+           g_assert_cmpint (rc, ==, CURLM_OK);
+           rc = curl_easy_setopt (req->easy, CURLOPT_SSLENGINE_DEFAULT, 1L);
+           g_assert_cmpint (rc, ==, CURLM_OK);
+-          rc = curl_easy_setopt (req->easy, CURLOPT_SSLKEYTYPE, "ENG");
++          rc = curl_easy_setopt (req->easy, CURLOPT_SSLKEYTYPE, pkcs11_curl_type ());
+           g_assert_cmpint (rc, ==, CURLM_OK);
+         }
+       if (g_str_has_prefix (self->tls_client_cert_path, "pkcs11:"))
+         {
+-          rc = curl_easy_setopt (req->easy, CURLOPT_SSLCERTTYPE, "ENG");
++          rc = curl_easy_setopt (req->easy, CURLOPT_SSLCERTTYPE, pkcs11_curl_type ());
+           g_assert_cmpint (rc, ==, CURLM_OK);
+         }
+ 
