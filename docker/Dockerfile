@@ -91,9 +91,13 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
 
 # OSTREE with libcurl support for HSM
 #  This allows ostree calls to libcurl to be able to keys controlled by pkcs11
+#  The patch makes ostree use the pkcs11 OpenSSL provider ("PROV") instead of the pkcs11 engine
+#  ("ENG") for pkcs11: TLS client cert/key paths on OpenSSL >= 4.0, which has no ENGINE API.
 WORKDIR /tmp
+COPY ostree-curl-pkcs11-provider.patch /tmp/
 RUN mkdir ostree && cd ostree && git init && git remote add origin https://github.com/ostreedev/ostree && \
     git fetch origin v2024.10 && git checkout FETCH_HEAD && \
+    git apply /tmp/ostree-curl-pkcs11-provider.patch && \
     ./autogen.sh CC="clang" CFLAGS='-Wno-error=missing-prototypes' \
     --with-libarchive \
     --disable-man \
@@ -121,6 +125,9 @@ RUN apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin
 # Restore a standalone "docker-compose" command for tests/tooling that still invoke it directly
 # instead of "docker compose" - the docker-compose-plugin binary works fine either way.
 RUN ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+
+# pkcs11-provider settings (see the file); /etc/ssl/openssl.cnf includes this directory
+COPY openssl-pkcs11-provider.cnf /etc/ssl/openssl.conf.d/pkcs11-provider.cnf
 
 # Install composeapp
 COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
