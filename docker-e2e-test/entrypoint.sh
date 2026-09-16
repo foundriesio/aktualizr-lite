@@ -6,7 +6,9 @@ if [ -z $DEV_USER ] || [ -z $DEV_GROUP ]; then
 fi
 
 # Recent ubuntu images have a user named 'ubuntu' with UID 1000, which might conflict with $DEV_USER.
-deluser ubuntu 2> /dev/null || true
+# Use userdel (always present, from the base passwd package) rather than deluser - newer Ubuntu
+# base images no longer pull in the adduser package that provides it.
+userdel ubuntu 2> /dev/null || true
 
 # Create a group with the specified GID if it doesn't already exist
 if ! getent group $DEV_GROUP >/dev/null; then
@@ -16,6 +18,13 @@ fi
 # Create a user with the specified UID and GID if it doesn't already exist
 if ! getent passwd $DEV_USER >/dev/null; then
     useradd -u $DEV_USER -g $DEV_GROUP -m dev
+fi
+
+# Let dev access the default SoftHSM token store (/var/lib/softhsm/tokens, group "softhsm")
+# for USE_SOFTHSM=1 registration runs. Best-effort: harmless if "dev" wasn't created above
+# (e.g. its UID was already taken by another user in the image).
+if getent group softhsm >/dev/null; then
+    usermod -aG softhsm dev 2>/dev/null || true
 fi
 
 # Change ownership of the home directory to the appuser

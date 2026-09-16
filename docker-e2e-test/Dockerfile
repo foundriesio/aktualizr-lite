@@ -25,7 +25,7 @@ RUN git clone https://github.com/foundriesio/ostreeuploader.git && cd ostreeuplo
     && cp ./bin/fiopull /usr/bin/fiopull
 
 
-FROM foundries/aklite-dev:ubuntu-25.04 AS aklite
+FROM foundries/aklite-dev:ubuntu-26.10 AS aklite
 
 # Install composectl
 COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
@@ -43,8 +43,12 @@ COPY --from=composeapp /build/ostreeuploader/bin/fiopull /usr/bin/fiopull
 # Install lmp-device-register
 RUN apt-get install -y libboost-iostreams-dev
 
+COPY lmp-device-register-libp11.patch /tmp/lmp-device-register-libp11.patch
+
 RUN git clone https://github.com/foundriesio/lmp-device-register \
-  && cd lmp-device-register && git checkout mp-90 \
+  && cd lmp-device-register && git checkout mp-94 \
+  && sed -i 's/find_package(Boost COMPONENTS filesystem iostreams program_options system REQUIRED)/find_package(Boost COMPONENTS filesystem iostreams program_options REQUIRED)/' CMakeLists.txt \
+  && git apply /tmp/lmp-device-register-libp11.patch \
   && cmake -S . -B ./build -DDOCKER_COMPOSE_APP=ON -DHARDWARE_ID=intel-corei7-64 && cmake --build ./build --target install
 
 # Install docker credential helper and auth configuration
