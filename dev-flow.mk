@@ -8,16 +8,15 @@ CTEST_ARGS ?= --output-on-failure
 CXX ?= clang++
 CC ?= clang
 GTEST_FILTER ?= "*"
-PKCS11_ENGINE_PATH ?= "/usr/lib/x86_64-linux-gnu/engines-3/pkcs11.so"
 EXTRA_CMAKE_CONFIG_ARGS ?= -DUSE_COMPOSEAPP_ENGINE=ON -DBUILD_AKLITE_OFFLINE=ON -DAUTO_DOWNGRADE=OFF
 
 all: config build
 
 config:
-	cmake -S . -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DBUILD_P11=ON -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations" -DPKCS11_ENGINE_PATH=${PKCS11_ENGINE_PATH} ${EXTRA_CMAKE_CONFIG_ARGS}
+	cmake -S . -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DBUILD_P11=ON -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations" ${EXTRA_CMAKE_CONFIG_ARGS}
 
 config-coverage:
-	cmake -S . -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DBUILD_P11=ON -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations" -DPKCS11_ENGINE_PATH=${PKCS11_ENGINE_PATH} ${EXTRA_CMAKE_CONFIG_ARGS} -DTEST_LABEL=${TEST_LABEL} -DBUILD_WITH_CODE_COVERAGE_AKLITE=ON
+	cmake -S . -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug -DBUILD_P11=ON -GNinja -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations" ${EXTRA_CMAKE_CONFIG_ARGS} -DTEST_LABEL=${TEST_LABEL} -DBUILD_WITH_CODE_COVERAGE_AKLITE=ON
 
 build:
 	cmake --build ${BUILD_DIR} --target ${TARGET}
@@ -41,5 +40,5 @@ install:
 	cp -r aktualizr/third_party/jsoncpp/include/json /usr/include
 
 garage-tools:
-	cmake -S . -B ${BUILD_DIR}-garage -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON -DBUILD_SOTA_TOOLS=ON -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations" -DPKCS11_ENGINE_PATH=${PKCS11_ENGINE_PATH}
+	cmake -S . -B ${BUILD_DIR}-garage -DCMAKE_BUILD_TYPE=Debug -GNinja -DBUILD_P11=ON -DBUILD_SOTA_TOOLS=ON -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations"
 	cmake --build ${BUILD_DIR}-garage --target all
