@@ -1,0 +1,95 @@
+diff --git a/src/openssl.cpp b/src/openssl.cpp
+index 03ff5c8..c0af27a 100644
+--- a/src/openssl.cpp
++++ b/src/openssl.cpp
+@@ -30,7 +30,10 @@ int openssl_gen_csr(const lmp_options &opt, EVP_PKEY *pub, EVP_PKEY *priv,
+ 
+ 	bio = BIO_new(BIO_s_mem());
+ 	req = X509_REQ_new();
+-	name = X509_REQ_get_subject_name(req);
++	/* OpenSSL 4.0 made this getter return const X509_NAME*, but the returned name is
++	 * still the CSR's own mutable subject name field - cast away the const to keep
++	 * populating it in place. */
++	name = (X509_NAME *)X509_REQ_get_subject_name(req);
+ 
+ 	if (X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+ 				       (const unsigned char *)
+@@ -99,7 +102,10 @@ int openssl_create_csr(const lmp_options &options, string &pkey, string &csr)
+ 
+ 	bio = BIO_new(BIO_s_mem());
+ 	req = X509_REQ_new();
+-	name = X509_REQ_get_subject_name(req);
++	/* OpenSSL 4.0 made this getter return const X509_NAME*, but the returned name is
++	 * still the CSR's own mutable subject name field - cast away the const to keep
++	 * populating it in place. */
++	name = (X509_NAME *)X509_REQ_get_subject_name(req);
+ 
+ 	if (X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+ 				       (const unsigned char *)
+diff --git a/src/pkcs11.cpp b/src/pkcs11.cpp
+index 340e4da..9eb4779 100644
+--- a/src/pkcs11.cpp
++++ b/src/pkcs11.cpp
+@@ -6,6 +6,7 @@
+ 
+ #include <device_register.h>
+ #include <libp11.h>
++#include <openssl/rsa.h>
+ 
+ /* HSM default information */
+ static const struct lmp_hsm {
+@@ -239,21 +240,13 @@ int pkcs11_create_csr(const lmp_options &opt, string &pkey, string &csr)
+ 	unsigned int n = 0;
+ 	int ret = 0;
+ 	bool created_keys = false;
+-	PKCS11_EC_KGEN ec = {
+-		.curve = "P-256",
+-	};
+-	PKCS11_KGEN_ATTRS attr = {
+-		.type = EVP_PKEY_EC,
+-		.token_label = hsm_cfg.token.c_str(),
+-		.key_label = hsm_cfg.tls_lbl.c_str(),
+-		.key_id = hsm_cfg.tls_id.c_str(),
+-	};
++	EVP_PKEY *kp = NULL;
++	unsigned char tls_id = (unsigned char)strtoul(hsm_cfg.tls_id.c_str(), NULL, 16);
+ 	bool init = false;
+ 
+ 	if (opt.hsm_module.empty())
+ 		leave;
+ 
+-	attr.kgen.ec = &ec;
+ again:
+ 	ctx = PKCS11_CTX_new();
+ 
+@@ -293,9 +286,29 @@ again:
+ 	if (PKCS11_login(slot, 0, opt.hsm_pin.c_str()))
+ 		leave_exit;
+ 
+-	if (PKCS11_generate_key(slot->token, &attr))
++	/* The on-token EC keygen API this used to call (PKCS11_generate_key/PKCS11_KGEN_ATTRS)
++	 * isn't usable with the libp11 version available here (the newer PKCS11_keygen()
++	 * replacement segfaults for EC on this libp11/token combination), and libp11's
++	 * PKCS11_store_private_key()/PKCS11_store_public_key() only support RSA keys, not EC.
++	 * So generate an RSA-2048 keypair in software instead and import it onto the token -
++	 * same approach aktualizr's own p11engine.cc uses for the analogous problem. The
++	 * Foundries backend CA accepts RSA CSRs the same as EC ones. */
++	kp = EVP_RSA_gen(2048);
++	if (!kp)
+ 		leave_exit;
+ 
++	if (PKCS11_store_private_key(slot->token, kp, (char *)hsm_cfg.tls_lbl.c_str(), &tls_id, 1)) {
++		EVP_PKEY_free(kp);
++		leave_exit;
++	}
++
++	if (PKCS11_store_public_key(slot->token, kp, (char *)hsm_cfg.tls_lbl.c_str(), &tls_id, 1)) {
++		EVP_PKEY_free(kp);
++		leave_exit;
++	}
++
++	EVP_PKEY_free(kp);
++
+ 	/* Keys have been created */
+ 	created_keys = true;
+ 

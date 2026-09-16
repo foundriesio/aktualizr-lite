@@ -278,13 +278,42 @@ def get_target_for_actual_version(actual_version: int):
             return target
     assert False, f"Unable to find target with version {actual_version}"
 
+# Opt-in: when USE_SOFTHSM=1, the device's mTLS client cert/key are provisioned onto a SoftHSM
+# token (via lmp-device-register's --hsm-module/--hsm-pin/--hsm-so-pin) instead of plain files,
+# exercising aklite's PKCS#11 client-cert path. Not supported with fioup, which has no HSM option.
+use_softhsm = os.getenv("USE_SOFTHSM") == "1"
+SOFTHSM_MODULE = "/usr/lib/softhsm/libsofthsm2.so"
+SOFTHSM_TOKEN_LABEL = "aktualizr"  # must match HSM_TOKEN_STR in lmp-device-register
+SOFTHSM_PIN = os.getenv("SOFTHSM_PIN", "1234")
+SOFTHSM_SO_PIN = os.getenv("SOFTHSM_SO_PIN", "1234")
+
+def setup_softhsm():
+    logger.info("Initializing SoftHSM token for PKCS#11 device registration...")
+    cmd = (
+        f"softhsm2-util --init-token --free --label {SOFTHSM_TOKEN_LABEL} "
+        f"--pin {SOFTHSM_PIN} --so-pin {SOFTHSM_SO_PIN}"
+    )
+    output = os.popen(cmd).read().strip()
+    logger.info(output)
+
 def register_if_required():
     if not os.path.exists("/var/sota/client.pem"):
         user_token = os.getenv("USER_TOKEN")
         if use_fioup:
+            if use_softhsm:
+                logger.warning("USE_SOFTHSM is set but fioup has no HSM support; registering with file-based creds")
             cmd = f'{fioup_cmd} register --api-token "{user_token}" --tag {primary_tag} --factory {factory_name} --hw-id {hardware_id}'
         else:
-            cmd = f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" --start-daemon 0 --tags {primary_tag} --hwid {hardware_id}'
+            hsm_args = ""
+            if use_softhsm:
+                setup_softhsm()
+                hsm_args = f" --hsm-module {SOFTHSM_MODULE} --hsm-pin {SOFTHSM_PIN} --hsm-so-pin {SOFTHSM_SO_PIN}"
+            # --mlock-all defaults to true (mlockall() to keep key material off swap), which fails
+            # under Docker's default memlock ulimit; not needed for a disposable test device.
+            cmd = (
+                f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" '
+                f"--start-daemon 0 --mlock-all 0 --tags {primary_tag} --hwid {hardware_id}{hsm_args}"
+            )
         logger.info(f"Registering device...")
         output = os.popen(cmd).read().strip()
         logger.info(output)
