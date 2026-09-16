@@ -25,7 +25,7 @@ RUN git clone https://github.com/foundriesio/ostreeuploader.git && cd ostreeuplo
     && cp ./bin/fiopull /usr/bin/fiopull
 
 
-FROM foundries/aklite-dev:ubuntu-25.04 AS aklite
+FROM foundries/aklite-dev:ubuntu-26.10 AS aklite
 
 # Install composectl
 COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/
@@ -43,9 +43,13 @@ COPY --from=composeapp /build/ostreeuploader/bin/fiopull /usr/bin/fiopull
 # Install lmp-device-register
 RUN apt-get install -y libboost-iostreams-dev
 
+# A commit on main: no release yet builds against OpenSSL 4.0 with the HSM options. Built without
+# REQUIRE_FACTORY, so there's no --factory (DEVICE_FACTORY sets it) and the API URLs are built in.
 RUN git clone https://github.com/foundriesio/lmp-device-register \
-  && cd lmp-device-register && git checkout mp-90 \
-  && cmake -S . -B ./build -DDOCKER_COMPOSE_APP=ON -DHARDWARE_ID=intel-corei7-64 && cmake --build ./build --target install
+  && cd lmp-device-register && git checkout d8f39a6 \
+  && cmake -S . -B ./build -DDOCKER_COMPOSE_APP=ON -DHARDWARE_ID=intel-corei7-64 -DDISABLE_PKCS11=OFF \
+       -DDEVICE_API=https://api.foundries.io/ota/devices/ -DOAUTH_API=https://app.foundries.io/oauth \
+  && cmake --build ./build --target install
 
 # Install docker credential helper and auth configuration
 COPY config.json /usr/lib/docker/config.json
