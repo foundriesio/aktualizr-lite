@@ -34,8 +34,10 @@ TEST(Exec, SuccessfulExecFailedExecutable) {
     const std::string err_msg{exc.what()};
 
     ASSERT_EQ(err_msg.find(err_msg_prefix), 0);
-    ASSERT_NE(err_msg.find("unrecognized option \'" + bad_option + "\'"), std::string::npos)
-        << "Actual error message: " + err_msg;
+    // The exact wording ("unrecognized option" vs "unexpected argument") differs between GNU
+    // coreutils and other `ls` implementations (e.g. Ubuntu 26.10's uutils-based `ls`), so just
+    // check that the offending option was echoed back, which both report.
+    ASSERT_NE(err_msg.find(bad_option), std::string::npos) << "Actual error message: " + err_msg;
   }
 }
 
