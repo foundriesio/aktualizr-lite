@@ -1204,13 +1204,6 @@ def run_test_sequence_random(updates_count: int = 20):
         target = all_primary_tag_targets[target_version]
         if target.build_error: # skip this one for now
             continue
-        if backend == "update-server" and target.run_rollback:
-            # update-server's TUF metadata is single-target-per-rollout, so the previous
-            # target is no longer trusted once a new rollout is created; aktualizr-lite's
-            # app-rollback path requires the rollback target to still be in trusted TUF
-            # (src/api.cc: AkliteClient::Installer(), require_target_in_tuf defaults true).
-            continue
-
         logger.info(f"Updating to {target.actual_version} {target}. SingleStep={single_step}, Offline={offline} DelayAppsInstall={delay_app_install}")
         write_settings(apps, prune)
         install_target(target)
@@ -1223,13 +1216,6 @@ def run_test_sequence_incremental():
         target = all_primary_tag_targets[target_version]
         if target.build_error: # skip this one for now
             continue
-        if backend == "update-server" and target.run_rollback:
-            # update-server's TUF metadata is single-target-per-rollout, so the previous
-            # target is no longer trusted once a new rollout is created; aktualizr-lite's
-            # app-rollback path requires the rollback target to still be in trusted TUF
-            # (src/api.cc: AkliteClient::Installer(), require_target_in_tuf defaults true).
-            continue
-
         logger.info(f"Updating to {target.actual_version} {target}. SingleStep={single_step}, Offline={offline} DelayAppsInstall={delay_app_install}")
         write_settings(apps, prune)
         install_target(target)
