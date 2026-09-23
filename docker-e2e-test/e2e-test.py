@@ -700,9 +700,18 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
             options = [ x.replace('pull', 'fetch').replace('run', 'start') for x in options if x not in ['--install-mode=delay-app-install'] ]
         cmd = fioup_cmd
 
+    env = None
+    if backend == "update-server":
+        env = os.environ.copy()
+        # aklite shells out to fiopull for the pre-pull size check. fiopull is a Go binary that
+        # performs its own HTTPS request and has no CA option (`fiopull update-size --help`), so
+        # it cannot verify update-server's private CA and the size check is silently skipped.
+        # Go honours SSL_CERT_FILE; point it at the CA the device already trusts.
+        env.setdefault("SSL_CERT_FILE", "/var/sota/root.crt")
+
     logger.info("  Running `" + " ".join([aklite_path] + options) + "`")
     if kill_after_sec is not None:
-        proc = subprocess.Popen([cmd] + options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([cmd] + options, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         try:
             outs, errs = proc.communicate(timeout=kill_after_sec)
             return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
@@ -713,7 +722,7 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
                 os.remove("/var/lock/aklite.lock")
             outs, errs = proc.communicate()
             return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
-    return subprocess.run([cmd] + options, capture_output=True)
+    return subprocess.run([cmd] + options, capture_output=True, env=env)
 
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None,
                    reserved_storage: Optional[str] = None, use_fiopull: bool = False):
