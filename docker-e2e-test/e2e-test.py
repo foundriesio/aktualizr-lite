@@ -438,7 +438,29 @@ def _ensure_target_rollout(version: int):
     else:
         assert False, f"Rollout for {update_name} did not take effect within 30s"
 
+    _refresh_tuf_metadata()
     _rollout_target_version = version
+
+def _refresh_tuf_metadata():
+    # `pull` and `install` run with CheckMode::Current (aktualizr-lite's src/main.cc), i.e. they
+    # use the TUF metadata already stored on the device. A Foundries device gateway lists every
+    # Target for the tag, so that stored copy still contains the one being pulled; update-server
+    # serves only the Target of the assigned update, so it predates the rollout just created and
+    # the lookup fails with "No Target found; version: N". Refresh it here.
+    #
+    # Tests assert on exact callback sequences, and this refresh is not part of any of them, so
+    # restore the callback log afterwards.
+    saved = None
+    if os.path.isfile(callback_log_path):
+        with open(callback_log_path) as f:
+            saved = f.read()
+    subprocess.run([fioup_cmd if use_fioup else aklite_path, "check"], capture_output=True)
+    if saved is None:
+        if os.path.isfile(callback_log_path):
+            os.remove(callback_log_path)
+    else:
+        with open(callback_log_path, "w") as f:
+            f.write(saved)
 
 def register_if_required():
     if not os.path.exists("/var/sota/client.pem"):
