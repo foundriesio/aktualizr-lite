@@ -418,17 +418,16 @@ def _ensure_target_rollout(version: int):
     # process (e.g. reused across local dev runs against the same instance), and rollout names
     # must be unique per (tag, update).
     rollout_name = f"e2e-{_rollout_counter}-{uuid.uuid4().hex[:8]}"
-    url = f"{update_server_url}/v1/updates/{target.tag}/{update_name}/rollouts/{rollout_name}"
+    url = f"{update_server_url}/v1/updates/{update_name}/rollouts/{rollout_name}"
     headers = {'Authorization': f'Bearer {user_token}'}
     res = requests.put(url, json={"uuids": [device_name]}, headers=headers)
     assert res.status_code in (200, 201, 202), \
         f"Unable to create rollout for {update_name}: {res.status_code} {res.text}"
 
-    # Rollouts are applied asynchronously by a background journal-processing daemon
-    # (update-server's server/ui/daemons rolloutWatchdog) -- poll for it to actually take effect
-    # rather than assuming a fixed wait is long enough, which raced intermittently even with a
-    # short --rolloutinterval (a `check`/`pull` issued right after PUT could still see stale
-    # cached TUF metadata from before the rollout applied).
+    # rolloutPut commits the rollout in a goroutine and returns 202 straight away (update-server's
+    # server/ui/api/handlers_rollouts.go), so a `check`/`pull` issued right after the PUT can still
+    # see the device on its previous update. The journal-processing daemon only reconciles what
+    # that goroutine failed to finish, so poll for the rollout to actually be effective.
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         res = requests.get(url, headers=headers)

@@ -8,12 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git-lfs \
     && rm -rf /var/lib/apt/lists/* && git lfs install
 
 WORKDIR /build
-# Pinned to a commit on foundriesio/update-server's unmerged `add-rollout-interval-flag` branch,
-# not a tagged release: adds a `--rolloutinterval` flag to `serve`, needed so a rollout created
-# by e2e-test.py doesn't sit unapplied for up to 5 minutes (the otherwise-compiled-in default,
-# server/ui/daemons's rolloutWatchdog). Switch back to fetching a tagged release binary (as
-# below, commented out) once this ships in one.
-ARG UPDATE_SERVER_REF=3258c3d8c2f5ff5ae36fd76c01d6694f76c11f5b
+# Pinned to a commit on foundriesio/update-server's main rather than a tagged release: the e2e
+# support targets the post-#277 API (the tag is gone from rollout creation and from the storage
+# addressing), which no release carries yet.
+ARG UPDATE_SERVER_REF=208e846d50febb6024953ff5a0079b45b900a58b
 RUN git clone https://github.com/foundriesio/update-server.git && cd update-server \
     && git checkout ${UPDATE_SERVER_REF} \
     && git lfs pull \
@@ -29,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=build /usr/local/bin/fioserver /usr/local/bin/fioserver
 
-# Once `--rolloutinterval` ships in a tagged release, replace the build stage above with:
+# Once a release carries the post-#277 API, replace the build stage above with:
 #   ARG UPDATE_SERVER_VERSION=vX.Y.Z
 #   ARG TARGETARCH=amd64
 #   RUN curl -fsSL -o /usr/local/bin/fioserver \
