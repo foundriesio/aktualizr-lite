@@ -221,6 +221,13 @@ def secondary_tag_is_set():
         return False
     return True
 
+def require_secondary_tag():
+    # e2e-test-create-targets-local.py generates Targets for a single tag only, so there is no
+    # secondary tag to switch to when running against update-server.
+    if backend == "update-server":
+        pytest.skip("secondary-tag Targets are not generated for the update-server backend")
+    assert secondary_tag_is_set()
+
 e2e_test_ostree_tgz = os.getenv("E2E_TEST_OSTREE_TGZ")
 
 logger.info(f"End-to-end test environment variables:")
@@ -1272,6 +1279,12 @@ def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_insta
 @pytest.mark.parametrize('delay_app_install_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_random_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
+    if backend == "update-server":
+        # The random sequence jumps backward to lower-version Targets. Reaching one needs a
+        # rollout of an earlier update, whose TUF role versions are lower than what the device
+        # already stored (update-server bumps them per upload, monotonic), so the check-in fails
+        # with "TUF metadata check failure: Rollback attempt".
+        pytest.skip("downgrade to an earlier-uploaded Target trips update-server's monotonic TUF versioning")
     set_test_mode(offline_, single_step_, delay_app_install_)
     run_test_sequence_random()
 
@@ -1282,7 +1295,7 @@ def test_update_to_latest(offline_: bool, single_step_: bool):
     run_test_sequence_update_to_latest()
 
 def run_test_switch_tag():
-    assert secondary_tag_is_set()
+    require_secondary_tag()
     restore_system_state()
     apps = None # All apps, for now
     write_settings(apps, prune)
@@ -1300,7 +1313,7 @@ def run_test_switch_tag():
     install_target(all_secondary_tag_targets[Target.UpdateOstreeWithApps])
 
 def run_test_auto_downgrade_prevention():
-    assert secondary_tag_is_set()
+    require_secondary_tag()
     restore_system_state()
     apps = None # All apps, for now
     write_settings(apps, prune, secondary_tag)
@@ -1316,7 +1329,7 @@ def run_test_auto_downgrade_prevention():
     install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
 
 def run_test_deamon_auto_downgrade():
-    assert secondary_tag_is_set()
+    require_secondary_tag()
     auto_downgrade_enabled = False
     restore_system_state()
     apps = None # All apps, for now
@@ -1379,6 +1392,11 @@ def run_test_pull_install_different_versions():
 
 @pytest.mark.parametrize('offline_', [False])
 def test_pull_install_different_tags(offline_: bool):
+    if backend == "update-server":
+        # This pulls one version and installs another, so both must be in the device's trusted
+        # TUF metadata. update-server serves only the Target of the currently assigned update,
+        # so the second lookup fails with "No Target found; version: N".
+        pytest.skip("pull and install of different versions needs several Targets in TUF metadata")
     set_test_mode(offline_)
     run_test_pull_install_different_versions()
 
