@@ -84,6 +84,10 @@ services:
       working_dir: "${PWD}"
       hostname: device
       user: "root"
+      # tc/netem: test_kill_process and test_fiopull_interrupt_resume shape eth0 to slow the
+      # ostree pull enough to interrupt it.
+      cap_add:
+        - NET_ADMIN
       environment:
         - FACTORY=${FACTORY}
         - AUTH_TOKEN=${AUTH_TOKEN}
