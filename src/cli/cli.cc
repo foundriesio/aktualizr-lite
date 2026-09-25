@@ -365,7 +365,9 @@ StatusCode CompleteInstall(AkliteClient &client) {
         return SC::InstallRollbackFailed;
       }
       LOG_INFO << "Rolling back to " << rollback_target.Name() << "...";
-      auto ri = client.Installer(rollback_target);
+      // The rollback Target comes from the installation log, so it may not be in the current
+      // TUF metadata; Installer() still verifies it via wasTargetInstalled().
+      auto ri = client.Installer(rollback_target, "", "", InstallMode::All, nullptr, false);
       if (ri == nullptr) {
         LOG_ERROR
             << "Unexpected error: installer couldn't find the rollback Target in the DB; try to install another Target";
