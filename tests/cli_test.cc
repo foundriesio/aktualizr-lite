@@ -16,6 +16,12 @@
 
 using namespace aklite;
 
+TEST(InstallResult, BootFwNeedsCompletionIsNotFailure) {
+  const InstallResult result{InstallResult::Status::BootFwNeedsCompletion, "reboot required"};
+
+  ASSERT_TRUE(result);
+}
+
 class CliClient : public AkliteTest {
  protected:
   std::shared_ptr<AkliteClientExt> createAkClient(InitialVersion initial_version = InitialVersion::kOn) {
