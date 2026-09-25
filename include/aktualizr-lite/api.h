@@ -91,7 +91,8 @@ class InstallResult {
   // NOLINTNEXTLINE(hicpp-explicit-conversions,google-explicit-constructor)
   operator bool() const {
     return status == Status::Ok || status == Status::OkBootFwNeedsCompletion || status == Status::NeedsCompletion ||
-           status == Status::AppsNeedCompletion || status == Status::InstallRollbackOk;
+           status == Status::AppsNeedCompletion || status == Status::BootFwNeedsCompletion ||
+           status == Status::InstallRollbackOk;
   }
 };
 
