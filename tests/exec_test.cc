@@ -30,12 +30,12 @@ TEST(Exec, SuccessfulExecFailedExecutable) {
 
   try {
     exec(executable + " " + bad_option, err_msg_prefix);
-  } catch (const std::exception& exc) {
+  } catch (const ExecError& exc) {
     const std::string err_msg{exc.what()};
 
     ASSERT_EQ(err_msg.find(err_msg_prefix), 0);
-    ASSERT_NE(err_msg.find("unrecognized option \'" + bad_option + "\'"), std::string::npos)
-        << "Actual error message: " + err_msg;
+    // GNU and uutils `ls` word the error differently, but both echo the bad option to stderr.
+    ASSERT_NE(exc.StdErr.find(bad_option), std::string::npos) << "Actual error message: " + err_msg;
   }
 }
 

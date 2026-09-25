@@ -117,11 +117,21 @@ class Handler(SimpleHTTPRequestHandler):
 
                 # seek to the beginning of the im-memory tar
                 tarred_load_manifest.seek(0)
-                # extract and store the image load manifest
+                # extract and store the image load manifest. composectl doesn't append the
+                # standard two-block (1024-byte) end-of-archive terminator, so tarfile raises
+                # ReadError("unexpected end of data") once it runs out of real members to iterate;
+                # that's expected here, not a truncated/corrupt archive, as long as we already
+                # found what we were looking for.
+                found_manifest = False
                 with tarfile.open(fileobj=tarred_load_manifest, mode='r') as t:
-                    for member in t:
-                        if member.name == "manifest.json":
-                            t.extract(member, self.server.root_dir, set_attrs=False)
+                    try:
+                        for member in t:
+                            if member.name == "manifest.json":
+                                t.extract(member, self.server.root_dir, set_attrs=False)
+                                found_manifest = True
+                    except tarfile.ReadError:
+                        if not found_manifest:
+                            raise
         try:
             with open(os.path.join(self.server.root_dir, "manifest.json")) as mf:
                 lm = json.load(mf)
@@ -159,16 +169,20 @@ class Handler(SimpleHTTPRequestHandler):
             logger.error(exc)
 
         try:
-            image_uri = lm[0]["RepoTags"][0]
-        except KeyError:
+            repo_tags = lm[0]["RepoTags"]
+            image_uri = repo_tags[0]
+        except (KeyError, IndexError):
             self.send_response(400)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'error': 'missing `RepoTags` in the manifest.json'}).encode())
             return
 
-        # Make the `docker-compose_fake think that the image is installed/pulled/loaded
-        images[image_uri] = True
+        # Make the `docker-compose_fake` think that the image is installed/pulled/loaded. Record
+        # every RepoTags entry (not just the first), since the caller may look the image up by
+        # either its tag or its digest form.
+        for tag in repo_tags:
+            images[tag] = True
         with open(os.path.join(self.server.root_dir, "images.json"), "w+") as f:
             json.dump(images, f)
 
