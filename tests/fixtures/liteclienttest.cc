@@ -40,10 +40,10 @@ class ClientTest :virtual public ::testing::Test {
   static std::string SysRootSrc;
 
  protected:
-  ClientTest(std::string certs_dir = "")
+  ClientTest(std::string certs_dir = "", const std::string& sysroot_os = os)
       : boot_flag_mgr_{std::make_shared<FioVb>((test_dir_.Path() / "fiovb").string())},
-        sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, os},
-        sys_repo_{(test_dir_.Path() / "sysrepo").string(), os},
+        sys_rootfs_{(test_dir_.Path() / "sysroot-fs").string(), branch, hw_id, sysroot_os},
+        sys_repo_{(test_dir_.Path() / "sysrepo").string(), sysroot_os},
         tuf_repo_{test_dir_.Path() / "repo"},
         ostree_repo_{(test_dir_.Path() / "treehub").string(), true},
         device_gateway_{ostree_repo_, tuf_repo_, certs_dir},
