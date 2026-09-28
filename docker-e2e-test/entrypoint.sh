@@ -50,15 +50,23 @@ if [ -f /registry-certs/registry.crt ] && ! [ -f /usr/local/share/ca-certificate
     update-ca-certificates
 fi
 
+# update-server models a non-LmP distro: use meta-foundries' default OS name and leave pacman.os
+# unset, so aklite has to derive it from the sysroot.
+if [ "$E2E_BACKEND" = "update-server" ]; then
+    os_name=nodistro
+else
+    os_name=lmp
+fi
+
 # Initialize ostree
 if [ ! -d /sysroot/ostree/repo ]; then
-    echo "Initializing sysroot ostree..."
+    echo "Initializing sysroot ostree (OS name: $os_name)..."
     ostree admin init-fs /sysroot
-    ostree admin os-init lmp
+    ostree admin os-init $os_name
     ostree config set core.mode bare-user
-    ${PWD}/tests/make_sys_rootfs.sh initfs lmp intel-corei7-64 lmp
+    ${PWD}/tests/make_sys_rootfs.sh initfs lmp intel-corei7-64 $os_name
     commit=$(ostree commit initfs --branch lmp)
-    ostree admin deploy --os=lmp $commit
+    ostree admin deploy --os=$os_name $commit
     rm -rf initfs
     chown -R dev:devgrp /ostree
     ostree config set core.mode bare-user-only
@@ -74,7 +82,11 @@ ln -sfn ${PWD}/build/aktualizr/src/aktualizr_get/aktualizr-get /usr/local/bin/ak
 # Initialize default toml config
 sysroot_cfg=/usr/lib/sota/conf.d/z-90-sysroot.toml
 if [ ! -f $sysroot_cfg ]; then
-    echo "[pacman]\nbooted = 0\nos = \"lmp\"" > $sysroot_cfg
+    if [ "$os_name" = "lmp" ]; then
+        echo "[pacman]\nbooted = 0\nos = \"lmp\"" > $sysroot_cfg
+    else
+        echo "[pacman]\nbooted = 0" > $sysroot_cfg
+    fi
 fi
 
 bootloader_cfg=/usr/lib/sota/conf.d/z-91-bootloader.toml
