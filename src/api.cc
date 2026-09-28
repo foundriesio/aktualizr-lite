@@ -324,8 +324,17 @@ CheckInResult AkliteClient::CheckIn() const {
     return checkInFailure(client_, hw_id_, check_status, err_msg);
   }
 
+  auto allTargets{tuf_repo_->GetTargets()};
+  if (allTargets.empty()) {
+    LOG_INFO << "No Targets are available for the device";
+    if (invoke_post_cb_at_checkin_) {
+      client_->notifyTufUpdateFinished();
+    }
+    return {CheckInResult::Status::Ok, hw_id_, std::vector<TufTarget>{}};
+  }
+
   LOG_INFO << "Searching for matching TUF Targets...";
-  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
+  auto matchingTargets = filterTargets(allTargets, hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
     // TODO: consider reporting about it to the backend to make it easier to figure out
     // why specific devices are not picking up a new Target
@@ -594,8 +603,14 @@ CheckInResult AkliteClient::CheckInCurrent(const LocalUpdateSource* local_update
     return {CheckInResult::Status::SecurityError, hw_id_, {}};
   }
 
+  auto allTargets{tuf_repo_->GetTargets()};
+  if (allTargets.empty()) {
+    LOG_INFO << "No Targets are available for the device";
+    return {CheckInResult::Status::OkCached, hw_id_, std::vector<TufTarget>{}};
+  }
+
   LOG_INFO << "Searching for matching TUF Targets...";
-  auto matchingTargets = filterTargets(tuf_repo_->GetTargets(), hw_id_, client_->tags, secondary_hwids_);
+  auto matchingTargets = filterTargets(allTargets, hw_id_, client_->tags, secondary_hwids_);
   if (matchingTargets.empty()) {
     // TODO: consider reporting about it to the backend to make it easier to figure out
     // why specific devices are not picking up a new Target
