@@ -182,7 +182,10 @@ TEST_F(ApiClientTest, CheckInLocal) {
 }
 
 TEST_F(ApiClientTest, CheckInWithoutTargetImport) {
-  AkliteClient client(createLiteClient(InitialVersion::kOff));
+  auto lite_client = createLiteClient(InitialVersion::kOff);
+  AkliteClient client(lite_client);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")));
 
   auto result = client.CheckIn();
 
@@ -191,13 +194,15 @@ TEST_F(ApiClientTest, CheckInWithoutTargetImport) {
   auto val = getDeviceGateway().readSotaToml();
   ASSERT_NE(std::string::npos, val.find("[pacman]"));
 
-  ASSERT_EQ(CheckInResult::Status::NoMatchingTargets, result.status);
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
   ASSERT_EQ(0, result.Targets().size());
 
   ASSERT_TRUE(getDeviceGateway().resetSotaToml());
   ASSERT_TRUE(resetEvents());
 
   auto new_target = createTarget();
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-pre"), testing::_, testing::StrEq(""))).Times(1);
+  EXPECT_CALL(*lite_client, callback(testing::StrEq("check-for-update-post"), testing::_, testing::StrEq("OK")));
   result = client.CheckIn();
   ASSERT_EQ(1, getDeviceGateway().getEvents().size());
   ASSERT_EQ("", getDeviceGateway().readSotaToml());

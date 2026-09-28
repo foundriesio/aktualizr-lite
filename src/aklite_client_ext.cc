@@ -43,8 +43,13 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     return {GetTargetToInstallResult::Status::BadCheckinStatus, TufTarget(), err};
   }
 
+  const auto current = GetCurrent();
   bool rollback_operation = false;
   auto candidate_target = checkin_res.SelectTarget(version, target_name);
+  if (checkin_res.Targets().empty() && version == -1 && target_name.empty()) {
+    // Nothing to update to, but the current Target's Apps still need to be checked/synced
+    candidate_target = current;
+  }
   if (candidate_target.IsUnknown()) {
     err = "No matching target";
     if (!invoke_post_cb_at_checkin_) {
@@ -54,7 +59,6 @@ GetTargetToInstallResult AkliteClientExt::GetTargetToInstall(const CheckInResult
     return {GetTargetToInstallResult::Status::TufTargetNotFound, TufTarget(), err};
   }
 
-  const auto current = GetCurrent();
   // It may occur that the TUF targets list only has versions lower than the current one.
   // The `auto_downgrade` parameter controls what to do in such situation: Should a version lower than the current
   //  one be accepted as a valid selected target for installation or not
