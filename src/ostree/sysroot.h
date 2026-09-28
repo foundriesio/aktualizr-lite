@@ -42,6 +42,7 @@ class Sysroot {
   const std::string& path() const { return cfg_.path; }
   const std::string& repoPath() const { return repo_path_; }
   const std::string& deployment_path() const { return deployment_path_; }
+  const std::string& osname() const { return osname_; }
 
   virtual std::string getDeploymentHash(Deployment deployment_type) const;
   bool reload();
@@ -55,7 +56,8 @@ class Sysroot {
 
   const Config cfg_;
   const std::string repo_path_;
-  const std::string deployment_path_;
+  std::string osname_;
+  std::string deployment_path_;
 
   GObjectUniquePtr<OstreeSysroot> sysroot_;
 };

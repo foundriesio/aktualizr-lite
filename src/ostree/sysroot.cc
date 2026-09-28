@@ -13,7 +13,7 @@ const unsigned int Sysroot::Config::MaxReservedStorageSpacePercentageOstree{50};
 Sysroot::Config::Config(const PackageConfig& pconfig) {
   path = pconfig.sysroot.string();
   type = pconfig.booted;
-  osname = pconfig.os.empty() ? "lmp" : pconfig.os;
+  osname = pconfig.os;
 
   if (pconfig.extra.count(ReservedStorageSpacePercentageOstreeParamName) == 1) {
     const std::string val_str{pconfig.extra.at(ReservedStorageSpacePercentageOstreeParamName)};
@@ -35,10 +35,30 @@ Sysroot::Config::Config(const PackageConfig& pconfig) {
   }
 }
 
-Sysroot::Sysroot(const PackageConfig& pconfig)
-    : cfg_{pconfig},
-      repo_path_{cfg_.path + "/ostree/repo"},
-      deployment_path_{cfg_.path + "/ostree/deploy/" + cfg_.osname + "/deploy"} {
+// The configured name wins; otherwise the sysroot itself tells which OS it holds,
+// so no distro-specific default is needed.
+static std::string resolveOsName(const std::string& configured, OstreeSysroot* sysroot) {
+  if (!configured.empty()) {
+    return configured;
+  }
+  OstreeDeployment* deployment = ostree_sysroot_get_booted_deployment(sysroot);
+  if (deployment == nullptr) {
+    // Non-booted sysroot; it holds a single OS, so any deployment is representative
+    g_autoptr(GPtrArray) deployments = ostree_sysroot_get_deployments(sysroot);
+    if (deployments != nullptr && deployments->len > 0) {
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+      deployment = static_cast<OstreeDeployment*>(deployments->pdata[0]);
+    }
+  }
+  if (deployment == nullptr) {
+    LOG_WARNING << "No ostree deployment found to derive the OS name from, assuming \"lmp\";"
+                   " set `pacman.os` to override it";
+    return "lmp";
+  }
+  return ostree_deployment_get_osname(deployment);
+}
+
+Sysroot::Sysroot(const PackageConfig& pconfig) : cfg_{pconfig}, repo_path_{cfg_.path + "/ostree/repo"} {
   Repo repo{repo_path_};
   const auto ostree_min_free_space{repo.getFreeSpacePercent()};
 
@@ -64,6 +84,9 @@ Sysroot::Sysroot(const PackageConfig& pconfig)
     }
   }
   sysroot_ = OstreeManager::LoadSysroot(cfg_.path);
+  osname_ = resolveOsName(cfg_.osname, sysroot_.get());
+  deployment_path_ = cfg_.path + "/ostree/deploy/" + osname_ + "/deploy";
+  LOG_DEBUG << "ostree OS name: " << osname_;
 }
 
 bool Sysroot::reload() {
@@ -85,22 +108,22 @@ std::string Sysroot::getDeploymentHash(Deployment deployment_type) const {
 
   switch (cfg_.type) {
     case BootedType::kBooted:
-      deployment = getDeploymentIfBooted(sysroot_.get(), cfg_.osname.c_str(), deployment_type);
+      deployment = getDeploymentIfBooted(sysroot_.get(), osname_.c_str(), deployment_type);
       break;
     case BootedType::kStaged:
       if (deployment_type == Deployment::kPending) {
-        OstreeDeployment* cur_deployment = getDeploymentIfStaged(sysroot_.get(), cfg_.osname.c_str(), deployment_type);
+        OstreeDeployment* cur_deployment = getDeploymentIfStaged(sysroot_.get(), osname_.c_str(), deployment_type);
         // Load the sysroot to make sure we get its latest state, so we can get real "pending" deployment caused by
         // successful installation
         GObjectUniquePtr<OstreeSysroot> changed_sysroot = OstreeManager::LoadSysroot(cfg_.path);
         OstreeDeployment* pend_deployment =
-            getDeploymentIfStaged(changed_sysroot.get(), cfg_.osname.c_str(), deployment_type);
+            getDeploymentIfStaged(changed_sysroot.get(), osname_.c_str(), deployment_type);
         deployment =
             (strcmp(ostree_deployment_get_csum(pend_deployment), ostree_deployment_get_csum(cur_deployment)) == 0)
                 ? nullptr
                 : pend_deployment;
       } else {
-        deployment = getDeploymentIfStaged(sysroot_.get(), cfg_.osname.c_str(), deployment_type);
+        deployment = getDeploymentIfStaged(sysroot_.get(), osname_.c_str(), deployment_type);
       }
       break;
     default:

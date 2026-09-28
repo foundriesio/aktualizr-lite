@@ -29,6 +29,8 @@ using ::testing::Return;
 
 class LiteClientTest : public fixtures::ClientTest {
  protected:
+  explicit LiteClientTest(const std::string& sysroot_os = fixtures::ClientTest::os) : ClientTest("", sysroot_os) {}
+
   std::shared_ptr<fixtures::LiteClientMock> createLiteClient(
       InitialVersion initial_version = InitialVersion::kOn,
       boost::optional<std::vector<std::string>> apps = boost::none, bool finalize = true) override {
@@ -465,6 +467,26 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdateIfSameVersion) {
     ASSERT_TRUE(targetsMatch(client->getCurrent(), target_01_1));
     checkHeaders(*client, target_01_1);
   }
+}
+
+class LiteClientTestNoOsName : public LiteClientTest {
+ protected:
+  // The sysroot OS is not "lmp" and `pacman.os` is unset, so the client must take the name from the sysroot
+  LiteClientTestNoOsName() : LiteClientTest("poky") {}
+  void tweakConf(Config& conf) override { conf.pacman.os = ""; }
+};
+
+TEST_F(LiteClientTestNoOsName, OstreeUpdateWithOsNameDerivedFromSysroot) {
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+
+  auto new_target = createTarget();
+  update(*client, getInitialTarget(), new_target);
+  ASSERT_TRUE(client->isPendingTarget(new_target));
+
+  reboot(client);
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  checkHeaders(*client, new_target);
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiPacmanType, LiteClientTestMultiPacman,
