@@ -126,7 +126,7 @@ target_compile_definitions(t_liteclientHSM PRIVATE ${TEST_DEFS})
 target_include_directories(t_liteclientHSM PRIVATE ${TEST_INCS} ${AKTUALIZR_DIR}/tests/ ${AKTUALIZR_DIR}/src/)
 target_link_libraries(t_liteclientHSM ${MAIN_TARGET_LIB} ${TEST_LIBS} uptane_generator_lib testutilities)
 add_dependencies(t_liteclientHSM make_ostree_sysroot)
-set_tests_properties(test_liteclientHSM PROPERTIES LABELS "aklite:liteclientHSM")
+set_tests_properties(test_liteclientHSM PROPERTIES LABELS "aklite:liteclientHSM" TIMEOUT 300)
 add_dependencies(aklite-tests t_liteclientHSM)
 endif(BUILD_P11)
 

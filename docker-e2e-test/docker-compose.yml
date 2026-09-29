@@ -32,6 +32,9 @@ services:
       working_dir: "${PWD}"
       hostname: device
       user: "root"
+      # tc/netem: test_kill_process, test_fiopull_interrupt_resume and test_bad_network shape eth0.
+      cap_add:
+        - NET_ADMIN
       environment:
         - FACTORY=${FACTORY}
         - AUTH_TOKEN=${AUTH_TOKEN}

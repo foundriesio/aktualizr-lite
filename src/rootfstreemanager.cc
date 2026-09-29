@@ -2,7 +2,15 @@
 
 #include <boost/algorithm/hex.hpp>
 #include <boost/algorithm/string.hpp>
+
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 108800
+#include <boost/process/v1/search_path.hpp>
+namespace bp = boost::process::v1;
+#else
 #include <boost/process.hpp>
+namespace bp = boost::process;
+#endif
 
 #include "crypto/crypto.h"
 #include "exec.h"
@@ -495,7 +503,7 @@ std::string RootfsTreeManager::fioPullBin() const {
     }
   } else {
     // A bare name: look it up on $PATH.
-    const auto found{boost::process::search_path(tool)};
+    const auto found{bp::search_path(tool)};
     if (found.empty()) {
       LOG_WARNING << "ostree_pull_tool=" << tool << " not found on PATH; falling back to libostree";
     } else {
