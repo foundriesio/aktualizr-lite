@@ -462,3 +462,49 @@ jobs:
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
+
+  e2e-test-hsm:
+    name: SoftHSM-backed device end-to-end tests
+    runs-on: ubuntu-latest
+    needs: refresh-ccache-e2e
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory ${{ github.workspace }}
+      - run: git submodule update --init --recursive
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: e2e-ccache-${{ github.sha }}
+          restore-keys: |
+            e2e-ccache-
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if image exists # Fallback to master image if branch-specific image doesn't exist
+        id: check_image
+        run: |
+          # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
+          # (a literal "/" isn't a valid Docker tag character) - match that here too.
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
+          else
+            echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
+          fi
+      - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+      - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k 'test_update_to_latest[False-True or test_update_to_latest[False-False or test_update_to_latest[True-False or test_fiopull_interrupt_resume'
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+          FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
+          USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
+          TAG: ${{secrets.E2E_TEST_TAG}}
+          E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
+          # The device's mTLS key and cert live on a SoftHSM token; the other jobs use plain files.
+          USE_SOFTHSM: "1"
