@@ -356,7 +356,7 @@ export BASE_TARGET_VERSION={base_target_version}
 export E2E_TARGETS_LAYOUT='{targets_layout_json}'
 
 # Run tests:
-./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py
+E2E_BACKEND=update-server ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py
 """)
 
         output_file = os.getenv('GITHUB_OUTPUT')
