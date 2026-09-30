@@ -1,13 +1,30 @@
 #!/bin/bash -e
+#
+# Runs a command in the aklite-e2e-test container. With E2E_BACKEND=update-server it also starts
+# the self-hosted update-server and registry (the update-server profile in docker-compose.yml)
+# and points the tests at them. FACTORY and USER_TOKEN are then fixed local values, so no
+# Factory credentials from the environment reach that server.
 
 docker_dir=docker-e2e-test
 docker_path=${PWD}/${docker_dir}
 # Compose prefixes volume names with the project name, which COMPOSE_PROJECT_NAME can override.
 project=${COMPOSE_PROJECT_NAME:-${docker_dir}}
+compose="docker compose --env-file=${docker_path}/.env.dev -f ${docker_path}/docker-compose.yml"
+
+backend_args=()
+if [ "$E2E_BACKEND" = "update-server" ]; then
+	compose="$compose --profile update-server"
+	export FACTORY=e2e-factory USER_TOKEN=e2e-local-dev
+	TAG=${TAG:-main}
+	BASE_TARGET_VERSION=${BASE_TARGET_VERSION:-1}
+	backend_args=(-e E2E_BACKEND=update-server -e BASE_TARGET_VERSION=$BASE_TARGET_VERSION
+		-e UPDATE_SERVER_URL=${UPDATE_SERVER_URL:-http://update-server:8080}
+		-e HARDWARE_ID=${HARDWARE_ID:-intel-corei7-64} -e TARGET="${TARGET:-aklite-tests aktualizr-get aktualizr-lite}")
+fi
 
 # Function to execute custom commands before exiting
 down() {
-	docker compose --env-file=${docker_path}/.env.dev -f ${docker_path}/docker-compose.yml down --remove-orphans
+	$compose down --remove-orphans
 	# remove the docker runtime part
 	docker volume rm ${project}_docker-runtime
 }
@@ -36,4 +53,8 @@ else
         CCACHE_ARGS="-e CCACHE_DIR=$PWD/.ccache"
 fi
 
-docker compose --env-file=${docker_path}/.env.dev -f ${docker_path}/docker-compose.yml run $CCACHE_ARGS -e DEV_USER=$(id -u) -e DEV_GROUP=$(id -g) -e USER_TOKEN=${USER_TOKEN} -e TAG=${TAG} -e E2E_TEST_OSTREE_TGZ="${E2E_TEST_OSTREE_TGZ}" -e E2E_TARGETS_LAYOUT="${E2E_TARGETS_LAYOUT}" -e SECONDARY_TAG=${SECONDARY_TAG} -e SECONDARY_E2E_TEST_OSTREE_TGZ="${SECONDARY_E2E_TEST_OSTREE_TGZ}" -e AKLITE_E2E_IMAGE=${AKLITE_E2E_IMAGE} -e USE_SOFTHSM=${USE_SOFTHSM} ${SOFTHSM_PIN:+-e SOFTHSM_PIN=$SOFTHSM_PIN} ${SOFTHSM_SO_PIN:+-e SOFTHSM_SO_PIN=$SOFTHSM_SO_PIN} aklite-e2e-test "$@"
+if [ "$E2E_BACKEND" = "update-server" ]; then
+	$compose up -d update-server registry
+fi
+
+$compose run $CCACHE_ARGS -e DEV_USER=$(id -u) -e DEV_GROUP=$(id -g) -e USER_TOKEN=${USER_TOKEN} -e TAG=${TAG} -e E2E_TEST_OSTREE_TGZ="${E2E_TEST_OSTREE_TGZ}" -e E2E_TARGETS_LAYOUT="${E2E_TARGETS_LAYOUT}" -e SECONDARY_TAG=${SECONDARY_TAG} -e SECONDARY_E2E_TEST_OSTREE_TGZ="${SECONDARY_E2E_TEST_OSTREE_TGZ}" -e AKLITE_E2E_IMAGE=${AKLITE_E2E_IMAGE} -e USE_SOFTHSM=${USE_SOFTHSM} ${SOFTHSM_PIN:+-e SOFTHSM_PIN=$SOFTHSM_PIN} ${SOFTHSM_SO_PIN:+-e SOFTHSM_SO_PIN=$SOFTHSM_SO_PIN} "${backend_args[@]}" aklite-e2e-test "$@"
