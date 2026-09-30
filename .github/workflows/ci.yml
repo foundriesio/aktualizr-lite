@@ -179,8 +179,22 @@ jobs:
           - name: SoftHSM-backed device end-to-end tests
             tests: "test_update_to_latest[False-True or test_update_to_latest[False-False or test_update_to_latest[True-False or test_fiopull_interrupt_resume"
             softhsm: true
+          # update-server backend: no secrets; no offline or secondary-tag support.
+          - name: Update-server backend, online, single step end-to-end tests
+            backend: update-server
+            tests: "test_incremental_updates[False-True or test_update_to_latest[False-True"
+          - name: Update-server backend, online, granular steps, no delay start apps end-to-end tests
+            backend: update-server
+            tests: "test_incremental_updates[False-False-False or test_update_to_latest[False-False"
+          - name: Update-server backend, online, granular steps, delay start apps end-to-end tests
+            backend: update-server
+            tests: "test_incremental_updates[False-False-True"
+          - name: Update-server backend, end-to-end tests additional set
+            backend: update-server
+            tests: "test_no_space[False or test_no_space_reserved_storage[False or test_reserved_storage_low_allows_update[False or test_forced_sync or test_bad_network or test_kill_process or test_apps_selection"
     uses: ./.github/workflows/e2e-tests.yml
     with:
+      backend: ${{ matrix.backend || 'foundries' }}
       tests: ${{ matrix.tests }}
       softhsm: ${{ matrix.softhsm || false }}
     secrets: inherit
