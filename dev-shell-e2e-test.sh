@@ -2,12 +2,14 @@
 
 docker_dir=docker-e2e-test
 docker_path=${PWD}/${docker_dir}
+# Compose prefixes volume names with the project name, which COMPOSE_PROJECT_NAME can override.
+project=${COMPOSE_PROJECT_NAME:-${docker_dir}}
 
 # Function to execute custom commands before exiting
 down() {
 	docker compose --env-file=${docker_path}/.env.dev -f ${docker_path}/docker-compose.yml down --remove-orphans
 	# remove the docker runtime part
-    docker volume rm ${docker_dir}_docker-runtime
+	docker volume rm ${project}_docker-runtime
 }
 
 # Register the cleanup function to be called on EXIT
