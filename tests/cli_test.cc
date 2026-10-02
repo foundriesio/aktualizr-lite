@@ -90,6 +90,19 @@ TEST_P(CliClient, AppOnlyUpdate_02) {
   ASSERT_EQ(cli::Install(*akclient, target01.Version(), "", InstallMode::All), cli::StatusCode::Ok);
 }
 
+TEST_P(CliClient, NoTufTargets) {
+  auto akclient{createAkClient(InitialVersion::kOff)};
+
+  const auto ci_res = akclient->CheckIn();
+  ASSERT_EQ(CheckInResult::Status::Ok, ci_res.status);
+  ASSERT_TRUE(ci_res.Targets().empty());
+  const auto gti_res = akclient->GetTargetToInstall(ci_res);
+  ASSERT_EQ(GetTargetToInstallResult::Status::NoUpdate, gti_res.status);
+  ASSERT_TRUE(gti_res.selected_target.IsUnknown());
+
+  ASSERT_EQ(cli::CheckIn(*akclient), cli::StatusCode::Ok);
+}
+
 TEST_P(CliClient, NoMatchingTufTargets_Tag) {
   tag_ = "device-tag";
   auto akclient{createAkClient()};
