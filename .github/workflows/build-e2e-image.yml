@@ -1,4 +1,4 @@
-name: Build and push aklite-e2e-test image
+name: Build and push e2e test images
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build-e2e-image:
-    name: Build and push aklite-e2e-test to GHCR
+    name: Build and push the e2e test images to GHCR
     runs-on: ubuntu-latest
 
     steps:
@@ -21,6 +21,7 @@ jobs:
         run: |
           SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
           echo "image=ghcr.io/${{ github.repository }}/aklite-e2e-test:${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "branch=${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -36,3 +37,18 @@ jobs:
           file: docker-e2e-test/Dockerfile
           push: true
           tags: ${{ steps.tag.outputs.image }}
+
+      # Used by the update-server backend jobs, which otherwise build these from source each run.
+      - name: Build and push the update-server image
+        uses: docker/build-push-action@v5
+        with:
+          context: docker-e2e-test/update-server
+          push: true
+          tags: ghcr.io/${{ github.repository }}/aklite-e2e-update-server:${{ steps.tag.outputs.branch }}
+
+      - name: Build and push the registry image
+        uses: docker/build-push-action@v5
+        with:
+          context: docker-e2e-test/registry
+          push: true
+          tags: ghcr.io/${{ github.repository }}/aklite-e2e-registry:${{ steps.tag.outputs.branch }}

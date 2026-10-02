@@ -3,6 +3,10 @@ name: End-to-end tests
 on:
   workflow_call:
     inputs:
+      backend:
+        description: "Backend to update from: foundries (a real Factory) or update-server (self-hosted)"
+        type: string
+        default: foundries
       tests:
         description: pytest -k expression selecting the tests to run
         type: string
@@ -11,11 +15,18 @@ on:
         description: Register the device with its mTLS key and cert on a SoftHSM token
         type: boolean
         default: false
+      allow-failure:
+        description: Don't fail the workflow when the tests fail
+        type: boolean
+        default: false
 
 jobs:
   e2e:
     name: pytest
     runs-on: ubuntu-latest
+    continue-on-error: ${{ inputs.allow-failure }}
+    env:
+      E2E_BACKEND: ${{ inputs.backend }}
 
     steps:
       - uses: actions/checkout@v4
@@ -45,15 +56,40 @@ jobs:
           else
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:master" >> $GITHUB_ENV
           fi
+      - name: Pull the update-server backend images # Built from source by compose if missing
+        if: inputs.backend == 'update-server'
+        run: |
+          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          for name in update-server registry; do
+            var=$([ "$name" = update-server ] && echo UPDATE_SERVER_IMAGE || echo E2E_REGISTRY_IMAGE)
+            for tag in "$SAFE_BRANCH" master; do
+              img=ghcr.io/${{ github.repository }}/aklite-e2e-$name:$tag
+              if docker pull -q "$img" > /dev/null 2>&1; then
+                echo "$var=$img" >> "$GITHUB_ENV"
+                break
+              fi
+            done
+          done
       - run: ./dev-shell-e2e-test.sh make -f dev-flow.mk config build
+        env:
+          AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
+      - name: Generate the update-server Targets
+        if: inputs.backend == 'update-server'
+        run: |
+          OUTPUT=$(./dev-shell-e2e-test.sh python3 docker-e2e-test/e2e-test-create-targets-local.py)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep '^export BASE_TARGET_VERSION=' | sed 's/^export //' >> "$GITHUB_ENV"
+          LAYOUT=$(echo "$OUTPUT" | grep "^export E2E_TARGETS_LAYOUT=" | sed "s/^export E2E_TARGETS_LAYOUT='//; s/'$//")
+          echo "E2E_TARGETS_LAYOUT=$LAYOUT" >> "$GITHUB_ENV"
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
       - run: ./dev-shell-e2e-test.sh pytest docker-e2e-test/e2e-test.py -k "$E2E_TESTS"
         env:
           E2E_TESTS: ${{ inputs.tests }}
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
-          FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
-          TAG: ${{ secrets.E2E_TEST_TAG }}
-          E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
+          # update-server runs against its own local server and Targets: no Factory secrets.
+          FACTORY: ${{ inputs.backend == 'foundries' && secrets.E2E_TEST_FACTORY || '' }}
+          USER_TOKEN: ${{ inputs.backend == 'foundries' && secrets.E2E_TEST_USER_TOKEN || '' }}
+          TAG: ${{ inputs.backend == 'foundries' && secrets.E2E_TEST_TAG || '' }}
+          E2E_TEST_OSTREE_TGZ: ${{ inputs.backend == 'foundries' && secrets.E2E_TEST_OSTREE_TGZ || '' }}
           USE_SOFTHSM: ${{ inputs.softhsm && '1' || '' }}

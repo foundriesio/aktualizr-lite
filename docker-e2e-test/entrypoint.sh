@@ -39,15 +39,34 @@ chown -R dev:devgrp /usr/lib/sota/conf.d
 chown -R dev:devgrp /etc/sota/conf.d
 chown -R dev:devgrp /var/lib/docker
 
+# Trust the `registry` service's self-signed cert (only present when the update-server
+# profile populated the shared volume) -- needed by `composectl pull`, which requires real
+# HTTPS and doesn't honor /etc/docker/certs.d/. A no-op for the default Foundries
+# Factory-backed flow, where /registry-certs stays empty. Poll briefly rather than a
+# one-shot check: this container has no explicit start-order relative to `registry` either.
+for i in $(seq 1 10); do [ -f /registry-certs/registry.crt ] && break; sleep 0.5; done
+if [ -f /registry-certs/registry.crt ] && ! [ -f /usr/local/share/ca-certificates/e2e-registry.crt ]; then
+    cp /registry-certs/registry.crt /usr/local/share/ca-certificates/e2e-registry.crt
+    update-ca-certificates
+fi
+
+# update-server models a non-LmP distro: use meta-foundries' default OS name and leave pacman.os
+# unset, so aklite has to derive it from the sysroot.
+if [ "$E2E_BACKEND" = "update-server" ]; then
+    os_name=nodistro
+else
+    os_name=lmp
+fi
+
 # Initialize ostree
 if [ ! -d /sysroot/ostree/repo ]; then
-    echo "Initializing sysroot ostree..."
+    echo "Initializing sysroot ostree (OS name: $os_name)..."
     ostree admin init-fs /sysroot
-    ostree admin os-init lmp
+    ostree admin os-init $os_name
     ostree config set core.mode bare-user
-    ${PWD}/tests/make_sys_rootfs.sh initfs lmp intel-corei7-64 lmp
+    ${PWD}/tests/make_sys_rootfs.sh initfs lmp intel-corei7-64 $os_name
     commit=$(ostree commit initfs --branch lmp)
-    ostree admin deploy --os=lmp $commit
+    ostree admin deploy --os=$os_name $commit
     rm -rf initfs
     chown -R dev:devgrp /ostree
     ostree config set core.mode bare-user-only
@@ -63,7 +82,11 @@ ln -sfn ${PWD}/build/aktualizr/src/aktualizr_get/aktualizr-get /usr/local/bin/ak
 # Initialize default toml config
 sysroot_cfg=/usr/lib/sota/conf.d/z-90-sysroot.toml
 if [ ! -f $sysroot_cfg ]; then
-    echo "[pacman]\nbooted = 0\nos = \"lmp\"" > $sysroot_cfg
+    if [ "$os_name" = "lmp" ]; then
+        echo "[pacman]\nbooted = 0\nos = \"lmp\"" > $sysroot_cfg
+    else
+        echo "[pacman]\nbooted = 0" > $sysroot_cfg
+    fi
 fi
 
 bootloader_cfg=/usr/lib/sota/conf.d/z-91-bootloader.toml

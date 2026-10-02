@@ -9,7 +9,10 @@ import requests
 import stat
 import subprocess
 import sys
+import time
+import uuid
 from typing import Dict, List, Optional, Set, Tuple
+from urllib.parse import urlparse
 
 
 fioup_cmd = "./bin/fioup"
@@ -107,6 +110,17 @@ if not primary_tag:
 
 hardware_id = os.getenv("HARDWARE_ID", "intel-corei7-64")
 
+# Which backend the suite talks to: the real Foundries.io Factory (default, unchanged
+# behavior), or a self-hosted update-server instance (see docker-e2e-test/docker-compose.yml,
+# profile `update-server`, and docker-e2e-test/e2e-test-create-targets-local.py). Only the
+# handful of functions that hit a Foundries-specific HTTP API need to branch on this --
+# everything else (Target, install_target, invoke_aklite, write_settings, all test_* functions,
+# ...) drives the real CLI/docker/compose and is backend-agnostic already.
+backend = os.getenv("E2E_BACKEND", "foundries")
+if backend not in ("foundries", "update-server"):
+    pytest.fail(f"E2E_BACKEND must be 'foundries' or 'update-server', got {backend!r}")
+update_server_url = os.getenv("UPDATE_SERVER_URL", "http://update-server:8080")
+
 
 def _load_targets_layout() -> dict:
     """Load the e2e target sequence layout from E2E_TARGETS_LAYOUT (a JSON object
@@ -149,6 +163,10 @@ _layout = _load_targets_layout()
 _layout_targets: dict = _layout["targets"]
 offline_bundle_offsets: List[int] = _layout["offline_bundle_offsets"]
 
+# update-server names its updates ("First", "AddMoreApps", ...) rather than tracking them purely
+# by version offset -- needed to create rollouts (see _ensure_target_rollout below).
+_target_name_by_offset: Dict[int, str] = {td["offset"]: name for name, td in _layout_targets.items()}
+
 
 def _detect_base_target_version(tag: str) -> int:
     """Auto-detect this run's base ("First") target version from the Factory's TUF targets
@@ -171,13 +189,30 @@ def _detect_base_target_version(tag: str) -> int:
     return base
 
 
+def _required_base_target_version(env_var: str, tag: str) -> int:
+    # update-server has no Factory-wide version counter to probe (fiocli's --version is
+    # explicit, chosen by e2e-test-create-targets-local.py) -- there is nothing to detect, so
+    # this must just be passed through from that script's printed output.
+    value = os.getenv(env_var)
+    if not value:
+        pytest.fail(f"{env_var} must be set with the base target version for tag={tag} "
+                    f"(printed by e2e-test-create-targets-local.py) when E2E_BACKEND=update-server")
+    return int(value)
+
+
 base_version: Dict[str, int] = {}
-base_version[primary_tag] = _detect_base_target_version(primary_tag)
+if backend == "update-server":
+    base_version[primary_tag] = _required_base_target_version("BASE_TARGET_VERSION", primary_tag)
+else:
+    base_version[primary_tag] = _detect_base_target_version(primary_tag)
 
 # secondary tag used for tests that involve tags switching
 secondary_tag = os.getenv("SECONDARY_TAG")
 if secondary_tag:
-    base_version[secondary_tag] = _detect_base_target_version(secondary_tag)
+    if backend == "update-server":
+        base_version[secondary_tag] = _required_base_target_version("SECONDARY_BASE_TARGET_VERSION", secondary_tag)
+    else:
+        base_version[secondary_tag] = _detect_base_target_version(secondary_tag)
 
 
 def secondary_tag_is_set():
@@ -185,6 +220,13 @@ def secondary_tag_is_set():
         logger.error("SECONDARY_TAG environment variable not set")
         return False
     return True
+
+def require_secondary_tag():
+    # e2e-test-create-targets-local.py generates Targets for a single tag only, so there is no
+    # secondary tag to switch to when running against update-server.
+    if backend == "update-server":
+        pytest.skip("secondary-tag Targets are not generated for the update-server backend")
+    assert secondary_tag_is_set()
 
 e2e_test_ostree_tgz = os.getenv("E2E_TEST_OSTREE_TGZ")
 
@@ -335,13 +377,112 @@ def setup_softhsm():
     output = os.popen(cmd).read().strip()
     logger.info(output)
 
+# update-server scopes ALL TUF metadata -- including root.json -- per-device, per-assigned
+# update: a device gets nothing at all from the device gateway until an explicit rollout
+# targets it (storage/gateway/storage.go's GetTufMeta reads Updates.Tuf.ReadFile(tag,
+# d.UpdateName, file), and d.UpdateName is only ever set by a rollout,
+# storage/api/api_storage.go's stmtDeviceSetUpdate). Confirmed directly: the same root.json
+# request 404'd with "Not found TUF role" before a rollout, and served real signed metadata
+# right after. So advancing the device to a new target needs a *new* rollout, not a one-time
+# setup step.
+_rollout_target_version: Optional[int] = None
+_rollout_counter = 0
+
+def _ensure_device_checkin():
+    # update-server's SetUpdateName only assigns update_name to devices whose `tag` DB column
+    # already matches the rollout's tag -- storage/api/api_storage_test.go's TestStorage
+    # explicitly covers this: a device that has never checked in is excluded from the rollout's
+    # effect even when it's named explicitly by UUID (confirmed: not a bug, a deliberate/tested
+    # invariant, so devices can't be rolled out to a tag they haven't actually reported). A
+    # freshly-registered device has never made a gateway request, so its `tag` is still unset --
+    # without this, the very first rollout _ensure_target_rollout() creates for it would apply
+    # to zero devices, permanently (a rollout is only ever processed once). One lightweight
+    # authenticated request against any tag-checking gateway endpoint establishes it up front.
+    if backend != "update-server":
+        return
+    gateway_url = f"https://{urlparse(update_server_url).hostname}:8443"
+    res = requests.put(f"{gateway_url}/system_info/network", json={},
+                        headers={"x-ats-tags": primary_tag},
+                        cert=("/var/sota/client.pem", "/var/sota/pkey.pem"),
+                        verify="/var/sota/root.crt")
+    assert res.status_code == 200, f"Initial device check-in failed: {res.status_code} {res.text}"
+
+def _ensure_target_rollout(version: int):
+    global _rollout_target_version, _rollout_counter
+    if backend != "update-server" or version == _rollout_target_version:
+        return
+    target = get_target_for_actual_version(version)
+    update_name = _target_name_by_offset[target.version_offset]
+    _rollout_counter += 1
+    # Random suffix, not just the counter: update-server's data can outlive a single pytest
+    # process (e.g. reused across local dev runs against the same instance), and rollout names
+    # must be unique per (tag, update).
+    rollout_name = f"e2e-{_rollout_counter}-{uuid.uuid4().hex[:8]}"
+    url = f"{update_server_url}/v1/updates/{update_name}/rollouts/{rollout_name}"
+    headers = {'Authorization': f'Bearer {user_token}'}
+    res = requests.put(url, json={"uuids": [device_name]}, headers=headers)
+    assert res.status_code in (200, 201, 202), \
+        f"Unable to create rollout for {update_name}: {res.status_code} {res.text}"
+
+    # rolloutPut commits the rollout in a goroutine and returns 202 straight away (update-server's
+    # server/ui/api/handlers_rollouts.go), so a `check`/`pull` issued right after the PUT can still
+    # see the device on its previous update. The journal-processing daemon only reconciles what
+    # that goroutine failed to finish, so poll for the rollout to actually be effective.
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        res = requests.get(url, headers=headers)
+        res.raise_for_status()
+        if device_name in res.json().get("effective-uuids", []):
+            break
+        time.sleep(0.3)
+    else:
+        assert False, f"Rollout for {update_name} did not take effect within 30s"
+
+    _refresh_tuf_metadata()
+    _rollout_target_version = version
+
+def _refresh_tuf_metadata():
+    # `pull` and `install` run with CheckMode::Current (aktualizr-lite's src/main.cc), i.e. they
+    # use the TUF metadata already stored on the device. A Foundries device gateway lists every
+    # Target for the tag, so that stored copy still contains the one being pulled; update-server
+    # serves only the Target of the assigned update, so it predates the rollout just created and
+    # the lookup fails with "No Target found; version: N". Refresh it here.
+    #
+    # Tests assert on exact callback sequences, and this refresh is not part of any of them, so
+    # restore the callback log afterwards.
+    saved = None
+    if os.path.isfile(callback_log_path):
+        with open(callback_log_path) as f:
+            saved = f.read()
+    subprocess.run([fioup_cmd if use_fioup else aklite_path, "check"], capture_output=True)
+    if saved is None:
+        if os.path.isfile(callback_log_path):
+            os.remove(callback_log_path)
+    else:
+        with open(callback_log_path, "w") as f:
+            f.write(saved)
+
 def register_if_required():
     if not os.path.exists("/var/sota/client.pem"):
         user_token = os.getenv("USER_TOKEN")
+        env = os.environ.copy()
+        if backend == "update-server":
+            # Both lmp-device-register and fioup honor a DEVICE_API env var override (and an
+            # --api-token-header flag) -- no rebuild needed, just point them at update-server's
+            # POST /v1/devices instead of the real Factory, with a Bearer token instead of the
+            # default OSF-TOKEN-style header. No trailing slash: unlike Foundries' own DEVICE_API
+            # default, update-server's router (Echo, e.Group("/v1")) does not auto-strip a
+            # trailing slash, so "/v1/devices/" 404s where "/v1/devices" matches.
+            env["DEVICE_API"] = f"{update_server_url}/v1/devices"
+            api_token = f"Bearer {user_token}"
+            token_header_args = "--api-token-header Authorization"
+        else:
+            api_token = user_token
+            token_header_args = ""
         if use_fioup:
             if use_softhsm:
                 logger.warning("USE_SOFTHSM is set but fioup has no HSM support; registering with file-based creds")
-            cmd = f'{fioup_cmd} register --api-token "{user_token}" --tag {primary_tag} --factory {factory_name} --hw-id {hardware_id}'
+            cmd = f'{fioup_cmd} register --api-token "{api_token}" {token_header_args} --tag {primary_tag} --factory {factory_name} --hw-id {hardware_id}'
         else:
             hsm_args = ""
             if use_softhsm:
@@ -349,13 +490,19 @@ def register_if_required():
                 hsm_args = f" --hsm-module {SOFTHSM_MODULE} --hsm-pin {SOFTHSM_PIN} --hsm-so-pin {SOFTHSM_SO_PIN}"
             # --mlock-all defaults to true (mlockall() to keep key material off swap), which fails
             # under Docker's default memlock ulimit; not needed for a disposable test device.
+            # The factory name becomes the CSR's OU and OAuth scope for a real Factory; update-server
+            # has no notion of factory (#278), so leave it at lmp-device-register's default.
+            factory_env = "" if backend == "update-server" else f"DEVICE_FACTORY={factory_name} "
             cmd = (
-                f'DEVICE_FACTORY={factory_name} lmp-device-register --api-token "{user_token}" '
+                f'{factory_env}lmp-device-register --api-token "{api_token}" {token_header_args} '
                 f"--start-daemon 0 --mlock-all 0 --tag {primary_tag} --hwid {hardware_id}{hsm_args}"
             )
         logger.info(f"Registering device...")
-        output = os.popen(cmd).read().strip()
-        logger.info(output)
+        sp = subprocess.run(cmd, shell=True, capture_output=True, env=env)
+        logger.info(sp.stdout.decode('utf-8'))
+        if sp.returncode != 0:
+            logger.error(sp.stderr.decode('utf-8'))
+            assert False, f"Device registration failed (exit {sp.returncode})"
     else:
         logger.info("Device already registered")
         # The registration and the token persist in .device across runs; catch a stale mix.
@@ -379,19 +526,40 @@ def get_device_name():
 
 register_if_required()
 device_name = get_device_name()
+_ensure_device_checkin()
 
 def set_device_apps(apps: Optional[List[str]]):
-    if apps is None:
-        data = r"""{"reason":"Override aktualizr-lite update configuration ","files":[{"name":"z-50-fioctl.toml","value":"\n[pacman]\n","unencrypted":true,"on-changed":["/usr/share/fioconfig/handlers/aktualizr-toml-update"]}]}"""
+    if backend == "update-server":
+        if apps is None:
+            toml_value = "\n[pacman]\n"
+        else:
+            apps_str = ",".join(apps)
+            toml_value = f'\n[pacman]\n  compose_apps = "{apps_str}"\n  docker_apps = "{apps_str}"\n'
+        url = f"{update_server_url}/v1/configs/device/{device_name}"
+        body = {
+            "Reason": "Override aktualizr-lite update configuration ",
+            "Files": {
+                "z-50-fioctl.toml": {
+                    "Value": toml_value,
+                    "Unencrypted": True,
+                    "OnChanged": ["/usr/share/fioconfig/handlers/aktualizr-toml-update"],
+                },
+            },
+        }
+        headers = {'Authorization': f'Bearer {user_token}'}
+        res = requests.put(url, json=body, headers=headers)
+        assert res.status_code == 204, f"Unable to update device settings: {res.status_code} {res.text}"
     else:
-        apps_str = ",".join(apps)
-        data = r"""{"reason":"Override aktualizr-lite update configuration ","files":[{"name":"z-50-fioctl.toml","value":"\n[pacman]\n  compose_apps = \"""" + apps_str + r"""\"\n  docker_apps = \"""" + apps_str + r"""\"\n","unencrypted":true,"on-changed":["/usr/share/fioconfig/handlers/aktualizr-toml-update"]}]}"""
-    url = f"https://api.foundries.io/ota/devices/{device_name}/config/?factory={factory_name}&by-uuid=1"
-    print(data)
-    headers = {'OSF-TOKEN': user_token}
-    res = requests.patch(url, data, headers=headers)
-    assert res.status_code == 201, f"Unable to update device settings: {res.status_code} {res.text}"
-    logger.info(f"  Updated device apps settings in the factory: {apps=}")
+        if apps is None:
+            data = r"""{"reason":"Override aktualizr-lite update configuration ","files":[{"name":"z-50-fioctl.toml","value":"\n[pacman]\n","unencrypted":true,"on-changed":["/usr/share/fioconfig/handlers/aktualizr-toml-update"]}]}"""
+        else:
+            apps_str = ",".join(apps)
+            data = r"""{"reason":"Override aktualizr-lite update configuration ","files":[{"name":"z-50-fioctl.toml","value":"\n[pacman]\n  compose_apps = \"""" + apps_str + r"""\"\n  docker_apps = \"""" + apps_str + r"""\"\n","unencrypted":true,"on-changed":["/usr/share/fioconfig/handlers/aktualizr-toml-update"]}]}"""
+        url = f"https://api.foundries.io/ota/devices/{device_name}/config/?factory={factory_name}&by-uuid=1"
+        headers = {'OSF-TOKEN': user_token}
+        res = requests.patch(url, data, headers=headers)
+        assert res.status_code == 201, f"Unable to update device settings: {res.status_code} {res.text}"
+    logger.info(f"  Updated device apps settings: {apps=}")
 
 def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, Optional[bool]]]] = None, second_to_last_corr_id: bool = False, min_date: Optional[datetime] = None):
     if target_version:
@@ -399,31 +567,62 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
     else:
         assert min_date is not None
         logger.info(f"  Checking that no new event was generated since {min_date}")
-    headers = {'OSF-TOKEN': user_token}
-    r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/', headers=headers)
-    d = json.loads(r.text)
+    if backend == "update-server":
+        headers = {'Authorization': f'Bearer {user_token}'}
+        r = requests.get(f'{update_server_url}/v1/devices/{device_name}/updates', headers=headers)
+        r.raise_for_status()
+        updates = r.json()  # list of correlation-id strings, newest first (GET /devices/:uuid/updates)
+        corr_id = updates[1] if second_to_last_corr_id else updates[0]
 
-    if second_to_last_corr_id:
-        latest_update = d["updates"][1]
+        r = requests.get(f'{update_server_url}/v1/devices/{device_name}/updates/{corr_id}', headers=headers)
+        r.raise_for_status()
+        # list of DeviceUpdateEvent: {id, deviceTime, event: {correlationId, ecu, success,
+        # targetName, version, details}, eventType: {id, version}}
+        d_update = r.json()
+
+        if min_date is not None:
+            # Remove microsecods as event timestamps have second resolution
+            min_date = min_date.replace(tzinfo=None).replace(microsecond=0)
+            # Unlike Foundries, there's no single update-level timestamp here -- deviceTime is
+            # per-event, so use the latest one.
+            update_time = max(datetime.strptime(e["deviceTime"], "%Y-%m-%dT%H:%M:%SZ") for e in d_update)
+            if target_version:
+                assert update_time >= min_date, f"Latest update time {update_time} is before expected minimum date {min_date}"
+            else:
+                assert update_time <= min_date, f"Latest update happened at {update_time}, but there should be no events after date {min_date}"
+                return
+
+        assert int(d_update[0]["event"]["version"]) == target_version
+        # event.success is `*bool json:"success,omitempty"` server-side: absent (not present as
+        # null) when there's no value yet, unlike Foundries' JSON which always includes the key.
+        event_list = set([ (x["eventType"]["id"], x["event"].get("success")) for x in d_update ])
     else:
-        latest_update = d["updates"][0]
-    # Example event: {'correlation-id': '01K8K2DKYVS14C45SW4NNWP89Q', 'target': 'intel-corei7-64-lmp-414', 'version': '414', 'time': '2025-10-27T14:51:10Z'}
-    if min_date is not None:
-        # Remove microsecods as event timestamps have second resolution
-        min_date = min_date.replace(tzinfo=None).replace(microsecond=0)
-        update_time = datetime.strptime(latest_update["time"], "%Y-%m-%dT%H:%M:%SZ")
-        if target_version:
-            assert update_time >= min_date, f"Latest update time {update_time} is before expected minimum date {min_date}"
+        headers = {'OSF-TOKEN': user_token}
+        r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/', headers=headers)
+        d = json.loads(r.text)
+
+        if second_to_last_corr_id:
+            latest_update = d["updates"][1]
         else:
-            assert update_time <= min_date, f"Latest update happened at {update_time}, but there should be no events after date {min_date}"
-            return
+            latest_update = d["updates"][0]
+        # Example event: {'correlation-id': '01K8K2DKYVS14C45SW4NNWP89Q', 'target': 'intel-corei7-64-lmp-414', 'version': '414', 'time': '2025-10-27T14:51:10Z'}
+        if min_date is not None:
+            # Remove microsecods as event timestamps have second resolution
+            min_date = min_date.replace(tzinfo=None).replace(microsecond=0)
+            update_time = datetime.strptime(latest_update["time"], "%Y-%m-%dT%H:%M:%SZ")
+            if target_version:
+                assert update_time >= min_date, f"Latest update time {update_time} is before expected minimum date {min_date}"
+            else:
+                assert update_time <= min_date, f"Latest update happened at {update_time}, but there should be no events after date {min_date}"
+                return
 
-    corr_id = latest_update["correlation-id"]
-    assert int(latest_update["version"]) == target_version
-    r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/{corr_id}/', headers=headers)
+        corr_id = latest_update["correlation-id"]
+        assert int(latest_update["version"]) == target_version
+        r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/{corr_id}/', headers=headers)
 
-    d_update = json.loads(r.text)
-    event_list = set([ (x["eventType"]["id"], x["event"]["success"]) for x in d_update ])
+        d_update = json.loads(r.text)
+        event_list = set([ (x["eventType"]["id"], x["event"]["success"]) for x in d_update ])
+
     if expected_events is None:
         expected_events = {
             ('EcuDownloadStarted', None),
@@ -499,6 +698,9 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
     if offline:
         options = options + [ "--src-dir", os.path.abspath("./offline-bundles/unified/") ]
 
+    if len(options) >= 2 and options[0] in ("update", "pull", "install") and options[1].isdigit():
+        _ensure_target_rollout(int(options[1]))
+
     cmd = aklite_path
     if use_fioup:
         if options == ['check', '--json', '1']:
@@ -510,9 +712,18 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
             options = [ x.replace('pull', 'fetch').replace('run', 'start') for x in options if x not in ['--install-mode=delay-app-install'] ]
         cmd = fioup_cmd
 
+    env = None
+    if backend == "update-server":
+        env = os.environ.copy()
+        # aklite shells out to fiopull for the pre-pull size check. fiopull is a Go binary that
+        # performs its own HTTPS request and has no CA option (`fiopull update-size --help`), so
+        # it cannot verify update-server's private CA and the size check is silently skipped.
+        # Go honours SSL_CERT_FILE; point it at the CA the device already trusts.
+        env.setdefault("SSL_CERT_FILE", "/var/sota/root.crt")
+
     logger.info("  Running `" + " ".join([aklite_path] + options) + "`")
     if kill_after_sec is not None:
-        proc = subprocess.Popen([cmd] + options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([cmd] + options, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         try:
             outs, errs = proc.communicate(timeout=kill_after_sec)
             return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
@@ -523,7 +734,7 @@ def invoke_aklite(options: List[str], kill_after_sec: Optional[float] = None ):
                 os.remove("/var/lock/aklite.lock")
             outs, errs = proc.communicate()
             return subprocess.CompletedProcess(proc.args, proc.returncode, outs, errs)
-    return subprocess.run([cmd] + options, capture_output=True)
+    return subprocess.run([cmd] + options, capture_output=True, env=env)
 
 def write_settings(apps: Optional[List[str]] = None, prune: bool = True, tag: Optional[str] = None,
                    reserved_storage: Optional[str] = None, use_fiopull: bool = False):
@@ -575,7 +786,11 @@ compose_apps = "{apps_str}"
             f.write(sota_toml_content)
 
 def get_all_current_apps() -> List[str]:
-    if use_fioup:
+    if use_fioup or backend == "update-server":
+        # `aklite list`'s "current" flag depends on the local TUF-targets cache, which on
+        # update-server never accumulates across targets (each `fiocli updates upload` writes
+        # its own single-target snapshot) -- after e.g. a rollback, `list` can't identify
+        # "current" at all. Use `status` instead, like the fioup branch already does.
         t = get_target_for_actual_version(aklite_current_version())
         return t.apps
     else:
@@ -631,6 +846,10 @@ def cleanup_installed_data():
     os.system("""sqlite3 /var/sota/sql.db  "delete from installed_versions;" ".exit" """)
 
 def install_target(target: Target, explicit_version: bool = True, do_reboot: bool = True, do_finalize: bool = True):
+    # Covers explicit_version=False too (invoke_aklite's own interception can't -- there's no
+    # version in the command line to read), since target.actual_version is known here either way.
+    _ensure_target_rollout(target.actual_version)
+
     # combined-steps ("update") shares one correlation id for check+download+install, so its
     # callbacks/events need the check+download prefix; separate-steps verifies those up front.
     combined_steps = single_step
@@ -929,6 +1148,12 @@ def do_rollback(target: Target, requires_reboot: bool, installation_in_progress:
     assert aklite_current_version() == target.actual_version, cp.stdout.decode("utf-8")
 
 def create_offline_bundles():
+    if backend == "update-server":
+        # Offline bundles are a Foundries Factory-specific artifact (`fioctl targets
+        # offline-update`); update-server has no equivalent yet. Skip rather than fail -- a
+        # full-suite run (e.g. the update-server CI workflow) parametrizes offline_ on every
+        # test, and offline mode simply isn't a thing this backend supports (yet), not a bug.
+        pytest.skip("offline mode is not yet supported with E2E_BACKEND=update-server")
     if not e2e_test_ostree_tgz and not os.path.exists("./offline-bundles/unified/"):
         assert False, "No OSTree repo tgz provided, and offline bundles directory does not exist. Cannot proceed with offline update tests"
 
@@ -1028,7 +1253,6 @@ def run_test_sequence_random(updates_count: int = 20):
         target = all_primary_tag_targets[target_version]
         if target.build_error: # skip this one for now
             continue
-
         logger.info(f"Updating to {target.actual_version} {target}. SingleStep={single_step}, Offline={offline} DelayAppsInstall={delay_app_install}")
         write_settings(apps, prune)
         install_target(target)
@@ -1041,7 +1265,6 @@ def run_test_sequence_incremental():
         target = all_primary_tag_targets[target_version]
         if target.build_error: # skip this one for now
             continue
-
         logger.info(f"Updating to {target.actual_version} {target}. SingleStep={single_step}, Offline={offline} DelayAppsInstall={delay_app_install}")
         write_settings(apps, prune)
         install_target(target)
@@ -1098,6 +1321,12 @@ def test_incremental_updates(offline_: bool, single_step_: bool, delay_app_insta
 @pytest.mark.parametrize('delay_app_install_', [True, False])
 @pytest.mark.parametrize('offline_', [True, False])
 def test_random_updates(offline_: bool, single_step_: bool, delay_app_install_: bool):
+    if backend == "update-server":
+        # The random sequence jumps backward to lower-version Targets. Reaching one needs a
+        # rollout of an earlier update, whose TUF role versions are lower than what the device
+        # already stored (update-server bumps them per upload, monotonic), so the check-in fails
+        # with "TUF metadata check failure: Rollback attempt".
+        pytest.skip("downgrade to an earlier-uploaded Target trips update-server's monotonic TUF versioning")
     set_test_mode(offline_, single_step_, delay_app_install_)
     run_test_sequence_random()
 
@@ -1108,7 +1337,7 @@ def test_update_to_latest(offline_: bool, single_step_: bool):
     run_test_sequence_update_to_latest()
 
 def run_test_switch_tag():
-    assert secondary_tag_is_set()
+    require_secondary_tag()
     restore_system_state()
     apps = None # All apps, for now
     write_settings(apps, prune)
@@ -1126,7 +1355,7 @@ def run_test_switch_tag():
     install_target(all_secondary_tag_targets[Target.UpdateOstreeWithApps])
 
 def run_test_auto_downgrade_prevention():
-    assert secondary_tag_is_set()
+    require_secondary_tag()
     restore_system_state()
     apps = None # All apps, for now
     write_settings(apps, prune, secondary_tag)
@@ -1142,7 +1371,7 @@ def run_test_auto_downgrade_prevention():
     install_target(all_primary_tag_targets[Target.UpdateOstreeWithApps])
 
 def run_test_deamon_auto_downgrade():
-    assert secondary_tag_is_set()
+    require_secondary_tag()
     auto_downgrade_enabled = False
     restore_system_state()
     apps = None # All apps, for now
@@ -1205,6 +1434,11 @@ def run_test_pull_install_different_versions():
 
 @pytest.mark.parametrize('offline_', [False])
 def test_pull_install_different_tags(offline_: bool):
+    if backend == "update-server":
+        # This pulls one version and installs another, so both must be in the device's trusted
+        # TUF metadata. update-server serves only the Target of the currently assigned update,
+        # so the second lookup fails with "No Target found; version: N".
+        pytest.skip("pull and install of different versions needs several Targets in TUF metadata")
     set_test_mode(offline_)
     run_test_pull_install_different_versions()
 
@@ -1244,6 +1478,22 @@ def run_test_rollback(do_reboot: bool, do_finalize: bool):
 def test_rollback(do_reboot: bool, do_finalize: bool, offline_: bool, single_step_: bool):
     if not do_reboot and do_finalize:
         return
+    if backend == "update-server":
+        # do_rollback() always rolls back to a target that was uploaded *earlier* (a lower
+        # update-server TUF metadata version -- that counter is monotonic per tag across all
+        # uploads, never reset per update-name) than the one just installed. Whether this
+        # actually fails depends on aktualizr-lite's *real* pending-install state at that point
+        # (AkliteClientExt::Rollback()'s require_target_in_tuf=!installation_in_progress, per
+        # src/aklite_client_ext.cc) -- which does NOT reliably follow this test's own do_reboot/
+        # do_finalize/single_step parameters (confirmed live: a do_finalize=False case that
+        # "should" leave an install pending still hit "The specified Target is not found among
+        # trusted TUF targets" / "TUF metadata check failure: Rollback attempt", the same wall
+        # as the do_finalize=True cases). Not reliably predictable per-parametrization without
+        # reverse-engineering aktualizr-lite's own internal state tracking, so skip the whole
+        # test rather than guess which combinations happen to land on the fallback path. Same
+        # class of gap as run_rollback and test_random_updates jumping backward to a lower-
+        # version target.
+        pytest.skip("rollback to an earlier-uploaded target can trip update-server's monotonic TUF versioning")
     set_test_mode(offline_, single_step_)
     logger.info(f"Testing rollback {do_reboot=} {do_finalize=}")
     run_test_rollback(do_reboot, do_finalize)
@@ -1641,6 +1891,11 @@ def run_test_bad_network():
             cp = invoke_aklite(['update', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
             assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
         else:
+            # invoke_aklite()'s own interception can't help here: a bare `check` carries no
+            # target version on the command line, so it can't infer which target this call
+            # expects to discover. This test already knows -- tell _ensure_target_rollout()
+            # directly, same as install_target() does for its own explicit_version=False case.
+            _ensure_target_rollout(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)
             cp = invoke_aklite(['check'])
             assert cp.returncode == ReturnCodes.CheckinUpdateNewVersion, cp.stdout.decode("utf-8")
             cp = invoke_aklite(['pull', str(all_primary_tag_targets[Target.UpdateOstreeWithApps].actual_version)])
@@ -1699,10 +1954,35 @@ def test_forced_sync():
     logger.info(f"App URI: {app_uri}")
 
     # Identify a blob hash for the given application
-    cp = subprocess.run([composectl_path, 'inspect', app_uri, '--format', 'json'], capture_output=True)
-    assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
-    out_json = json.loads(cp.stdout.decode("utf-8"))
-    blob_digest = out_json['bundle']['services'][0]['image']['manifests'][0]['config']['digest'].split(':')[1]
+    if backend == "update-server":
+        # `composectl inspect <app_uri>` needs to reach the app URI's own host as a registry.
+        # For update-server that host is its "composeapphack" proxy -- which turns out to be a
+        # non-functional placeholder: there's no route for it at all server-side (grep confirms
+        # "composeapphack" appears nowhere but the URI-string template in
+        # storage/api/api_storage_tuf.go). The real serving path
+        # (server/gateway/handlers_apps.go's registry/v2 routes) requires a short-lived token
+        # minted via a separate, mTLS-gated POST /app-proxy-url call -- the exact mechanism
+        # aktualizr-lite's own compose_apps_proxy config drives internally (composeappmanager.cc
+        # -> composeapp's ProxyProvider, wired only into the CGo-embedded library, not exposed
+        # by the standalone `composectl` CLI at all). Confirmed live: even with the transport
+        # scheme fixed (COMPOSECTL_INSECURE_REGISTRIES), the request 404s ("app not found").
+        # Since install_target() already pulled and started this exact app a few lines above,
+        # derive the same config digest locally instead, via composectl ps (local store only,
+        # no network) + docker inspect (also local) -- no registry access needed at all.
+        cp = subprocess.run([composectl_path, 'ps', app_uri, '--format', 'json'], capture_output=True)
+        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+        # `ps <ref>` prints a JSON object keyed by the ref itself (getAppsStatus's
+        # map[string]*App), not a list.
+        app_ps = json.loads(cp.stdout.decode("utf-8"))[app_uri]
+        image_ref = app_ps['services'][0]['image']
+        cp = subprocess.run(['docker', 'inspect', image_ref, '--format', '{{.Id}}'], capture_output=True)
+        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+        blob_digest = cp.stdout.decode("utf-8").strip().split(':')[1]
+    else:
+        cp = subprocess.run([composectl_path, 'inspect', app_uri, '--format', 'json'], capture_output=True)
+        assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+        out_json = json.loads(cp.stdout.decode("utf-8"))
+        blob_digest = out_json['bundle']['services'][0]['image']['manifests'][0]['config']['digest'].split(':')[1]
 
     # Test forced `pull` command
     logger.info("Testing corruption of pulled blob, to make sure it's re-downloaded with `pull` command")

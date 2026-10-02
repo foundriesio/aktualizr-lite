@@ -177,8 +177,29 @@ jobs:
           - name: SoftHSM-backed device end-to-end tests
             tests: "test_update_to_latest[False-True or test_update_to_latest[False-False or test_update_to_latest[True-False or test_fiopull_interrupt_resume"
             softhsm: true
+          # Self-hosted update-server backend: no secrets needed. It has no offline or
+          # secondary-tag support, so those rows are left out. allow-failure until the
+          # non-lmp OS name fix (#477) is on master.
+          - name: Update-server backend, online, single step end-to-end tests
+            backend: update-server
+            tests: "test_incremental_updates[False-True or test_update_to_latest[False-True"
+            allow-failure: true
+          - name: Update-server backend, online, granular steps, no delay start apps end-to-end tests
+            backend: update-server
+            tests: "test_incremental_updates[False-False-False or test_update_to_latest[False-False"
+            allow-failure: true
+          - name: Update-server backend, online, granular steps, delay start apps end-to-end tests
+            backend: update-server
+            tests: "test_incremental_updates[False-False-True"
+            allow-failure: true
+          - name: Update-server backend, end-to-end tests additional set
+            backend: update-server
+            tests: "test_no_space[False or test_no_space_reserved_storage[False or test_reserved_storage_low_allows_update[False or test_forced_sync or test_bad_network or test_kill_process"
+            allow-failure: true
     uses: ./.github/workflows/e2e-tests.yml
     with:
+      backend: ${{ matrix.backend || 'foundries' }}
       tests: ${{ matrix.tests }}
       softhsm: ${{ matrix.softhsm || false }}
+      allow-failure: ${{ matrix.allow-failure || false }}
     secrets: inherit
