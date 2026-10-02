@@ -194,7 +194,6 @@ jobs:
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
 
@@ -239,7 +238,6 @@ jobs:
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
 
@@ -284,7 +282,6 @@ jobs:
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
           
@@ -328,7 +325,6 @@ jobs:
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
           E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
@@ -373,7 +369,6 @@ jobs:
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
           E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
@@ -418,7 +413,6 @@ jobs:
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
           E2E_TEST_OSTREE_TGZ: ${{ secrets.E2E_TEST_OSTREE_TGZ }}
@@ -466,6 +460,5 @@ jobs:
         env:
           AKLITE_E2E_IMAGE: ${{ env.AKLITE_E2E_IMAGE }}
           FACTORY: ${{ secrets.E2E_TEST_FACTORY }}
-          BASE_TARGET_VERSION: ${{ secrets.E2E_TEST_BASE_TARGET_VERSION }}
           USER_TOKEN: ${{ secrets.E2E_TEST_USER_TOKEN }}
           TAG: ${{secrets.E2E_TEST_TAG}}
