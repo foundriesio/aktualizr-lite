@@ -108,6 +108,8 @@ LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const
   primary_ecu = ecu_serials[0];
 
   auto ostree_sysroot = std::make_shared<OSTree::Sysroot>(config.pacman);
+  // The package managers deploy with the same OS name the sysroot resolved, so an unset `pacman.os` works
+  config.pacman.os = ostree_sysroot->osname();
 
   std::vector<std::string> headers;
   // Add all required request headers to the http client and set them to default values.
@@ -805,7 +807,8 @@ data::InstallationResult LiteClient::install(const Uptane::Target& target, Insta
   if (iresult.result_code.num_code == data::ResultCode::Numeric::kNeedCompletion) {
     LOG_INFO << "Update complete. Please reboot the device to activate";
     is_reboot_required_ = true;
-    if (target.sha256Hash() == sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending)) {
+    const auto pending_hash{sysroot_->getDeploymentHash(OSTree::Sysroot::Deployment::kPending)};
+    if (target.sha256Hash() == pending_hash) {
       // Don't mark Target as pending if its ostree deployment is not really pending.
       // It happens if rootfs/ostreemanager::install() detects the boot firmware update during installation
       // and exists the installation earlier before the target ostree is actually deployed.
@@ -813,6 +816,10 @@ data::InstallationResult LiteClient::install(const Uptane::Target& target, Insta
       // So, after the reboot the boot fw update is confirmed and then the aklite will try to install
       // the given Target again.
       storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
+    } else if (!isBootFwUpdateInProgress()) {
+      LOG_WARNING << "Target is not marked as pending since its ostree deployment is not pending; target: "
+                  << target.sha256Hash() << ", pending deployment: " << pending_hash
+                  << ", ostree OS name: " << sysroot_->osname();
     }
   } else if (iresult.result_code.num_code == data::ResultCode::Numeric::kOk) {
     if (install_mode == InstallMode::OstreeOnly) {
