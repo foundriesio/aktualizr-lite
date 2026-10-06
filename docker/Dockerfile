@@ -1,11 +1,11 @@
-FROM golang:1.22.2-bookworm AS composeapp
+FROM golang:1.24.13-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
 RUN git clone https://github.com/foundriesio/composeapp.git && \
     cd composeapp && git checkout lmp-97.0.0 && make && cp ./bin/composectl /usr/bin/
 
 
-FROM ubuntu:plucky
+FROM ubuntu:stonking
 LABEL Description="Aktualizr testing dockerfile for Ubuntu Focal with static checks"
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -42,11 +42,11 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   libboost-dev \
   libboost-log-dev \
   libboost-program-options-dev \
-  libboost-system-dev \
   libboost-test-dev \
   libboost-thread-dev \
   libcurl4-openssl-dev \
-  libengine-pkcs11-openssl \
+  pkcs11-provider \
+  libicu-dev \
   libexpat1-dev \
   libfuse-dev \
   libglib2.0-dev \
@@ -81,7 +81,6 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
   wget \
   xsltproc \
   zip \
-  docker-compose \
   sudo \
   shellcheck \
   gcovr \
@@ -92,9 +91,13 @@ RUN apt-get update && apt-get -y install --no-install-suggests --no-install-reco
 
 # OSTREE with libcurl support for HSM
 #  This allows ostree calls to libcurl to be able to keys controlled by pkcs11
+#  The patch makes ostree use the pkcs11 OpenSSL provider ("PROV") instead of the pkcs11 engine
+#  ("ENG") for pkcs11: TLS client cert/key paths on OpenSSL >= 4.0, which has no ENGINE API.
 WORKDIR /tmp
+COPY ostree-curl-pkcs11-provider.patch /tmp/
 RUN mkdir ostree && cd ostree && git init && git remote add origin https://github.com/ostreedev/ostree && \
     git fetch origin v2024.10 && git checkout FETCH_HEAD && \
+    git apply /tmp/ostree-curl-pkcs11-provider.patch && \
     ./autogen.sh CC="clang" CFLAGS='-Wno-error=missing-prototypes' \
     --with-libarchive \
     --disable-man \
@@ -108,13 +111,23 @@ RUN install -m 0755 -d /etc/apt/keyrings
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 RUN chmod a+r /etc/apt/keyrings/docker.asc
 
-# Add the repository to Apt sources:
+# Add the repository to Apt sources. Docker's own apt repo lags behind Ubuntu's release
+# cadence and has no "stonking" component yet, so fall back to the latest codename it does
+# support (resolute, 26.04) - docker-ce-cli/docker-compose-plugin are Go binaries with no
+# meaningful ABI dependency on the host's exact Ubuntu release.
 RUN echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  resolute stable" | \
   tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 RUN apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin
+
+# Restore a standalone "docker-compose" command for tests/tooling that still invoke it directly
+# instead of "docker compose" - the docker-compose-plugin binary works fine either way.
+RUN ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+
+# pkcs11-provider settings (see the file); /etc/ssl/openssl.cnf includes this directory
+COPY openssl-pkcs11-provider.cnf /etc/ssl/openssl.conf.d/pkcs11-provider.cnf
 
 # Install composeapp
 COPY --from=composeapp /build/composeapp/bin/composectl /usr/bin/

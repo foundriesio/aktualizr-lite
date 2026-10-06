@@ -26,6 +26,7 @@ services:
         - ${SOTA_DIR}:/var/sota
         - ${USR_SOTA_DIR}:/usr/lib/sota/conf.d
         - ${ETC_SOTA_DIR}:/etc/sota/conf.d
+        - ${SOFTHSM_DIR}:/var/lib/softhsm/tokens
         - ${DOCKER_DATA_ROOT}:/var/lib/docker
         - docker-runtime:/var/run/docker
         - ${CCACHE_DIR:-${PWD}/.ccache}:${CCACHE_DIR:-${PWD}/.ccache}
