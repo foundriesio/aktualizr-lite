@@ -40,9 +40,10 @@ COPY --from=composeapp /build/fioctl/bin/fioctl-linux-amd64 /usr/bin/fioctl
 COPY --from=composeapp /build/ostreeuploader/bin/fiopull /usr/bin/fiopull
 
 
-# Install lmp-device-register
-RUN apt-get install -y libboost-iostreams-dev
+# The base image's apt lists go stale.
+RUN apt-get update && apt-get install -y libboost-iostreams-dev python3-pytest iproute2
 
+# Install lmp-device-register
 # A commit on main: no release yet builds against OpenSSL 4.0 with the HSM options. Built without
 # REQUIRE_FACTORY, so there's no --factory (DEVICE_FACTORY sets it) and the API URLs are built in.
 RUN git clone https://github.com/foundriesio/lmp-device-register \
@@ -59,9 +60,6 @@ COPY docker-credential-fio-helper /usr/bin/docker-credential-fio-helper
 RUN wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64" && \
     chmod +x /usr/local/bin/gosu && \
     gosu nobody true
-
-RUN  apt-get install -y python3-pytest
-RUN  apt-get install -y iproute2
 
 # Copy the entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
