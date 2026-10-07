@@ -9,6 +9,11 @@ services:
       - docker-runtime:/var/run/docker
       - ${SOTA_DIR}:/var/sota
     privileged: true
+    healthcheck:
+      # The test entrypoint uses the socket right away; depends_on alone doesn't wait for it.
+      test: ["CMD", "test", "-S", "/var/run/docker/docker.sock"]
+      interval: 1s
+      retries: 30
 
   aklite-e2e-test:
       build:
@@ -45,7 +50,8 @@ services:
         - CXX=clang++
         - CC=clang
       depends_on:
-      - dockerd
+        dockerd:
+          condition: service_healthy
 
 volumes:
   docker-runtime:
