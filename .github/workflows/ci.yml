@@ -83,7 +83,9 @@ jobs:
         run: |
           # build-e2e-image.yml tags images with "/" replaced by "-" in the branch name
           # (a literal "/" isn't a valid Docker tag character) - match that here too.
-          SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+          # On pull_request events GITHUB_REF_NAME is "<number>/merge"; GITHUB_HEAD_REF is the branch.
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          SAFE_BRANCH="${BRANCH//\//-}"
           if docker manifest inspect ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH > /dev/null 2>&1; then
             echo "AKLITE_E2E_IMAGE=ghcr.io/${{ github.repository }}/aklite-e2e-test:$SAFE_BRANCH" >> $GITHUB_ENV
           else
