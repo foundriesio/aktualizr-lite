@@ -39,9 +39,18 @@ COPY --from=composeapp /build/fioctl/bin/fioctl-linux-amd64 /usr/bin/fioctl
 # Install fiopull at the default FioPullBin path so the size check runs.
 COPY --from=composeapp /build/ostreeuploader/bin/fiopull /usr/bin/fiopull
 
+# fiocli uploads Targets and creates rollouts for the update-server backend
+# (e2e-test-create-targets-local.py). Same release as fioserver in update-server/Dockerfile.
+RUN wget -O /usr/bin/fiocli "https://github.com/foundriesio/update-server/releases/download/v0.9.5/fiocli-linux-amd64" && \
+    chmod +x /usr/bin/fiocli
+
 
 # The base image's apt lists go stale.
-RUN apt-get update && apt-get install -y libboost-iostreams-dev python3-pytest iproute2
+RUN apt-get update && apt-get install -y libboost-iostreams-dev python3-pytest iproute2 ca-certificates
+
+# Trust the update-server backend's registry: `composectl pull` requires HTTPS.
+COPY registry/certs/registry.crt /usr/local/share/ca-certificates/e2e-registry.crt
+RUN update-ca-certificates
 
 # Install lmp-device-register
 # A commit on main: no release yet builds against OpenSSL 4.0 with the HSM options. Built without

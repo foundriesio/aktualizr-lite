@@ -1,6 +1,31 @@
 version: '3.8'
 
 services:
+  # Local stand-in for a Factory; opt-in via `--profile update-server`.
+  update-server:
+    build:
+      context: ./update-server
+    image: ${UPDATE_SERVER_IMAGE:-aklite-e2e-update-server}
+    volumes:
+      - update-server-data:/data
+    ports:
+      - "8080:8080"
+    profiles:
+      - update-server
+
+  # Registry for the update-server backend's apps. `composectl publish` treats localhost as
+  # plain HTTP while `composectl pull` requires HTTPS, so it is reached by name over TLS.
+  registry:
+    image: registry:2
+    environment:
+      - REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.crt
+      - REGISTRY_HTTP_TLS_KEY=/certs/registry.key
+    volumes:
+      - ./registry/certs:/certs:ro
+      - registry-data:/var/lib/registry
+    profiles:
+      - update-server
+
   dockerd:
     image: ghcr.io/foundriesio/moby:25.0.3_fio
     command: ["dockerd", "-H", "unix:///var/run/docker/docker.sock"]
@@ -8,7 +33,13 @@ services:
       - ${DOCKER_DATA_ROOT}:/var/lib/docker
       - docker-runtime:/var/run/docker
       - ${SOTA_DIR}:/var/sota
+      - ./registry/daemon.json:/etc/docker/daemon.json:ro
     privileged: true
+    healthcheck:
+      # The test entrypoint uses the socket right away; depends_on alone doesn't wait for it.
+      test: ["CMD", "test", "-S", "/var/run/docker/docker.sock"]
+      interval: 1s
+      retries: 30
 
   aklite-e2e-test:
       build:
@@ -45,7 +76,10 @@ services:
         - CXX=clang++
         - CC=clang
       depends_on:
-      - dockerd
+        dockerd:
+          condition: service_healthy
 
 volumes:
   docker-runtime:
+  update-server-data:
+  registry-data:
