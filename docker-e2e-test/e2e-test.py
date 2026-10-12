@@ -406,7 +406,7 @@ def _ensure_device_checkin():
     res = requests.put(f"{gateway_url}/system_info/network", json={},
                         headers={"x-ats-tags": primary_tag},
                         cert=("/var/sota/client.pem", "/var/sota/pkey.pem"),
-                        verify="/var/sota/root.crt")
+                        verify="/var/sota/root.crt", timeout=30)
     assert res.status_code == 200, f"Initial device check-in failed: {res.status_code} {res.text}"
 
 def _ensure_target_rollout(version: int):
@@ -420,14 +420,14 @@ def _ensure_target_rollout(version: int):
     rollout_name = f"e2e-{_rollout_counter}-{uuid.uuid4().hex[:8]}"
     url = f"{update_server_url}/v1/updates/{update_name}/rollouts/{rollout_name}"
     headers = {'Authorization': f'Bearer {user_token}'}
-    res = requests.put(url, json={"uuids": [device_name]}, headers=headers)
+    res = requests.put(url, json={"uuids": [device_name]}, headers=headers, timeout=30)
     assert res.status_code in (200, 201, 202), \
         f"Unable to create rollout for {update_name}: {res.status_code} {res.text}"
 
     # The rollout is committed asynchronously after the PUT returns; wait until it's effective.
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
-        res = requests.get(url, headers=headers)
+        res = requests.get(url, headers=headers, timeout=30)
         res.raise_for_status()
         if device_name in res.json().get("effective-uuids", []):
             break
@@ -533,7 +533,7 @@ def set_device_apps(apps: Optional[List[str]]):
             },
         }
         headers = {'Authorization': f'Bearer {user_token}'}
-        res = requests.put(url, json=body, headers=headers)
+        res = requests.put(url, json=body, headers=headers, timeout=30)
         assert res.status_code == 204, f"Unable to update device settings: {res.status_code} {res.text}"
     else:
         if apps is None:
@@ -554,12 +554,12 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
         logger.info(f"  Checking that no new event was generated since {min_date}")
     if backend == "update-server":
         headers = {'Authorization': f'Bearer {user_token}'}
-        r = requests.get(f'{update_server_url}/v1/devices/{device_name}/updates', headers=headers)
+        r = requests.get(f'{update_server_url}/v1/devices/{device_name}/updates', headers=headers, timeout=30)
         r.raise_for_status()
         updates = r.json()  # list of correlation-id strings, newest first (GET /devices/:uuid/updates)
         corr_id = updates[1] if second_to_last_corr_id else updates[0]
 
-        r = requests.get(f'{update_server_url}/v1/devices/{device_name}/updates/{corr_id}', headers=headers)
+        r = requests.get(f'{update_server_url}/v1/devices/{device_name}/updates/{corr_id}', headers=headers, timeout=30)
         r.raise_for_status()
         # list of DeviceUpdateEvent: {id, deviceTime, event: {correlationId, ecu, success,
         # targetName, version, details}, eventType: {id, version}}
