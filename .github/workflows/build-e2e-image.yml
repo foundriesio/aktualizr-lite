@@ -2,6 +2,18 @@ name: Build and push e2e test images
 
 on:
   workflow_dispatch:
+  # CI falls back to the master image, so rebuild it when its inputs change.
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/build-e2e-image.yml
+      - docker-e2e-test/Dockerfile
+      - docker-e2e-test/config.json
+      - docker-e2e-test/docker-credential-fio-helper
+      - docker-e2e-test/entrypoint.sh
+      - docker-e2e-test/registry/certs/**
+      - docker-e2e-test/update-server/**
 
 permissions:
   contents: read
