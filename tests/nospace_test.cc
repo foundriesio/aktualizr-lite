@@ -519,8 +519,16 @@ class AkliteNoSpaceTest : public AkliteTest {
 };
 
 TEST_P(AkliteNoSpaceTest, OstreeAndAppUpdateNotEnoughSpaceForApps) {
+  // Fixed layer sizes: the default random ones (3 x 1-32KB) sometimes exceed the space left
+  // for the App image in the last case (69632B), failing in the skopeo store instead of docker.
+  Json::Value layers;
+  for (int ii = 0; ii < 3; ++ii) {
+    layers["layers"][ii]["digest"] =
+        "sha256:" + boost::algorithm::to_lower_copy(boost::algorithm::hex(Crypto::sha256digest(Utils::randomUuid())));
+    layers["layers"][ii]["size"] = 10240;
+  }
   // App's containers are re-created before reboot
-  auto app01 = registry.addApp(fixtures::ComposeApp::create("app-01"));
+  auto app01 = registry.addApp(fixtures::ComposeApp::createAppWithCustomeLayers("app-01", layers));
 
   auto client = createLiteClient();
   ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
