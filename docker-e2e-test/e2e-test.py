@@ -163,6 +163,30 @@ offline_bundle_offsets: List[int] = _layout["offline_bundle_offsets"]
 _target_name_by_offset: Dict[int, str] = {td["offset"]: name for name, td in _layout_targets.items()}
 
 
+def factory_api(method: str, url: str, **kwargs) -> requests.Response:
+    # The parallel e2e jobs share one Factory token and get rate limited: retry 429s, server
+    # errors and connection failures, and report anything else with its status and body.
+    err = ""
+    for attempt in range(6):
+        try:
+            r = requests.request(method, url, headers={'OSF-TOKEN': user_token}, timeout=60, **kwargs)
+        except requests.exceptions.ConnectionError as e:
+            err, delay = str(e), 5 * 2 ** attempt
+        else:
+            if r.ok:
+                return r
+            if r.status_code != 429 and r.status_code < 500:
+                break
+            err = f"{r.status_code} {r.text[:200]}"
+            retry_after = r.headers.get("Retry-After", "")
+            delay = int(retry_after) if retry_after.isdigit() else 5 * 2 ** attempt
+        delay = min(delay, 60)
+        logger.warning(f"  {method} {url} failed ({err}); retrying in {delay}s")
+        time.sleep(delay)
+    else:
+        assert False, f"{method} {url} failed: {err}"
+    assert False, f"{method} {url} failed: {r.status_code} {r.text}"
+
 def _detect_base_target_version(tag: str) -> int:
     """Auto-detect this run's base ("First") target version from the Factory's TUF targets
     metadata: highest version currently published for (factory_name, tag, hardware_id), minus
@@ -170,10 +194,8 @@ def _detect_base_target_version(tag: str) -> int:
     tag+hardware_id are the ones e2e-test-create-targets.py just produced (no concurrent runs
     against the same tag).
     """
-    headers = {'OSF-TOKEN': user_token}
-    r = requests.get(f'https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/targets.json', headers=headers)
-    r.raise_for_status()
-    targets = json.loads(r.text)["signed"]["targets"]
+    r = factory_api("GET", f'https://api.foundries.io/ota/repo/{factory_name}/api/v1/user_repo/targets.json')
+    targets = r.json()["signed"]["targets"]
     versions = [
         int(t["custom"]["version"]) for t in targets.values()
         if tag in t.get("custom", {}).get("tags", []) and hardware_id in t.get("custom", {}).get("hardwareIds", [])
@@ -520,8 +542,7 @@ def set_device_apps(apps: Optional[List[str]]):
             apps_str = ",".join(apps)
             data = r"""{"reason":"Override aktualizr-lite update configuration ","files":[{"name":"z-50-fioctl.toml","value":"\n[pacman]\n  compose_apps = \"""" + apps_str + r"""\"\n  docker_apps = \"""" + apps_str + r"""\"\n","unencrypted":true,"on-changed":["/usr/share/fioconfig/handlers/aktualizr-toml-update"]}]}"""
         url = f"https://api.foundries.io/ota/devices/{device_name}/config/?factory={factory_name}&by-uuid=1"
-        headers = {'OSF-TOKEN': user_token}
-        res = requests.patch(url, data, headers=headers)
+        res = factory_api("PATCH", url, data=data)
         assert res.status_code == 201, f"Unable to update device settings: {res.status_code} {res.text}"
     logger.info(f"  Updated device apps settings: {apps=}")
 
@@ -559,9 +580,7 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
         # update-server omits `success` until it's set.
         event_list = set([ (x["eventType"]["id"], x["event"].get("success")) for x in d_update ])
     else:
-        headers = {'OSF-TOKEN': user_token}
-        r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/', headers=headers)
-        d = json.loads(r.text)
+        d = factory_api("GET", f'https://api.foundries.io/ota/devices/{device_name}/updates/').json()
 
         if second_to_last_corr_id:
             latest_update = d["updates"][1]
@@ -580,9 +599,7 @@ def verify_events(target_version: int, expected_events: Optional[Set[Tuple[str, 
 
         corr_id = latest_update["correlation-id"]
         assert int(latest_update["version"]) == target_version
-        r = requests.get(f'https://api.foundries.io/ota/devices/{device_name}/updates/{corr_id}/', headers=headers)
-
-        d_update = json.loads(r.text)
+        d_update = factory_api("GET", f'https://api.foundries.io/ota/devices/{device_name}/updates/{corr_id}/').json()
         event_list = set([ (x["eventType"]["id"], x["event"]["success"]) for x in d_update ])
 
     if expected_events is None:
