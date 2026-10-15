@@ -29,6 +29,40 @@ RootfsTreeManager::Config::Config(const PackageConfig& pconfig) {
   }
 }
 
+bool RootfsTreeManager::isSameOrigin(const std::string& url_a, const std::string& url_b) {
+  const auto origin = [](const std::string& url) -> std::string {
+    const auto scheme_end{url.find("://")};
+    if (scheme_end == std::string::npos) {
+      return "";
+    }
+    const std::string scheme{boost::algorithm::to_lower_copy(url.substr(0, scheme_end))};
+    std::string port{scheme == "https" ? "443" : scheme == "http" ? "80" : ""};
+    if (port.empty()) {
+      return "";
+    }
+    const auto host_start{scheme_end + 3};
+    std::string authority{url.substr(host_start, url.find_first_of("/?#", host_start) - host_start)};
+    const auto at{authority.rfind('@')};
+    if (at != std::string::npos) {
+      authority.erase(0, at + 1);
+    }
+    // The port separator is the last ':' unless it sits inside an IPv6 literal.
+    const auto colon{authority.rfind(':')};
+    const auto bracket{authority.rfind(']')};
+    std::string host{authority};
+    if (colon != std::string::npos && (bracket == std::string::npos || colon > bracket)) {
+      host = authority.substr(0, colon);
+      port = authority.substr(colon + 1);
+    }
+    if (host.empty()) {
+      return "";
+    }
+    return scheme + "://" + boost::algorithm::to_lower_copy(host) + ":" + port;
+  };
+  const std::string origin_a{origin(url_a)};
+  return !origin_a.empty() && origin_a == origin(url_b);
+}
+
 RootfsTreeManager::RootfsTreeManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                                      const std::shared_ptr<INvStorage>& storage,
                                      const std::shared_ptr<HttpInterface>& http,
@@ -54,7 +88,7 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
   std::string error_desc;
   for (const auto& remote : remotes) {
     if (!remote.isRemoteSet) {
-      setRemote(remote.name, remote.baseUrl, remote.keys);
+      setRemote(remote);
     }
 
     DeltaStat delta_stat{};
@@ -241,16 +275,20 @@ void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const
 
   const auto respJson = resp.getJson();
   for (Json::ValueConstIterator it = respJson.begin(); it != respJson.end(); it++) {
-    remotes.emplace(
-        remotes.begin(), Remote{"gcs",
-                                (*it)["download_url"].asString(),
-                                {
-                                    {"X-Correlation-ID", target_name},
-                                    {"Authorization", std::string("Bearer ") + (*it)["access_token"].asString()},
-                                },
-                                boost::none}
-
-    );
+    const std::string url{(*it)["download_url"].asString()};
+    // A self-hosted gateway (e.g. update-server) hands out its own URL, served
+    // with a cert from the device's CA; object stores use publicly trusted certs.
+    const std::string ca_file{isSameOrigin(url, gateway_url_) ? keys_.getCaFile() : ""};
+    remotes.emplace(remotes.begin(),
+                    Remote{"gcs",
+                           url,
+                           {
+                               {"X-Correlation-ID", target_name},
+                               {"Authorization", std::string("Bearer ") + (*it)["access_token"].asString()},
+                           },
+                           boost::none,
+                           false,
+                           ca_file});
   }
 }
 
@@ -282,14 +320,14 @@ RootfsTreeManager::OstreeUpdateSize RootfsTreeManager::getOstreeUpdateSize(const
   return res;
 }
 
-void RootfsTreeManager::setRemote(const std::string& name, const std::string& url,
-                                  const boost::optional<const KeyManager*>& keys) {
+void RootfsTreeManager::setRemote(const Remote& remote) {
   OSTree::Repo repo{sysroot_->repoPath()};
 
-  if (!!keys && *keys != nullptr) {
-    repo.addRemote(name, url, (*keys)->getCaFile(), (*keys)->getCertFile(), (*keys)->getPkeyFile());
+  if (!!remote.keys && *remote.keys != nullptr) {
+    const KeyManager* keys{*remote.keys};
+    repo.addRemote(remote.name, remote.baseUrl, keys->getCaFile(), keys->getCertFile(), keys->getPkeyFile());
   } else {
-    repo.addRemote(name, url, "", "", "");
+    repo.addRemote(remote.name, remote.baseUrl, remote.caFile, "", "");
   }
 }
 
@@ -399,6 +437,15 @@ std::string shellQuote(const std::string& s) {
   out += "'";
   return out;
 }
+
+// fiopullEnv points fiopull's TLS roots at the remote's CA. fiopull is a Go
+// binary, and Go reads SSL_CERT_FILE in place of the system store.
+std::string fiopullEnv(const RootfsTreeManager::Remote& remote) {
+  if (remote.caFile.empty() || !boost::filesystem::is_regular_file(remote.caFile)) {
+    return "";
+  }
+  return "SSL_CERT_FILE=" + shellQuote(remote.caFile) + " ";
+}
 }  // namespace
 
 bool RootfsTreeManager::getDeltaStatFromFioPull(const TufTarget& target, const Remote& remote,
@@ -444,7 +491,7 @@ bool RootfsTreeManager::getDeltaStatFromFioPull(const TufTarget& target, const R
     url = "file://" + sysroot_->repoPath();
   }
 
-  std::string cmd{shellQuote(bin) + " update-size --format json"};
+  std::string cmd{fiopullEnv(remote) + shellQuote(bin) + " update-size --format json"};
   cmd += " --url " + shellQuote(url);
   cmd += " --commit " + shellQuote(to);
   if (!from.empty()) {
@@ -535,7 +582,7 @@ data::InstallationResult RootfsTreeManager::pullWithFioPull(const TufTarget& tar
   const std::string to{target.Sha256Hash()};
   const std::string from{getCurrentHash()};
 
-  std::string cmd{shellQuote(fioPullBin()) + " pull"};
+  std::string cmd{fiopullEnv(remote) + shellQuote(fioPullBin()) + " pull"};
   cmd += " --repo " + shellQuote(sysroot_->repoPath());
   // Emit periodic progress lines to stderr so this pull does not look hung on a
   // large diff; exec() below streams the child's output live to the log.
@@ -548,7 +595,7 @@ data::InstallationResult RootfsTreeManager::pullWithFioPull(const TufTarget& tar
   // fiopull is DG-agnostic and has no mTLS handling: the remote's headers carry
   // any auth (e.g. the GCS bearer token from the gateway's download-urls). This
   // path is only taken for remotes that need no client certificate (see
-  // useFioPull), so there are no TLS credentials to pass.
+  // useFioPull); a CA, when the remote needs one, goes through fiopullEnv.
   for (const auto& h : remote.headers) {
     cmd += " --header " + shellQuote(h.first + ": " + h.second);
   }

@@ -39,7 +39,14 @@ class RootfsTreeManager : public OstreeManager, public Downloader, public Instal
     RequestHeaders headers;
     boost::optional<const KeyManager*> keys;
     bool isRemoteSet{false};
+    // CA to verify a remote that authenticates without a client cert, e.g. a
+    // download URL pointing back at the gateway, whose cert the system store lacks.
+    std::string caFile{};
   };
+
+  // Whether two http(s) URLs share scheme, host and port; a missing port means
+  // the scheme's default.
+  static bool isSameOrigin(const std::string& url_a, const std::string& url_b);
 
   RootfsTreeManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
                     const std::shared_ptr<INvStorage>& storage, const std::shared_ptr<HttpInterface>& http,
@@ -100,7 +107,7 @@ class RootfsTreeManager : public OstreeManager, public Downloader, public Instal
   // the gateway when the ostree server is an http(s) endpoint.
   std::vector<Remote> getRemotes(const std::string& target_name);
 
-  void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys);
+  void setRemote(const Remote& remote);
   data::InstallationResult verifyBootloaderUpdate(const Uptane::Target& target) const;
   bool getDeltaStatIfAvailable(const TufTarget& target, const Remote& remote, DeltaStat& delta_stat) const;
   // Estimates the update's required size by invoking the `fiopull` helper's
