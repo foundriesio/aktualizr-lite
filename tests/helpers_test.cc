@@ -3,6 +3,7 @@
 #include "helpers.h"
 #include "composeappmanager.h"
 #include "primary/reportqueue.h"
+#include "rootfstreemanager.h"
 #include "storage/invstorage.h"
 #include "target.h"
 #include "appengine.h"
@@ -46,6 +47,23 @@ TEST(version, good_versions) {
 }
 
 // Ensure we finalize an install if completed
+TEST(helpers, rootfs_same_origin) {
+  // The gateway's own download URL, as update-server returns it
+  EXPECT_TRUE(RootfsTreeManager::isSameOrigin("https://gw.example.com/ostree", "https://gw.example.com:443/ostree"));
+  EXPECT_TRUE(RootfsTreeManager::isSameOrigin("https://GW.example.com:8443/ostree?x=1",
+                                              "https://gw.example.com:8443/ostree"));
+  EXPECT_TRUE(RootfsTreeManager::isSameOrigin("http://gw:80", "http://gw/ostree"));
+  EXPECT_TRUE(RootfsTreeManager::isSameOrigin("https://[::1]:8443/ostree", "https://[::1]:8443"));
+  // Object-store URLs and anything that differs in scheme, host or port
+  EXPECT_FALSE(RootfsTreeManager::isSameOrigin("https://storage.googleapis.com/bucket", "https://gw.example.com/ostree"));
+  EXPECT_FALSE(RootfsTreeManager::isSameOrigin("https://gw.example.com:8443/ostree", "https://gw.example.com/ostree"));
+  EXPECT_FALSE(RootfsTreeManager::isSameOrigin("http://gw.example.com/ostree", "https://gw.example.com/ostree"));
+  EXPECT_FALSE(RootfsTreeManager::isSameOrigin("https://gw.example.com.evil/ostree", "https://gw.example.com/ostree"));
+  EXPECT_FALSE(RootfsTreeManager::isSameOrigin("https://gw.example.com@evil.com/ostree", "https://gw.example.com/ostree"));
+  EXPECT_FALSE(RootfsTreeManager::isSameOrigin("file:///var/sota/ostree", "file:///var/sota/ostree"));
+  EXPECT_FALSE(RootfsTreeManager::isSameOrigin("", ""));
+}
+
 TEST(helpers, lite_client_finalize) {
   TemporaryDirectory cfg_dir;
 
