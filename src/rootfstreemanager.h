@@ -39,6 +39,8 @@ class RootfsTreeManager : public OstreeManager, public Downloader, public Instal
     RequestHeaders headers;
     boost::optional<const KeyManager*> keys;
     bool isRemoteSet{false};
+    // CA for a download URL that points back at the gateway; empty keeps the system store.
+    std::string caFile;
   };
 
   RootfsTreeManager(const PackageConfig& pconfig, const BootloaderConfig& bconfig,
@@ -100,7 +102,8 @@ class RootfsTreeManager : public OstreeManager, public Downloader, public Instal
   // the gateway when the ostree server is an http(s) endpoint.
   std::vector<Remote> getRemotes(const std::string& target_name);
 
-  void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys);
+  void setRemote(const std::string& name, const std::string& url, const boost::optional<const KeyManager*>& keys,
+                 const std::string& ca_file);
   data::InstallationResult verifyBootloaderUpdate(const Uptane::Target& target) const;
   bool getDeltaStatIfAvailable(const TufTarget& target, const Remote& remote, DeltaStat& delta_stat) const;
   // Estimates the update's required size by invoking the `fiopull` helper's
