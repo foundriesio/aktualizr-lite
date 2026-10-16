@@ -13,24 +13,40 @@ static bool checkAppInstallationStatus(const AppEngine::App& app, const Json::Va
 static bool isNullOrEmptyOrUnset(const Json::Value& val, const std::string& field);
 static Json::Value parseJSON(const std::string& json_str);
 
+// ProxyEnv exports the app proxy to composectl for the lifetime of the object.
+class ProxyEnv {
+ public:
+  explicit ProxyEnv(const ProxyProvider& proxy) {
+    if (!proxy) {
+      return;
+    }
+    const auto proxy_url_and_ca{proxy()};
+    if (proxy_url_and_ca.first.empty()) {
+      return;
+    }
+    ::setenv("COMPOSE_APPS_PROXY", proxy_url_and_ca.first.c_str(), 1);
+    ::setenv("COMPOSE_APPS_PROXY_CA", proxy_url_and_ca.second.c_str(), 1);
+    set_ = true;
+  }
+  ~ProxyEnv() {
+    if (set_) {
+      ::unsetenv("COMPOSE_APPS_PROXY");
+      ::unsetenv("COMPOSE_APPS_PROXY_CA");
+    }
+  }
+
+ private:
+  bool set_{false};
+};
+
 AppEngine::Result AppEngine::fetch(const App& app) {
   Result res{false};
-  bool was_proxy_set{false};
   try {
     // If a given app was fetched before, then don't consider it as a fetched app if a caller tries to fetch it again
     // for one reason or another - hence remove it from the set of fetched apps.
     fetched_apps_.erase(app.uri);
     if (local_source_path_.empty()) {
-      if (proxy_) {
-        // If the proxy provider is set, then obtain the proxy URL and CA from it,
-        // and set the corresponding environment variables for `composectl`.
-        const auto proxy{proxy_()};
-        if (!proxy.first.empty()) {
-          ::setenv("COMPOSE_APPS_PROXY", proxy.first.c_str(), 1);
-          ::setenv("COMPOSE_APPS_PROXY_CA", proxy.second.c_str(), 1);
-          was_proxy_set = true;
-        }
-      }
+      const ProxyEnv proxy_env{proxy_};
       // reserved_storage, when set, forwards an absolute reserved free space; otherwise the percentage
       // watermark is forwarded. composectl gives --reserved-storage precedence over the watermark.
       const std::string storage_arg{
@@ -59,10 +75,6 @@ AppEngine::Result AppEngine::fetch(const App& app) {
   } catch (const std::exception& exc) {
     res = {false, exc.what()};
   }
-  if (was_proxy_set) {
-    ::unsetenv("COMPOSE_APPS_PROXY");
-    ::unsetenv("COMPOSE_APPS_PROXY_CA");
-  }
   return res;
 }
 
@@ -82,6 +94,7 @@ AppEngine::UpdateSize AppEngine::checkUpdateSize(const Apps& apps) const {
     uris += " " + app.uri;
   }
   try {
+    const ProxyEnv proxy_env{proxy_};
     std::string output;
     exec(boost::format{"%s --store %s check%s --format json"} % composectl_cmd_ % storeRoot() % uris,
          "failed to check apps update size", "", &output, "10m");
