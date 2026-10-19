@@ -60,6 +60,9 @@ void Repo::addRemote(const std::string& name, const std::string& url, const std:
     if (!ca.empty()) {
       g_variant_builder_add(&var_builder, "{s@v}", "tls-ca-path",
                             g_variant_new_variant(g_variant_new_string(ca.c_str())));
+    }
+    // A bearer-token remote carries a CA and no client cert.
+    if (!cert.empty() && !key.empty()) {
       g_variant_builder_add(&var_builder, "{s@v}", "tls-client-cert-path",
                             g_variant_new_variant(g_variant_new_string(cert.c_str())));
       g_variant_builder_add(&var_builder, "{s@v}", "tls-client-key-path",

@@ -54,7 +54,7 @@ DownloadResult RootfsTreeManager::Download(const TufTarget& target) {
   std::string error_desc;
   for (const auto& remote : remotes) {
     if (!remote.isRemoteSet) {
-      setRemote(remote.name, remote.baseUrl, remote.keys);
+      setRemote(remote.name, remote.baseUrl, remote.keys, remote.caFile);
     }
 
     DeltaStat delta_stat{};
@@ -241,16 +241,20 @@ void RootfsTreeManager::getAdditionalRemotes(std::vector<Remote>& remotes, const
 
   const auto respJson = resp.getJson();
   for (Json::ValueConstIterator it = respJson.begin(); it != respJson.end(); it++) {
-    remotes.emplace(
-        remotes.begin(), Remote{"gcs",
-                                (*it)["download_url"].asString(),
-                                {
-                                    {"X-Correlation-ID", target_name},
-                                    {"Authorization", std::string("Bearer ") + (*it)["access_token"].asString()},
-                                },
-                                boost::none}
-
-    );
+    const std::string url{(*it)["download_url"].asString()};
+    // update-server serves ostree itself and hands back ostree_server as the
+    // download URL; its cert is issued by the CA the device trusts for the gateway.
+    const std::string ca_file{boost::starts_with(url, gateway_url_) ? keys_.getCaFile() : ""};
+    remotes.emplace(remotes.begin(),
+                    Remote{"gcs",
+                           url,
+                           {
+                               {"X-Correlation-ID", target_name},
+                               {"Authorization", std::string("Bearer ") + (*it)["access_token"].asString()},
+                           },
+                           boost::none,
+                           false,
+                           ca_file});
   }
 }
 
@@ -283,13 +287,13 @@ RootfsTreeManager::OstreeUpdateSize RootfsTreeManager::getOstreeUpdateSize(const
 }
 
 void RootfsTreeManager::setRemote(const std::string& name, const std::string& url,
-                                  const boost::optional<const KeyManager*>& keys) {
+                                  const boost::optional<const KeyManager*>& keys, const std::string& ca_file) {
   OSTree::Repo repo{sysroot_->repoPath()};
 
   if (!!keys && *keys != nullptr) {
     repo.addRemote(name, url, (*keys)->getCaFile(), (*keys)->getCertFile(), (*keys)->getPkeyFile());
   } else {
-    repo.addRemote(name, url, "", "", "");
+    repo.addRemote(name, url, ca_file, "", "");
   }
 }
 
@@ -399,6 +403,14 @@ std::string shellQuote(const std::string& s) {
   out += "'";
   return out;
 }
+
+// fiopull is a Go binary; Go takes its TLS roots from SSL_CERT_FILE.
+std::string fiopullEnv(const std::string& ca_file) {
+  if (ca_file.empty()) {
+    return "";
+  }
+  return "SSL_CERT_FILE=" + shellQuote(ca_file) + " ";
+}
 }  // namespace
 
 bool RootfsTreeManager::getDeltaStatFromFioPull(const TufTarget& target, const Remote& remote,
@@ -444,7 +456,7 @@ bool RootfsTreeManager::getDeltaStatFromFioPull(const TufTarget& target, const R
     url = "file://" + sysroot_->repoPath();
   }
 
-  std::string cmd{shellQuote(bin) + " update-size --format json"};
+  std::string cmd{fiopullEnv(remote.caFile) + shellQuote(bin) + " update-size --format json"};
   cmd += " --url " + shellQuote(url);
   cmd += " --commit " + shellQuote(to);
   if (!from.empty()) {
@@ -535,7 +547,7 @@ data::InstallationResult RootfsTreeManager::pullWithFioPull(const TufTarget& tar
   const std::string to{target.Sha256Hash()};
   const std::string from{getCurrentHash()};
 
-  std::string cmd{shellQuote(fioPullBin()) + " pull"};
+  std::string cmd{fiopullEnv(remote.caFile) + shellQuote(fioPullBin()) + " pull"};
   cmd += " --repo " + shellQuote(sysroot_->repoPath());
   // Emit periodic progress lines to stderr so this pull does not look hung on a
   // large diff; exec() below streams the child's output live to the log.
@@ -548,7 +560,7 @@ data::InstallationResult RootfsTreeManager::pullWithFioPull(const TufTarget& tar
   // fiopull is DG-agnostic and has no mTLS handling: the remote's headers carry
   // any auth (e.g. the GCS bearer token from the gateway's download-urls). This
   // path is only taken for remotes that need no client certificate (see
-  // useFioPull), so there are no TLS credentials to pass.
+  // useFioPull); a CA, when the remote carries one, goes in through fiopullEnv.
   for (const auto& h : remote.headers) {
     cmd += " --header " + shellQuote(h.first + ": " + h.second);
   }
