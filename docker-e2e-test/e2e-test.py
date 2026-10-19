@@ -820,6 +820,14 @@ def cleanup_installed_data():
         os.system("""rm -f /var/sota/updates.db /etc/sota/conf.d/* /run/secrets/* /var/sota/.last*""")
     os.system("""sqlite3 /var/sota/sql.db  "delete from installed_versions;" ".exit" """)
 
+def assert_apps_size_estimated(cp: subprocess.CompletedProcess):
+    # update-server's apps are reachable only through the gateway's app proxy. A pre-pull size
+    # check that bypasses it fails, and aktualizr-lite only logs that before pulling anyway.
+    if backend != "update-server":
+        return
+    output = cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+    assert "Failed to estimate apps update size" not in output, output
+
 def install_target(target: Target, explicit_version: bool = True, do_reboot: bool = True, do_finalize: bool = True):
     # Also covers explicit_version=False, which invoke_aklite() can't infer.
     _ensure_target_rollout(target.actual_version)
@@ -845,6 +853,7 @@ def install_target(target: Target, explicit_version: bool = True, do_reboot: boo
         if delay_app_install:
             cmd.append("--install-mode=delay-app-install")
         cp = invoke_aklite(cmd)
+        assert_apps_size_estimated(cp)
         callback_prefix = [
             ("check-for-update-pre", ""), ("check-for-update-post", "OK"),
             ("download-pre", ""), ("download-post", "OK"),
@@ -859,6 +868,7 @@ def install_target(target: Target, explicit_version: bool = True, do_reboot: boo
         else:
             cp = invoke_aklite(['pull'])
         assert cp.returncode == ReturnCodes.Ok, cp.stdout.decode("utf-8")
+        assert_apps_size_estimated(cp)
         verify_callback([("download-pre", ""), ("download-post", "OK")])
         verify_events(target.actual_version, {
                 ('EcuDownloadStarted', None),
