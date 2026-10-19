@@ -41,7 +41,7 @@ COPY --from=composeapp /build/ostreeuploader/bin/fiopull /usr/bin/fiopull
 
 # fiocli uploads Targets and creates rollouts for the update-server backend
 # (e2e-test-create-targets-local.py). Same release as fioserver in update-server/Dockerfile.
-RUN wget -O /usr/bin/fiocli "https://github.com/foundriesio/update-server/releases/download/v0.9.5/fiocli-linux-amd64" && \
+RUN wget -O /usr/bin/fiocli "https://github.com/foundriesio/update-server/releases/download/v1.0-rc2/fiocli-linux-amd64" && \
     chmod +x /usr/bin/fiocli
 
 
