@@ -226,16 +226,11 @@ def make_upload_dir(name: str, ostree_repo_src: str, apps: Dict[str, str]) -> st
         os.makedirs(upload_dir, exist_ok=True)
         shutil.copytree(ostree_repo_src, os.path.join(upload_dir, "ostree_repo"))
 
-        if apps:
-                blobs_src = os.path.join(apps_store_dir, "blobs")
-                if os.path.exists(blobs_src):
-                        shutil.copytree(blobs_src, os.path.join(upload_dir, "apps", "blobs"))
-                for app_name, app_hash in apps.items():
-                        # apps_store dirs are named by the bare hex digest.
-                        hash_hex = app_hash.split(":", 1)[-1]
-                        src = os.path.join(apps_store_dir, "apps", app_name, hash_hex)
-                        dst = os.path.join(upload_dir, "apps", "apps", app_name, hash_hex)
-                        shutil.copytree(src, dst)
+        # Pull the apps into a store of their own, so the update carries only their blobs, like a
+        # real one: a device can't fetch the apps of another update.
+        store = os.path.join(upload_dir, "apps")
+        for app_name, app_hash in apps.items():
+                run_cmd(f"{composectl_cmd} pull -i {store} -s {store} {registry_host}/{app_name}@{app_hash}")
 
         return upload_dir
 
