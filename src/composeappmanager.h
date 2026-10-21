@@ -123,6 +123,8 @@ class ComposeAppManager : public RootfsTreeManager {
   Config cfg_;
   mutable AppsContainer cur_apps_to_fetch_and_update_;
   mutable AppsContainer cur_apps_to_fetch_;
+  // Apps to update that are not running but complete in the store, installed without a download
+  mutable std::set<std::string> cur_apps_fetched_;
   bool are_apps_checked_{false};
   AppEngine::Ptr app_engine_;
   bool is_restorable_engine_{false};
