@@ -1894,6 +1894,40 @@ def verify_file_integrity(file_path: str, expected_hash: str):
         sha256_hash = hashlib.sha256(data).hexdigest()
         assert sha256_hash == expected_hash, f"File hash mismatch after corruption and new pull, expected {expected_hash}, got {sha256_hash}"
 
+def test_access_denied():
+    if backend != "update-server":
+        pytest.skip("denying a device needs the update-server API")
+    if use_fioup:
+        pytest.skip("checks aktualizr-lite's log")
+    global _rollout_target_version
+    restore_system_state()
+    version = aklite_current_version()
+    headers = {'Authorization': f'Bearer {user_token}'}
+
+    # Deleting a device puts it on the denied list: its metadata requests get HTTP 403
+    r = requests.delete(f"{update_server_url}/v1/devices/{device_name}", headers=headers, timeout=30)
+    assert r.status_code == 204, f"Unable to deny the device: {r.status_code} {r.text}"
+    try:
+        cp = invoke_aklite(['check'])
+        out = cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+        assert "HTTP 403" in out, out
+        assert "The server denied the device access" in out, out
+        assert "Check the device tag" not in out, out
+        assert aklite_current_version() == version
+    finally:
+        r = requests.delete(f"{update_server_url}/v1/denied-devices/{device_name}", headers=headers, timeout=30)
+        assert r.status_code == 204, f"Unable to allow the device: {r.status_code} {r.text}"
+        # The device's server data is gone: check in and assign the current Target again
+        _ensure_device_checkin()
+        write_settings()
+        _rollout_target_version = None
+        _ensure_target_rollout(version)
+
+    cp = invoke_aklite(['check'])
+    out = cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+    assert cp.returncode == ReturnCodes.Ok, out
+    assert "HTTP 403" not in out, out
+
 def test_forced_sync():
     restore_system_state()
     apps = None # All apps, for now
