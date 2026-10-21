@@ -329,6 +329,11 @@ ComposeAppManager::AppsContainer ComposeAppManager::getAppsToUpdate(const Uptane
       // an App that is supposed to be running is not running or is not fully installed
       apps_to_update.insert(app_pair);
       apps_and_reasons[app_pair.first] = "not running";
+      if (app_engine_->isFetched({app_name, app_pair.second})) {
+        // Install it from the store, e.g. the previous Target's app after a rollback: the server may
+        // no longer serve it
+        cur_apps_fetched_.insert(app_name);
+      }
       continue;
     }
     if (!app_engine_->isFetched({app_name, app_pair.second})) {
@@ -349,6 +354,7 @@ ComposeAppManager::AppsSyncReason ComposeAppManager::checkForAppsToUpdate(const 
   std::set<std::string> fetched_apps;
   bool check_apps_to_fetch;
 
+  cur_apps_fetched_.clear();
   if (!cfg_.force_update) {
     LOG_INFO << "Checking status of target apps; target: " << target.filename();
     cur_apps_to_fetch_and_update_ = getAppsToUpdate(target, apps_and_reasons, fetched_apps);
@@ -485,7 +491,13 @@ DownloadResult ComposeAppManager::checkUpdateSize(const TufTarget& target, const
 
 DownloadResult ComposeAppManager::Download(const TufTarget& target) {
   AppsContainer all_apps_to_fetch;
-  all_apps_to_fetch.insert(cur_apps_to_fetch_and_update_.begin(), cur_apps_to_fetch_and_update_.end());
+  for (const auto& pair : cur_apps_to_fetch_and_update_) {
+    if (cur_apps_fetched_.count(pair.first) > 0) {
+      LOG_INFO << pair.first << " is already fetched, skipping its download; uri: " << pair.second;
+      continue;
+    }
+    all_apps_to_fetch.insert(pair);
+  }
   all_apps_to_fetch.insert(cur_apps_to_fetch_.begin(), cur_apps_to_fetch_.end());
 
   // Before downloading anything, check that the combined ostree + apps update
@@ -672,6 +684,7 @@ data::InstallationResult ComposeAppManager::install(const Uptane::Target& target
   // TODO: we might add more advanced logic here, e.g. try to install a few times and then fail
   cur_apps_to_fetch_and_update_.clear();
   cur_apps_to_fetch_.clear();
+  cur_apps_fetched_.clear();
 
   res.description += "\n# Apps running:\n" + getRunningAppsInfoForReport();
   return res;
