@@ -7,6 +7,7 @@
 #include "libaktualizr/config.h"
 #include "libaktualizr/packagemanagerinterface.h"
 #include "ostree/sysroot.h"
+#include "uptane/exceptions.h"
 #include "uptane/fetcher.h"
 #include "uptane/imagerepository.h"
 
@@ -150,5 +151,8 @@ class LiteClient {
   TufUpdateDetails tuf_update_details_;
   std::shared_ptr<Uptane::Targets> targets_;
 };
+
+constexpr const char* kAccessDeniedHint{
+    "The server denied the device access; check that the device is registered and has not been deleted or denied"};
 
 #endif  // AKTUALIZR_LITE_CLIENT_H_
