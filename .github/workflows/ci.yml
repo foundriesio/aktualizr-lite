@@ -191,7 +191,7 @@ jobs:
             tests: "test_incremental_updates[False-False-True"
           - name: Update-server backend, end-to-end tests additional set
             backend: update-server
-            tests: "test_no_space[False or test_no_space_reserved_storage[False or test_reserved_storage_low_allows_update[False or test_forced_sync or test_bad_network or test_kill_process or test_apps_selection"
+            tests: "test_no_space[False or test_no_space_reserved_storage[False or test_reserved_storage_low_allows_update[False or test_forced_sync or test_bad_network or test_kill_process or test_apps_selection or test_boot_fallback_restores_apps"
           - name: Update-server backend, fiopull end-to-end tests
             backend: update-server
             tests: "test_fiopull_interrupt_resume or test_pre_pull_no_space or test_pre_pull_enough_space"
