@@ -1,8 +1,10 @@
 FROM golang:1.24.13-bookworm AS composeapp
 # Build composeapp
 WORKDIR /build
+# composeapp PR #153 (feat/load-app-tree-from-store): load an app's tree from the
+# store, so the apps of a Target whose blobs are gone from the registry still pull.
 RUN git clone https://github.com/foundriesio/composeapp.git && cd composeapp \
-    && git checkout main \
+    && git checkout e4612dedede0d3eac6fd883d17207491a004c056 \
     && STOREROOT=/var/sota/reset-apps COMPOSEROOT=/var/sota/compose-apps BASESYSTEMCONFIG=/usr/lib/docker make \
     && cp ./bin/composectl /usr/bin/
 
