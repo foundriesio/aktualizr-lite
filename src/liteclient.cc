@@ -635,7 +635,9 @@ std::tuple<bool, std::string> LiteClient::updateImageMeta() {
   } catch (const Uptane::MetadataFetchFailure& e) {
     const std::string err{e.what()};
     LOG_ERROR << "Failed to update the local TUF repo; TUF metadata fetch failure: " << err;
-    if (err.find("Failed to fetch role timestamp") != std::string::npos) {
+    if (e.isAccessDenied()) {
+      LOG_ERROR << kAccessDeniedHint;
+    } else if (err.find("Failed to fetch role timestamp") != std::string::npos) {
       LOG_ERROR << "Check the device tag or verify the existence of a wave for the device";
     }
     return {false, err};

@@ -602,6 +602,46 @@ TEST_F(ApiClientTest, InstallTargetWithHackedApps) {
   ASSERT_EQ(nullptr, installer);
 }
 
+TEST_F(ApiClientTest, CheckInAccessDenied) {
+  auto lite_client = createLiteClient(InitialVersion::kOn);
+  AkliteClient client(lite_client);
+  ASSERT_EQ(CheckInResult::Status::Ok, client.CheckIn().status);
+
+  // The server denies the device: the check-in falls back to the cached metadata
+  // and the log says why the update failed.
+  ASSERT_TRUE(getDeviceGateway().denyTuf(lite_client->http_client, true));
+  testing::internal::CaptureStdout();
+  auto result = client.CheckIn();
+  auto log = testing::internal::GetCapturedStdout();
+  ASSERT_TRUE(result);
+  ASSERT_NE(std::string::npos, log.find("Failed to fetch role timestamp in image repository: ")) << log;
+  ASSERT_NE(std::string::npos, log.find("HTTP 403")) << log;
+  ASSERT_NE(std::string::npos, log.find(kAccessDeniedHint)) << log;
+  ASSERT_EQ(std::string::npos, log.find("Check the device tag")) << log;
+
+  // Access is restored: the next check-in recovers
+  ASSERT_TRUE(getDeviceGateway().denyTuf(lite_client->http_client, false));
+  testing::internal::CaptureStdout();
+  result = client.CheckIn();
+  log = testing::internal::GetCapturedStdout();
+  ASSERT_EQ(CheckInResult::Status::Ok, result.status);
+  ASSERT_EQ(std::string::npos, log.find("HTTP 403")) << log;
+}
+
+TEST_F(ApiClientTest, CheckInAccessDeniedNoLocalMeta) {
+  auto lite_client = createLiteClient(InitialVersion::kOn);
+  AkliteClient client(lite_client);
+
+  // No valid local metadata to fall back to: the check-in fails and keeps the cause
+  ASSERT_TRUE(getDeviceGateway().denyTuf(lite_client->http_client, true));
+  testing::internal::CaptureStdout();
+  auto result = client.CheckIn();
+  auto log = testing::internal::GetCapturedStdout();
+  ASSERT_EQ(CheckInResult::Status::MetadataFetchFailure, result.status);
+  ASSERT_NE(std::string::npos, log.find("HTTP 403")) << log;
+  ASSERT_NE(std::string::npos, log.find(kAccessDeniedHint)) << log;
+}
+
 TEST_F(ApiClientTest, CheckInCurrent) {
   auto lite_client = createLiteClient(InitialVersion::kOn);
   AkliteClient client(lite_client);

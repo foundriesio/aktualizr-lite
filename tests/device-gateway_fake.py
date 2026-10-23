@@ -60,6 +60,12 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
         elif self.path.startswith(self.EventPrefix):
             self.event_handler()
+        elif self.path in ("/test/deny-tuf", "/test/allow-tuf"):
+            # Emulate a device the server denies access to
+            self.server.deny_tuf = self.path == "/test/deny-tuf"
+            self.send_response(200)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
         else:
             self.send_response(200)
             self.end_headers()
@@ -123,7 +129,11 @@ class Handler(SimpleHTTPRequestHandler):
     def tuf_handler(self):
         logger.info("TUF: GET request %s" % self.path)
         path = os.path.join(self._tuf_repo(), self.path[1:])
-        if not os.path.exists(path):
+        if self.server.deny_tuf:
+            self.send_response(403)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+        elif not os.path.exists(path):
             self.send_response(404)
             self.send_header('Content-Length', '0')
             self.end_headers()
@@ -201,6 +211,7 @@ class FakeDeviceGateway(HTTPServer):
         self.headers_file = headers_file
         self.events_file = events_file
         self.sota_toml_file = sota_toml_file
+        self.deny_tuf = False
         super(HTTPServer, self).__init__(server_address=addr, RequestHandlerClass=Handler)
 
         if mtls:

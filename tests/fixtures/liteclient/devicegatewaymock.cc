@@ -62,6 +62,10 @@ class DeviceGatewayMock {
     const HttpResponse r = http_client->post(url_ + "/events/reset", Json::nullValue);
     return r.isOk();
   }
+  bool denyTuf(const std::shared_ptr<HttpClient>& http_client, bool deny) const {
+    const HttpResponse r = http_client->post(url_ + (deny ? "/test/deny-tuf" : "/test/allow-tuf"), Json::nullValue);
+    return r.isOk();
+  }
   std::string readSotaToml() const { return Utils::readFile(sota_toml_file_); }
   bool resetSotaToml() const { return boost::filesystem::remove(sota_toml_file_); }
 
