@@ -141,6 +141,43 @@ TEST_P(LiteClientTestMultiPacman, OstreeUpdate) {
   checkHeaders(*client, new_target);
 }
 
+TEST_P(LiteClientTestMultiPacman, OstreeUpdateCleanupFailure) {
+  auto client = createLiteClient();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), getInitialTarget()));
+  auto new_target = createTarget();
+
+  // Remove the booted commit's root dirtree: the new Target deploys, but a cleanup's prune fails on it
+  const auto repo{getSysRepo().getRepo().getPath()};
+  std::string dirtree;
+  ASSERT_EQ(0, Utils::shell("ostree --repo=" + repo + " ls -d -C " + getInitialTarget().sha256Hash() +
+                                " / | awk '{print $5}'",
+                            &dirtree));
+  boost::trim(dirtree);
+  ASSERT_EQ(64, dirtree.size());
+  const auto object{boost::filesystem::path(repo) / "objects" / dirtree.substr(0, 2) /
+                    (dirtree.substr(2) + ".dirtree")};
+  const auto backup{object.string() + ".bak"};
+  boost::filesystem::rename(object, backup);
+
+  // The install does not clean up, so it succeeds; the finalization's cleanup fails, which is only logged
+  update(*client, getInitialTarget(), new_target);
+  testing::internal::CaptureStdout();
+  reboot(client);
+  auto log = testing::internal::GetCapturedStdout();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
+  ASSERT_NE(std::string::npos, log.find("Failed to clean up the OSTree sysroot")) << log;
+
+  // Once the object is back, the next finalization cleans up
+  boost::filesystem::rename(backup, object);
+  auto next_target = createTarget();
+  update(*client, new_target, next_target);
+  testing::internal::CaptureStdout();
+  reboot(client);
+  log = testing::internal::GetCapturedStdout();
+  ASSERT_TRUE(targetsMatch(client->getCurrent(), next_target));
+  ASSERT_EQ(std::string::npos, log.find("Failed to clean up the OSTree sysroot")) << log;
+}
+
 TEST_P(LiteClientTestMultiPacman, OstreeUpdateRollback) {
   // boot device
   auto client = createLiteClient();
