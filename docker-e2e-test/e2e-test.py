@@ -1894,6 +1894,73 @@ def verify_file_integrity(file_path: str, expected_hash: str):
         sha256_hash = hashlib.sha256(data).hexdigest()
         assert sha256_hash == expected_hash, f"File hash mismatch after corruption and new pull, expected {expected_hash}, got {sha256_hash}"
 
+def test_access_denied():
+    if backend != "update-server":
+        pytest.skip("denying a device needs the update-server API")
+    if use_fioup:
+        pytest.skip("checks aktualizr-lite's log")
+    global _rollout_target_version
+    restore_system_state()
+    version = aklite_current_version()
+    headers = {'Authorization': f'Bearer {user_token}'}
+
+    # Deleting a device puts it on the denied list: its metadata requests get HTTP 403
+    r = requests.delete(f"{update_server_url}/v1/devices/{device_name}", headers=headers, timeout=30)
+    assert r.status_code == 204, f"Unable to deny the device: {r.status_code} {r.text}"
+    try:
+        cp = invoke_aklite(['check'])
+        out = cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+        assert "HTTP 403" in out, out
+        assert "The server denied the device access" in out, out
+        assert "Check the device tag" not in out, out
+        assert aklite_current_version() == version
+    finally:
+        r = requests.delete(f"{update_server_url}/v1/denied-devices/{device_name}", headers=headers, timeout=30)
+        assert r.status_code == 204, f"Unable to allow the device: {r.status_code} {r.text}"
+        # The device's server data is gone: check in and assign the current Target again
+        _ensure_device_checkin()
+        write_settings()
+        _rollout_target_version = None
+        _ensure_target_rollout(version)
+
+    cp = invoke_aklite(['check'])
+    out = cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8")
+    assert cp.returncode == ReturnCodes.Ok, out
+    assert "HTTP 403" not in out, out
+
+def test_boot_fallback_restores_apps():
+    # The boot loader falls back from an OS + app update; the daemon must run the previous apps again.
+    if use_fioup:
+        pytest.skip("fioup has its own rollback handling")
+    restore_system_state()
+    write_settings(None, prune)
+
+    previous = all_primary_tag_targets[Target.FixApp]
+    install_target(previous)
+    check_running_apps()
+
+    # Reboot detection needs the session dir owned by the user running aklite
+    session_dir = "/var/run/aktualizr-session"
+    session_stat = os.stat(session_dir)
+    os.chown(session_dir, os.getuid(), os.getgid())
+    os.environ["AKLITE_TEST_RETURN_ON_SLEEP"] = "1"
+    try:
+        # Updates both the OS and shellhttpd_base_20000
+        target = all_primary_tag_targets[Target.UpdateOstreeWithApps]
+        cp = invoke_aklite(['update', str(target.actual_version)])
+        assert cp.returncode == ReturnCodes.InstallNeedsReboot, cp.stdout.decode("utf-8")
+
+        # Boot the previous deployment, keeping the new one, as the boot loader does after failed boots
+        subprocess.run(["ostree", "admin", "set-default", "1"], check=True)
+        sys_reboot()
+        cp = invoke_aklite(['daemon'])
+        logger.info(cp.stdout.decode("utf-8") + cp.stderr.decode("utf-8"))
+    finally:
+        del os.environ["AKLITE_TEST_RETURN_ON_SLEEP"]
+        os.chown(session_dir, session_stat.st_uid, session_stat.st_gid)
+    assert aklite_current_version() == previous.actual_version
+    check_running_apps()
+
 def test_forced_sync():
     restore_system_state()
     apps = None # All apps, for now

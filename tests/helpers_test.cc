@@ -4,6 +4,7 @@
 #include "composeappmanager.h"
 #include "primary/reportqueue.h"
 #include "storage/invstorage.h"
+#include "storage/sql_utils.h"
 #include "target.h"
 #include "appengine.h"
 
@@ -88,6 +89,15 @@ TEST(helpers, lite_client_finalize) {
   Uptane::Target new_target("test-finalize", target_json);
   storage->savePrimaryInstalledVersion(target, InstalledVersionUpdateMode::kPending);
   ASSERT_FALSE(new_target.MatchHash(LiteClient(config, createAppEngine(config)).getCurrent().hashes()[0]));
+}
+
+// A commit followed closely by a power loss must survive it (e.g. the pending Target's record)
+TEST(helpers, sqlite_synchronous_extra) {
+  TemporaryDirectory dir;
+  SQLite3Guard db(dir.Path() / "sql.db");
+  auto statement = db.prepareStatement("PRAGMA synchronous;");
+  ASSERT_EQ(SQLITE_ROW, statement.step());
+  ASSERT_EQ(3, statement.get_result_col_int(0));  // EXTRA
 }
 
 TEST(helpers, target_has_tags) {

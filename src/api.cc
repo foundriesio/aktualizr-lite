@@ -276,8 +276,12 @@ static std::tuple<CheckInResult::Status, std::string> updateMeta(const std::shar
     err_msg += (is_offline ? "not found" : "fetch failure");
     err_msg += ": ";
     err_msg += err;
-    if (!is_offline && err.find("Failed to fetch role timestamp") != std::string::npos) {
-      err_msg += "Check the device tag or verify the existence of a wave for the device";
+    if (!is_offline) {
+      if (exc.isAccessDenied()) {
+        err_msg += std::string("; ") + kAccessDeniedHint;
+      } else if (err.find("Failed to fetch role timestamp") != std::string::npos) {
+        err_msg += "; Check the device tag or verify the existence of a wave for the device";
+      }
     }
     check_status = CheckInResult::Status::MetadataFetchFailure;
   } catch (const aklite::tuf::MetadataNotFoundException& exc) {
@@ -296,7 +300,8 @@ static std::tuple<CheckInResult::Status, std::string> updateMeta(const std::shar
       check_status = CheckInResult::Status::OkCached;
       LOG_INFO << "The local TUF is valid";
     } catch (const std::exception& exc) {
-      err_msg = std::string("Local TUF repo is invalid: ") + exc.what();
+      // Keep the update error: it says why the local repo could not be refreshed
+      err_msg += std::string("; local TUF repo is invalid: ") + exc.what();
     }
   }
   if (!err_msg.empty() && check_status == CheckInResult::Status::OkCached) {
