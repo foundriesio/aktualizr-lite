@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Pre-1.0: pin a release, and keep fiocli in ../Dockerfile on the same one.
-ARG UPDATE_SERVER_VERSION=v0.9.5
+ARG UPDATE_SERVER_VERSION=v1.0-rc3
 ARG TARGETARCH=amd64
 RUN curl -fsSL -o /usr/local/bin/fioserver \
         "https://github.com/foundriesio/update-server/releases/download/${UPDATE_SERVER_VERSION}/fioserver-linux-${TARGETARCH}" \
