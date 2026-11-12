@@ -127,8 +127,11 @@ LiteClient::LiteClient(Config config_in, const AppEngine::Ptr& app_engine, const
   if (!uptane_fetcher_) {
     uptane_fetcher_ = std::make_shared<Uptane::Fetcher>(config, http_client);
   }
-  report_queue = std_::make_unique<AkLiteReportQueue>(config, http_client, storage, report_queue_run_pause_s_,
-                                                      report_queue_event_limit_);
+  // Pending events belong to the client that queued them; a read-only one, e.g. `status`, posts them twice.
+  if (!read_only_storage) {
+    report_queue = std_::make_unique<AkLiteReportQueue>(config, http_client, storage, report_queue_run_pause_s_,
+                                                        report_queue_event_limit_);
+  }
 
   std::shared_ptr<RootfsTreeManager> basepacman;
   // Deduce a package manager type if not set explicitly by a user
@@ -304,7 +307,7 @@ void LiteClient::checkForUpdatesEnd(const Uptane::Target& target) { notifyTufUpd
 void LiteClient::checkForUpdatesEndWithFailure(const std::string& err) { notifyTufUpdateFinished(err); }
 
 void LiteClient::notify(const Uptane::Target& t, std::unique_ptr<ReportEvent> event) const {
-  if (!config.tls.server.empty()) {
+  if (report_queue && !config.tls.server.empty()) {
     event->custom["targetName"] = t.filename();
     event->custom["version"] = t.custom_version();
     if (event->custom.isMember("details")) {

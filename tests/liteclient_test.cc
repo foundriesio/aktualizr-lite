@@ -5,6 +5,8 @@
 
 #include "libaktualizr/types.h"
 #include "logging/logging.h"
+#include "primary/reportqueue.h"
+#include "storage/invstorage.h"
 #include "test_utils.h"
 #include "uptane_generator/image_repo.h"
 #include "utilities/utils.h"
@@ -527,6 +529,30 @@ TEST_F(LiteClientTestNoOsName, OstreeUpdateWithOsNameDerivedFromSysroot) {
   reboot(client);
   ASSERT_TRUE(targetsMatch(client->getCurrent(), new_target));
   checkHeaders(*client, new_target);
+}
+
+TEST_F(LiteClientTest, ReadOnlyClientLeavesPendingEvents) {
+  auto client = createLiteClient();
+  Config conf{client->config};
+  client.reset();
+
+  // An event the daemon has yet to send when a read-only command runs.
+  const auto storage{INvStorage::newStorage(conf.storage)};
+  const EcuDownloadStartedReport event{Uptane::EcuSerial("test_primary_ecu_serial_id"), "read-only-client"};
+  storage->saveReportEvent(event.toJson());
+
+  {
+    LiteClient read_only_client(conf, getAppEngine(), nullptr, nullptr, true);
+  }
+
+  for (const auto& sent : getDeviceGateway().getEvents()) {
+    ASSERT_NE(sent["id"].asString(), event.id);
+  }
+  Json::Value pending;
+  int64_t max_id{0};
+  storage->loadReportEvents(&pending, &max_id, 10);
+  ASSERT_EQ(pending.size(), 1);
+  ASSERT_EQ(pending[0]["id"].asString(), event.id);
 }
 
 INSTANTIATE_TEST_SUITE_P(MultiPacmanType, LiteClientTestMultiPacman,
