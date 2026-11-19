@@ -8,6 +8,21 @@
 
 const std::string Target::InitialTarget{"Initial Target"};
 
+void Target::validateApp(const std::string& name, const std::string& uri) {
+  // None of these characters is special to a POSIX shell, so a value made only
+  // of them cannot inject commands even when passed through `sh -c`. A registry
+  // URI (host[:port]/path[:tag][@sha256:...]) is covered by this set. An empty
+  // value carries no shell syntax, so only non-empty values are checked.
+  static const std::string kNameChars{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"};
+  static const std::string kUriChars{kNameChars + ":/@+"};
+  if (!name.empty() && name.find_first_not_of(kNameChars) != std::string::npos) {
+    throw std::runtime_error("Invalid characters in App name: " + name);
+  }
+  if (!uri.empty() && uri.find_first_not_of(kUriChars) != std::string::npos) {
+    throw std::runtime_error("Invalid characters in App URI: " + uri);
+  }
+}
+
 bool Target::hasTag(const Uptane::Target& target, const std::vector<std::string>& tags) {
   if (tags.empty()) {
     return true;

@@ -272,6 +272,15 @@ ComposeAppManager::AppsContainer ComposeAppManager::getApps(const Uptane::Target
       const auto& target_app_name = i.key().asString();
       const auto& target_app_uri = (*i)["uri"].asString();
 
+      try {
+        // These reach composectl through a shell, so reject anything that
+        // could be interpreted as shell syntax before it gets there.
+        Target::validateApp(target_app_name, target_app_uri);
+      } catch (const std::exception& e) {
+        LOG_ERROR << "Ignoring App with an invalid name or URI: " << e.what();
+        continue;
+      }
+
       if (!!cfg_.apps) {
         // if `compose_apps` is specified in the config then add the current Target app only if it listed in
         // `compose_apps`
