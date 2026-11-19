@@ -1,8 +1,14 @@
 #include "liteclient.h"
 
 #include <fcntl.h>
+#include <spawn.h>
 #include <sys/file.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <cerrno>
 #include <cstdlib>
+#include <cstring>
+#include <vector>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -269,25 +275,50 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
   if (callback_program.empty()) {
     return;
   }
-  std::string env_variables;
-  env_variables += "MESSAGE=\"" + std::string(msg) + "\" ";
-  env_variables += "CURRENT_TARGET=\"" + (config.storage.path / "current-target").string() + "\" ";
+  // Pass the values through the environment and spawn the callback directly,
+  // without a shell, so values we do not control cannot be read as shell syntax.
+  std::vector<std::string> env_strings;
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+  for (char** e = environ; e != nullptr && *e != nullptr; ++e) {
+    env_strings.emplace_back(*e);
+  }
+  env_strings.emplace_back(std::string("MESSAGE=") + msg);
+  env_strings.emplace_back("CURRENT_TARGET=" + (config.storage.path / "current-target").string());
   auto current = getCurrent();
   if (!current.MatchTarget(Uptane::Target::Unknown())) {
-    env_variables += "CURRENT_TARGET_NAME=\"" + current.filename() + "\" ";
+    env_strings.emplace_back("CURRENT_TARGET_NAME=" + current.filename());
   }
-
   if (!install_target.MatchTarget(Uptane::Target::Unknown())) {
-    env_variables += "INSTALL_TARGET_NAME=\"" + install_target.filename() + "\" ";
+    env_strings.emplace_back("INSTALL_TARGET_NAME=" + install_target.filename());
   }
   if (!result.empty()) {
-    env_variables += "RESULT=\"" + result + "\" ";
+    env_strings.emplace_back("RESULT=" + result);
   }
 
-  LOG_DEBUG << "Running callback: " << callback_program.string() << " with env variables: " << env_variables;
-  int rc = std::system((env_variables + callback_program.string()).c_str());
+  std::vector<char*> envp;
+  envp.reserve(env_strings.size() + 1);
+  for (auto& s : env_strings) {
+    envp.push_back(const_cast<char*>(s.c_str()));
+  }
+  envp.push_back(nullptr);
+
+  LOG_DEBUG << "Running callback: " << callback_program.string();
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+  char* argv[] = {const_cast<char*>(callback_program.c_str()), nullptr};
+  pid_t pid{-1};
+  int rc = posix_spawnp(&pid, callback_program.c_str(), nullptr, nullptr, argv, envp.data());
   if (rc != 0) {
-    LOG_ERROR << "Error with callback: " << rc;
+    LOG_ERROR << "Error with callback: failed to spawn " << callback_program.string() << ": " << std::strerror(rc);
+    return;
+  }
+  int status{0};
+  if (waitpid(pid, &status, 0) < 0) {
+    LOG_ERROR << "Error with callback: failed to wait for " << callback_program.string() << ": "
+              << std::strerror(errno);
+    return;
+  }
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    LOG_ERROR << "Error with callback: " << status;
   }
 }
 
