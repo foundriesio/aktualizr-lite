@@ -2,11 +2,21 @@
 
 #include <fcntl.h>
 #include <sys/file.h>
-#include <cstdlib>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 108800
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/env.hpp>
+#include <boost/process/v1/environment.hpp>
+#include <boost/process/v1/exe.hpp>
+namespace bp = boost::process::v1;
+#else
+#include <boost/process.hpp>
+namespace bp = boost::process;
+#endif
 
 #include "aklitereportqueue.h"
 #include "composeappmanager.h"
@@ -269,25 +279,32 @@ void LiteClient::callback(const char* msg, const Uptane::Target& install_target,
   if (callback_program.empty()) {
     return;
   }
-  std::string env_variables;
-  env_variables += "MESSAGE=\"" + std::string(msg) + "\" ";
-  env_variables += "CURRENT_TARGET=\"" + (config.storage.path / "current-target").string() + "\" ";
+  // Pass the values through the environment and run the callback directly, without
+  // a shell, so values we do not control cannot be read as shell syntax.
+  bp::environment env = boost::this_process::environment();
+  env["MESSAGE"] = msg;
+  env["CURRENT_TARGET"] = (config.storage.path / "current-target").string();
   auto current = getCurrent();
   if (!current.MatchTarget(Uptane::Target::Unknown())) {
-    env_variables += "CURRENT_TARGET_NAME=\"" + current.filename() + "\" ";
+    env["CURRENT_TARGET_NAME"] = current.filename();
   }
-
   if (!install_target.MatchTarget(Uptane::Target::Unknown())) {
-    env_variables += "INSTALL_TARGET_NAME=\"" + install_target.filename() + "\" ";
+    env["INSTALL_TARGET_NAME"] = install_target.filename();
   }
   if (!result.empty()) {
-    env_variables += "RESULT=\"" + result + "\" ";
+    env["RESULT"] = result;
   }
 
-  LOG_DEBUG << "Running callback: " << callback_program.string() << " with env variables: " << env_variables;
-  int rc = std::system((env_variables + callback_program.string()).c_str());
-  if (rc != 0) {
-    LOG_ERROR << "Error with callback: " << rc;
+  LOG_DEBUG << "Running callback: " << callback_program.string();
+  std::error_code ec;
+  bp::child callback(bp::exe = callback_program.string(), bp::env = env, ec);
+  if (ec) {
+    LOG_ERROR << "Error with callback: failed to run " << callback_program.string() << ": " << ec.message();
+    return;
+  }
+  callback.wait();
+  if (callback.exit_code() != 0) {
+    LOG_ERROR << "Error with callback: exited with code " << callback.exit_code();
   }
 }
 
