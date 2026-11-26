@@ -1,4 +1,7 @@
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <iterator>
+#include <set>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <fstream>
@@ -687,6 +690,58 @@ TEST_F(AkliteOffline, OfflineClientOstreeOnly) {
   reboot();
   ASSERT_EQ(aklite::cli::StatusCode::Ok, run());
   ASSERT_EQ(target, getCurrent());
+}
+
+TEST_F(AkliteOffline, OfflineClientOstreeTamperedObject) {
+  // Swap one content object in the source repo for a different valid object,
+  // keeping its name, so its content no longer matches the signed commit's
+  // checksum. A file:// pull must verify each object and reject the update.
+  cfg_.pacman.type = RootfsTreeManager::Name;
+
+  const auto listContentObjects = [this]() {
+    std::set<std::string> objs;
+    const boost::filesystem::path objects_dir{boost::filesystem::path(ostree_repo_.getPath()) / "objects"};
+    for (boost::filesystem::recursive_directory_iterator it{objects_dir}, end; it != end; ++it) {
+      if (it->path().extension() == ".filez") {
+        objs.insert(it->path().string());
+      }
+    }
+    return objs;
+  };
+
+  const auto before{listContentObjects()};
+  const auto target{addTarget({createApp("app-01")})};
+  // Keep only ostree in the update so the pull is the only thing under test.
+  boost::filesystem::remove_all(app_store_.appsDir());
+  const auto after{listContentObjects()};
+
+  // addTarget writes one new file, so the target adds exactly one content object.
+  std::vector<std::string> target_objects;
+  std::set_difference(after.begin(), after.end(), before.begin(), before.end(), std::back_inserter(target_objects));
+  ASSERT_EQ(1, target_objects.size());
+  const std::string victim{target_objects.front()};
+
+  // Commit an unrelated tree to obtain a second, valid content object to swap in.
+  TemporaryDirectory tamper_src;
+  Utils::writeFile((tamper_src.Path() / "f").string(), std::string("tampered content"), true);
+  ostree_repo_.commit(tamper_src.Path().string(), "tamper-src");
+  std::vector<std::string> foreign_objects;
+  const auto after_tamper{listContentObjects()};
+  std::set_difference(after_tamper.begin(), after_tamper.end(), after.begin(), after.end(),
+                      std::back_inserter(foreign_objects));
+  ASSERT_FALSE(foreign_objects.empty());
+  boost::filesystem::remove(victim);
+  boost::filesystem::copy_file(foreign_objects.front(), victim);
+
+  // The target is still listed: its signed commit metadata is untouched.
+  const auto available_targets{check()};
+  ASSERT_EQ(1, available_targets.size());
+  ASSERT_EQ(target, available_targets.back());
+
+  // The modified object must be rejected, so the target must not be deployed.
+  ASSERT_NE(aklite::cli::StatusCode::InstallNeedsReboot, install());
+  reboot();
+  ASSERT_FALSE(target == getCurrent());
 }
 
 TEST_F(AkliteOffline, OfflineClientAppsOnly) {
