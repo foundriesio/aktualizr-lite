@@ -38,6 +38,12 @@ class Target {
   static Uptane::Target toInitial(const Uptane::Target& target, const std::string& hw_id);
   static bool isInitial(const Uptane::Target& target) { return target.filename() == InitialTarget; }
 
+  // Reject an App name or URI that contains characters outside a conservative
+  // allow list. The values come from (signed) Target metadata but are passed
+  // to composectl through a shell, so they must not carry shell metacharacters.
+  // Throws std::runtime_error on an invalid value.
+  static void validateApp(const std::string& name, const std::string& uri);
+
   class Apps {
    public:
     struct AppDesc {
@@ -46,6 +52,7 @@ class Target {
           throw std::runtime_error("Invalid format of App in Target json: " + app_json.toStyledString());
         }
         uri = app_json["uri"].asString();
+        Target::validateApp(name, uri);
       }
       AppDesc() = delete;
       bool operator==(const AppDesc& app_desc) const { return name == app_desc.name && uri == app_desc.uri; }

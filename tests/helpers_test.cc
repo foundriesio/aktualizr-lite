@@ -131,6 +131,20 @@ TEST(helpers, target_has_tags) {
   ASSERT_FALSE(target_has_tags(t, config_tags));
 }
 
+TEST(target, validate_app) {
+  // Accepted: a normal App name, a full registry URI, and empty values
+  // (an empty value carries no shell syntax).
+  EXPECT_NO_THROW(Target::validateApp("shellhttpd_base_10000", "hub.foundries.io/factory/app:latest"));
+  EXPECT_NO_THROW(Target::validateApp("app-01.test", "registry:5000/org/app@sha256:" + std::string(64, 'a')));
+  EXPECT_NO_THROW(Target::validateApp("", ""));
+
+  // Rejected: anything a POSIX shell could interpret, in either field.
+  for (const std::string& bad : {"a;b", "a|b", "a`b`", "a$(b)", "a b", "a&b", "a'b'", "a\"b\"", "a\nb", "a>b", "a*b"}) {
+    EXPECT_THROW(Target::validateApp(bad, "app"), std::runtime_error) << "name: " << bad;
+    EXPECT_THROW(Target::validateApp("app", bad), std::runtime_error) << "uri: " << bad;
+  }
+}
+
 TEST(helpers, callback) {
   TemporaryDirectory cfg_dir;
 
